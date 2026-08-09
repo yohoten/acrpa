@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+lib/python*/
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ACRPA 运行时文件
+logs/
+screenshots/
+*.log
+config.json
+
+# Test coverage reports
+htmlcov/
+.coverage
+coverage.xml
+.pytest_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# PyInstaller
+*.spec
+
+# UPX (如果使用)
+upx.exe

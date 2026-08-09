@@ -1,0 +1,89 @@
+{
+  "name": "未命名工作流",
+  "steps": [
+    {
+      "type": "parallel",
+      "steps": []
+    },
+    {
+      "type": "command",
+      "cmd": "区域找图",
+      "params": [
+        "img.png",
+        "0.96",
+        "0",
+        "0",
+        "800",
+        "600",
+        "True",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "写入",
+      "params": [
+        "",
+        "0.05",
+        "auto",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "悬停",
+      "params": [
+        "0",
+        "0",
+        "0.1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "loop",
+      "times": "3",
+      "steps": [],
+      "enabled": true,
+      "comment": ""
+    },
+    {
+      "type": "command",
+      "cmd": "相移",
+      "params": [
+        "10",
+        "10",
+        "0.1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "variable",
+      "var_name": "var",
+      "var_value": "",
+      "enabled": true,
+      "comment": ""
+    },
+    {
+      "type": "script",
+      "path": "D:/CodingEmber/ACRPA/template/数据采集.xls",
+      "enabled": true,
+      "comment": ""
+    }
+  ]
+}

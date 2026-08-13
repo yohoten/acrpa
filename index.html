@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACRPA · A/C RPA 自动化工作流工具</title>
+<meta name="description" content="ACRPA —— 轻量级桌面自动化工具。Excel 脚本驱动、图像识别定位、窗口管理、工作流编排、AI 增强，让重复工作一键完成。">
+<style>
+  :root{
+    --bg:#070b15;
+    --bg2:#0c1222;
+    --card:rgba(255,255,255,.035);
+    --card-hover:rgba(255,255,255,.06);
+    --border:rgba(255,255,255,.09);
+    --border-strong:rgba(255,255,255,.16);
+    --text:#e8ecf6;
+    --muted:#93a0bd;
+    --dim:#5d6a88;
+    --c1:#22d3ee;
+    --c2:#818cf8;
+    --c3:#e879f9;
+    --ok:#34d399;
+    --warn:#fbbf24;
+    --err:#f87171;
+    --mono:'Cascadia Code','JetBrains Mono','Consolas','Courier New',monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei','PingFang SC','Hiragino Sans GB',sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:var(--sans);
+    background:
+      radial-gradient(1000px 500px at 85% -5%, rgba(129,140,248,.14), transparent 60%),
+      radial-gradient(900px 500px at -10% 15%, rgba(34,211,238,.10), transparent 55%),
+      radial-gradient(800px 600px at 50% 120%, rgba(232,121,249,.08), transparent 60%),
+      var(--bg);
+    color:var(--text);
+    line-height:1.7;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  ::selection{background:rgba(34,211,238,.3)}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1140px;margin:0 auto;padding:0 24px}
+
+  /* ---------- Nav ---------- */
+  nav{
+    position:sticky;top:0;z-index:50;
+    backdrop-filter:blur(14px);
+    background:rgba(7,11,21,.72);
+    border-bottom:1px solid var(--border);
+  }
+  .nav-inner{display:flex;align-items:center;gap:28px;height:62px}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;letter-spacing:.3px}
+  .logo-badge{
+    width:30px;height:30px;border-radius:8px;display:grid;place-items:center;
+    background:linear-gradient(135deg,var(--c1),var(--c2));
+    box-shadow:0 4px 18px rgba(99,172,255,.35);
+    font-size:15px;color:#06121f;
+  }
+  .nav-links{display:flex;gap:22px;margin-left:auto}
+  .nav-links a{color:var(--muted);font-size:14px;transition:color .2s}
+  .nav-links a:hover{color:var(--text)}
+  .menu-toggle{
+    display:none;margin-left:auto;background:none;border:1px solid var(--border-strong);
+    color:var(--text);font-size:20px;width:40px;height:40px;border-radius:10px;cursor:pointer;
+    transition:background .18s;
+  }
+  .menu-toggle:hover{background:var(--card-hover)}
+  .mobile-nav{display:none}
+  .ver-pill{
+    font-family:var(--mono);font-size:12px;color:var(--c1);
+    border:1px solid rgba(34,211,238,.4);background:rgba(34,211,238,.08);
+    padding:3px 10px;border-radius:999px;white-space:nowrap;
+  }
+
+  /* ---------- Hero ---------- */
+  header{position:relative;padding:84px 0 70px}
+  .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
+  .hero-eyebrow{
+    display:inline-flex;align-items:center;gap:8px;
+    font-size:13px;color:var(--muted);
+    border:1px solid var(--border-strong);border-radius:999px;
+    padding:5px 14px;margin-bottom:22px;background:var(--card);
+  }
+  .hero-eyebrow .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+  h1{
+    font-size:clamp(34px,5vw,58px);line-height:1.12;font-weight:800;letter-spacing:-.5px;
+    margin-bottom:18px;
+  }
+  h1 .grad{
+    background:linear-gradient(92deg,var(--c1) 0%,var(--c2) 55%,var(--c3) 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .hero-sub{font-size:17px;color:var(--muted);max-width:560px;margin-bottom:28px}
+  .hero-cta{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:26px}
+  .btn{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:12px 24px;border-radius:12px;font-size:15px;font-weight:600;
+    transition:transform .18s,box-shadow .18s;cursor:pointer;
+  }
+  .btn-primary{
+    background:linear-gradient(135deg,var(--c1),var(--c2));
+    color:#06121f;box-shadow:0 10px 32px rgba(99,172,255,.36);
+    padding:15px 34px;font-size:17px;
+  }
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 14px 40px rgba(99,172,255,.5)}
+  .btn-ghost{border:1px solid var(--border-strong);color:var(--text);background:var(--card)}
+  .btn-ghost:hover{background:var(--card-hover);transform:translateY(-2px)}
+  .hero-tags{display:flex;gap:8px;flex-wrap:wrap}
+  .tag{
+    font-size:12px;color:var(--muted);border:1px solid var(--border);
+    border-radius:8px;padding:4px 10px;background:var(--card);
+  }
+  .tag b{color:var(--text);font-weight:600}
+
+  /* Hero app mock */
+  .mock-wrap{position:relative}
+  .mock{
+    border:1px solid var(--border-strong);border-radius:16px;overflow:hidden;
+    background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.015));
+    box-shadow:0 30px 80px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.03) inset;
+  }
+  .mock-bar{
+    display:flex;align-items:center;gap:8px;padding:11px 14px;
+    border-bottom:1px solid var(--border);background:rgba(0,0,0,.25);
+  }
+  .mock-dot{width:11px;height:11px;border-radius:50%}
+  .mock-dot.r{background:#ff5f57}.mock-dot.y{background:#febc2e}.mock-dot.g{background:#28c840}
+  .mock-title{font-size:12px;color:var(--dim);margin-left:8px;font-family:var(--mono)}
+  .mock-body{display:flex;min-height:340px}
+  .mock-tabs{width:92px;border-right:1px solid var(--border);padding:10px 8px;display:flex;flex-direction:column;gap:4px}
+  .mock-tab{
+    font-size:12px;padding:7px 8px;border-radius:8px;color:var(--dim);white-space:nowrap;
+  }
+  .mock-tab.on{background:rgba(34,211,238,.12);color:var(--c1);font-weight:600}
+  .mock-main{flex:1;padding:16px}
+  .mock-main h4{font-size:12px;color:var(--dim);margin-bottom:10px;font-weight:500}
+  .mtable{border:1px solid var(--border);border-radius:10px;overflow:hidden;font-family:var(--mono);font-size:12px}
+  .mtable .mrow{display:grid;grid-template-columns:88px 1fr;gap:0}
+  .mtable .mrow + .mrow{border-top:1px solid var(--border)}
+  .mtable .cmd{padding:8px 12px;border-right:1px solid var(--border);color:var(--c1);background:rgba(34,211,238,.05)}
+  .mtable .arg{padding:8px 12px;color:var(--muted)}
+  .mtable .arg em{color:var(--ok);font-style:normal}
+  .mock-flow{margin-top:14px;border:1px dashed rgba(129,140,248,.4);border-radius:10px;padding:14px 12px}
+  .mock-flow p{font-size:11px;color:var(--dim);margin-bottom:8px}
+  .flow-nodes{display:flex;align-items:center;gap:0;flex-wrap:wrap}
+  .fnode{
+    font-size:11px;font-family:var(--mono);padding:5px 10px;border-radius:8px;
+    border:1px solid var(--border-strong);
+  }
+  .fnode.n1{background:rgba(34,211,238,.12);color:var(--c1)}
+  .fnode.n2{background:rgba(129,140,248,.14);color:var(--c2)}
+  .fnode.n3{background:rgba(232,121,249,.12);color:var(--c3)}
+  .fnode.n4{background:rgba(52,211,153,.12);color:var(--ok)}
+  .farrow{color:var(--dim);margin:0 6px;font-size:12px}
+  .glow-ring{
+    position:absolute;inset:-8%;z-index:-1;border-radius:30px;
+    background:radial-gradient(500px 300px at 50% 50%, rgba(99,172,255,.20), transparent 70%);
+    filter:blur(6px);
+  }
+
+  /* ---------- Stats ---------- */
+  .stats{border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:rgba(255,255,255,.015)}
+  .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;padding:34px 0}
+  .stat{text-align:center}
+  .stat .num{
+    font-size:34px;font-weight:800;font-family:var(--mono);
+  }
+  .stat .num .grad{
+    background:linear-gradient(135deg,var(--c1),var(--c2));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .stat .lab{font-size:13px;color:var(--muted);margin-top:4px}
+
+  /* ---------- Sections ---------- */
+  section{padding:80px 0}
+  .sec-head{margin-bottom:44px;max-width:720px}
+  .sec-tag{
+    display:inline-block;font-size:12px;font-weight:600;letter-spacing:1px;
+    color:var(--c2);border:1px solid rgba(129,140,248,.4);background:rgba(129,140,248,.08);
+    border-radius:6px;padding:4px 10px;margin-bottom:14px;
+  }
+  h2{font-size:clamp(26px,3.4vw,36px);font-weight:800;letter-spacing:-.3px;margin-bottom:12px}
+  .sec-desc{color:var(--muted);font-size:15px}
+
+  /* Feature cards */
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .card{
+    background:var(--card);border:1px solid var(--border);border-radius:16px;
+    padding:26px 24px;transition:transform .22s,border-color .22s,background .22s;
+    position:relative;overflow:hidden;
+  }
+  .card:hover{transform:translateY(-4px);border-color:var(--border-strong);background:var(--card-hover);box-shadow:0 16px 38px rgba(0,0,0,.35)}
+  .card::before{
+    content:'';position:absolute;top:0;left:0;right:0;height:2px;
+    background:linear-gradient(90deg,transparent,rgba(99,172,255,.7),transparent);
+    opacity:0;transition:opacity .25s;
+  }
+  .card:hover::before{opacity:1}
+  .card .ico{
+    width:44px;height:44px;border-radius:12px;display:grid;place-items:center;
+    font-size:21px;margin-bottom:16px;
+    background:linear-gradient(135deg,rgba(34,211,238,.14),rgba(129,140,248,.14));
+    border:1px solid var(--border-strong);
+  }
+  .card h3{font-size:17px;margin-bottom:8px}
+  .card p{font-size:13.5px;color:var(--muted)}
+
+  /* Command system */
+  .cmd-tabs{
+    display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;
+    position:sticky;top:62px;z-index:20;
+    background:rgba(7,11,21,.88);backdrop-filter:blur(12px);
+    padding:10px 0;margin-left:-8px;margin-right:-8px;padding-left:8px;padding-right:8px;
+    border-radius:0 0 12px 12px;
+  }
+  .cmd-tab{
+    font-size:13px;padding:8px 16px;border-radius:999px;cursor:pointer;
+    border:1px solid var(--border);color:var(--muted);background:var(--card);
+    transition:all .18s;user-select:none;
+  }
+  .cmd-tab:hover{border-color:var(--border-strong);color:var(--text)}
+  .cmd-tab.on{
+    background:linear-gradient(135deg,rgba(34,211,238,.14),rgba(129,140,248,.14));
+    border-color:rgba(129,140,248,.5);color:var(--text);font-weight:600;
+  }
+  .cmd-panel{display:none}
+  .cmd-panel.on{display:block;animation:fadeIn .3s}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .cmd-table{width:100%;border-collapse:collapse;font-size:13.5px}
+  .cmd-table th{
+    text-align:left;font-size:12px;color:var(--dim);font-weight:600;letter-spacing:.6px;
+    padding:10px 14px;border-bottom:1px solid var(--border-strong);
+  }
+  .cmd-table td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+  .cmd-table tr:last-child td{border-bottom:none}
+  .cmd-table tr:hover td{background:rgba(255,255,255,.02)}
+  .cmd-table code{
+    font-family:var(--mono);font-size:12.5px;color:var(--c1);
+    background:rgba(34,211,238,.07);border:1px solid rgba(34,211,238,.18);
+    padding:2px 8px;border-radius:6px;white-space:nowrap;
+  }
+  .cmd-table code:hover,.cmd-table .ex:hover{color:var(--text);border-color:rgba(34,211,238,.5)}
+  .cmd-table .ex{font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .cmd-table .ex b{color:var(--warn);font-weight:500}
+  .copied{outline:1px solid var(--ok);background:rgba(52,211,153,.12) !important}
+
+  /* Toast */
+  .toast{
+    position:fixed;left:50%;bottom:34px;transform:translateX(-50%) translateY(20px);
+    background:rgba(12,20,38,.96);border:1px solid rgba(52,211,153,.45);color:var(--text);
+    font-size:13.5px;padding:11px 22px;border-radius:999px;z-index:200;
+    opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;
+    box-shadow:0 12px 34px rgba(0,0,0,.5);backdrop-filter:blur(8px);
+    max-width:80vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast b{color:var(--ok)}
+
+  /* Workflow */
+  .wf-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:44px;align-items:center}
+  .wf-board{
+    border:1px solid var(--border-strong);border-radius:18px;padding:26px;
+    background:rgba(255,255,255,.02);
+  }
+  .wf-row{display:flex;align-items:center;gap:0;flex-wrap:wrap;margin-bottom:6px}
+  .wf-node{
+    display:flex;align-items:center;gap:10px;
+    padding:12px 18px;border-radius:12px;border:1px solid var(--border-strong);
+    font-size:13.5px;font-weight:600;
+  }
+  .wf-node .badge{font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:5px;background:rgba(0,0,0,.3)}
+  .wf-a{background:rgba(34,211,238,.10);color:var(--c1);border-color:rgba(34,211,238,.35)}
+  .wf-b{background:rgba(129,140,248,.12);color:var(--c2);border-color:rgba(129,140,248,.4)}
+  .wf-c{background:rgba(232,121,249,.10);color:var(--c3);border-color:rgba(232,121,249,.35)}
+  .wf-d{background:rgba(52,211,153,.10);color:var(--ok);border-color:rgba(52,211,153,.35)}
+  .wf-arrow{color:var(--dim);margin:0 8px}
+  .wf-side{border:1px dashed rgba(129,140,248,.4);border-radius:10px;padding:12px 16px;margin-top:14px;font-size:12.5px;color:var(--muted)}
+  .wf-list{display:flex;flex-direction:column;gap:14px}
+  .wf-item{display:flex;gap:14px}
+  .wf-item .dot2{
+    width:30px;height:30px;flex:none;border-radius:9px;display:grid;place-items:center;font-size:14px;
+    background:rgba(129,140,248,.12);border:1px solid rgba(129,140,248,.35);color:var(--c2);
+  }
+  .wf-item b{font-size:15px;display:block;margin-bottom:2px}
+  .wf-item p{font-size:13px;color:var(--muted)}
+
+  /* AI section */
+  .ai-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  .ai-card,.tmpl-card,.env-card{
+    transition:transform .22s,border-color .22s,box-shadow .22s,background .22s;
+  }
+  .ai-card:hover,.tmpl-card:hover,.env-card:hover{
+    transform:translateY(-4px);border-color:var(--border-strong);
+    box-shadow:0 14px 34px rgba(0,0,0,.35);background:var(--card-hover);
+  }
+  .ai-card:hover{border-color:rgba(232,121,249,.45)}
+  .ai-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px}
+  .ai-card .aico{font-size:24px;margin-bottom:12px}
+  .ai-card h3{font-size:15.5px;margin-bottom:6px}
+  .ai-card p{font-size:13px;color:var(--muted)}
+  .ai-note{
+    margin-top:22px;font-size:13px;color:var(--muted);
+    border:1px solid rgba(251,191,36,.3);background:rgba(251,191,36,.05);
+    border-radius:12px;padding:14px 18px;
+  }
+  .ai-note b{color:var(--warn)}
+
+  /* Templates */
+  .tmpl-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .tmpl-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px}
+  .tmpl-card h3{font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+  .tmpl-card ul{list-style:none;font-size:13px;color:var(--muted)}
+  .tmpl-card li{padding:4px 0;display:flex;gap:8px;align-items:baseline}
+  .tmpl-card li::before{content:'▸';color:var(--c2);font-size:11px}
+  .tmpl-badge{
+    font-size:11px;font-weight:600;border-radius:6px;padding:2px 8px;
+  }
+  .t-basic{color:var(--c1);background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.3)}
+  .t-adv{color:var(--c2);background:rgba(129,140,248,.1);border:1px solid rgba(129,140,248,.35)}
+  .t-ai{color:var(--c3);background:rgba(232,121,249,.1);border:1px solid rgba(232,121,249,.3)}
+
+  /* Env */
+  .env-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .env-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px}
+  .env-card h3{font-size:16px;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+  .pill-wrap{display:flex;flex-wrap:wrap;gap:8px}
+  .pill{
+    font-family:var(--mono);font-size:12px;color:var(--text);
+    background:rgba(255,255,255,.05);border:1px solid var(--border-strong);
+    padding:5px 12px;border-radius:999px;
+  }
+  .env-line{font-size:13.5px;color:var(--muted);padding:5px 0;border-bottom:1px dashed var(--border)}
+  .env-line:last-child{border-bottom:none}
+  .env-line code{font-family:var(--mono);font-size:12px;color:var(--c1)}
+
+  /* Changelog */
+  .timeline{position:relative;padding-left:30px;display:flex;flex-direction:column;gap:0}
+  .timeline::before{
+    content:'';position:absolute;left:8px;top:6px;bottom:6px;width:1px;
+    background:linear-gradient(180deg,var(--c1),var(--c2),var(--c3),transparent);
+  }
+  .tl-item{position:relative;padding:0 0 26px 14px}
+  .tl-item::before{
+    content:'';position:absolute;left:-26px;top:8px;width:11px;height:11px;border-radius:50%;
+    background:var(--bg);border:2px solid var(--c2);
+  }
+  .tl-item:first-child::before{border-color:var(--c1);box-shadow:0 0 12px rgba(34,211,238,.6)}
+  .tl-ver{font-family:var(--mono);font-size:15px;font-weight:700}
+  .tl-item:first-child .tl-ver{color:var(--c1)}
+  .tl-date{font-size:12px;color:var(--dim);font-family:var(--mono);margin:2px 0 6px}
+  .tl-item p{font-size:13.5px;color:var(--muted);max-width:860px}
+
+  /* Contact */
+  .contact{
+    border:1px solid var(--border-strong);border-radius:20px;
+    background:linear-gradient(135deg,rgba(34,211,238,.06),rgba(129,140,248,.08),rgba(232,121,249,.05));
+    padding:48px;text-align:center;
+  }
+  .contact h2{margin-bottom:10px}
+  .contact .sub{color:var(--muted);margin-bottom:26px}
+  .contact-flex{display:flex;align-items:center;justify-content:center;gap:34px;flex-wrap:wrap}
+  .qrcode{
+    width:104px;height:104px;border-radius:14px;padding:8px;
+    background:#fff;box-shadow:0 10px 30px rgba(0,0,0,.4);
+  }
+  .qrcode img{width:100%;height:100%;display:block}
+  .contact-info{text-align:left;font-size:14.5px;color:var(--muted)}
+  .contact-info .row{display:flex;align-items:center;gap:10px;padding:8px 0}
+  .contact-info b{color:var(--text)}
+  .contact-info code{font-family:var(--mono);color:var(--c1)}
+
+  footer{
+    border-top:1px solid var(--border);padding:26px 0;text-align:center;
+    color:var(--dim);font-size:13px;
+  }
+  footer a{color:var(--c2)}
+
+  /* Reveal */
+  .reveal{opacity:0;transform:translateY(22px);transition:opacity .6s ease,transform .6s ease}
+  .reveal.in{opacity:1;transform:none}
+
+  /* Download dropdown */
+  .dl-drop{position:relative;display:inline-block}
+  .btn-download{
+    display:inline-flex;align-items:center;gap:9px;
+    padding:14px 28px;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;
+    background:linear-gradient(135deg,var(--c3),var(--c2));color:#0b0d1a;
+    box-shadow:0 8px 26px rgba(232,121,249,.28);
+    transition:transform .18s,box-shadow .18s;border:none;font-family:var(--sans);
+  }
+  .btn-download:hover{transform:translateY(-2px);box-shadow:0 12px 34px rgba(232,121,249,.42)}
+  .btn-download .caret{font-size:12px;margin-left:2px;transition:transform .2s}
+  .dl-drop.open .caret{transform:rotate(180deg)}
+  .dl-menu{
+    position:absolute;top:calc(100% + 10px);left:0;min-width:270px;z-index:60;
+    background:rgba(14,20,38,.98);border:1px solid var(--border-strong);border-radius:12px;
+    padding:8px;display:none;box-shadow:0 18px 50px rgba(0,0,0,.5);
+    backdrop-filter:blur(12px);
+  }
+  .dl-menu.open{display:block;animation:fadeIn .2s}
+  .dl-menu a{
+    display:flex;flex-direction:column;gap:2px;padding:11px 14px;border-radius:8px;
+    color:var(--text);font-size:14.5px;font-weight:600;transition:background .15s;
+  }
+  .dl-menu a:hover{background:rgba(255,255,255,.07)}
+  .dl-menu a .gi{font-size:16px;margin-right:8px}
+  .dl-menu a small{color:var(--dim);font-size:11.5px;font-family:var(--mono);font-weight:400}
+  .dl-menu a .row{display:flex;align-items:center}
+
+  /* Screenshot showcase (Agivar-style) */
+  .showcase{display:flex;flex-direction:column;gap:48px}
+  .showcase-item{display:grid;grid-template-columns:1.25fr 1fr;gap:36px;align-items:center}
+  .showcase-item.rev .showcase-text{order:-1}
+  .showcase-img{
+    border:1px solid var(--border-strong);border-radius:16px;overflow:hidden;cursor:zoom-in;
+    background:linear-gradient(135deg,rgba(255,255,255,.04),rgba(255,255,255,.008));
+    box-shadow:0 22px 54px rgba(0,0,0,.38);
+    transition:transform .25s,box-shadow .25s,border-color .25s;
+  }
+  .showcase-img:hover{transform:translateY(-3px);border-color:rgba(129,140,248,.5);box-shadow:0 28px 64px rgba(0,0,0,.45)}
+  .showcase-img img{width:100%;display:block;opacity:0;transition:opacity .45s ease}
+  .showcase-img img.loaded{opacity:1}
+  .showcase-text .num{
+    display:inline-block;font-family:var(--mono);font-size:12.5px;color:var(--c2);
+    border:1px solid rgba(129,140,248,.4);background:rgba(129,140,248,.08);
+    border-radius:999px;padding:3px 12px;margin-bottom:14px;letter-spacing:1px;
+  }
+  .showcase-text h3{font-size:clamp(21px,2.6vw,28px);margin-bottom:10px;font-weight:800}
+  .showcase-text p{color:var(--muted);font-size:14.5px;max-width:480px}
+  .showcase-text .hint{margin-top:14px;font-size:12.5px;color:var(--dim)}
+  .showcase-text .hint b{color:var(--c1);font-weight:600}
+
+  /* Lightbox */
+  .lb{
+    position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;
+    background:rgba(4,7,14,.92);backdrop-filter:blur(6px);padding:30px;
+  }
+  .lb.on{display:flex}
+  .lb img{max-width:94vw;max-height:88vh;border-radius:8px;box-shadow:0 20px 80px rgba(0,0,0,.7)}
+  .lb .lb-close{
+    position:absolute;top:18px;right:24px;font-size:30px;color:var(--muted);cursor:pointer;
+    width:44px;height:44px;display:grid;place-items:center;border-radius:50%;
+    border:1px solid var(--border-strong);background:rgba(255,255,255,.04);transition:all .18s;
+  }
+  .lb .lb-close:hover{color:#fff;background:rgba(255,255,255,.1)}
+  .lb .lb-nav{
+    position:absolute;top:50%;transform:translateY(-50%);font-size:34px;color:var(--muted);
+    cursor:pointer;user-select:none;padding:12px;transition:color .15s;
+  }
+  .lb .lb-nav:hover{color:#fff}
+  .lb .lb-prev{left:12px}
+  .lb .lb-next{right:12px}
+  .lb .lb-cap{position:absolute;bottom:18px;left:0;right:0;text-align:center;color:var(--muted);font-size:13px}
+
+  @media (max-width:960px){
+    .hero-grid,.wf-grid{grid-template-columns:1fr;gap:40px}
+    .cards,.ai-grid,.tmpl-grid{grid-template-columns:repeat(2,1fr)}
+    .showcase-item{grid-template-columns:1fr;gap:18px}
+    .showcase-item.rev .showcase-text{order:0}
+    .stats-grid{grid-template-columns:repeat(2,1fr);gap:28px}
+    .env-grid{grid-template-columns:1fr}
+    .nav-links{display:none}
+    .menu-toggle{display:grid;place-items:center}
+    .mobile-nav{
+      display:none;position:fixed;top:62px;left:0;right:0;z-index:49;
+      background:rgba(10,15,30,.97);backdrop-filter:blur(12px);
+      border-bottom:1px solid var(--border);padding:10px 24px 16px;
+      flex-direction:column;gap:2px;box-shadow:0 18px 40px rgba(0,0,0,.4);
+    }
+    .mobile-nav.open{display:flex}
+    .mobile-nav a{
+      padding:13px 10px;color:var(--muted);font-size:15px;
+      border-bottom:1px solid var(--border);transition:color .15s,padding-left .15s;
+    }
+    .mobile-nav a:last-child{border-bottom:none}
+    .mobile-nav a:hover{color:var(--c1);padding-left:16px}
+  }
+  @media (max-width:600px){
+    .cards,.ai-grid,.tmpl-grid{grid-template-columns:1fr}
+    section{padding:56px 0}
+    header{padding:56px 0}
+    .contact{padding:32px 22px}
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= Nav ================= -->
+<nav>
+  <div class="wrap nav-inner">
+    <a class="logo" href="#top"><span class="logo-badge">⚡</span>ACRPA</a>
+    <div class="nav-links">
+      <a href="#screenshots">界面预览</a>
+      <a href="#features">核心特性</a>
+      <a href="#commands">命令系统</a>
+      <a href="#workflow">工作流</a>
+      <a href="#ai">AI 增强</a>
+      <a href="#templates">模板库</a>
+      <a href="#changelog">更新日志</a>
+      <a href="#contact">联系</a>
+    </div>
+    <button class="menu-toggle" id="menuToggle" aria-label="菜单" aria-expanded="false">☰</button>
+    <span class="ver-pill">v0.1.25</span>
+  </div>
+  <div class="mobile-nav" id="mobileNav">
+    <a href="#screenshots">界面预览</a>
+    <a href="#features">核心特性</a>
+    <a href="#commands">命令系统</a>
+    <a href="#workflow">工作流</a>
+    <a href="#ai">AI 增强</a>
+    <a href="#templates">模板库</a>
+    <a href="#changelog">更新日志</a>
+    <a href="#contact">联系</a>
+  </div>
+</nav>
+
+<!-- ================= Hero ================= -->
+<header id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="hero-eyebrow"><span class="dot"></span>轻量级桌面自动化工具 · A/C RPA</span>
+      <h1>让重复工作，<br><span class="grad">一键自动完成</span></h1>
+      <p class="hero-sub">
+        ACRPA 是一款基于 Python + tkinter 的轻量级桌面自动化工具。以 Excel 表格为脚本、以图像识别与窗口管理为手段，
+        支持录制回放、定时任务、工作流编排与 AI 增强，让繁琐重复的操作真正「一次编写，永久省心」。
+      </p>
+      <div class="hero-cta">
+        <a class="btn btn-primary" href="#features">✨ 开始使用</a>
+        <a class="btn btn-ghost" href="#commands">📋 命令速查</a>
+        <div class="dl-drop" id="dlDrop">
+          <button class="btn-download" id="dlToggle" aria-haspopup="true" aria-expanded="false">⬇ 下载 ACRPA <span class="caret">▾</span></button>
+          <div class="dl-menu" id="dlMenu">
+            <a href="https://github.com/yohoten/acrpa/releases" target="_blank" rel="noopener">
+              <span class="row"><span class="gi">⌥</span> GitHub Releases</span>
+              <small>github.com/yohoten/acrpa</small>
+            </a>
+            <a href="https://gitee.com/yohoten/acrpa/releases" target="_blank" rel="noopener">
+              <span class="row"><span class="gi">◆</span> Gitee Releases</span>
+              <small>gitee.com/yohoten/acrpa</small>
+            </a>
+          </div>
+        </div>
+      </div>
+      <div class="hero-tags">
+        <span class="tag">📦 Excel 脚本驱动</span>
+        <span class="tag">🖱 图像识别定位</span>
+        <span class="tag">🪟 窗口管理</span>
+        <span class="tag">🤖 AI 增强</span>
+        <span class="tag">⏱ 定时任务</span>
+      </div>
+    </div>
+    <div class="mock-wrap">
+      <div class="glow-ring"></div>
+      <div class="mock">
+        <div class="mock-bar">
+          <span class="mock-dot r"></span><span class="mock-dot y"></span><span class="mock-dot g"></span>
+          <span class="mock-title">ACRPA v0.1.25</span>
+        </div>
+        <div class="mock-body">
+          <div class="mock-tabs">
+            <div class="mock-tab">📜 脚本</div>
+            <div class="mock-tab on">🧩 工作流</div>
+            <div class="mock-tab">📚 模板</div>
+            <div class="mock-tab">⚙ 设置</div>
+          </div>
+          <div class="mock-main">
+            <h4>script_example.xls · 运行中 ▸</h4>
+            <div class="mtable">
+              <div class="mrow"><div class="cmd">激活窗口</div><div class="arg">记事本</div></div>
+              <div class="mrow"><div class="cmd">找图</div><div class="arg">button.png, 0.9</div></div>
+              <div class="mrow"><div class="cmd">输入</div><div class="arg"><em>Hello World</em></div></div>
+              <div class="mrow"><div class="cmd">等待</div><div class="arg">2.5</div></div>
+              <div class="mrow"><div class="cmd">点图</div><div class="arg">submit.png, 0.9</div></div>
+            </div>
+            <div class="mock-flow">
+              <p>工作流流程图</p>
+              <div class="flow-nodes">
+                <span class="fnode n1">▶ 登录脚本</span><span class="farrow">→</span>
+                <span class="fnode n2">条件判断</span><span class="farrow">→</span>
+                <span class="fnode n3">并行 ×2</span><span class="farrow">→</span>
+                <span class="fnode n4">✓ 完成</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ================= Stats ================= -->
+<div class="stats">
+  <div class="wrap stats-grid">
+    <div class="stat"><div class="num"><span class="grad count" data-target="45">0</span><span class="grad">+</span></div><div class="lab">内置自动化命令</div></div>
+    <div class="stat"><div class="num"><span class="grad count" data-target="11">0</span></div><div class="lab">即用型脚本模板</div></div>
+    <div class="stat"><div class="num"><span class="grad count" data-target="4">0</span></div><div class="lab">步骤类型 · 工作流编排</div></div>
+    <div class="stat"><div class="num"><span class="grad">v0.1.25</span></div><div class="lab">2026-08-10 最新版本</div></div>
+  </div>
+</div>
+
+<!-- ================= Screenshots ================= -->
+<section id="screenshots">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">SCREENSHOTS</span>
+      <h2>界面一览 · 五大核心界面</h2>
+      <p class="sec-desc">ACRPA 实际运行界面展示，点击图片可放大查看。</p>
+    </div>
+    <div class="showcase">
+      <div class="showcase-item reveal" data-full="img/image1.png" data-cap="脚本编辑">
+        <div class="showcase-img"><img src="img/image1.png" loading="lazy" alt="脚本编辑界面"></div>
+        <div class="showcase-text">
+          <span class="num">01 · 脚本编辑</span>
+          <h3>Excel 表格即脚本</h3>
+          <p>A 列命令、B–J 列参数，无需编程即可编排自动化流程；支持内联编辑、复制粘贴、断点标记，表格即脚本，上手零门槛。</p>
+          <div class="hint">🖱 点击图片查看大图</div>
+        </div>
+      </div>
+      <div class="showcase-item reveal rev" data-full="img/image2.png" data-cap="执行编辑">
+        <div class="showcase-img"><img src="img/image2.png" loading="lazy" alt="执行编辑界面"></div>
+        <div class="showcase-text">
+          <span class="num">02 · 执行编辑</span>
+          <h3>运行控制与调试中枢</h3>
+          <p>运行 / 暂停 / 停止 / 单步控制，断点与条件断点、变量监视器、调用栈与执行耗时统计，运行状态一目了然。</p>
+          <div class="hint">🖱 点击图片查看大图</div>
+        </div>
+      </div>
+      <div class="showcase-item reveal" data-full="img/image3.png" data-cap="工作流">
+        <div class="showcase-img"><img src="img/image3.png" loading="lazy" alt="工作流界面"></div>
+        <div class="showcase-text">
+          <span class="num">03 · 工作流</span>
+          <h3>多脚本串联编排</h3>
+          <p>可视化流程图（节点 / 连线 / 拖拽），支持脚本、并行、条件、等待四种步骤类型，执行节点实时高亮。</p>
+          <div class="hint">🖱 点击图片查看大图</div>
+        </div>
+      </div>
+      <div class="showcase-item reveal rev" data-full="img/image4.png" data-cap="设置导航">
+        <div class="showcase-img"><img src="img/image4.png" loading="lazy" alt="设置导航界面"></div>
+        <div class="showcase-text">
+          <span class="num">04 · 设置导航</span>
+          <h3>分类设置卡片</h3>
+          <p>基础执行 / AI 增强 / 定时调度 / 日志 / 高级设置分卡管理、独立保存；模型下拉自动匹配 API 端点。</p>
+          <div class="hint">🖱 点击图片查看大图</div>
+        </div>
+      </div>
+      <div class="showcase-item reveal" data-full="img/image5.png" data-cap="暗黑模式">
+        <div class="showcase-img"><img src="img/image5.png" loading="lazy" alt="暗黑模式界面"></div>
+        <div class="showcase-text">
+          <span class="num">05 · 暗黑模式</span>
+          <h3>亮暗主题一键切换</h3>
+          <p>深色主题与 Mini Bar 折叠状态条，托盘常驻后台运行，夜间长时间自动化更舒适、更护眼。</p>
+          <div class="hint">🖱 点击图片查看大图</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Features ================= -->
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">CORE FEATURES</span>
+      <h2>核心特性</h2>
+      <p class="sec-desc">从基础自动化到智能工作流，ACRPA 覆盖桌面自动化的完整链路。</p>
+    </div>
+    <div class="cards">
+      <div class="card reveal"><div class="ico">📦</div><h3>Excel 脚本驱动</h3><p>以 <b>.xls</b> 表格作为脚本文件，A 列命令、B–J 列参数，无需编程即可编排自动化流程，学习成本极低。</p></div>
+      <div class="card reveal"><div class="ico">🖱</div><h3>图像识别定位</h3><p>基于 OpenCV / Pillow 的图像识别，支持全屏与区域找图、灰度加速匹配，精准定位并点击任意界面元素。</p></div>
+      <div class="card reveal"><div class="ico">🪟</div><h3>窗口管理</h3><p>直接操作 Windows 窗口：激活、关闭、最小化、等待窗口出现/消失，支持窗口相对坐标，比图像识别快 10–100 倍。</p></div>
+      <div class="card reveal"><div class="ico">🎬</div><h3>录制回放</h3><p>录制鼠标键盘操作（含拖拽、滚轮、窗口激活），自动插入等待间隔，一键回放，重复操作从此告别手工。</p></div>
+      <div class="card reveal"><div class="ico">⏱</div><h3>定时任务</h3><p>支持每天 / 每周 / 间隔 / 一次性多种调度模式，后台静默执行，配合系统托盘与 Mini Bar 常驻运行。</p></div>
+      <div class="card reveal"><div class="ico">⚡</div><h3>DD 驱动增强</h3><p>可选内核级高性能输入后端，模拟真实键鼠、难以被检测，支持 direct / simulate / auto 三种写入模式并自动回退。</p></div>
+      <div class="card reveal"><div class="ico">🧩</div><h3>工作流编排</h3><p>多脚本串联编排，可视化流程图（节点 / 连线 / 拖拽），支持脚本、并行、条件、等待四种步骤类型。</p></div>
+      <div class="card reveal"><div class="ico">📊</div><h3>变量系统</h3><p>设置变量、读取剪贴板、字符串截取/替换、数学运算，${var} 语法贯穿全程，处理复杂数据得心应手。</p></div>
+      <div class="card reveal"><div class="ico">🔍</div><h3>OCR 识别</h3><p>屏幕区域文字识别、等待文字出现、点击文字，兼容 PaddleOCR / Windows OCR / Tesseract，动态界面也能自动化。</p></div>
+      <div class="card reveal"><div class="ico">🐞</div><h3>专业调试器</h3><p>断点 / 条件断点、单步执行、变量监视器、调用栈、执行耗时统计、运行到光标、跳过行，问题一目了然。</p></div>
+      <div class="card reveal"><div class="ico">🌓</div><h3>深色模式</h3><p>亮 / 暗主题一键切换；系统托盘、Mini Bar 悬浮状态条，让自动化任务在后台安静地跑。</p></div>
+      <div class="card reveal"><div class="ico">📜</div><h3>日志与市场</h3><p>结构化分级日志、按日轮转、自动清理、一键导出；内置脚本市场（离线模式可用），持续扩展脚本生态。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Commands ================= -->
+<section id="commands" style="background:linear-gradient(180deg,transparent,rgba(129,140,248,.045) 30%,rgba(129,140,248,.045) 70%,transparent)">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">COMMAND SYSTEM</span>
+      <h2>命令系统 · 45+ 条内置命令</h2>
+      <p class="sec-desc">按分类查看全部内置命令，每条命令在 Excel 表格中即可直接使用。</p>
+    </div>
+    <div class="cmd-tabs reveal">
+      <div class="cmd-tab on" data-tab="t1">🎯 基础操作</div>
+      <div class="cmd-tab" data-tab="t2">🪟 窗口管理</div>
+      <div class="cmd-tab" data-tab="t3">🧮 变量与逻辑</div>
+      <div class="cmd-tab" data-tab="t4">🔍 OCR 识别</div>
+      <div class="cmd-tab" data-tab="t5">🤖 AI 增强</div>
+      <div class="cmd-tab" data-tab="t6">🧩 工作流</div>
+    </div>
+
+    <div class="cmd-panel on" id="t1">
+      <table class="cmd-table">
+        <tr><th style="width:150px">命令</th><th style="width:46%">说明</th><th>示例</th></tr>
+        <tr><td><code>找图</code></td><td>全屏查找图片，找到后将鼠标移动到该位置（悬停）</td><td class="ex">找图, <b>hello</b>, 0.9</td></tr>
+        <tr><td><code>点图</code></td><td>查找图片并点击，支持精度控制</td><td class="ex">点图, <b>submit</b>, 0.9</td></tr>
+        <tr><td><code>区域找图 / 区域点图</code></td><td>限定扫描区域，速度更快，支持灰度匹配加速</td><td class="ex">区域找图, icon, 0.8, 100,100,500,500</td></tr>
+        <tr><td><code>坐标</code></td><td>点击指定屏幕坐标，可设按键 / 次数 / 间隔</td><td class="ex">坐标, 500, 300, 左, 1, 0.1</td></tr>
+        <tr><td><code>悬停</code></td><td>移动鼠标到指定坐标</td><td class="ex">悬停, 500, 300</td></tr>
+        <tr><td><code>按键 / 热键</code></td><td>模拟按键与组合键（Ctrl+C / Ctrl+V 等）</td><td class="ex">热键, ctrl, c</td></tr>
+        <tr><td><code>输入 / 写入</code></td><td>粘贴式输入（不受输入法影响）或逐字模拟键盘输入（支持 DD 驱动）</td><td class="ex">写入, Hello, 0.05, auto</td></tr>
+        <tr><td><code>等待</code></td><td>延时等待，支持随机范围（如 1.0-3.0）</td><td class="ex">等待, 1.0-3.0</td></tr>
+        <tr><td><code>滚轮 / 拖拽 / 相移</code></td><td>滚动、拖拽到指定坐标、相对鼠标当前位置移动</td><td class="ex">滚轮, -3</td></tr>
+        <tr><td><code>按下 / 释放</code></td><td>长按与松开按键，实现按住拖动等复杂操作</td><td class="ex">按下, a</td></tr>
+        <tr><td><code>复制 / 粘贴</code></td><td>内置快捷键组合（Ctrl+A+C / Ctrl+A+V）</td><td class="ex">复制</td></tr>
+        <tr><td><code>代码</code></td><td>执行指定 txt 文件中的 Python 代码（可调用程序内置库）</td><td class="ex">代码, my_code</td></tr>
+        <tr><td><code>截屏</code></td><td>截图保存，文件名自动附带时间戳</td><td class="ex">截屏, shot, E:/ACRPA/截图</td></tr>
+      </table>
+    </div>
+
+    <div class="cmd-panel" id="t2">
+      <table class="cmd-table">
+        <tr><th style="width:150px">命令</th><th style="width:46%">说明</th><th>示例</th></tr>
+        <tr><td><code>激活窗口</code></td><td>激活指定标题的窗口，支持模糊匹配</td><td class="ex">激活窗口, 记事本</td></tr>
+        <tr><td><code>关闭窗口</code></td><td>关闭指定窗口</td><td class="ex">关闭窗口, 无标题 - 记事本</td></tr>
+        <tr><td><code>最小化 / 最大化窗口</code></td><td>窗口最小化到任务栏 / 最大化显示</td><td class="ex">最小化窗口, 计算器</td></tr>
+        <tr><td><code>获取窗口位置</code></td><td>获取窗口坐标与大小并保存到变量</td><td class="ex">获取窗口位置, 记事本, x, y, w, h</td></tr>
+        <tr><td><code>等待窗口</code></td><td>等待窗口出现或消失，可设超时</td><td class="ex">等待窗口, Chrome, 10, 存在</td></tr>
+        <tr><td><code>窗口坐标</code></td><td>相对于窗口左上角点击，窗口移动后依然准确 ★</td><td class="ex">窗口坐标, 记事本, 100, 50</td></tr>
+      </table>
+    </div>
+
+    <div class="cmd-panel" id="t3">
+      <table class="cmd-table">
+        <tr><th style="width:150px">命令</th><th style="width:46%">说明</th><th>示例</th></tr>
+        <tr><td><code>设置变量</code></td><td>设置变量值，支持数字自动转换，全程用 ${var} 引用</td><td class="ex">设置变量, count, 100</td></tr>
+        <tr><td><code>读取剪贴板</code></td><td>读取剪贴板内容存入变量</td><td class="ex">读取剪贴板, clip_text</td></tr>
+        <tr><td><code>字符串处理</code></td><td>字符串截取 / 替换操作</td><td class="ex">字符串处理, text, 截取, 0:5, result</td></tr>
+        <tr><td><code>数学运算</code></td><td>执行数学计算，支持 ${var} 引用变量</td><td class="ex">数学运算, ${x}*${y}+1, sum</td></tr>
+        <tr><td><code>如果 / 否则 / 结束如果</code></td><td>条件分支控制流</td><td class="ex">如果, ${count}&gt;10</td></tr>
+        <tr><td><code>循环开始 / 循环结束</code></td><td>循环块，支持次数或条件表达式</td><td class="ex">循环开始, 5</td></tr>
+        <tr><td><code>跳出循环</code></td><td>立即跳出当前循环</td><td class="ex">跳出循环</td></tr>
+      </table>
+    </div>
+
+    <div class="cmd-panel" id="t4">
+      <table class="cmd-table">
+        <tr><th style="width:150px">命令</th><th style="width:46%">说明</th><th>示例</th></tr>
+        <tr><td><code>识别文字</code></td><td>OCR 识别屏幕指定区域文字并存入变量</td><td class="ex">识别文字, 0, 0, 800, 300, ocr_text</td></tr>
+        <tr><td><code>等待文字</code></td><td>等待指定文字出现 / 消失，可限定搜索区域</td><td class="ex">等待文字, 提交成功, 10, 存在</td></tr>
+        <tr><td><code>点击文字</code></td><td>找到文字位置并点击，支持置信度与搜索区域</td><td class="ex">点击文字, 立即登录, 0.8</td></tr>
+      </table>
+    </div>
+
+    <div class="cmd-panel" id="t5">
+      <table class="cmd-table">
+        <tr><th style="width:150px">命令</th><th style="width:46%">说明</th><th>示例</th></tr>
+        <tr><td><code>AI找图</code></td><td>用自然语言描述界面元素，AI 分析截图并定位（点击 / 悬停 / 仅查找）</td><td class="ex">AI找图, 登录按钮, 0.8, click</td></tr>
+        <tr><td><code>AI识别界面</code></td><td>AI 分析当前屏幕所有 UI 元素，结果存入 ${前缀}_elements 变量</td><td class="ex">AI识别界面, ui</td></tr>
+        <tr><td><code>AI优化建议</code></td><td>AI 分析历史执行数据，给出脚本优化建议</td><td class="ex">AI优化建议, log</td></tr>
+        <tr><td><code>[AI] 调试</code></td><td>自然语言向 AI 提问，AI 分析日志并回答调试问题</td><td class="ex">点击 [AI] 调试按钮</td></tr>
+      </table>
+    </div>
+
+    <div class="cmd-panel" id="t6">
+      <table class="cmd-table">
+        <tr><th style="width:150px">命令</th><th style="width:46%">说明</th><th>示例</th></tr>
+        <tr><td><code>运行工作流</code></td><td>调用工作流文件（.json / .yaml）执行多脚本编排</td><td class="ex">运行工作流, workflow.json</td></tr>
+        <tr><td><code>工作流变量</code></td><td>设置工作流级共享变量，供多个子步骤使用</td><td class="ex">工作流变量, var_name, value</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Workflow ================= -->
+<section id="workflow">
+  <div class="wrap wf-grid">
+    <div class="wf-board reveal">
+      <p style="font-size:12px;color:var(--dim);margin-bottom:16px">工作流可视化流程图 · 节点可拖拽编排</p>
+      <div class="wf-row">
+        <div class="wf-node wf-a"><span class="badge">▶</span>登录脚本</div>
+        <span class="wf-arrow">→</span>
+        <div class="wf-node wf-b"><span class="badge">◇</span>条件：已登录？</div>
+      </div>
+      <div style="display:flex;justify-content:space-around;padding:2px 0 0 30px">
+        <span class="wf-arrow">↙</span><span class="wf-arrow">↘</span>
+      </div>
+      <div style="display:flex;gap:30px;justify-content:space-around">
+        <div class="wf-node wf-c"><span class="badge">☰</span>并行：数据采集</div>
+        <div class="wf-node wf-d"><span class="badge">⟳</span>重试 ×3</div>
+      </div>
+      <div style="text-align:center;padding:4px 0">
+        <span class="wf-arrow">↓</span>
+      </div>
+      <div class="wf-row" style="justify-content:center">
+        <div class="wf-node wf-d"><span class="badge">✓</span>生成报表 · 完成</div>
+      </div>
+      <div class="wf-side">💡 执行时当前节点绿色高亮，出错节点红色标记；支持外层循环次数与最长执行分钟数控制。</div>
+    </div>
+    <div>
+      <div class="sec-head reveal" style="margin-bottom:28px">
+        <span class="sec-tag">WORKFLOW</span>
+        <h2>工作流编排</h2>
+        <p class="sec-desc">把多个脚本串成一条流水线，用流程图可视化调度。</p>
+      </div>
+      <div class="wf-list">
+        <div class="wf-item reveal"><div class="dot2">📜</div><div><b>四种步骤类型</b><p>脚本（顺序执行）、并行（同时执行多个子步骤）、条件（if/else 分支）、等待（延时）。</p></div></div>
+        <div class="wf-item reveal"><div class="dot2">🧩</div><div><b>操作库分类面板</b><p>流程控制 / 鼠标 / 键盘 / 识别 / 窗口 / 文件 / 变量 / 浏览器，支持搜索过滤、最近使用，双击快速添加节点。</p></div></div>
+        <div class="wf-item reveal"><div class="dot2">📝</div><div><b>节点级控制</b><p>命令 / 变量 / 循环 / 日志四类新节点，统一编辑表单，支持启用禁用、注释、克隆、复制粘贴、上移下移。</p></div></div>
+        <div class="wf-item reveal"><div class="dot2">🎯</div><div><b>执行高亮</b><p>运行中节点实时高亮、结果跟踪，出错节点红色标记，调试直观高效。</p></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= AI ================= -->
+<section id="ai" style="background:linear-gradient(180deg,transparent,rgba(232,121,249,.05) 40%,rgba(232,121,249,.05) 60%,transparent)">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">AI ENHANCED</span>
+      <h2>AI 增强 · 从「自动化」到「智能化」</h2>
+      <p class="sec-desc">配置 API Key 后解锁四大 AI 能力，支持 DeepSeek / Qwen / GPT / Claude 统一模型注册表。</p>
+    </div>
+    <div class="ai-grid">
+      <div class="ai-card reveal"><div class="aico">👁️</div><h3>AI 视觉定位</h3><p>用自然语言描述界面元素（如「登录按钮」），AI 分析截图智能定位并执行点击 / 悬停。</p></div>
+      <div class="ai-card reveal"><div class="aico">🔄</div><h3>AI 智能重试</h3><p>失败后由 AI 分析错误原因，自适应调整参数重试，比固定重试更聪明。</p></div>
+      <div class="ai-card reveal"><div class="aico">🚨</div><h3>AI 异常检测</h3><p>运行过程中 AI 持续检测异常画面与状态，及时预警，避免错误操作扩散。</p></div>
+      <div class="ai-card reveal"><div class="aico">💬</div><h3>自然语言调试</h3><p>直接向 AI 提问日志与执行问题，AI 分析后给出结论与优化建议，调试零门槛。</p></div>
+    </div>
+    <div class="ai-note reveal">💡 AI 功能需在设置中填写 API Key（支持 DeepSeek / Qwen / GPT / Claude），模型下拉框自动匹配正确 API 端点，无需手工配置。</div>
+  </div>
+</section>
+
+<!-- ================= Templates ================= -->
+<section id="templates">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">TEMPLATES</span>
+      <h2>示例脚本库 · 开箱即用</h2>
+      <p class="sec-desc">11 个即用型模板覆盖基础、高级与 AI 场景，导入即可运行，快速上手 ACRPA 自动化。</p>
+    </div>
+    <div class="tmpl-grid">
+      <div class="tmpl-card reveal">
+        <h3><span class="tmpl-badge t-basic">基础</span> Basic · 新手起步</h3>
+        <ul>
+          <li>自动填写表单</li>
+          <li>批量下载文件</li>
+          <li>Excel 数据处理</li>
+          <li>定时截图监控</li>
+          <li>窗口管理示例</li>
+        </ul>
+      </div>
+      <div class="tmpl-card reveal">
+        <h3><span class="tmpl-badge t-adv">高级</span> Advanced · 进阶用法</h3>
+        <ul>
+          <li>条件分支示例</li>
+          <li>错误重试机制</li>
+          <li>变量运算示例</li>
+          <li>多脚本串联</li>
+        </ul>
+      </div>
+      <div class="tmpl-card reveal">
+        <h3><span class="tmpl-badge t-ai">AI 辅助</span> AI Assisted · 智能化</h3>
+        <ul>
+          <li>AI 视觉定位</li>
+          <li>自然语言指令</li>
+        </ul>
+      </div>
+    </div>
+    <div class="reveal" style="margin-top:22px;font-size:13.5px;color:var(--muted);border:1px solid var(--border);border-radius:12px;padding:16px 20px;background:var(--card)">
+      📂 快速开始：选择模板 → 「文件」→「导入脚本」选择 .xls → 修改窗口标题与参数 → 点击「运行」（或按 F5）查看效果。<br>
+      <span style="color:var(--dim)">附赠业务示例：发送邮件、数据采集、网银票据、右键菜单、间隔点击等脚本同样内置可用。</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Env ================= -->
+<section id="env">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">TECH STACK</span>
+      <h2>技术栈与运行环境</h2>
+      <p class="sec-desc">轻量冷启动，占用小；提供 exe 免安装版本与源码运行两种方式。</p>
+    </div>
+    <div class="env-grid">
+      <div class="env-card reveal">
+        <h3>🧰 技术栈</h3>
+        <div class="pill-wrap">
+          <span class="pill">Python 3.7+</span>
+          <span class="pill">tkinter</span>
+          <span class="pill">PyAutoGUI</span>
+          <span class="pill">OpenCV</span>
+          <span class="pill">Pillow</span>
+          <span class="pill">pywin32</span>
+          <span class="pill">DD 驱动</span>
+          <span class="pill">PaddleOCR</span>
+          <span class="pill">Windows OCR</span>
+          <span class="pill">Tesseract</span>
+          <span class="pill">AI API</span>
+        </div>
+        <p style="margin-top:16px;font-size:13px;color:var(--dim)">打包为单文件 exe，双击即用；无 OpenCV 时自动降级为 Pillow 匹配，稳而不崩。</p>
+      </div>
+      <div class="env-card reveal">
+        <h3>⚙️ 关键配置（config.json）</h3>
+        <div class="env-line"><code>dark_mode</code> 亮 / 暗主题切换</div>
+        <div class="env-line"><code>retry_max / retry_interval</code> 失败重试次数与间隔</div>
+        <div class="env-line"><code>image_timeout</code> 识图超时秒数</div>
+        <div class="env-line"><code>api_key / api_model</code> AI 密钥与模型选择</div>
+        <div class="env-line"><code>use_dd_driver</code> DD 驱动高性能输入</div>
+        <div class="env-line"><code>minimize_to_tray / mini_bar_enabled</code> 托盘常驻与折叠状态条</div>
+        <div class="env-line"><code>sched_enabled / sched_tasks</code> 定时任务调度</div>
+        <div class="env-line"><code>log_level / log_retention_days</code> 日志级别与保留天数</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Changelog ================= -->
+<section id="changelog">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">CHANGELOG</span>
+      <h2>更新历程</h2>
+      <p class="sec-desc">持续迭代，近期聚焦工作流编排、AI 增强与稳定性。</p>
+    </div>
+    <div class="timeline">
+      <div class="tl-item reveal"><div class="tl-ver">v0.1.25</div><div class="tl-date">2026-08-10</div><p>工作流 Tab 深度定制：操作库分类树 + 搜索 + 最近使用；新增 command / variable / loop / log 节点，统一配置表单，右键复制 / 粘贴 / 禁用 / 注释；外层循环次数与最长执行时间控制；执行高亮与变量管理；版本号全局统一管理。</p></div>
+      <div class="tl-item reveal"><div class="tl-ver">v0.1.24</div><div class="tl-date">2026-08-09</div><p>设置页新增高级设置（最大执行时间 / 全局绑定窗口 / 录制模式 / OCR 后端 / 浏览器无头模式等）；每张设置卡独立「应用 ✓」；模型下拉框统一注册表（DeepSeek / Qwen / GPT / Claude）；修复 DD DLL 路径不生效、Claude 端点映射错误。</p></div>
+      <div class="tl-item reveal"><div class="tl-ver">v0.1.23</div><div class="tl-date">2026-07-20</div><p>模板选择对话框上下布局；托盘切换异常保护；恢复默认设置按钮；修复录制后脚本未加载、card_log 变量名冲突等问题。</p></div>
+      <div class="tl-item reveal"><div class="tl-ver">v0.1.22</div><div class="tl-date">2026-07-20</div><p>结构化日志升级（LogLevel 分级 / 时间戳 / 每日轮转 / 自动清理）；设置页重构为 6 张独立卡片；脚本编辑工具栏新增录制按钮。</p></div>
+      <div class="tl-item reveal"><div class="tl-ver">v0.1.21</div><div class="tl-date">2026-07-18</div><p>系统托盘图标与气泡通知、右键菜单；Mini Bar 折叠模式（置顶悬浮状态条），可拖拽、主题同步、状态实时更新。</p></div>
+      <div class="tl-item reveal"><div class="tl-ver">v0.1.20</div><div class="tl-date">2026-07-17</div><p>工作流流程图可视化（节点 + 连线 + 拖拽）；窗口相对坐标体系；录制增强（拖拽 / 滚轮 / 窗口激活）；条件断点 UI 增强、图像缓存 LRU 淘汰。</p></div>
+      <div class="tl-item reveal"><div class="tl-ver">v0.1.19</div><div class="tl-date">2026-07-16</div><p>AI 增强模块上线：视觉定位（AI找图 / AI识别界面）、智能重试、异常检测、流程优化建议、自然语言调试。</p></div>
+      <div class="tl-item reveal"><div class="tl-ver">v0.1.18</div><div class="tl-date">2026-07-06</div><p>OCR 文字识别命令、脚本市场面板、调试器增强（执行计时 / 跳过行 / 运行到光标 / 变量就地编辑）、打包体积优化。</p></div>
+      <div class="tl-item reveal"><div class="tl-ver">v0.1.17 → v0.1.13</div><div class="tl-date">2026-06 — 2026-07</div><p>集成 DD 驱动高性能输入后端；统一退出清理机制；AI 生成器与模板优化；图色识别与 OCR 功能说明完善。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Contact ================= -->
+<section id="contact">
+  <div class="wrap">
+    <div class="contact reveal">
+      <h2>开始你的自动化之旅</h2>
+      <p class="sub">有问题、有想法、想参与共建？欢迎联系作者</p>
+      <div class="contact-flex">
+        <div class="qrcode"><img src="data:image/png;base64,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V/q+weX5y3QGVjGdnKbR3cC9jXdxPTrEC9dfJFb86bZbAry6oo2H2vZyLTy8cqb5SiCbJlbFysPtd5fid6tswanYkW76oRmx2IrLKltxKDZssrXUwkW4rbG5IQICdtmKJEql46zEAZSdr5j2LwiFSiqHbMNWnGNhrjf8Y1GQcCmO4rHt2GRbaWZWyVI8nhWn6igVzEuChFNxYhGXlxcs69ljmCY5Pc/r8XcXRRKlslhcMwo1aYqk3lTJWTj2Yi+dxcZEmGZZY7lfJnkjzyIFZZjmLdsumJjk9XzxFwuk4litxIAVuIlC1pEqKgiCsOIcF0NkrVg3VxhTeFEuZh/l9HyJ5LotwP8t/+/Kf/+m53+x/DfA/8Xy3wD/F8v/AX0jAjLBb82zAAABBWVYSWZNTQAqAAAACAAFAQAAAwAAAAEDeAAAAQEAAwAAAAEDdAAAATEAAgAAACAAAABKh2kABAAAAAEAAABqARIABAAAAAEAAAAAAAAAAEFuZHJvaWQgUEQyMzU5Ql9BXzE2LjIuMTEuMC5XMTAAAASQAwACAAAAFAAAAKCSkQACAAAABDAwMgCQEQACAAAABwAAALSSCAAEAAAAAQAAAAAAAAAAMjAyNjowNToxMiAxNDo0NzoyMwArMDg6MDAAAAMBAAADAAAAAQN4AAABMQACAAAAIAAAAOUBAQADAAAAAQN0AAAAAAAAQW5kcm9pZCBQRDIzNTlCX0FfMTYuMi4xMS4wLlcxMABbbArZAAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI2LTA1LTEyVDA2OjUyOjU0KzAwOjAwKQnWPQAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNi0wNS0xMlQwNjo1Mjo1NCswMDowMFhUboEAAAAodEVYdGRhdGU6dGltZXN0YW1wADIwMjYtMDUtMTJUMDY6NTM6MDYrMDowMDovDstAAAAKXRFWHRleGlmOkRhdGVUaW1lT3JpZ2luYWwAMjAyNjowNToxMiAxNDo0NzoyM37PFhgAAAATdEVYdGV4aWY6RXhpZk9mZnNldAAxMDZ0L+2+AAAAFHRFWHRleGlmOkltYWdlTGVuZ3RoADg4NL38XJsAAAATdEVYdGV4aWY6SW1hZ2VXaWR0aAA4ODhnNgA9AAAAEnRFWHRleGlmOkxpZ2h0U291cmNlADB4BWtIAAAAHnRFWHRleGlmOk9mZnNldFRpbWVPcmlnaW5hbAArMDg6MDDAtrZqAAAALXRFWHRleGlmOlNvZnR3YXJlAEFuZHJvaWQgUEQyMzU5Ql9BXzE2LjIuMTEuMC5XMTCyyRmlAAAAG3RFWHRleGlmOlN1YlNlY1RpbWVPcmlnaW5hbAAwMDJV0H2qAAAAHnRFWHRpY2M6Y29weXJpZ2h0AEdvb2dsZSBJbmMuIDIwMTasCzM4AAAAM3RFWHRpY2M6ZGVzY3JpcHRpb24ARGlzcGxheSBQMyBHYW11dCB3aXRoIHNSR0IgVHJhbnNmZXInN/p6AAAAAElFTkSuQmCC" alt="微信二维码"></div>
+        <div class="contact-info">
+          <div class="row">📧 邮箱：<b><code>yoho12138@aliyun.com</code></b></div>
+          <div class="row">🤝 扫码添加微信，交流自动化经验</div>
+          <div class="row">⭐ 欢迎提出建议、报告 Bug、参与共建</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    ACRPA · A/C RPA 自动化工作流工具 &nbsp;|&nbsp; v0.1.25（2026-08-10）&nbsp;|&nbsp; 基于 Python + tkinter + PyAutoGUI 构建
+  </div>
+</footer>
+
+<!-- Lightbox -->
+<div class="lb" id="lightbox">
+  <span class="lb-close" id="lbClose">✕</span>
+  <span class="lb-nav lb-prev" id="lbPrev">‹</span>
+  <img id="lbImg" src="" alt="放大预览">
+  <span class="lb-nav lb-next" id="lbNext">›</span>
+  <div class="lb-cap" id="lbCap"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // Command tabs
+  document.querySelectorAll('.cmd-tab').forEach(function(tab){
+    tab.addEventListener('click', function(){
+      document.querySelectorAll('.cmd-tab').forEach(function(t){t.classList.remove('on')});
+      document.querySelectorAll('.cmd-panel').forEach(function(p){p.classList.remove('on')});
+      tab.classList.add('on');
+      document.getElementById(tab.dataset.tab).classList.add('on');
+    });
+  });
+
+  // Reveal on scroll (scroll-listener based, robust in sandboxed preview)
+  function isInView(el){
+    var r = el.getBoundingClientRect();
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+    return r.top < vh * 0.92 && r.bottom > 0;
+  }
+  function revealOnScroll(){
+    document.querySelectorAll('.reveal:not(.in)').forEach(function(el){
+      if(isInView(el)) el.classList.add('in');
+    });
+  }
+  window.addEventListener('scroll', revealOnScroll, {passive:true});
+  document.addEventListener('scroll', revealOnScroll, {passive:true});
+  window.addEventListener('resize', revealOnScroll);
+  revealOnScroll();
+
+  // Lightbox for screenshots
+  (function(){
+    var lb = document.getElementById('lightbox');
+    var lbImg = document.getElementById('lbImg');
+    var lbCap = document.getElementById('lbCap');
+    var shots = Array.prototype.slice.call(document.querySelectorAll('[data-full]'));
+    var cur = 0;
+    function show(i){
+      if(!shots.length) return;
+      cur = (i + shots.length) % shots.length;
+      var el = shots[cur];
+      lbImg.src = el.dataset.full;
+      var n = el.querySelector('.shot-num');
+      lbCap.textContent = el.dataset.cap || (n ? 'ACRPA 界面截图 ' + n.textContent : 'ACRPA 界面预览');
+      lb.classList.add('on');
+      document.body.style.overflow = 'hidden';
+    }
+    function hide(){
+      lb.classList.remove('on');
+      document.body.style.overflow = '';
+    }
+    shots.forEach(function(el, i){
+      el.addEventListener('click', function(){ show(i); });
+    });
+    document.getElementById('lbClose').addEventListener('click', hide);
+    document.getElementById('lbPrev').addEventListener('click', function(e){ e.stopPropagation(); show(cur-1); });
+    document.getElementById('lbNext').addEventListener('click', function(e){ e.stopPropagation(); show(cur+1); });
+    lb.addEventListener('click', function(e){ if(e.target === lb) hide(); });
+    document.addEventListener('keydown', function(e){
+      if(!lb.classList.contains('on')) return;
+      if(e.key === 'Escape') hide();
+      if(e.key === 'ArrowLeft') show(cur-1);
+      if(e.key === 'ArrowRight') show(cur+1);
+    });
+  })();
+
+  // Mobile nav toggle
+  (function(){
+    var tg = document.getElementById('menuToggle');
+    var nav = document.getElementById('mobileNav');
+    if(!tg || !nav) return;
+    tg.addEventListener('click', function(){
+      var open = nav.classList.toggle('open');
+      tg.setAttribute('aria-expanded', open ? 'true' : 'false');
+      tg.textContent = open ? '✕' : '☰';
+    });
+    nav.querySelectorAll('a').forEach(function(a){
+      a.addEventListener('click', function(){ nav.classList.remove('open'); tg.textContent='☰'; tg.setAttribute('aria-expanded','false'); });
+    });
+  })();
+
+  // Download dropdown
+  (function(){
+    var drop = document.getElementById('dlDrop');
+    if(!drop) return;
+    var tg = document.getElementById('dlToggle');
+    var menu = document.getElementById('dlMenu');
+    tg.addEventListener('click', function(e){
+      e.stopPropagation();
+      var open = menu.classList.toggle('open');
+      drop.classList.toggle('open', open);
+      tg.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    document.addEventListener('click', function(e){
+      if(!drop.contains(e.target)){
+        menu.classList.remove('open'); drop.classList.remove('open'); tg.setAttribute('aria-expanded','false');
+      }
+    });
+    document.addEventListener('keydown', function(e){
+      if(e.key === 'Escape'){ menu.classList.remove('open'); drop.classList.remove('open'); tg.setAttribute('aria-expanded','false'); }
+    });
+  })();
+
+  // Copy command + toast
+  (function(){
+    var toast = document.getElementById('toast');
+    var timer = null;
+    function showToast(msg){
+      toast.innerHTML = msg;
+      toast.classList.add('show');
+      clearTimeout(timer);
+      timer = setTimeout(function(){ toast.classList.remove('show'); }, 1800);
+    }
+    function copy(text, label){
+      function success(){ showToast('✅ 已复制 <b>' + label + '</b>'); }
+      function asyncFallback(){
+        showToast('📋 正在复制…');
+        try{
+          if(navigator.clipboard && navigator.clipboard.writeText){
+            navigator.clipboard.writeText(text).then(success, function(){ showToast('⚠️ 复制未完成，请手动选择复制'); });
+            return;
+          }
+        }catch(e){}
+        showToast('⚠️ 复制未完成，请手动选择复制');
+      }
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.select();
+      var ok = false;
+      try{ ok = document.execCommand('copy'); }catch(e){ ok = false; }
+      document.body.removeChild(ta);
+      if(ok) success(); else asyncFallback();
+    }
+    document.querySelectorAll('.cmd-table code, .cmd-table .ex').forEach(function(el){
+      el.style.cursor = 'pointer';
+      el.title = '点击复制';
+      el.addEventListener('click', function(e){
+        e.stopPropagation();
+        copy(el.textContent.trim(), el.textContent.trim());
+        el.classList.add('copied');
+        setTimeout(function(){ el.classList.remove('copied'); }, 800);
+      });
+    });
+  })();
+
+  // Screenshot fade-in after load
+  document.querySelectorAll('.showcase-img img').forEach(function(im){
+    if(im.complete && im.naturalWidth > 0){ im.classList.add('loaded'); }
+    else { im.addEventListener('load', function(){ im.classList.add('loaded'); }); }
+  });
+
+  // Animated stat counters
+  function animate(el){
+    var target = parseInt(el.dataset.target, 10) || 0;
+    var dur = 1200, start = null;
+    function step(ts){
+      if(!start) start = ts;
+      var p = Math.min((ts - start) / dur, 1);
+      var ease = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(target * ease);
+      if(p < 1) requestAnimationFrame(step);
+      else el.textContent = target;
+    }
+    requestAnimationFrame(step);
+  }
+  function startCounters(){
+    document.querySelectorAll('.count').forEach(function(el){
+      if(el.dataset.done) return;
+      if(isInView(el)){
+        el.dataset.done = '1';
+        animate(el);
+      }
+    });
+  }
+  (function(){
+    window.addEventListener('scroll', startCounters, {passive:true});
+    document.addEventListener('scroll', startCounters, {passive:true});
+    window.addEventListener('resize', startCounters);
+    startCounters();
+  })();
+
+  // Safety sweep: periodically check until all revealed / counted
+  (function(){
+    var sweep = setInterval(function(){
+      var pending = document.querySelectorAll('.reveal:not(.in), .count:not([data-done])').length;
+      revealOnScroll();
+      startCounters();
+      if(pending === 0) clearInterval(sweep);
+    }, 400);
+  })();
+</script>
+</body>
+</html>

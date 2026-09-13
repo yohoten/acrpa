@@ -30,6 +30,7 @@ _editor_sync_to_tree = None   # 编辑器刷新回调 (版本历史/AI 面板)
 _push_undo = None             # 撤销栈回调 (AI 面板)
 _main_run = None              # 运行脚本回调 (计划任务"立即执行")
 _tlog = None                  # ThreadSafeLog 实例 (AI 调试读取日志缓冲)
+_exit_for_update = None       # 退出主程序回调 (自更新替换主程序前调用, 走统一清理流程)
 
 # PIL 惰性加载 (与 ACRPA.py 相同模式)
 _PIL_loaded = False
@@ -38,10 +39,12 @@ ImageTk = None
 
 
 def init_ctx(root_win=None, colors=None, fonts=None, app_root="", res_dir="",
-             editor_sync_to_tree=None, push_undo=None, main_run=None, tlog=None):
+             editor_sync_to_tree=None, push_undo=None, main_run=None, tlog=None,
+             exit_for_update=None):
     """注入 ACRPA.py 提供的依赖 (模块启动时调用一次)。"""
     global root, C, FONT_TITLE, FONT_BODY, FONT_SMALL, FONT_BUTTON
     global APP_ROOT, RES_DIR, _editor_sync_to_tree, _push_undo, _main_run, _tlog
+    global _exit_for_update
     root = root_win
     C = colors
     if fonts:
@@ -52,6 +55,7 @@ def init_ctx(root_win=None, colors=None, fonts=None, app_root="", res_dir="",
     _push_undo = push_undo
     _main_run = main_run
     _tlog = tlog
+    _exit_for_update = exit_for_update
 
 
 def _load_pil():
@@ -1102,3 +1106,264 @@ def open_sched_manager():
 
     _mgr_refresh()
     dlg.bind("<Escape>", lambda e: dlg.destroy())
+
+
+# ======================================================================
+# 软件更新对话框 (检查 → 直链下载 → 校验 → 重启自更新)
+# ======================================================================
+def show_update_dialog(force_check=False):
+    """一站式更新窗口。
+
+    与旧实现的差别: 旧版只在状态栏挂一个 os.startfile 链接 —— 用户点击后跳到
+    浏览器, 既无进度、无校验, 也无法确认下载到的到底是不是目标版本。本窗口
+    把「检查 → 下载(带进度与体积) → 完整性校验 → 替换并重启」收在应用内完成。
+
+    未打包运行 (源码模式) 时仍可下载, 但会提示手动替换 —— 自更新只对 EXE 生效。
+    """
+    import updater
+    from version_info import GITHUB_REPO
+
+    releases_page = "https://github.com/{}/releases".format(GITHUB_REPO)
+
+    dlg = tkinter.Toplevel(root)
+    dlg.title("软件更新 — ACRPA")
+    dlg.configure(bg=C["bg"])
+    dlg.transient(root)
+    dlg.resizable(False, False)
+    _set_window_icon(dlg)
+
+    body = tkinter.Frame(dlg, bg=C["bg"])
+    body.grid(row=0, column=0, sticky="nsew", padx=20, pady=16)
+    body.columnconfigure(0, weight=1)
+
+    head = tkinter.Label(body, text="正在检查更新…", font=FONT_TITLE,
+                         fg=C["fgt"], bg=C["bg"], anchor="w")
+    head.grid(row=0, column=0, sticky="ew")
+
+    sub = tkinter.Label(body, text="当前版本 v{}".format(updater.VERSION),
+                        font=FONT_SMALL, fg=C["fgm"], bg=C["bg"], anchor="w")
+    sub.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+
+    notes = tkinter.Text(body, height=7, width=52, font=FONT_SMALL, wrap="word",
+                         bg=C["logbg"], fg=C["logfg"], relief="flat",
+                         highlightbackground=C["bd"], highlightthickness=1)
+    notes.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+    notes.configure(state="disabled")
+    notes.grid_remove()
+
+    prog = ttk.Progressbar(body, orient="horizontal", length=460,
+                           mode="determinate", maximum=100)
+    prog.grid(row=3, column=0, sticky="ew", pady=(10, 0))
+    prog.grid_remove()
+
+    detail = tkinter.Label(body, text="", font=FONT_SMALL, fg=C["fgm"], bg=C["bg"],
+                           anchor="w", justify="left", wraplength=460)
+    detail.grid(row=4, column=0, sticky="ew", pady=(8, 0))
+
+    bar = tkinter.Frame(body, bg=C["bg"])
+    bar.grid(row=5, column=0, sticky="ew", pady=(14, 0))
+
+    ui = {"info": None, "downloading": False, "done": False, "started": 0}
+
+    def _say(text, color=None):
+        try:
+            detail.config(text=text, fg=color or C["fgm"])
+        except Exception:
+            pass
+
+    def _set_notes(text):
+        try:
+            if not text:
+                notes.grid_remove()
+                return
+            notes.configure(state="normal")
+            notes.delete("1.0", "end")
+            notes.insert("1.0", text[:4000])
+            notes.configure(state="disabled")
+            notes.grid()
+        except Exception:
+            pass
+
+    def _render(res):
+        ui["info"] = res
+        status = (res or {}).get("status")
+        btn_download.grid_remove()
+        btn_page.grid_remove()
+        btn_retry.grid_remove()
+        btn_restart.grid_remove()
+        btn_folder.grid_remove()
+
+        if status == "ok":
+            head.config(text="发现新版本 v{}".format(res["latest"]), fg=C["sc"])
+            size_txt = updater.format_size(res["size"]) if res.get("size") else "体积未知"
+            sub.config(text="当前 v{}　→　最新 v{}　·　{}".format(
+                updater.VERSION, res["latest"], size_txt))
+            if res.get("sha256"):
+                _say("下载将进行 sha256 校验: {}…".format(res["sha256"][:16]))
+            else:
+                _say("下载后将校验包体积与容器格式。")
+            _set_notes(res.get("notes", ""))
+            btn_download.grid()
+            btn_page.grid()
+        elif status == "no_update":
+            head.config(text="已是最新版本 (v{})".format(updater.VERSION), fg=C["sc"])
+            sub.config(text="上次检查来源: {}".format(res.get("source", "—") or "—"))
+            _say("如需强制重新检查, 点击「重新检查」。")
+            btn_retry.grid()
+        else:
+            head.config(text="无法获取更新信息", fg=C["wn"])
+            sub.config(text="当前版本 v{}".format(updater.VERSION))
+            _say("检查更新失败: {}\n可在「打开下载页」中手动获取最新版本。".format(
+                (res or {}).get("error", "未知原因")), C["wn"])
+            btn_retry.grid()
+            btn_page.grid()
+
+    # ── 按需创建按钮 (避免 Toplevel 尺寸抖动) ──
+    def _mk(text, cmd, bg_c=None, fg_c=None, tip=None):
+        b = _btn(bar, text, cmd, bg_c, fg_c, tip)
+        return b
+
+    btn_retry = _mk("重新检查", lambda: _start_check(force=True),
+                    tip="忽略本次结果重新请求更新清单")
+    btn_retry.grid(row=0, column=0, padx=(0, 8)); btn_retry.grid_remove()
+    btn_download = _mk("⬇ 下载更新", lambda: _start_download(), C["ac"], "white",
+                       tip="下载到 updates/ 并校验完整性")
+    btn_download.grid(row=0, column=1, padx=(0, 8)); btn_download.grid_remove()
+    btn_page = _mk("打开下载页", lambda: _open(releases_page))
+    btn_page.grid(row=0, column=2, padx=(0, 8)); btn_page.grid_remove()
+    btn_restart = _mk("🚀 立即重启更新", lambda: _apply(), C["sc"], "white",
+                      tip="退出程序 → 替换主程序与 VERSION → 自动重启")
+    btn_restart.grid(row=0, column=3, padx=(0, 8)); btn_restart.grid_remove()
+    btn_folder = _mk("打开所在文件夹", lambda: _open_folder())
+    btn_folder.grid(row=0, column=4, padx=(0, 8)); btn_folder.grid_remove()
+    _mk("关闭", dlg.destroy).grid(row=0, column=5)
+
+    def _open(path):
+        try:
+            os.startfile(path)
+        except Exception as e:
+            messagebox.showerror("打开失败", str(e), parent=dlg)
+
+    def _open_folder():
+        path = ui.get("zip") or os.path.dirname(updater.get_app_dir())
+        _open(os.path.dirname(path) if os.path.isfile(path) else path)
+
+    # ── 检查 ──
+    def _start_check():
+        head.config(text="正在检查更新…", fg=C["fgt"])
+        sub.config(text="当前版本 v{}".format(updater.VERSION))
+        _set_notes("")
+        prog.grid_remove()
+        _say("正在请求更新清单 (GitHub Releases → 镜像回退)…")
+        btn_retry.grid_remove(); btn_download.grid_remove(); btn_page.grid_remove()
+
+        def _done(res):
+            try:
+                root.after(0, lambda: _render(res))
+            except Exception:
+                pass
+
+        updater.check_async(on_done=_done)
+
+    # ── 下载 ──
+    def _on_progress(done, total):
+        pct = (done * 100.0 / total) if total else 0
+        txt = "已下载 {} / {}".format(updater.format_size(done),
+                                    updater.format_size(total) if total else "未知")
+
+        def _apply_ui():
+            try:
+                prog.configure(value=pct)
+                _say(txt + ("　（正在校验…）" if total and done >= total else ""))
+            except Exception:
+                pass
+        try:
+            root.after(0, _apply_ui)
+        except Exception:
+            pass
+
+    def _start_download():
+        if ui["downloading"] or not ui["info"]:
+            return
+        ui["downloading"] = True
+        prog.configure(value=0)
+        prog.grid()
+        btn_download.config(text="⬇ 下载中…", state="disabled")
+        _say("正在连接下载源…")
+
+        def _worker():
+            ok, res = updater.download_package(ui["info"], progress=_on_progress)
+            if ok:
+                ui["zip"] = res
+                try:
+                    root.after(0, lambda: _on_ok(res))
+                except Exception:
+                    pass
+            else:
+                try:
+                    root.after(0, lambda: _on_fail(res))
+                except Exception:
+                    pass
+            ui["downloading"] = False
+
+        threading.Thread(target=_worker, daemon=True,
+                         name="acrpa-update-download").start()
+
+    def _on_fail(reason):
+        prog.grid_remove()
+        btn_download.config(text="⬇ 重试下载", state="normal")
+        _say("下载失败: {}".format(reason), C["dg"])
+
+    def _on_ok(path):
+        ui["done"] = True
+        prog.configure(value=100)
+        btn_download.config(text="✔ 已下载", state="disabled")
+        _say("安装包已下载并通过完整性校验。\n{}".format(path), C["sc"])
+
+        ok, why = updater.can_self_update()
+        if ok:
+            btn_restart.grid()
+            btn_folder.grid()
+            _say("安装包已下载并通过完整性校验。\n{}\n\n"
+                 "点击「立即重启更新」将: 退出程序 → 替换主程序与 VERSION → 自动重启。\n"
+                 "配置、脚本、模板、日志均不受影响。".format(path), C["sc"])
+        else:
+            btn_folder.grid()
+            _say("安装包已下载并通过完整性校验。\n{}\n\n"
+                 "当前无法自动更新: {}\n请手动解压替换。".format(path, why), C["wn"])
+
+    # ── 应用并退出 ──
+    def _apply():
+        path = ui.get("zip")
+        if not path:
+            return
+        if not messagebox.askyesno(
+                "确认更新",
+                "程序将立即退出并替换主程序, 随后自动重启。\n\n"
+                "更新包: {}\n\n继续吗?".format(os.path.basename(path)), parent=dlg):
+            return
+        ok, why = updater.apply_update(path)
+        if not ok:
+            messagebox.showerror("无法启动更新", why, parent=dlg)
+            return
+        log1("已启动自更新助手, 即将退出以完成主程序替换")
+        try:
+            dlg.destroy()
+        except Exception:
+            pass
+        if _exit_for_update:
+            _exit_for_update()
+        else:
+            try:
+                root.destroy()
+            except Exception:
+                pass
+
+    dlg.bind("<Escape>", lambda e: dlg.destroy())
+
+    cached = None if force_check else updater.get_status()
+    if cached is None:
+        _start_check()
+    else:
+        _render(cached)
+    return dlg

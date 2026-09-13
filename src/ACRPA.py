@@ -1024,6 +1024,23 @@ def _do_close():
 
 root.protocol("WM_DELETE_WINDOW", window_close)
 
+
+def _exit_for_update():
+    """自更新专用退出路径: 走统一清理后结束进程。
+
+    与 window_close 的差别是不弹确认、也不最小化到托盘 —— 主程序必须真正退出,
+    否则更新助手会一直等待主程序文件解锁, 替换环节会挂到超时。
+    """
+    state.quit2 = True
+    state._closing = True
+    try:
+        _do_close()
+    except Exception:
+        try:
+            root.destroy()
+        except Exception:
+            pass
+
 # === Layout - compact spacing ──
 root.columnconfigure(0,weight=1)
 root.rowconfigure(0,weight=0); root.rowconfigure(1,weight=1); root.rowconfigure(2,weight=0)
@@ -2984,7 +3001,8 @@ init_ctx(root_win=root, colors=C,
          fonts=(FONT_TITLE, FONT_BODY, FONT_SMALL, FONT_BUTTON),
          app_root=APP_ROOT, res_dir=RES_DIR,
          editor_sync_to_tree=_editor_sync_to_tree,
-         push_undo=_push_undo, main_run=main_run, tlog=_tlog)
+         push_undo=_push_undo, main_run=main_run, tlog=_tlog,
+         exit_for_update=_exit_for_update)
 # ── settings_window 模块依赖注入 ──
 settings_window.init_ctx(root_win=root, colors=C,
          fonts=(FONT_TITLE, FONT_BODY, FONT_SMALL, FONT_BUTTON),
@@ -4497,6 +4515,8 @@ def _periodic():
             status_text.config(text=" 就绪{}{}  |  {} 行  |  请选择脚本文件开始".format(
                 mod_mark, " "+ai_status if ai_status else "", rows_count), fg=C["fgm"])
             status_dot.config(text="● 就绪",fg=C["fgm"])
+            if _update_pending.get("ver"):
+                _on_update_hint(_update_pending["ver"], "")
     if is_running and state.exec_state.get("total_rows",0)>0:
         lp=state.exec_state["loop"]; tl=state.exec_state["total_loops"]
         rw=state.exec_state["row"]; tr=state.exec_state["total_rows"]
@@ -4550,21 +4570,52 @@ def _periodic():
     root.after(100,_periodic)
 root.after(100,_periodic)
 
-# === Update check (runs once, 3s after startup) ──
+# === 更新检查 (启动 3s 后静默检查一次) ──────────────────────────────
+# 旧实现: 发现新版只把 status_text 变成一个 os.startfile 链接 —— 用户点了跳到浏览器,
+# 既看不到下载进度, 也无法校验拿到的到底是不是目标版本。现改为点击进入更新窗口,
+# 在应用内完成「下载(带进度) → 完整性校验 → 替换并重启」。
 _update_done = False
-def _check_update():
+
+
+def _on_update_hint(ver, url):
+    """状态栏提示可更新 (由 updater 在发现新版本时回调)。"""
+    _update_pending["ver"] = ver
+    try:
+        status_text.config(text=" 新版本 v{} 可用 — 点击更新".format(ver), fg=C["wn"])
+        status_dot.config(text=" 更新", fg=C["wn"])
+        status_text.config(cursor="hand2")
+    except Exception:
+        pass
+
+
+def _check_update(status=None):
+    """启动后的静默检查；结果写入状态栏，点击后打开更新窗口。
+
+    status 为 updater 的结构化结果: 只有 ok 才提示更新 —— 网络故障不再被
+    伪装成「已是最新」，但也不打扰用户 (仅在日志留痕)。
+    """
     global _update_done
-    if _update_done: return
+    if _update_done:
+        return
     _update_done = True
-    if state.CHECK_UPDATE:
-        import updater
-        def _on_update(ver, url):
-            status_text.config(text=" 新版本 v{} 可用 — 点击下载".format(ver), fg=C["wn"])
-            status_dot.config(text=" 更新", fg=C["wn"])
-            status_text._update_url = url
-            status_text.bind("<Button-1>", lambda e: os.startfile(status_text._update_url))
-            status_text.config(cursor="hand2")
-        updater.check_async(_on_update)
+    if not state.CHECK_UPDATE:
+        return
+    import updater
+
+    def _done(res):
+        if not res:
+            return
+        if res.get("status") == "network_error":
+            log1("检查更新失败 (不影响使用): {}".format(res.get("error", "")), "warning")
+        try:
+            root.after(0, updater.cleanup_updates, True)
+        except Exception:
+            pass
+
+    updater.check_async(callback=_on_update_hint, on_done=_done)
+
+
+status_text.bind("<Button-1>", lambda e: show_update_dialog())
 root.after(3000, _check_update)
 
 # === Config-driven global hotkeys (run/pause/stop) ===

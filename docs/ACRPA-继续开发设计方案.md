@@ -1,6 +1,6 @@
 # ACRPA 继续开发设计方案
 
-> 版本基线：v0.1.25（VERSION 首行）
+> 版本基线：v0.1.26（VERSION 首行）
 > 审查对象：`D:\CodingEmber\ACRPA`
 > 审查方式：源码通读 + 核心回归脚本实跑 + 构建链核查
 > 结论日期：2026-09-13（2026-09-13 修订：更正 ACRPA.spec 与 res/ 两处事实判断，见 §1.4 注）
@@ -92,7 +92,8 @@ ACRPA.spec                  → 磁盘上存在，被 .gitignore:47 的 *.spec �
 build.py:220-221           → 打包硬前提：res/automation.ico 存在 + res/ 目录存在
                               ← 这才是干净克隆后构建失败的真实且唯一原因
 VERSION 第 2 行              → https://gitee.com/yohoten/acrpa/raw/master/dist/ACRPA.zip
-                             而 .gitignore:12 忽略 dist/        ← 更新通道与忽略规则矛盾
+                             实测该地址对 dist/ 下的大文件返回 403，通道实际不可用
+                             （v0.1.26 已改为 GitHub Release + jsDelivr/raw/Gitee 多源降级，见 §后续说明）
 .gitignore:52               → 忽略项写作 dosc/（docs 拼写错误，从未命中任何路径，无实际影响）
 docs/                       → 本次已新建并提交方案文档；README 仍链接 docs/窗口管理功能指南.md、docs/DD_DRIVER_GUIDE.md（均不存在）
 templates/                  → 不存在（实际目录为 template/，仅 5 个 .xls + 1 个 .json，README 称"11 个模板"）

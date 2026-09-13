@@ -51,8 +51,11 @@ HIDDEN_IMPORTS = _PROJECT_MODULES + [
 ]
 
 # ── 附加数据文件 (随 exe 解压) ──
+# VERSION 必须随包分发: 冻结后 version_info 优先在 _MEIPASS 内查找该文件,
+# 若缺失会回退到内置 _FALLBACK_VERSION, 导致 EXE 自报错误版本、更新检查结论失真。
 EXTRA_DATAS = [
     os.path.join(BASE, "使用说明.txt"),
+    os.path.join(BASE, "VERSION"),
     # os.path.join(BASE, "README.md"),
 ]
 

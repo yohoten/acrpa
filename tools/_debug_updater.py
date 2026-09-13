@@ -17,6 +17,7 @@
 用法: python tools/_debug_updater.py
 退出码: 0=全部通过, 1=存在失败
 """
+import contextlib
 import hashlib
 import os
 import shutil
@@ -38,6 +39,9 @@ sys.path.insert(0, SRC)
 
 import updater                      # noqa: E402
 import version_info as vi           # noqa: E402
+
+sys.path.insert(0, os.path.join(BASE, "tools"))
+import make_release as mr           # noqa: E402
 
 _passed = [0]
 _failed = [0]
@@ -61,6 +65,23 @@ def reset_updater_state():
     updater._status = None
     with updater._lock:
         del updater._pending_done[:]
+
+
+@contextlib.contextmanager
+def patched_sha256(value):
+    """临时固定 get_sha256() 的返回值。
+
+    candidate_download_urls 会调 get_sha256() 读【项目根 VERSION】来决定是否启用
+    不带版本信息的 dist/ 兜底通道。若测试直接依赖真实文件内容, 结论就会随仓库状态
+    漂移 —— 发版时把 sha256 回填进 VERSION 之后, "无 sha256 应放弃该通道"这条断言
+    就会反过来失败。测试必须显式固定这一输入。
+    """
+    real = updater.get_sha256
+    updater.get_sha256 = lambda: value
+    try:
+        yield
+    finally:
+        updater.get_sha256 = real
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -135,10 +156,11 @@ check("C5  有 sha256 时含 raw 镜像兜底",
 
 # dist/ 副本是唯一不带版本信息的通道: 历史包连包内 VERSION 都没有, 无法复核,
 # 此时若仍使用它, Release 未发布时会静默装上旧包 —— 没有校验和就必须放弃。
-nogate = updater.candidate_download_urls({
-    "latest": "0.1.26",
-    "download_urls": ["https://a.example/ACRPA.zip"],
-})
+with patched_sha256(""):
+    nogate = updater.candidate_download_urls({
+        "latest": "0.1.26",
+        "download_urls": ["https://a.example/ACRPA.zip"],
+    })
 check("C5b 无 sha256 时放弃不带版本信息的 dist/ 兜底通道",
       not any("/dist/ACRPA.zip" in u for u in nogate), str(nogate))
 check("C5c 无 sha256 时仍保留 Release 约定直链",
@@ -614,6 +636,41 @@ check("S4  format_size 可读", updater.format_size(13 * 1024 * 1024) == "13.0 M
       updater.format_size(13 * 1024 * 1024))
 check("S5  format_size 容忍非法输入", updater.format_size(None) == "未知",
       updater.format_size(None))
+
+# ══════════════════════════════════════════════════════════════════
+print("[Z] 发布包内 VERSION (自引用校验和不得入包)")
+_zlines = ["0.1.26",
+           "https://github.com/yohoten/acrpa/releases/download/v0.1.26/ACRPA.zip",
+           "sha256:" + "c" * 64]
+_txt = mr.package_version_text(_zlines)
+check("Z1  包内 VERSION 剔除 sha256 行", "sha256" not in _txt, repr(_txt))
+check("Z2  包内 VERSION 保留版本号与下载直链",
+      _txt.startswith("0.1.26\n") and "releases/download/v0.1.26/ACRPA.zip" in _txt,
+      repr(_txt))
+check("Z3  包内 VERSION 首行即客户端读取的版本号",
+      _txt.splitlines()[0] == "0.1.26", repr(_txt))
+
+_zdir = tempfile.mkdtemp(prefix="acrpa_pkg_")
+try:
+    _fake_exe = os.path.join(_zdir, "fake.exe")
+    with open(_fake_exe, "wb") as f:
+        f.write(b"MZ" + b"\x00" * 2048)
+    _out = os.path.join(_zdir, "ACRPA.zip")
+    mr.build_zip("0.1.26", _fake_exe, _out, _zlines)
+    with zipfile.ZipFile(_out) as z:
+        _inner = [n for n in z.namelist() if n.upper().split("/")[-1] == "VERSION"]
+        _body = z.read(_inner[0]).decode("utf-8", "replace") if _inner else ""
+    check("Z4  打包产物内 VERSION 不含自引用校验和",
+          bool(_inner) and "sha256" not in _body, repr(_body))
+    check("Z5  客户端可从打包产物读到版本号",
+          updater.get_expected_version(_out) == "0.1.26",
+          updater.get_expected_version(_out))
+    check("Z6  客户端校验通过 (包内版本与目标一致)",
+          updater._verify_package_version(_out, "0.1.26")[0])
+    check("Z7  包内版本与目标不符时被拒",
+          updater._verify_package_version(_out, "0.1.27")[0] is False)
+finally:
+    shutil.rmtree(_zdir, ignore_errors=True)
 
 print("\n" + "=" * 56)
 if _failed[0]:

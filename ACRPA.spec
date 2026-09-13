@@ -5,7 +5,7 @@ a = Analysis(
     ['D:/CodingEmber/ACRPA/run.py'],
     pathex=['D:/CodingEmber/ACRPA/src'],
     binaries=[],
-    datas=[('D:/CodingEmber/ACRPA/res', 'res'), ('D:/CodingEmber/ACRPA/src/plugins', 'src/plugins'), ('D:/CodingEmber/ACRPA/使用说明.txt', '.'), ('D:/CodingEmber/ACRPA/lib/dd_driver/dd63330.dll', '.')],
+    datas=[('D:/CodingEmber/ACRPA/res', 'res'), ('D:/CodingEmber/ACRPA/src/plugins', 'src/plugins'), ('D:/CodingEmber/ACRPA/使用说明.txt', '.'), ('D:/CodingEmber/ACRPA/VERSION', '.'), ('D:/CodingEmber/ACRPA/lib/dd_driver/dd63330.dll', '.')],
     hiddenimports=['state', 'scriptdata', 'templates', 'utils', 'commands', 'engine', 'recorder', 'scheduler', 'updater', 'marketplace', 'ocr_backend', 'dd_backend', 'safe_eval', 'tkinter', 'tkinter.ttk', 'tkinter.filedialog', 'tkinter.messagebox', 'PIL.Image', 'PIL.ImageTk', 'PIL.ImageGrab', 'PIL.PngImagePlugin', 'PIL.JpegImagePlugin', 'pyautogui', 'pyperclip', 'xlrd', 'xlwt', 'requests', 'urllib3', 'certifi', 'idna', 'queue', 'json', 'datetime', 'ctypes', 'shutil', 're', 'threading', 'ast', 'asyncio', 'csv', 'configparser'],
     hookspath=['D:/CodingEmber/ACRPA/hooks_override'],
     hooksconfig={},

@@ -97,7 +97,18 @@ def package_version(zip_path):
     return ""
 
 
-def build_zip(version, exe_path, out_zip):
+def package_version_text(lines):
+    """包内 VERSION 的正文 —— 只保留版本号与下载直链, 剔除 sha256 行。
+
+    sha256 描述的是「装有这份 VERSION 的那个 zip」本身。把它写进被校验的产物里
+    必然自相矛盾: 写进去之后哈希就变了, 包内那一行永远是错的。客户端解析清单时
+    也只取首行作版本、取 URL 行作直链, 该行在包内纯属误导, 故打包时剔除。
+    """
+    kept = [l for l in lines[1:] if not l.lower().startswith("sha256")]
+    return "\n".join([lines[0]] + kept) + "\n"
+
+
+def build_zip(version, exe_path, out_zip, version_lines=None):
     """按发行版目录结构打包; 非 ASCII 名自动带 UTF-8 标志位。"""
     exe_name = "ACRPA v{}.exe".format(version)
     written = []
@@ -107,6 +118,10 @@ def build_zip(version, exe_path, out_zip):
         written.append(exe_name)
         for src_rel, dst_rel in PACKAGE_ITEMS:
             src = os.path.join(BASE, src_rel)
+            if src_rel == "VERSION" and version_lines:
+                z.writestr("ACRPA/" + dst_rel, package_version_text(version_lines))
+                written.append(dst_rel)
+                continue
             if os.path.exists(src):
                 z.write(src, "ACRPA/" + dst_rel)
                 written.append(dst_rel)
@@ -241,7 +256,7 @@ def main():
             os.path.relpath(exe, BASE), os.path.getsize(exe) / (1024 * 1024)))
 
         os.makedirs(os.path.dirname(out_zip), exist_ok=True)
-        written = build_zip(version, exe, out_zip)
+        written = build_zip(version, exe, out_zip, lines)
         print("[OK] 已生成 {} ({:.1f} MB, {} 项)".format(
             os.path.relpath(out_zip, BASE),
             os.path.getsize(out_zip) / (1024 * 1024), len(written)))

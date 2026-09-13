@@ -219,14 +219,20 @@ ACRPA v0.1.22 支持 **DD 驱动**（可选）作为高性能输入后端：
 > 仓库内 `dist/ACRPA.zip` 是唯一**不带版本信息**的兜底通道，历史发布包甚至没有包内
 > `VERSION` 可供复核。因此它只在 `VERSION` 配置了 `sha256` 时才被使用 —— 否则宁可报错
 > 也不会静默装上旧包。建议发版时用 `--write-sha256` 把校验和写进 `VERSION`。
+>
+> 注意区分两份 `VERSION`：**项目根目录**那份带 `sha256` 行，是给客户端读的清单；
+> **发布包内**那份只保留版本号与直链 —— 校验和描述的是包本身，写进被校验的产物里
+> 必然自相矛盾（写进去哈希就变了），因此发版工具在打包时会把它剔除。
 
 **发版流程**：
 
 ```bash
 python tools/bump_version.py --patch     # 1. 递增版本号 (同步 VERSION + README 标记)
 python build.py --clean                  # 2. 打包
-python tools/make_release.py --write-sha256   # 3. 发布包 + 回填 sha256 + 生成 Release 说明
-python tools/make_release.py --no-zip --purge-cdn main   # 4. 清 CDN 缓存 (见下)
+python tools/make_release.py --write-sha256   # 3. 生成 dist/ACRPA.zip + 校验和 + 回填 VERSION + Release 说明
+# 4. 建 GitHub Release (tag 与 VERSION 首行直链一致, 正文用 docs/releases/vX.Y.Z.md),
+#    上传 dist/ACRPA.zip —— 文件名必须就叫 ACRPA.zip, 否则直链 404
+python tools/make_release.py --no-zip --purge-cdn main   # 5. 清 CDN 缓存 (见下)
 ```
 
 发布时需注意三点（均由实测踩坑得出）：
@@ -236,7 +242,7 @@ python tools/make_release.py --no-zip --purge-cdn main   # 4. 清 CDN 缓存 (�
 2. **Gitee 镜像需单独 push**，本地 `origin` 指向 Gitee 而推送目标常是 `github`，两者是两个仓库。
    实测 Gitee 的 raw 路径对 `dist/` 下的大文件返回 403，故仅作最后兜底。
 3. **jsDelivr 会缓存分支别名**：推送新 `VERSION` 后实测仍持续返回旧版本号（按提交哈希访问
-   才即时生效，但客户端无从预知哈希）。因此发版后要执行第 4 步清缓存，否则只能走 jsDelivr
+   才即时生效，但客户端无从预知哈希）。因此发版后要执行第 5 步清缓存，否则只能走 jsDelivr
    的网络会被这份落后的清单告知"已是最新"。
 
 ---
@@ -244,7 +250,7 @@ python tools/make_release.py --no-zip --purge-cdn main   # 4. 清 CDN 缓存 (�
 **联系**：yoho12138@aliyun.com
 **更新日志**：
 
-- v0.1.26 (2026-09-13): **更新机制重构** —— 修复打包后版本号失真（EXE 此前只查项目根目录，冻结后必然回退到内置值，永远自报 v0.1.24，导致更新判断与"关于"页面全部失真）；检查环节改为多源降级（GitHub Releases API → raw/jsDelivr/Gitee 清单镜像）；版本比较改为完整语义化实现，支持 `v` 前缀、位数不齐与预发布后缀（此前 `0.1.26-beta` 会因 int() 抛错被静默判为无更新）；检查结果结构化，明确区分无更新/网络故障/清单损坏，不再把网络异常伪装成"已是最新"；某来源报出的版本不比本机新时继续探测其余来源取最高者，避免镜像缓存落后把真实新版本静默吞掉（实测 jsDelivr 分支别名与 Gitee 镜像均会滞后）；传输改为 requests→系统证书库双栈，修复企业 TLS 拦截环境下两个权威来源永久不可达；版本比较改为完整语义化实现，支持 `v` 前缀、位数不齐与预发布后缀（此前 `0.1.26-beta` 会因 int() 抛错被静默判为无更新）；下载支持多候选直链逐个重试、流式进度、sha256 与体积/容器格式校验，并复核包内 VERSION、兼容 `v0.1.26.0` 四段 tag 写法；无 sha256 时不再使用不带版本信息的 `dist/` 兜底通道，避免静默装上旧包；新增便携版一键重启自更新（只替换主程序与 VERSION，不触碰用户数据）；新增 `tools/make_release.py` 发版助手（含 CDN 缓存清理），`bump_version.py` 现同步 README 版本标记。另修复 `engine` 命令失败静默成功、`stop_on_error` 与重试失效问题（详见 v0.1.25 之后提交）
+- v0.1.26 (2026-09-13): **更新机制重构** —— 修复打包后版本号失真（EXE 此前只查项目根目录，冻结后必然回退到内置值，永远自报 v0.1.24，导致更新判断与"关于"页面全部失真）；检查环节改为多源降级（GitHub Releases API → raw/jsDelivr/Gitee 清单镜像）；版本比较改为完整语义化实现，支持 `v` 前缀、位数不齐与预发布后缀（此前 `0.1.26-beta` 会因 int() 抛错被静默判为无更新）；检查结果结构化，明确区分无更新/网络故障/清单损坏，不再把网络异常伪装成"已是最新"；某来源报出的版本不比本机新时继续探测其余来源取最高者，避免镜像缓存落后把真实新版本静默吞掉（实测 jsDelivr 分支别名与 Gitee 镜像均会滞后）；传输改为 requests→系统证书库双栈，修复企业 TLS 拦截环境下两个权威来源永久不可达；下载支持多候选直链逐个重试、流式进度、sha256 与体积/容器格式校验，并复核包内 VERSION、兼容 `v0.1.26.0` 四段 tag 写法；无 sha256 时不再使用不带版本信息的 `dist/` 兜底通道，避免静默装上旧包；新增便携版一键重启自更新（只替换主程序与 VERSION，不触碰用户数据）；新增 `tools/make_release.py` 发版助手（含 CDN 缓存清理），`bump_version.py` 现同步 README 版本标记。另修复 `engine` 命令失败静默成功、`stop_on_error` 与重试失效问题（详见 v0.1.25 之后提交）
 - v0.1.25 (2026-08-10): 工作流Tab深度定制(操作库分类树+搜索+最近使用、command/variable/loop/log新节点、统一配置表单、右键复制/粘贴/禁用/注释、外层循环次数与最长执行时间控制、执行高亮、变量管理)、工作流引擎支持新节点及enabled/comment跳过、设置页导航与快捷键列表优化、版本号全局统一管理(bump_version.py)、README/使用说明在线优先打开、修复启动崩溃/最近使用失效/内联编辑popdown崩溃/找图OpenCV降级/暗黑模式工作流控件不变色/打包缺失模块
 - v0.1.24 (2026-08-09): 设置页新增「高级设置」操作逻辑优化、工作流拖拽节点崩溃修复、设置页tab改为标题栏右侧⚙ 设置按钮、AI模型下拉框改用统一模型注册表、DD DLL路径配置真正生效、修复claude模型端点映射错误、清理冗余代码
 - v0.1.23 (2026-07-20): 模板选择对话框改为上下布局(上横向滚动按钮+下预览含滚轴)、托盘切换异常保护(防止闪退和崩溃)、恢复默认设置按钮改为绿色、修复录制后脚本未加载到编辑器Bug、修复card_log变量名冲突、修复emoji Tcl兼容性

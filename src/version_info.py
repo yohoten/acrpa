@@ -6,11 +6,15 @@
 VERSION 文件格式 (纯文本; 首行必填, 其余行可选, 以 '#' 开头的行忽略):
 
     0.1.26
-    https://github.com/yohoten/acrpa/releases/download/v0.1.26/ACRPA.zip
+    https://github.com/yohoten/acrpa/releases/download/v0.1.26.0/ACRPA.zip
     sha256:9f2c...(64 位十六进制)
 
 第三行为下载包校验和, 缺省表示不校验。第二行留空或写 '-' 时,
 由 updater 按 GitHub Release 约定自动推导直链 —— 即发版只需改版本号。
+
+注意直链里的 tag 未必等于 v<版本号>: 本仓库 release 不可变, 被已发布 Release
+占用过的 tag 不可复用, 故实际使用了 v0.1.26.0 这种四段写法。updater 推导直链时
+会同时尝试两种写法, 以直链声明为准。
 
 VERSION 文件搜索顺序 (先命中先用):
     1. EXE 同级目录           便携版覆盖入口: 手工放一份即可改通道/锁版本

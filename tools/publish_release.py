@@ -366,14 +366,19 @@ def main():
         else:
             print("[WARN] 未找到 {} , 跳过独立 EXE".format(exe))
 
-    existing = {a.get("name"): a.get("id") for a in (rel.get("assets") or [])}
+    existing = {a.get("name"): (a.get("id"), a.get("size"))
+                for a in (rel.get("assets") or [])}
     for path, aname in targets:
-        if aname in existing:
+        cur = existing.get(aname)
+        if cur and cur[1] == os.path.getsize(path):
+            # 重跑时不必重传: 本机上行仅 0.1-0.3 MB/s, 一个 13MB 附件要数分钟。
+            print("[OK] {} 已存在且体积一致 ({}), 跳过重传".format(aname, cur[1]))
+            continue
+        if cur:
             okd, _, whyd = api("DELETE",
-                               "/repos/{}/releases/assets/{}".format(args.repo, existing[aname]),
-                               token)
+                               "/repos/{}/releases/assets/{}".format(args.repo, cur[0]), token)
             if okd:
-                print("[OK] 已删除同名旧附件 {}".format(aname))
+                print("[OK] 已删除同名旧附件 {} (体积 {} 不符)".format(aname, cur[1]))
             else:
                 print("[WARN] 删除旧附件失败: {}".format(whyd))
 

@@ -2,8 +2,8 @@
 
 > 版本基线：v0.1.25（VERSION 首行）
 > 审查对象：`D:\CodingEmber\ACRPA`
-> 审查方式：源码通读 + 核心回归脚本实跑 + 构建链核查（只读，未修改任何项目文件）
-> 结论日期：2026-09-13
+> 审查方式：源码通读 + 核心回归脚本实跑 + 构建链核查
+> 结论日期：2026-09-13（2026-09-13 修订：更正 ACRPA.spec 与 res/ 两处事实判断，见 §1.4 注）
 
 ---
 
@@ -82,23 +82,29 @@
 ### 1.4 发布链核查结果（关键）
 
 ```
-res/                        → 不存在；.gitignore 已新增 res/，且 git ls-files res 为空
-res/automation.ico          → 已于提交 562c089 删除并提交，完全脱离版本控制
-res/wechat_qrcode.png       → 同上
-ACRPA.spec:8  datas         → ('D:/CodingEmber/ACRPA/res', 'res')  ← 构建输入不存在
-ACRPA.spec:38 icon          → ['D:/CodingEmber/ACRPA/res/automation.ico'] ← 不存在
-ACRPA.spec 自身              → git ls-files ACRPA.spec 为空 ← 从未被跟踪（.gitignore 含 *.spec）
-                             即新克隆的仓库里没有 spec 文件     ← 单靠 res/ 补齐也无法构建
+res/                        → 磁盘上文件一直都在：automation.ico (4,286B)、wechat_qrcode.png (17,349B)
+                              〔更正〕此前记录为"不存在"，系 shell PATH 异常导致 ls 执行失败，
+                              非文件缺失；提交 562c089 是"移除索引"式操作（工作区文件保持完好）
+                              被 .gitignore:30 的 res/ 忽略，git ls-files res 为空
+ACRPA.spec                  → 磁盘上存在，被 .gitignore:47 的 *.spec 忽略
+                              ★ 它是 build.py 的生成产物，不是构建输入（见 §1.1）
+                              内部路径写死为 D:/CodingEmber/ACRPA/...（第 5,6,8,10,38 行）
+build.py:220-221           → 打包硬前提：res/automation.ico 存在 + res/ 目录存在
+                              ← 这才是干净克隆后构建失败的真实且唯一原因
 VERSION 第 2 行              → https://gitee.com/yohoten/acrpa/raw/master/dist/ACRPA.zip
                              而 .gitignore:12 忽略 dist/        ← 更新通道与忽略规则矛盾
-.gitignore:52               → 新增忽略项写作 dosc/（docs 拼写错误，意图落空、当前无实际影响）
+.gitignore:52               → 忽略项写作 dosc/（docs 拼写错误，从未命中任何路径，无实际影响）
 docs/                       → 本次已新建并提交方案文档；README 仍链接 docs/窗口管理功能指南.md、docs/DD_DRIVER_GUIDE.md（均不存在）
 templates/                  → 不存在（实际目录为 template/，仅 5 个 .xls + 1 个 .json，README 称"11 个模板"）
 tools/_test_ui.py           → 0 字节
 tools/ 中的一次性脚本        → batch_decompile*.py、extract_*.py、step1_extract*.py、rebuild_all.py 等约 15 个
 ```
 
-**直接后果**：干净克隆后 `python build.py` 必然失败——**且是双重失败**：既没有 `ACRPA.spec`（未跟踪），也没有 `res/` 资源（已删除 + 已忽略）。README 中 4 个链接 404；自动更新指向可能 404 的地址。这不是文档问题，是发布可用性问题。
+**直接后果**：干净克隆后 `python build.py` 必然失败——原因是 `res/` 缺失（`build.py:220-221` 的前置判断不成立，图标与数据目录都不会进包）。注意 `ACRPA.spec` 缺失**并不影响**构建，因为 `build.py` 会自行生成它。README 中 4 个链接 404；自动更新指向可能 404 的地址。这不是文档问题，是发布可用性问题。
+
+> **2026-09-13 执行记录**：提交 `951229c` 已重新纳管 `res/` 与 `ACRPA.spec`——`.gitignore` 移除 `res/`、为 `*.spec` 增加白名单例外 `!ACRPA.spec`、删除拼写错误的 `dosc/`，并已推送至 `github/main`（`ff5f788..951229c`）。
+>
+> 同时更正两处事实判断：① `res/` 文件从未从磁盘消失，此前"不存在"是 shell 异常导致的误判；② `ACRPA.spec` 是 `build.py` 生成产物，纳管它不影响构建可复现性，且每次 `build.py` 运行都会删除并重写它，因此会在 `git status` 中持续产生噪声。**若追求最小噪声，建议只纳管 `res/`，`ACRPA.spec` 维持忽略。**
 
 ---
 
@@ -136,7 +142,7 @@ tools/ 中的一次性脚本        → batch_decompile*.py、extract_*.py、ste
 | --- | --- | --- |
 | 0.1 | `execute()` 返回 `Result`；`_image_search_loop` 超时抛 `ImageNotFound`；`_exec_timings` 记录真实成功标志 | `engine.py:346`、`573-645`、`751-755` |
 | 0.2 | `_run_script` 失败向上抛，`run_workflow` 标记 `error` 并遵守 `stop_on_error` | `workflow.py:499-525`、`306-313` |
-| 0.3 | 把 `ACRPA.spec` 纳入版本控制（`.gitignore` 的 `*.spec` 改为白名单例外）；spec 路径改为相对项目根；`res/` 最小资源纳入版本控制或改由 `build.py` 生成 | `ACRPA.spec:8,38`、`.gitignore:47`、`build.py` |
+| 0.3 | **`res/` 资源纳入版本控制**（`.gitignore` 移除 `res/`）——这是干净克隆可构建的唯一硬前提；`ACRPA.spec` 是 `build.py` 生成产物，纳管与否不影响可复现性（已执行，见 §1.4） | `.gitignore:30`、`build.py:220-221` |
 | 0.4 | 解除 `dist/` 与更新通道的矛盾（二选一：把发布产物托管到独立 release 仓库，或改 `updater.UPDATE_URL`） | `VERSION`、`updater.py:9`、`.gitignore:12` |
 | 0.5 | 文档对齐：README 链接指向真实路径；`config.json` 示例与 `state._config_schema` 默认值一致；`template/` → `templates/` 或反向改名 | `README.md`、`使用说明.txt` |
 
@@ -236,11 +242,14 @@ tools: 25 文件 / 3,650 行
 commands.list_all() = 50 条；state._config_schema = 45 项
 
 # 构建链
-ls res        → No such file or directory
-ls docs       → No such file or directory
-ls templates  → No such file or directory
-git status    → D res/automation.ico, D res/wechat_qrcode.png, D README.en.md
+ls res        → 存在：automation.ico (4,286B)、wechat_qrcode.png (17,349B)
+                〔更正〕此前记录 "No such file or directory" 系 shell PATH 异常，非文件缺失
+ls docs       → 本次新建（此前不存在）
+ls templates  → No such file or directory（实际目录为 template/）
+git status    → D res/automation.ico, D res/wechat_qrcode.png, D README.en.md（索引移除，工作区文件仍在）
 ```
+
+> 修订说明：本文档在 2026-09-13 完成两处事实更正——`ACRPA.spec` 的生成产物定位、`res/` 的磁盘存在性。原判断均来自一次因 shell 环境异常而不可靠的命令输出，已按实际复测结果替换。
 
 ## 附录 B：未做的事（避免误读）
 

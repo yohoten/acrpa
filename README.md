@@ -4,7 +4,7 @@ version：v0.1.25
 
 轻量级桌面自动化工具，基于 Python + tkinter + pyautogui，通过 Excel 脚本实现图像识别定位、鼠标键盘自动化操作。
 
-![image-20260720103402703](C:\Users\yohoten\AppData\Roaming\Typora\typora-user-images\image-20260720103402703.png)
+![](https://i.imgs.ovh/2026/09/13/7ada54bcbc739d30045ccc36922bac5f.png)
 
 ## ✨ 核心特点
 
@@ -18,31 +18,13 @@ version：v0.1.25
 - **AI 增强**：视觉定位、智能重试、异常检测、自然语言调试
 - **调试器**：断点/条件断点（标记旁显示表达式）/单步/变量监视/调用栈
 
-![image-20260720103428040](C:\Users\yohoten\AppData\Roaming\Typora\typora-user-images\image-20260720103428040.png)![image-20260720103443381](C:\Users\yohoten\AppData\Roaming\Typora\typora-user-images\image-20260720103443381.png)![image-20260720103509984](C:\Users\yohoten\AppData\Roaming\Typora\typora-user-images\image-20260720103509984.png)![image-20260720103532819](C:\Users\yohoten\AppData\Roaming\Typora\typora-user-images\image-20260720103532819.png)
+![](https://i.imgs.ovh/2026/09/13/873139bf6c702c6d85d59f9a359136a6.png)
 
 ## 📚 示例脚本库
 
 **全新推出！** 提供 11 个即用型模板，帮助你快速上手 ACRPA 自动化。
 
-### 🗂️ 模板分类
-
-```
-templates/
-├── 🌱 basic/              # 基础模板（5个）- 适合新手
-│   ├── 01_自动填写表单.xls
-│   ├── 02_批量下载文件.xls
-│   ├── 03_Excel数据处理.xls
-│   ├── 04_定时截图监控.xls
-│   └── 05_窗口管理示例.xls
-├── 🚀 advanced/           # 高级模板（4个）- 进阶用户
-│   ├── 06_条件分支示例.xls
-│   ├── 07_错误重试机制.xls
-│   ├── 08_变量运算示例.xls
-│   └── 09_多脚本串联.xls
-└── 🤖 ai_assisted/        # AI辅助模板（2个）- 智能化
-    ├── 10_AI视觉定位.xls
-    └── 11_自然语言指令.xls
-```
+![](https://i.imgs.ovh/2026/09/13/9b127df20cbb0ce77c55cd360ac0ea3b.png)
 
 ### 🎯 快速开始
 
@@ -61,6 +43,8 @@ templates/
 
 - Python 3.7+
 - pywin32（窗口管理功能必需）
+
+![](https://i.imgs.ovh/2026/09/13/a603299fcea344706ff8e72f9e1b2d70.png)
 
 ### 安装与运行
 
@@ -129,6 +113,8 @@ Excel 文件（`.xls`），第1行为标题，第3行开始为命令。
 
 **变量引用语法**：使用 `${variable_name}` 引用变量
 
+![](https://i.imgs.ovh/2026/09/13/03b8e909fc4ef1066291d6a5b0796a64.png)
+
 ## ⚙️ 配置说明
 
 `config.json` 文件：
@@ -181,9 +167,9 @@ Excel 文件（`.xls`），第1行为标题，第3行开始为命令。
 - [脚本模板](template/脚本模板.xls)
 - [测试脚本](template/窗口管理测试.xls)
 
-### 🆕 DD 驱动增强（可选）
+### 🆕 DD 驱动增强
 
-ACRPA v0.1.22 支持 **DD 驱动**作为高性能输入后端：
+ACRPA v0.1.22 支持 **DD 驱动**（可选）作为高性能输入后端：
 
 **优势**：
 

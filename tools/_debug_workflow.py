@@ -138,9 +138,9 @@ wf6 = {"name": "T6", "loop_count": 1, "steps": [
     {"type": "log", "text": "done"},
 ]}
 eng6.run_workflow(wf6, ".")
-check("T6 未知命令容错不中断 (done 已执行)",
+check("T6 未知命令在 stop_on_error=False 时不中断 (done 已执行)",
       any(m == "  [LOG] done" for m in logs6), str(logs6[-3:]))
-check("T6 未知命令步骤标记 ok", eng6._step_results.get(0) == "ok", str(eng6._step_results))
+check("T6 未知命令步骤标记 error", eng6._step_results.get(0) == "error", str(eng6._step_results))
 
 # ---------- T7: max_minutes 超时参数 ----------
 print("== T7 max_minutes 参数 ==")

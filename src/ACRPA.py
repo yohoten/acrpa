@@ -783,6 +783,12 @@ def autorun(tn):
         state.running=True
         engine.execute_script(rows_data, state.script_dir)
 
+        # 失败语义: stop_on_error=True 时脚本已在失败行停止，此处同步终止外层循环，
+        # 避免带着同一个失败反复重跑整段脚本 (无限循环模式下尤其致命)
+        if getattr(engine, '_script_failed', False) and getattr(state, 'STOP_ON_ERROR', True):
+            log1("脚本执行失败，按 stop_on_error 设置终止任务", "error")
+            break
+
         state.exec_state["elapsed"]=time.time()-state.exec_state["start_time"]
     state.running=False; state.exec_state["row"]=0; log1("任务终止")
 

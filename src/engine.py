@@ -17,6 +17,27 @@ from utils import _safe_get, log1
 import commands
 from safe_eval import safe_eval_condition, safe_eval_math, EvalError
 
+
+class ExecutionResult:
+    """单条命令的稳定执行结果，兼容 Python 3.7。"""
+    __slots__ = ("ok", "code", "message", "attempts", "artifacts")
+
+    def __init__(self, ok, code="ok", message="", attempts=1, artifacts=None):
+        self.ok = bool(ok)
+        self.code = code
+        self.message = message
+        self.attempts = attempts
+        self.artifacts = list(artifacts or [])
+
+    def __bool__(self):
+        return self.ok
+
+
+class ImageNotFound(Exception):
+    """图像在配置的超时时间内未找到。"""
+    code = "image_not_found"
+
+
 # ── 预编译正则 (避免每次调用编译) ──
 _VAR_REF_RE = re.compile(r'\$\{([^}]+)\}')
 
@@ -224,6 +245,7 @@ class ExecutionEngine:
         # P1 Enhancement: Conditional breakpoints storage
         # Format: {row_number: condition_string}
         self.conditional_breakpoints = {}
+        self._script_failed = False
 
     def execute_script(self, rows, script_dir, _nested=False):
         """
@@ -233,6 +255,7 @@ class ExecutionEngine:
         if not _nested:
             # Clear variables from previous run to prevent cross-run pollution
             self.variables.clear()
+            self._script_failed = False
         i = 0
         total_rows = len(rows)
         
@@ -288,6 +311,8 @@ class ExecutionEngine:
                 i = self._handle_if(rows, i, script_dir)
                 
                 self.call_stack.pop()
+                if self._script_failed and getattr(state, 'STOP_ON_ERROR', True):
+                    break
                 # _handle_if returns the index after the block, so we continue to next iteration
                 continue
             
@@ -322,6 +347,8 @@ class ExecutionEngine:
                 i = self._handle_loop(rows, i, script_dir)
                 
                 self.call_stack.pop()
+                if self._script_failed and getattr(state, 'STOP_ON_ERROR', True):
+                    break
                 continue
 
             elif cmd_type in ("循环结束", "跳出循环"):
@@ -332,7 +359,7 @@ class ExecutionEngine:
             else:
                 # Regular command execution with timing (debugger enhancement)
                 _t0 = time.time()
-                self.execute(row, script_dir)
+                result = self.execute(row, script_dir)
                 _elapsed = time.time() - _t0
                 
                 # Debugger enhancement: record execution timing
@@ -343,10 +370,15 @@ class ExecutionEngine:
                     state._exec_timings[row_num] = {
                         "cmd": cmd_type,
                         "elapsed": _elapsed,
-                        "success": True,
+                        "success": result.ok,
                         "time": time.time(),
                     }
-                
+
+                if not result.ok:
+                    self._script_failed = True
+                    if getattr(state, 'STOP_ON_ERROR', True):
+                        log1("脚本因命令失败停止: {}".format(result.message or result.code), "error")
+                        break
                 i += 1
             
             # P1 Enhancement: Notify variable watchers and handle step-mode debugging
@@ -559,11 +591,21 @@ class ExecutionEngine:
                     ret = self._handle_loop(loop_body, j, script_dir)
                     j = ret - 1
                 else:
-                    self.execute(body_row, script_dir)
+                    result = self.execute(body_row, script_dir)
+                    if not result.ok:
+                        self._script_failed = True
                 j += 1
-            
+
+                # 循环体内命令(含嵌套 如果/循环块)失败时中止本层迭代
+                if self._script_failed and getattr(state, 'STOP_ON_ERROR', True):
+                    break
+
             iteration_count += 1
-            
+
+            # 必须同时中止外层迭代，否则条件循环会反复重跑同一条失败命令
+            if self._script_failed and getattr(state, 'STOP_ON_ERROR', True):
+                break
+
             if should_break:
                 break
         
@@ -571,78 +613,95 @@ class ExecutionEngine:
         return loop_end_idx + 1
 
     def execute(self, row, script_dir):
-        # Support both ScriptData objects and xlrd rows
+        """执行单条命令并返回结果；保留 truthy 兼容，失败不再静默成功。"""
         if hasattr(row, 'cmd_type'):
-            # ScriptData object
             adapted_row = RowAdapter(row)
         else:
-            # xlrd row object (original format)
             adapted_row = row
-        
+
         cv = str(adapted_row[0].value) if adapted_row[0].value is not None else ""
         h = commands.get_handler(cv)
-        if h:
-            _t0 = time.time()
-            success = False
-            last_error = ""
-            for attempt in range(self.retry + 1):
-                try:
-                    h(adapted_row, script_dir)
-                    success = True
+        if h is None:
+            if cv in commands.list_names():
+                # 块结构标记(如果/否则/结束如果/循环开始/循环结束/跳出循环)注册时不带 handler，
+                # 正常由 execute_script 在到达 execute() 前拦截。走到这里说明块嵌套不匹配，
+                # 保持与改动前一致的非失败行为，避免把结构性提示误报为命令失败。
+                log1("命令 '{}' 无处理器，按块标记跳过".format(cv), "warning")
+                return ExecutionResult(True, "no_handler", "", 0)
+            message = "未知命令: {}".format(cv)
+            log1(message, "error")
+            return ExecutionResult(False, "unknown_command", message, 0)
+
+        _t0 = time.time()
+        success = False
+        last_error = ""
+        attempts = 0
+        for attempt in range(self.retry + 1):
+            attempts = attempt + 1
+            try:
+                handler_result = h(adapted_row, script_dir)
+                # 旧 handler 没有返回值时，未抛异常即视为成功；新 handler 可显式返回 False。
+                success = handler_result is not False
+                if not success:
+                    last_error = "命令返回失败"
+                else:
                     break
-                except Exception as e:
-                    last_error = str(e)
-                    if attempt < self.retry:
-                        log1("命令 '{}' 失败 (尝试 {}/{}) — {} 秒后重试".format(
-                            cv, attempt+1, self.retry, self.retry_interval), "warning")
+            except Exception as e:
+                last_error = str(e)
+                if attempt < self.retry:
+                    log1("命令 '{}' 失败 (尝试 {}/{}) — {} 秒后重试".format(
+                        cv, attempt + 1, self.retry + 1, self.retry_interval), "warning")
+                    if self.retry_interval > 0:
                         time.sleep(self.retry_interval)
-                    else:
-                        log1("命令 '{}' 最终失败: {}".format(cv, e), "error")
-                        # Auto-screenshot on failure
-                        try:
-                            ts = datetime.datetime.now().strftime("%m%d_%H%M%S")
-                            fp = os.path.join(os.path.dirname(state.CONFIG_PATH),
-                                "screenshots", "fail_{}_{}.png".format(cv, ts))
-                            os.makedirs(os.path.dirname(fp), exist_ok=True)
-                            get_pyautogui().screenshot(fp)
-                            log1("失败截图已保存: {}".format(fp), "warning")
-                        except Exception:
-                            pass
-                        
-                        # AI 增强: 智能重试分析
-                        if hasattr(state, 'AI_SMART_RETRY') and state.AI_SMART_RETRY:
-                            try:
-                                cmd_args = list(adapted_row[1:10])
-                                cmd_args = [c.value if hasattr(c, 'value') else c for c in cmd_args]
-                                from ai_enhance import ai_smart_retry
-                                plan = ai_smart_retry(cv, cmd_args[:4], last_error, script_dir,
-                                                       attempt, self.retry)
-                                if plan and plan.get("action") == "wait_and_retry":
-                                    wait_s = plan.get("wait_seconds", 2)
-                                    log1("AI 建议: 等待 {}s 后重试...".format(wait_s))
-                                    time.sleep(wait_s)
-                                    try:
-                                        h(adapted_row, script_dir)
-                                        success = True
-                                        log1("AI 智能重试成功!")
-                                    except Exception:
-                                        pass
-                            except Exception:
-                                pass  # AI 增强失败不影响主流程
-            
-            _elapsed = (time.time() - _t0) * 1000
-            # AI 增强: 异常检测记录
-            if hasattr(state, 'AI_ANOMALY_DETECT') and state.AI_ANOMALY_DETECT:
+                else:
+                    log1("命令 '{}' 最终失败: {}".format(cv, e), "error")
+
+        if not success:
+            # Auto-screenshot on failure
+            try:
+                ts = datetime.datetime.now().strftime("%m%d_%H%M%S")
+                fp = os.path.join(os.path.dirname(state.CONFIG_PATH),
+                    "screenshots", "fail_{}_{}.png".format(cv, ts))
+                os.makedirs(os.path.dirname(fp), exist_ok=True)
+                get_pyautogui().screenshot(fp)
+                log1("失败截图已保存: {}".format(fp), "warning")
+            except Exception:
+                pass
+
+            # AI 增强: 智能重试分析（仅在常规重试耗尽后执行一次）
+            if hasattr(state, 'AI_SMART_RETRY') and state.AI_SMART_RETRY:
                 try:
-                    from ai_enhance import anomaly_detector
-                    # 获取当前行号(如果可用)
-                    current_row = state.exec_state.get("row", 0) if hasattr(state, 'exec_state') else 0
-                    anomaly_detector.record(cv, _elapsed, success, current_row)
+                    cmd_args = list(adapted_row[1:10])
+                    cmd_args = [c.value if hasattr(c, 'value') else c for c in cmd_args]
+                    from ai_enhance import ai_smart_retry
+                    plan = ai_smart_retry(cv, cmd_args[:4], last_error, script_dir,
+                                          attempts - 1, self.retry)
+                    if plan and plan.get("action") == "wait_and_retry":
+                        wait_s = plan.get("wait_seconds", 2)
+                        log1("AI 建议: 等待 {}s 后重试...".format(wait_s))
+                        time.sleep(wait_s)
+                        attempts += 1
+                        try:
+                            success = h(adapted_row, script_dir) is not False
+                            if success:
+                                log1("AI 智能重试成功!")
+                        except Exception as e:
+                            last_error = str(e)
                 except Exception:
-                    pass
-        else:
-            success = True  # No handler found, but not a failure
-        return True
+                    pass  # AI 增强失败不影响主流程
+
+        _elapsed = (time.time() - _t0) * 1000
+        if hasattr(state, 'AI_ANOMALY_DETECT') and state.AI_ANOMALY_DETECT:
+            try:
+                from ai_enhance import anomaly_detector
+                current_row = state.exec_state.get("row", 0) if hasattr(state, 'exec_state') else 0
+                anomaly_detector.record(cv, _elapsed, success, current_row)
+            except Exception:
+                pass
+
+        if success:
+            return ExecutionResult(True, "ok", "", attempts)
+        return ExecutionResult(False, "command_failed", last_error or "命令执行失败", attempts)
 
     def _chk(self):
         if state.quit2: return False
@@ -730,7 +789,7 @@ class ExecutionEngine:
             if not isinstance(grayscale, bool):
                 grayscale = True
 
-        max_attempts = int(state.IMAGE_TIMEOUT / 0.5)  # 秒 → 尝试次数 (0.5s/次)
+        max_attempts = max(1, int(float(state.IMAGE_TIMEOUT) / 0.5))  # 秒 → 尝试次数 (0.5s/次)
         for _ in range(max_attempts):
             self._chk()
             loc = self._find_cached(img, confidence, region=region_tuple,
@@ -748,11 +807,12 @@ class ExecutionEngine:
             log1("没有找到图片{}".format(img))
             time.sleep(0.5)
 
-        # 超时提示 (保持与原命令一致的名称)
+        # 超时视为命令失败，交由 execute() 的重试与 stop_on_error 统一处理。
         cmd_name = ("区域点图" if region else "点图") if action == "click" \
             else ("区域找图" if region else "查找图片")
-        log1("{}超时({}s)，跳过".format(cmd_name, state.IMAGE_TIMEOUT), "warning")
-        return None
+        message = "{}超时({}s)".format(cmd_name, state.IMAGE_TIMEOUT)
+        log1(message, "error")
+        raise ImageNotFound(message)
 
     def _find(self, row, z):
         """找图 — 找到目标图并悬停"""
@@ -1031,6 +1091,7 @@ class ExecutionEngine:
             log1("✅ 执行了脚本: {}".format(cp))
         except Exception as e:
             log1("❌ 代码执行失败 {}: {}".format(cp, e), "error")
+            raise
 
     # ======================================================================
     # SECTION: Window Management Methods (新增窗口管理方法)

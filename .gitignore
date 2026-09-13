@@ -27,7 +27,9 @@ ENV/
 
 # ACRPA 运行时文件
 logs/
+res/
 screenshots/
+# img/
 *.log
 config.json
 
@@ -46,3 +48,5 @@ Thumbs.db
 
 # UPX (如果使用)
 upx.exe
+
+dosc/

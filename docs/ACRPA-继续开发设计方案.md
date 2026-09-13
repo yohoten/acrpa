@@ -28,7 +28,7 @@
 
 1. **执行语义不闭合**——命令失败不产生失败信号，重试、`stop_on_error`、AI 异常检测、调度日志全部建立在"成功"这个假前提上。
 2. **状态所有权不清**——45 项配置 + 执行运行时状态集中在模块级全局，被 GUI / 执行 / 工作流并行 / 调度四类线程共同读写；`parallel` 节点为规避数据竞争被迫串行化，"并行"名不符实。
-3. **发布链不可复现**——`ACRPA.spec` 引用的 `res/` 目录被 `.gitignore` 忽略且当前不存在；README 链接的 `docs/`、`templates/` 全部不存在；自动更新地址指向同样被忽略的 `dist/`。
+3. **发布链不可复现**——`ACRPA.spec` 本身从未被跟踪（`.gitignore` 含 `*.spec`），其引用的 `res/` 目录又已被删除并加入忽略；README 链接的 `docs/`、`templates/` 全部不存在；自动更新地址指向同样被忽略的 `dist/`。
 
 **建议：先做"可失败、可复现、可观测"三件事，再谈扩展。** 阶段 0 + 阶段 1 合计约 2–3 周即可把项目从"能跑"推到"可信"。
 
@@ -82,20 +82,23 @@
 ### 1.4 发布链核查结果（关键）
 
 ```
-res/                        → 不存在，且 .gitignore:24 忽略 res/
-res/automation.ico          → git status 显示 D（已删除未提交）
+res/                        → 不存在；.gitignore 已新增 res/，且 git ls-files res 为空
+res/automation.ico          → 已于提交 562c089 删除并提交，完全脱离版本控制
+res/wechat_qrcode.png       → 同上
 ACRPA.spec:8  datas         → ('D:/CodingEmber/ACRPA/res', 'res')  ← 构建输入不存在
 ACRPA.spec:38 icon          → ['D:/CodingEmber/ACRPA/res/automation.ico'] ← 不存在
+ACRPA.spec 自身              → git ls-files ACRPA.spec 为空 ← 从未被跟踪（.gitignore 含 *.spec）
+                             即新克隆的仓库里没有 spec 文件     ← 单靠 res/ 补齐也无法构建
 VERSION 第 2 行              → https://gitee.com/yohoten/acrpa/raw/master/dist/ACRPA.zip
                              而 .gitignore:12 忽略 dist/        ← 更新通道与忽略规则矛盾
-.gitignore 末段              → 忽略 *.spec，但 ACRPA.spec 已被跟踪 ← 规则与事实冲突
-docs/                       → 不存在（README 链接 docs/窗口管理功能指南.md、docs/DD_DRIVER_GUIDE.md）
+.gitignore:52               → 新增忽略项写作 dosc/（docs 拼写错误，意图落空、当前无实际影响）
+docs/                       → 本次已新建并提交方案文档；README 仍链接 docs/窗口管理功能指南.md、docs/DD_DRIVER_GUIDE.md（均不存在）
 templates/                  → 不存在（实际目录为 template/，仅 5 个 .xls + 1 个 .json，README 称"11 个模板"）
 tools/_test_ui.py           → 0 字节
 tools/ 中的一次性脚本        → batch_decompile*.py、extract_*.py、step1_extract*.py、rebuild_all.py 等约 15 个
 ```
 
-**直接后果**：干净克隆后 `python build.py` 必然失败；README 中 4 个链接 404；自动更新指向可能 404 的地址。这不是文档问题，是发布可用性问题。
+**直接后果**：干净克隆后 `python build.py` 必然失败——**且是双重失败**：既没有 `ACRPA.spec`（未跟踪），也没有 `res/` 资源（已删除 + 已忽略）。README 中 4 个链接 404；自动更新指向可能 404 的地址。这不是文档问题，是发布可用性问题。
 
 ---
 
@@ -133,7 +136,7 @@ tools/ 中的一次性脚本        → batch_decompile*.py、extract_*.py、ste
 | --- | --- | --- |
 | 0.1 | `execute()` 返回 `Result`；`_image_search_loop` 超时抛 `ImageNotFound`；`_exec_timings` 记录真实成功标志 | `engine.py:346`、`573-645`、`751-755` |
 | 0.2 | `_run_script` 失败向上抛，`run_workflow` 标记 `error` 并遵守 `stop_on_error` | `workflow.py:499-525`、`306-313` |
-| 0.3 | `ACRPA.spec` 路径改为相对项目根；`res/` 最小资源纳入版本控制或改由 `build.py` 生成 | `ACRPA.spec:8,38`、`.gitignore`、`build.py` |
+| 0.3 | 把 `ACRPA.spec` 纳入版本控制（`.gitignore` 的 `*.spec` 改为白名单例外）；spec 路径改为相对项目根；`res/` 最小资源纳入版本控制或改由 `build.py` 生成 | `ACRPA.spec:8,38`、`.gitignore:47`、`build.py` |
 | 0.4 | 解除 `dist/` 与更新通道的矛盾（二选一：把发布产物托管到独立 release 仓库，或改 `updater.UPDATE_URL`） | `VERSION`、`updater.py:9`、`.gitignore:12` |
 | 0.5 | 文档对齐：README 链接指向真实路径；`config.json` 示例与 `state._config_schema` 默认值一致；`template/` → `templates/` 或反向改名 | `README.md`、`使用说明.txt` |
 
@@ -207,7 +210,8 @@ tools/ 中的一次性脚本        → batch_decompile*.py、extract_*.py、ste
 1. `engine.execute()` → 返回 `Result`（重写 `engine.py:573-645`）。
 2. `_image_search_loop` 超时抛 `ImageNotFound`（`engine.py:751-755`）。
 3. `workflow._run_script` 错误向上传播（`workflow.py:499-525`）。
-4. `ACRPA.spec` 路径相对化 + `res/` 资源补齐（`ACRPA.spec:8,38`）。
+4. `ACRPA.spec` 纳入版本控制 + 路径相对化 + `res/` 资源补齐（`ACRPA.spec:8,38`、`.gitignore`）。
+   注意：`res/automation.ico` 已于 `562c089` 删除，需从 `dist/` 或历史版本取回并重新纳管。
 5. README 链接与 `config.json` 示例对齐（`README.md`）。
 6. `tools/` 整理 + 0 字节文件清理。
 

@@ -27,11 +27,13 @@ ENV/
 
 # ACRPA 运行时文件
 logs/
-res/
 screenshots/
 # img/
 *.log
 config.json
+
+# ACRPA 构建资源（构建输入，必须纳入版本控制）
+# res/ 内含 automation.ico / wechat_qrcode.png，被 ACRPA.spec 引用，请勿加入忽略规则
 
 # Test coverage reports
 htmlcov/
@@ -44,9 +46,9 @@ coverage.xml
 Thumbs.db
 
 # PyInstaller
+# 自动生成的 spec 忽略，但构建入口 ACRPA.spec 必须纳管
 *.spec
+!ACRPA.spec
 
 # UPX (如果使用)
 upx.exe
-
-dosc/

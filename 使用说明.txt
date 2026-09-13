@@ -305,9 +305,12 @@
 - python tools/bump_version.py --patch   递增版本号（同时同步 VERSION 与 README 版本标记）
 - python build.py --clean                打包
 - python tools/make_release.py --write-sha256   生成发布包 + 回填 sha256 + 生成 Release 说明
+- python tools/publish_release.py --exe  建草稿 Release → 上传附件 → 发布（一条命令）
 - python tools/make_release.py --no-zip --purge-cdn main   清 jsDelivr 分支别名缓存
-  注意：Release 的 tag 要与 VERSION 里的直链一致（本版为 v0.1.26）；Gitee 镜像需单独 push，
-  且其 raw 路径对 dist/ 下大文件返回 403，仅作最后兜底。
+  注意：本仓库启用了 release 不可变 —— 附件必须在草稿阶段上传，已发布的 Release 无法再改；
+  且被已发布 Release 占用过的 tag 不可复用（报 tag_name was used by an immutable release），
+  故 tag 由工具从 VERSION 的直链推导，本版为 v0.1.26.0，不要手工拼 v<版本号>。
+  Gitee 镜像需单独 push，且其 raw 路径对 dist/ 下大文件返回 403，仅作最后兜底。
 
 === v0.1.25 新增功能 ===
 

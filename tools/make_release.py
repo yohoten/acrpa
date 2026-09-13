@@ -167,11 +167,28 @@ def read_changelog_entry(version):
     return m.group(0).lstrip("- ").strip() if m else ""
 
 
-def write_release_notes(version, zip_name, digest, size):
+def manifest_tag(lines, version):
+    """从 VERSION 的直链行取 Release tag; 取不到则回退 v<版本号>。
+
+    必要性 (实测本仓库): release 不可变, 一个 tag 一旦被某个已发布的 Release 用过就
+    不能再用于新 Release —— 即便那个 Release 已被删除, 重新发布会报
+    "tag_name was used by an immutable release"。因此 tag 未必等于 v<版本号>, 历史线上
+    本来就有 v0.1.25.0 这种四段写法。客户端读的是 VERSION 里的直链, 所以以直链为准,
+    才能保证「声明的直链」与「实际 tag」始终一致。
+    """
+    for line in lines[1:]:
+        m = re.search(r"/releases/download/([^/]+)/", line)
+        if m:
+            return m.group(1)
+    return "v{}".format(version)
+
+
+def write_release_notes(version, zip_name, digest, size, tag=None):
     """生成 docs/releases/vX.Y.Z.md —— 可直接粘贴为 GitHub Release 正文。"""
     os.makedirs(RELEASES_DIR, exist_ok=True)
     entry = read_changelog_entry(version)
-    tag = "v{}".format(version)
+    if not tag:
+        tag = "v{}".format(version)
     body = []
     body.append("# ACRPA {}\n".format(tag))
     if entry:
@@ -191,8 +208,13 @@ def write_release_notes(version, zip_name, digest, size):
     body.append("# Windows")
     body.append("certutil -hashfile {} SHA256".format(zip_name))
     body.append("```")
+    if tag != "v{}".format(version):
+        body.append("\n> Release tag: `{}`（本仓库 release 不可变，`v{}` 曾被一个已发布的 "
+                    "Release 占用，不可复用；客户端两种写法都会尝试）。".format(
+                        tag, version))
 
-    path = os.path.join(RELEASES_DIR, "{}.md".format(tag))
+    # 文件名按【版本号】取, 不按 tag —— 便于跨 tag 写法稳定引用; 正文里的直链才用 tag。
+    path = os.path.join(RELEASES_DIR, "v{}.md".format(version))
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(body) + "\n")
     return path
@@ -297,7 +319,8 @@ def main():
             replaced = write_sha256_to_version(version, lines, digest)
             print("[OK] VERSION 已{} sha256 行".format("更新" if replaced else "追加"))
 
-        notes = write_release_notes(version, os.path.basename(out_zip), digest, size)
+        notes = write_release_notes(version, os.path.basename(out_zip), digest, size,
+                                    tag=manifest_tag(lines, version))
         print("[OK] Release 说明: {}".format(os.path.relpath(notes, BASE)))
     else:
         print("[WARN] 未找到发布包, 跳过校验和与 Release 说明")
@@ -306,14 +329,18 @@ def main():
         print()
         purge_cdn(args.purge_cdn, ["VERSION", "dist/ACRPA.zip"])
 
-    tag = "v{}".format(version)
+    tag = manifest_tag(lines, version)
     zip_name = os.path.basename(out_zip) if out_zip else "dist/ACRPA.zip"
     print("\n下一步:")
-    print("  A) 建 GitHub Release 并上传 {}".format(zip_name))
-    print("     tag 必须是 {}  (与 VERSION 声明的直链一致; 客户端也会兼容 {} .0 写法)".format(
-        tag, tag))
-    print("     正文直接粘贴 docs/releases/{}.md".format(tag))
+    print("  A) 发布 Release 并上传 {} —— 一条命令搞定:".format(zip_name))
+    print("     python tools/publish_release.py --exe")
+    print("     tag 为 {} (取自 VERSION 直链; 改动 VERSION 直链即改 tag)".format(tag))
+    print("     正文自动取 docs/releases/v{}.md".format(version))
     print("     客户端优先走 Releases API, 且直链/体积取自 API, 最省事也最不易出错。")
+    print("     注意: 本仓库 release 不可变 —— 附件必须在【草稿】阶段上传, 已发布的")
+    print("     Release 无法再改。工具已内置该流程; 若某个 tag 曾被已发布的 Release")
+    print("     占用过, 则不可复用 (报 was used by an immutable release), 需换 tag 并")
+    print("     同步改 VERSION 的直链。")
     print("  B) 镜像仓库 (Gitee) 若也要同步, 记得单独 push 一次并上传 dist/ACRPA.zip:")
     print("     gitee 的 raw 路径对 dist/ 下的大文件实测返回 403, 因此仅作最后兜底。")
     print("  C) 清 CDN 缓存 (否则只走 jsDelivr 的网络会读到旧版本号):")

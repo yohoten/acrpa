@@ -46,7 +46,9 @@ coverage.xml
 Thumbs.db
 
 # PyInstaller
-# 自动生成的 spec 忽略，但构建入口 ACRPA.spec 必须纳管
+# 生成的 spec 默认忽略；ACRPA.spec 目前作为例外纳管
+# 注意：ACRPA.spec 由 build.py 生成（build.py:186-187 先删除、202-232 再重建），
+#      每次构建都会被重写，因此纳管它会在 git status 中产生变更噪声。
 *.spec
 !ACRPA.spec
 

@@ -23,9 +23,12 @@ import json
 import os
 import re
 import shutil
+import ssl
 import subprocess
 import sys
 import threading
+import urllib.error
+import urllib.request
 
 import requests
 
@@ -37,6 +40,7 @@ from version_info import (
     get_sha256,
     get_app_dir,
     release_asset_url,
+    release_asset_urls,
     raw_mirror_urls,
 )
 
@@ -147,16 +151,91 @@ def _compare_versions(current, latest):
 # ══════════════════════════════════════════════════════════════════════
 
 def _http_get(url, timeout=_TIMEOUT):
-    """GET 请求 → (ok, text, error)。"""
+    """GET 请求 → (ok, text, error)。
+
+    双栈传输: 先 requests, 失败再用 urllib 重试。
+    必要性 (实测, 非理论): 在启用 TLS 拦截的网络 (企业代理、安全软件) 中, 代理
+    自签根证书装在 Windows 系统证书库, 而 requests 自带的是 certifi 包 —— 于是
+    requests 对 api.github.com / raw.githubusercontent.com 抛
+    SSLCertVerificationError, urllib (走系统证书库) 却返回 200。只用 requests
+    的后果是: 恰好在最依赖内网的企业环境里, 两个【权威且无缓存】的来源永久不可达,
+    只剩会缓存旧版本的 jsDelivr 可用 —— 表现为"永远提示已是最新", 且毫无错误提示。
+    """
+    headers = {"User-Agent": _USER_AGENT,
+               "Accept": "application/json, text/plain, */*"}
     try:
-        resp = requests.get(url, timeout=timeout,
-                            headers={"User-Agent": _USER_AGENT,
-                                     "Accept": "application/json, text/plain, */*"})
+        resp = requests.get(url, timeout=timeout, headers=headers)
         if resp.status_code != 200:
+            # 服务端给出了明确应答 (404/403 等), 换传输栈重试没有意义
             return False, "", "HTTP {}".format(resp.status_code)
         return True, resp.text, ""
     except Exception as e:
-        return False, "", "{}: {}".format(type(e).__name__, e)
+        first = "{}: {}".format(type(e).__name__, e)
+
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            code = getattr(resp, "status", 200) or 200
+            if code != 200:
+                return False, "", "HTTP {}".format(code)
+            return True, resp.read().decode("utf-8", "replace"), ""
+    except Exception as e:
+        return False, "", "{} | urllib {}: {}".format(first, type(e).__name__, e)
+
+
+# ── 流式下载的双栈适配 ──
+# requests 与 urllib 的响应对象接口不同, 这里统一成 read(n) + 上下文管理,
+# 使下载主循环无需关心底层用的是哪一套 (以及是否能通过代理的自签证书)。
+
+class _HttpStatus(Exception):
+    """服务端给出了明确的非 200 —— 换传输栈重试没有意义, 只需记录状态码。"""
+
+    def __init__(self, code):
+        super(_HttpStatus, self).__init__("HTTP {}".format(code))
+        self.code = code
+
+
+class _RequestsStream(object):
+    """把 requests 的流式响应适配成 urllib 风格 (read(n) + with)。"""
+
+    def __init__(self, resp):
+        self._resp = resp
+        self._iter = resp.iter_content(_CHUNK)
+
+    def read(self, n=-1):
+        for chunk in self._iter:        # iter_content 对 keep-alive 会吐空块
+            if chunk:
+                return chunk
+        return b""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            self._resp.close()
+        except Exception:
+            pass
+        return False
+
+
+def _open_requests_stream(url, timeout, headers):
+    """requests 流式打开 → (handle, 声明体积)。"""
+    resp = requests.get(url, timeout=timeout, stream=True, headers=headers)
+    if resp.status_code != 200:
+        raise _HttpStatus(resp.status_code)
+    return _RequestsStream(resp), int(resp.headers.get("Content-Length") or 0)
+
+
+def _open_urllib_stream(url, timeout, headers):
+    """urllib 流式打开 (系统证书库, 能通过企业代理的自签证书)。"""
+    req = urllib.request.Request(url, headers=headers)
+    resp = urllib.request.urlopen(req, timeout=timeout)
+    code = getattr(resp, "status", 200) or 200
+    if code != 200:
+        resp.close()
+        raise _HttpStatus(code)
+    return resp, int(resp.headers.get("Content-Length") or 0)
 
 
 def _parse_release_api(payload, source):
@@ -246,33 +325,51 @@ def _empty_result(status="network_error", error="", source=""):
 # 检查更新
 # ══════════════════════════════════════════════════════════════════════
 
-def check(timeout=_TIMEOUT):
-    """检查更新 → 结构化结果 dict (status: ok/no_update/network_error/bad_manifest)。"""
-    errors = []
-    info = None
+def _probe_sources(sources, parser, current, timeout, errors):
+    """按顺序探测来源, 返回最可信的一份清单 info (或 None)。
 
-    for source in _RELEASE_API_SOURCES:
+    这里刻意不做"首个成功即返回": 各镜像 (尤其 jsDelivr 的分支别名与 Gitee
+    另一条历史分支) 会缓存旧版本。若首个成功的来源恰好落后, 真实存在的新版本
+    就会被静默吞成"已是最新" —— 这是用户完全无从察觉的失败模式。因此:
+      · 某个来源一旦报出"比本机新"的版本, 立即采纳并停止 (无需再看别的来源);
+      · 若报出的都不比本机新, 则把所有来源探完, 取其中版本最高的一份。
+    额外代价只落在"确实没有更新"这一支上, 且对象是几十字节的纯文本清单。
+    """
+    best = None
+    for source in sources:
         ok, text, err = _http_get(source, timeout)
         if not ok:
             errors.append("{} → {}".format(source, err))
             continue
-        info, why = _parse_release_api(text, source)
+        info, why = parser(text, source)
         if info is None:
             errors.append("{} → {}".format(source, why))
-        else:
-            break
+            continue
+        if compare_versions(current, info["latest"]) < 0:
+            return info                     # 已确认有新版本, 早退
+        if best is None or compare_versions(best["latest"], info["latest"]) < 0:
+            best = info                     # 不比本机新, 先记下版本最高的一份
+    return best
 
-    if info is None:
-        for source in _RAW_MANIFEST_SOURCES:
-            ok, text, err = _http_get(source, timeout)
-            if not ok:
-                errors.append("{} → {}".format(source, err))
-                continue
-            info, why = _parse_manifest(text, source)
-            if info is None:
-                errors.append("{} → {}".format(source, why))
-                continue
-            break
+
+def check(timeout=_TIMEOUT):
+    """检查更新 → 结构化结果 dict (status: ok/no_update/network_error/bad_manifest)。"""
+    errors = []
+    current = VERSION
+
+    info = _probe_sources(_RELEASE_API_SOURCES, _parse_release_api,
+                          current, timeout, errors)
+
+    # Release API 是最权威来源, 但两种情况都真实存在: 清单已先行而 Release 尚未
+    # 发布 (发版流程允许先改版本号再传包), 或 Release 已发布而镜像还落后。因此
+    # 只要尚未确认"有新版本", 就把清单镜像也探一遍, 取版本更高的一方 —— 宁可多问
+    # 一句, 也不能让落后的一方决定"没有更新"。
+    if info is None or compare_versions(current, info["latest"]) >= 0:
+        raw = _probe_sources(_RAW_MANIFEST_SOURCES, _parse_manifest,
+                             current, timeout, errors)
+        if raw is not None and (info is None or
+                                compare_versions(info["latest"], raw["latest"]) < 0):
+            info = raw
 
     if info is None:
         return _empty_result("network_error", " | ".join(errors[:3]))
@@ -413,7 +510,14 @@ def candidate_download_urls(info):
     """按优先级返回候选直链列表 (逐个尝试, 任一成功即止)。
 
     顺序: 远端清单声明的直链 (GitHub Release → 国内镜像) → 版本吻合的本地声明
-    → Release 约定推导 → 仓库内 dist/ 副本镜像 (兜底, 无版本信息, 依赖 sha256 把关)。
+    → Release 约定推导 → 仓库内 dist/ 副本镜像。
+
+    最后一条 (dist/ 副本) 是唯一【不带版本信息】的通道: 它永远返回"仓库里最后
+    提交的那份包", 且历史发布包可能连包内 VERSION 都没有 (实测 dist/ACRPA.zip
+    即为此例), 于是"包内 VERSION 复核"也无从判定。此时若仍去用它, 用户在
+    Release 尚未发布时会静默装上旧版 —— 表现为"更新成功"却版本没变, 比明确
+    报错糟糕得多。因此: 没有可用的 sha256 时, 直接放弃这条通道, 让上层给出
+    "请手动下载"的明确提示。
     """
     version = (info or {}).get("latest") or ""
     urls = list((info or {}).get("download_urls") or [])
@@ -421,8 +525,10 @@ def candidate_download_urls(info):
         urls.append(info["download_url"])
     urls.extend(_acceptable_local_urls(version))
     if version:
-        urls.append(release_asset_url(version))
-    urls.extend(raw_mirror_urls())
+        # 两种 tag 写法 (v0.1.26 / v0.1.26.0) 都作为候选, 避免因 tag 约定不一致 404
+        urls.extend(release_asset_urls(version))
+    if (info or {}).get("sha256") or get_sha256():
+        urls.extend(raw_mirror_urls())
 
     unique = []
     for u in urls:
@@ -535,32 +641,53 @@ def download_package(info, dest_dir=None, progress=None, cancel=None,
 
 def _download_one(url, part_path, progress, cancel, timeout,
                   expect_sha256, expect_size):
-    """单源流式下载 + 校验 → (ok, 原因)。"""
-    try:
-        resp = requests.get(url, timeout=timeout, stream=True,
-                            headers={"User-Agent": _USER_AGENT})
-        if resp.status_code != 200:
-            return False, "HTTP {}".format(resp.status_code)
+    """单源流式下载 + 校验 → (ok, 原因)。
 
-        total = int(resp.headers.get("Content-Length") or 0)
-        got = 0
-        with open(part_path, "wb") as f:
-            for chunk in resp.iter_content(_CHUNK):
-                if cancel and cancel():
-                    return False, "已取消"
-                if not chunk:
-                    continue
-                f.write(chunk)
-                got += len(chunk)
-                if progress:
-                    try:
-                        progress(got, total)
-                    except Exception:
-                        pass
-    except Exception as e:
-        return False, "{}: {}".format(type(e).__name__, e)
+    传输同样双栈: requests 因证书问题失败时改用 urllib 再试一次; 若服务端明确
+    应答非 200, 则不再换栈 (换栈解决不了 404)。
+    """
+    headers = {"User-Agent": _USER_AGENT}
+    total = 0
+    errors = []
 
-    return _verify_file(part_path, expect_sha256, expect_size or total)
+    for label, opener in (("requests", _open_requests_stream),
+                          ("urllib", _open_urllib_stream)):
+        try:
+            handle, total = opener(url, timeout, headers)
+        except _HttpStatus as e:
+            return False, str(e)        # 明确状态码, 换栈无意义
+        except Exception as e:
+            errors.append("{} {}".format(label, type(e).__name__))
+            continue
+
+        try:
+            got = 0
+            with handle, open(part_path, "wb") as f:
+                while True:
+                    if cancel and cancel():
+                        return False, "已取消"
+                    chunk = handle.read(_CHUNK)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    got += len(chunk)
+                    if progress:
+                        try:
+                            progress(got, total)
+                        except Exception:
+                            pass
+        except Exception as e:
+            errors.append("{} {}: {}".format(label, type(e).__name__, e))
+            try:
+                if os.path.exists(part_path):
+                    os.remove(part_path)
+            except Exception:
+                pass
+            continue
+
+        return _verify_file(part_path, expect_sha256, expect_size or total)
+
+    return False, " | ".join(errors[:2]) if errors else "无法建立连接"
 
 
 # ══════════════════════════════════════════════════════════════════════

@@ -114,10 +114,25 @@ def release_tag(version=None):
     return ver if ver.lower().startswith("v") else "v{}".format(ver)
 
 
+def release_asset_urls(version=None):
+    """按 GitHub Release 约定推导下载直链 (含 tag 写法差异的多种可能)。
+
+    本仓库历史 tag 存在两种写法: 三段段 `v0.1.25` 与四段段 `v0.1.25.0`。
+    只推导一种写法, 另一种写法下必然 404 —— 而 404 的表现是"更新可用却下不动",
+    对用户是彻底的失败。因此两种写法都给出, 由下载环节逐个尝试: 多试一个 URL
+    的代价 (一次极轻量的请求) 远小于链接失效。
+    """
+    tag = release_tag(version)
+    tags = [tag]
+    if tag.count(".") == 2:                 # v0.1.26 → 再补一个 v0.1.26.0
+        tags.append(tag + ".0")
+    return ["https://github.com/{}/releases/download/{}/{}".format(
+        GITHUB_REPO, t, RELEASE_ASSET) for t in tags]
+
+
 def release_asset_url(version=None):
-    """按 GitHub Release 约定推导下载直链。"""
-    return "https://github.com/{}/releases/download/{}/{}".format(
-        GITHUB_REPO, release_tag(version), RELEASE_ASSET)
+    """按 GitHub Release 约定推导下载直链 (首个候选; 兼容既有调用方)。"""
+    return release_asset_urls(version)[0]
 
 
 def raw_mirror_urls():

@@ -6,14 +6,18 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-# dist/ 下有两类文件，处置不同：
-#   · dist/*.exe  —— 每次构建都变的产物，不入库
+# dist/ 下有三类文件，处置不同：
+#   · dist/*.exe    —— 每次构建都变的产物，不入库
+#   · dist/*.sha256 —— make_release.py 生成的本地校验和旁挂文件，不入库
 #   · dist/ACRPA.zip —— 发布包，是更新机制里"仓库内镜像直链"的兜底通道，必须纳管
-#     （无版本信息，客户端靠 VERSION 里的 sha256 / 包内 VERSION 兜住旧包风险）
+#     注意：该通道不带版本信息，客户端只在 VERSION 里配了 sha256 时才会使用它 ——
+#     否则宁可报错也不会静默装上旧包。因此建议同时把 sha256 写进 VERSION
+#     （python tools/make_release.py --write-sha256）。
 # 发布包由 tools/make_release.py 生成，务必与 VERSION 同一次提交、同版本。
 dist/*.exe
 dist/*.spec
 dist/*.pkg
+dist/*.sha256
 *.egg-info/
 *.egg
 .eggs/

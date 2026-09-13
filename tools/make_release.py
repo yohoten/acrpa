@@ -5,6 +5,7 @@
     python tools/make_release.py --exe "dist/ACRPA v0.1.26.exe"
     python tools/make_release.py --write-sha256      # 同时把 sha256 回填进 VERSION
     python tools/make_release.py --no-zip            # 只回填 sha256 + 生成 Release 说明
+    python tools/make_release.py --no-zip --purge-cdn main   # 清 jsDelivr 分支别名缓存
 
 它解决三个此前只能手工处理、且容易出错的问题:
 
@@ -167,6 +168,35 @@ def write_release_notes(version, zip_name, digest, size):
     return path
 
 
+def purge_cdn(branch, paths, repo="yohoten/acrpa"):
+    """清 jsDelivr 对分支别名 (如 @main) 的缓存。
+
+    必要性 (实测): jsDelivr 会缓存分支别名下的文件内容。推送新 VERSION 之后实测
+    仍持续返回旧版本号, 而客户端的第一梯队回退源正是 jsDelivr。缓存不清,
+    只能走 jsDelivr 的网络下, 更新检查会被这份"落后的清单"告知"已是最新"。
+    (按提交哈希访问的 URL 不受影响, 但客户端无从预知哈希, 故必须清分支别名。)
+    """
+    import urllib.error
+    import urllib.request
+
+    all_ok = True
+    for p in paths:
+        url = "https://purge.jsdelivr.net/gh/{repo}@{ref}/{path}".format(
+            repo=repo, ref=branch, path=p)
+        try:
+            with urllib.request.urlopen(url, timeout=30) as r:
+                body = r.read().decode("utf-8", "replace")
+            if '"status"' in body and '"finished"' not in body:
+                print("[WARN] CDN 缓存清理未确认完成: {}@{}".format(branch, p))
+                all_ok = False
+            else:
+                print("[OK] CDN 缓存已清: @{} / {}".format(branch, p))
+        except Exception as e:
+            all_ok = False
+            print("[WARN] CDN 缓存清理失败 (@{} / {}): {}".format(branch, p, e))
+    return all_ok
+
+
 def main():
     ap = argparse.ArgumentParser(description="ACRPA 发版助手")
     ap.add_argument("--exe", help="待打包的 EXE 路径 (缺省自动选取 dist/ 下最新)")
@@ -174,6 +204,8 @@ def main():
     ap.add_argument("--write-sha256", action="store_true",
                     help="把 sha256 回填到 VERSION 第三行 (客户端将强制校验)")
     ap.add_argument("--no-zip", action="store_true", help="跳过打包, 只做校验和与 Release 说明")
+    ap.add_argument("--purge-cdn", metavar="BRANCH",
+                    help="清 jsDelivr 对分支别名的缓存 (如 --purge-cdn main), 发版后必须执行")
     args = ap.parse_args()
 
     lines = read_version_lines()
@@ -224,13 +256,24 @@ def main():
     else:
         print("[WARN] 未找到发布包, 跳过校验和与 Release 说明")
 
+    if args.purge_cdn:
+        print()
+        purge_cdn(args.purge_cdn, ["VERSION", "dist/ACRPA.zip"])
+
     tag = "v{}".format(version)
-    print("\n下一步 (任选其一即可让客户端取到新版):")
-    print("  A) 建 GitHub Release 并上传 {}  —— 客户端优先走 Releases API, 最省事".format(
-        os.path.basename(out_zip) if out_zip else "dist/ACRPA.zip"))
-    print("     建议 tag: {}   正文: docs/releases/{}.md".format(tag, tag))
-    print("  B) 直接把 dist/ACRPA.zip 提交进仓库 (VERSION 声明的镜像直链会回退到它)")
+    zip_name = os.path.basename(out_zip) if out_zip else "dist/ACRPA.zip"
+    print("\n下一步:")
+    print("  A) 建 GitHub Release 并上传 {}".format(zip_name))
+    print("     tag 必须是 {}  (与 VERSION 声明的直链一致; 客户端也会兼容 {} .0 写法)".format(
+        tag, tag))
+    print("     正文直接粘贴 docs/releases/{}.md".format(tag))
+    print("     客户端优先走 Releases API, 且直链/体积取自 API, 最省事也最不易出错。")
+    print("  B) 镜像仓库 (Gitee) 若也要同步, 记得单独 push 一次并上传 dist/ACRPA.zip:")
+    print("     gitee 的 raw 路径对 dist/ 下的大文件实测返回 403, 因此仅作最后兜底。")
+    print("  C) 清 CDN 缓存 (否则只走 jsDelivr 的网络会读到旧版本号):")
+    print("     python tools/make_release.py --no-zip --purge-cdn main")
     print("\n提醒: VERSION 与 dist/ACRPA.zip 必须同版本同一次提交, 否则校验会拦下旧包。")
+    print("      下载环节会用包内 VERSION 复核, 镜像返回旧包时会自动换源而非装错版本。")
     return 0
 
 

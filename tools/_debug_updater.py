@@ -4,11 +4,13 @@
 覆盖:
 - V*: 语义化版本比较（含预发布后缀、v 前缀、位数不齐、不可解析）
 - M*: VERSION 清单解析（多直链、sha256、注释、非法首行、notes 行）
-- C*: 下载直链候选（顺序、去重、Release 约定推导、镜像兜底）
+- C*: 下载直链候选（顺序、去重、Release 约定推导、两种 tag 写法、镜像兜底）
 - F*: 下载产物校验（空包、HTML 错误页、体积不符、sha256 不符、合法包）
 - D*: 下载流程（成功落盘、首个直链失败自动换源、全部失败可感知）
-- P*: check() 结构化状态（network_error / ok / no_update、Release API 解析）
+- P*: check() 结构化状态（network_error / ok / no_update、Release API 解析、
+      镜像缓存落后时不吞掉真实新版本）
 - A*: check_async 多路复用（检查在飞时第二个调用方也能拿到回调；已有结论直接复用）
+- T*: 传输双栈（requests 因证书失败时 urllib 兜底；明确 404 不换栈）
 - Z*: 包内 VERSION 读取（自更新前的版本一致性校验）
 - R*: 冻结路径解析（打包后能读到真实版本号 —— 本次修复的核心缺陷）
 
@@ -121,14 +123,26 @@ cands = updater.candidate_download_urls({
     "latest": "0.1.26",
     "download_urls": ["https://a.example/ACRPA.zip"],
     "download_url": "https://b.example/ACRPA.zip",
+    "sha256": "a" * 64,
 })
 check("C1  候选非空", len(cands) > 0)
 check("C2  远端清单直链优先", cands[0] == "https://a.example/ACRPA.zip", str(cands[:2]))
 check("C3  候选无重复", len(cands) == len(set(cands)))
 check("C4  含 Release 约定直链",
       vi.release_asset_url("0.1.26") in cands, str(cands))
-check("C5  含 raw 镜像兜底",
+check("C5  有 sha256 时含 raw 镜像兜底",
       any("raw.githubusercontent.com" in u for u in cands), str(cands))
+
+# dist/ 副本是唯一不带版本信息的通道: 历史包连包内 VERSION 都没有, 无法复核,
+# 此时若仍使用它, Release 未发布时会静默装上旧包 —— 没有校验和就必须放弃。
+nogate = updater.candidate_download_urls({
+    "latest": "0.1.26",
+    "download_urls": ["https://a.example/ACRPA.zip"],
+})
+check("C5b 无 sha256 时放弃不带版本信息的 dist/ 兜底通道",
+      not any("/dist/ACRPA.zip" in u for u in nogate), str(nogate))
+check("C5c 无 sha256 时仍保留 Release 约定直链",
+      vi.release_asset_url("0.1.26") in nogate, str(nogate))
 
 bare = updater.candidate_download_urls({"latest": "0.1.26"})
 check("C6  无显式直链时也能推导",
@@ -136,6 +150,17 @@ check("C6  无显式直链时也能推导",
 check("C7  resolve_download_url 可落回 Release 约定",
       updater.resolve_download_url({"latest": "0.9.9"}).endswith("/v0.9.9/ACRPA.zip"),
       updater.resolve_download_url({"latest": "0.9.9"}))
+# 仓库历史 tag 有 v0.1.25 与 v0.1.25.0 两种写法, 只推导一种必然在其中一种下 404
+check("C8  推导直链同时覆盖三段与四段 tag 写法",
+      vi.release_asset_urls("0.1.26") == [
+          "https://github.com/yohoten/acrpa/releases/download/v0.1.26/ACRPA.zip",
+          "https://github.com/yohoten/acrpa/releases/download/v0.1.26.0/ACRPA.zip",
+      ], str(vi.release_asset_urls("0.1.26")))
+check("C9  候选列表含四段 tag 写法",
+      any("/v0.1.26.0/ACRPA.zip" in u for u in cands), str(cands))
+check("C10 已是四段版本时不重复补 .0",
+      len(vi.release_asset_urls("0.1.25.0")) == 1,
+      str(vi.release_asset_urls("0.1.25.0")))
 
 # ══════════════════════════════════════════════════════════════════
 print("[F] 下载产物校验")
@@ -357,6 +382,36 @@ try:
     check("P9  清单损坏 → 不误判为有新版本",
           res["has_update"] is False and res["status"] in ("network_error", "no_update"),
           "{} / {}".format(res["status"], res.get("error", "")[:50]))
+
+    # 反陈旧: 首个成功来源恰好缓存落后 (jsDelivr 分支别名实测会滞后), 不得把
+    # 真实存在的新版本静默吞成"已是最新" —— 这是用户无从察觉的失败模式。
+    reset_updater_state()
+    _patch_http({
+        "releases/latest": (False, "", "ssl error"),
+        "cdn.jsdelivr.net": (True, "{}\n".format(updater.VERSION), ""),
+        "raw.githubusercontent": (True, "0.999.0\nhttps://x.example/a.zip\n", ""),
+    })
+    res = updater.check(timeout=1)
+    check("P10 首个镜像缓存落后时不吞掉真实新版本",
+          res["status"] == "ok" and res["has_update"] and res["latest"] == "0.999.0",
+          "{} / {}".format(res["status"], res["latest"]))
+    check("P11 记录的是真正给出新版本的来源",
+          "raw.githubusercontent" in (res["source"] or ""), str(res["source"]))
+
+    # 发版流程允许"先改版本号再传包": Release 还没发布, 但清单已先行
+    reset_updater_state()
+    _patch_http({
+        "releases/latest": (
+            True,
+            '{"tag_name":"v0.1.26","html_url":"https://github.com/x/rel","body":"n",'
+            '"assets":[{"name":"ACRPA.zip",'
+            '"browser_download_url":"https://dl.example/old.zip","size":1}]}', ""),
+        "/VERSION": (True, "0.999.0\nhttps://x.example/a.zip\n", ""),
+    })
+    res = updater.check(timeout=1)
+    check("P12 Release 落后而清单先行时仍报出更新",
+          res["status"] == "ok" and res["latest"] == "0.999.0",
+          "{} / {}".format(res["status"], res["latest"]))
 finally:
     updater._http_get = real_http
 
@@ -411,6 +466,88 @@ try:
 finally:
     updater._http_get = real_http
     reset_updater_state()
+
+# ══════════════════════════════════════════════════════════════════
+print("[T] 传输双栈 (requests 证书失败 → urllib 兜底)")
+real_get = updater.requests.get
+real_urlopen = updater.urllib.request.urlopen
+tmp = tempfile.mkdtemp(prefix="acrpa_transport_")
+
+
+class _UrlResp(object):
+    """urllib 风格的最小响应壳。"""
+
+    status = 200
+
+    def __init__(self, data):
+        self._data = data
+        self.headers = {"Content-Length": str(len(data))}
+
+    def read(self, n=-1):
+        out, self._data = self._data, b""
+        return out
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def close(self):
+        pass
+
+
+class _Resp404(object):
+    status_code = 404
+    headers = {}
+
+
+def _req_ssl_fail(*a, **kw):
+    raise updater.requests.exceptions.SSLError("certificate verify failed")
+
+
+try:
+    updater.requests.get = _req_ssl_fail
+    updater.urllib.request.urlopen = lambda req, timeout=None: _UrlResp(b"0.1.26\n")
+    ok, text, err = updater._http_get("https://api.github.com/x", timeout=1)
+    check("T1  requests 证书失败时 urllib 兜底成功",
+          ok and text.strip() == "0.1.26", "{} / {}".format(ok, err))
+    check("T2  兜底成功时不残留错误信息", err == "", err)
+
+    # 服务端明确应答 404 时不应再换栈 (换栈解决不了 404, 只会拖慢并污染原因)
+    hit = {"urllib": 0}
+
+    def _count_urlopen(req, timeout=None):
+        hit["urllib"] += 1
+        return _UrlResp(b"should-not-happen")
+
+    updater.requests.get = lambda *a, **kw: _Resp404()
+    updater.urllib.request.urlopen = _count_urlopen
+    ok, text, err = updater._http_get("https://x.example/missing", timeout=1)
+    check("T3  明确 404 不换栈重试",
+          (not ok) and "404" in err and hit["urllib"] == 0,
+          "{} / {} / urllib={}".format(ok, err, hit["urllib"]))
+
+    # 下载环节同样双栈: requests 抛证书错时必须改用 urllib 完成下载
+    src_zip = os.path.join(tmp, "src.zip")
+    with zipfile.ZipFile(src_zip, "w") as z:
+        z.writestr("ACRPA/VERSION", "0.1.26\n")
+    payload = open(src_zip, "rb").read()
+
+    updater.requests.get = _req_ssl_fail
+    updater.urllib.request.urlopen = lambda req, timeout=None: _UrlResp(payload)
+    part = os.path.join(tmp, "pkg.part")
+    okd, why = updater._download_one(
+        "https://raw.githubusercontent.com/x/ACRPA.zip", part,
+        None, None, 1, "", len(payload))
+    check("T4  下载在 requests 失败时改用 urllib 完成", okd, str(why))
+    check("T5  兜底下载内容与源一致",
+          okd and open(part, "rb").read() == payload,
+          "size={}".format(os.path.getsize(part) if os.path.exists(part) else -1))
+finally:
+    updater.requests.get = real_get
+    updater.urllib.request.urlopen = real_urlopen
+    shutil.rmtree(tmp, ignore_errors=True)
 
 # ══════════════════════════════════════════════════════════════════
 print("[R] 冻结路径解析 (打包后版本号来源)")

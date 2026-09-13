@@ -82,6 +82,21 @@ def find_exe(explicit=None):
     return cands[0]
 
 
+def package_version(zip_path):
+    """读发布包内嵌 VERSION 的首行; 读不到返回空串 (历史发布包可能确实没有)。"""
+    try:
+        with zipfile.ZipFile(zip_path) as z:
+            for name in z.namelist():
+                if name.endswith("/"):
+                    continue
+                if name.upper().split("/")[-1] == "VERSION":
+                    text = z.read(name).decode("utf-8", "replace").strip()
+                    return (text.splitlines() or [""])[0].strip()
+    except Exception:
+        return ""
+    return ""
+
+
 def build_zip(version, exe_path, out_zip):
     """按发行版目录结构打包; 非 ASCII 名自动带 UTF-8 标志位。"""
     exe_name = "ACRPA v{}.exe".format(version)
@@ -238,6 +253,22 @@ def main():
         out_zip = out_zip if os.path.exists(out_zip) else None
 
     digest, size = "", 0
+    if out_zip and os.path.exists(out_zip):
+        # 关键防线: --no-zip 会沿用已存在的 dist/ACRPA.zip。如果那份还是上一次的
+        # 旧包 (甚至没有内嵌 VERSION), 直接给它算校验和并写成"本版本的 Release
+        # 说明", 就会发布一个指向旧包的错误校验和 —— 用户拿到手也永远对不上。
+        # 包内版本对不上, 一律拒绝生成校验和与说明。
+        pkg_ver = package_version(out_zip)
+        if pkg_ver != version:
+            print("[WARN] {} 的包内版本为 {!r}, 与 VERSION 的 {} 不一致。".format(
+                os.path.relpath(out_zip, BASE), pkg_ver or "缺失", version),
+                file=sys.stderr)
+            print("       已拒绝用它生成校验和与 Release 说明 (否则会发布指向旧包的错误值)。",
+                  file=sys.stderr)
+            print("       请重新打包: python build.py --clean && python tools/make_release.py",
+                  file=sys.stderr)
+            out_zip = None
+
     if out_zip and os.path.exists(out_zip):
         digest = sha256_of(out_zip)
         size = os.path.getsize(out_zip)

@@ -12,10 +12,13 @@
     版本号唯一事实来源是项目根目录 VERSION 文件 (第一行)。
     所有模块 (updater/dialogs/settings_window/ACRPA) 已统一从
     src/version_info.py 读取，因此只需更新 VERSION 文件即可全局生效。
+    本工具还会顺带同步 README 顶部的 `version：vX.Y.Z` 标记行与
+    Release 直链中的 tag，避免"文件里写的"和"程序自报的"版本号不一致。
 
 说明:
     - 支持预发布后缀: 0.1.23beta / 0.1.23-beta / 0.1.23rc1
     - --patch/--minor/--major 递增数值部分并【保留后缀】: 0.1.23beta → 0.1.24beta
+    - VERSION 第二行起的直链与 sha256 行会原样保留, 不会被清零
 """
 import os
 import re
@@ -39,23 +42,57 @@ def read_version():
 
 
 def read_download_url():
-    """读取下载地址 (第二行)。"""
+    """读取首条下载直链 (VERSION 中第一条 http(s) 行)。"""
+    urls = read_download_urls()
+    return urls[0] if urls else ""
+
+
+def read_download_urls():
+    """VERSION 中声明的全部 http(s) 行。"""
+    return [l for l in read_manifest_lines()
+            if re.match(r"^https?://", l, re.I)]
+
+
+def read_manifest_lines():
+    """读取 VERSION 首行之后的全部有效行 (直链 / sha256), 供原样保留。"""
     try:
         with open(VERSION_FILE, encoding="utf-8") as f:
-            lines = [l.strip() for l in f.readlines() if l.strip()]
-            return lines[1] if len(lines) > 1 else ""
+            lines = [l.strip() for l in f
+                     if l.strip() and not l.strip().startswith("#")]
     except Exception:
-        return ""
+        return []
+    return lines[1:]
 
 
-def write_version(old_version, new_version, download_url):
-    """写入新版本号到 VERSION 文件 (保留第二行下载地址)。"""
-    content = "{}\n".format(new_version)
-    if download_url:
-        content += "{}\n".format(download_url)
+def write_version(old_version, new_version, tail_lines):
+    """写入新版本号到 VERSION 文件 (第二行起原样保留)。"""
+    out = [new_version] + list(tail_lines or [])
     with open(VERSION_FILE, "w", encoding="utf-8") as f:
-        f.write(content)
+        f.write("\n".join(out) + "\n")
     print("[OK] VERSION 已更新: {} → {}".format(old_version or "(无)", new_version))
+
+
+def sync_readme(old_version, new_version):
+    """同步 README 顶部版本标记与 Release 直链中的 tag → [改动文件列表]。"""
+    if not old_version:
+        return []
+    try:
+        with open(README_FILE, encoding="utf-8") as f:
+            text = f.read()
+    except Exception:
+        return []
+
+    original = text
+    text = re.sub(r"(?m)^(version[：:]\s*)v?[\w.\-]+",
+                  lambda m: m.group(1) + "v" + new_version, text)
+    # Release 直链形如 .../download/v0.1.25/ACRPA.zip
+    text = text.replace("/v{}/".format(old_version), "/v{}/".format(new_version))
+
+    if text == original:
+        return []
+    with open(README_FILE, "w", encoding="utf-8") as f:
+        f.write(text)
+    return ["README.md"]
 
 
 def bump(current, part):
@@ -81,8 +118,13 @@ def bump(current, part):
 
 
 def verify(old_version):
-    """扫描 src/ 下是否残留旧版本号硬编码 (跳过 version_info.py 回退值和测试)。"""
-    pattern = re.compile(re.escape(old_version))
+    """扫描 src/ 下是否残留旧版本号的【字符串字面量】硬编码。
+
+    只匹配引号包裹的版本号 (如 VERSION = "0.1.24"), 而不是注释或文档字符串里
+    作为示例出现的版本号 —— 后者是正常写法, 报出来只会让人习惯性忽略告警。
+    跳过 version_info.py 的内置回退值。
+    """
+    pattern = re.compile(r"""['"]v?""" + re.escape(old_version) + r"""['"]""")
     findings = []
     for root, _, files in os.walk(SRC_DIR):
         for fn in files:
@@ -93,22 +135,23 @@ def verify(old_version):
                 continue  # 回退值属正常
             with open(fp, encoding="utf-8") as f:
                 for i, line in enumerate(f, 1):
-                    if pattern.search(line):
-                        # 跳过测试/注释中的版本比较
-                        if "_compare_versions" in line or ("版本" in line and "test" in fn):
-                            continue
-                        findings.append((os.path.relpath(fp, BASE), i, line.strip()))
+                    if not pattern.search(line):
+                        continue
+                    if "_compare_versions" in line or ("版本" in line and "test" in fn):
+                        continue
+                    findings.append((os.path.relpath(fp, BASE), i, line.strip()))
     return findings
 
 
 def main():
     args = sys.argv[1:]
     current = read_version() or ""
-    download_url = read_download_url()
+    tail_lines = read_manifest_lines()
 
     if "--show" in args or not args:
         print("当前版本: {}".format(current or "(未设置)"))
-        print("下载地址: {}".format(download_url or "(未设置)"))
+        print("下载直链: {}".format(read_download_url() or "(未设置, 由 updater 自动推导)"))
+        print("VERSION 附加行: {}".format(len(tail_lines)))
         print("用法见文件头注释")
         return 0
 
@@ -154,10 +197,16 @@ def main():
         print("[SKIP] 目标版本 {} 与当前相同，无需更新".format(new_version))
         return 0
 
-    write_version(current, new_version, download_url)
+    write_version(current, new_version, tail_lines)
     print("  版本: {} → {}{}".format(
         current or "(无)", new_version,
         "  [{}递增]".format(bump_part) if bump_part else ""))
+
+    changed = sync_readme(current, new_version)
+    if changed:
+        print("[OK] 已同步: {}".format(", ".join(changed)))
+    else:
+        print("[SKIP] README 未发现需同步的版本标记")
 
     # 自动验证
     if current:

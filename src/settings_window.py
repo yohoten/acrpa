@@ -1258,15 +1258,34 @@ def open_settings_window():
     quick_content.columnconfigure(0, weight=1)
 
     # ── 关于 ACRPA (P2-7) — 版本号从 VERSION 文件统一获取 (每次打开实时读取) ──
-    from version_info import get_version
+    from version_info import get_version, get_manifest_path
     about_frame = tkinter.Frame(quick_content, bg=C["bgc"])
     about_frame.grid(row=0, column=0, columnspan=2, sticky="ew", padx=8, pady=(4, 4))
-    tkinter.Label(about_frame, text="ACRPA v{}".format(get_version()), font=FONT_TITLE,
-        fg=C["ac"], bg=C["bgc"]).pack(anchor="w")
+
+    about_head = tkinter.Frame(about_frame, bg=C["bgc"])
+    about_head.pack(fill="x")
+    tkinter.Label(about_head, text="ACRPA v{}".format(get_version()), font=FONT_TITLE,
+        fg=C["ac"], bg=C["bgc"]).pack(side="left")
+
+    def _open_update():
+        try:
+            import dialogs
+            dialogs.show_update_dialog(force_check=True)
+        except Exception as e:
+            messagebox.showerror("检查更新", "无法打开更新窗口:\n{}".format(e))
+
+    _btn(about_head, "⇪ 检查更新", _open_update,
+         tip="检查 GitHub 上的最新版本并直接下载 (支持自动重启更新)"
+         ).pack(side="right")
+
     tkinter.Label(about_frame, text="自动化工作流工具 — 脚本编辑 | 执行控制 | 动作录制 | 模板共创",
         font=("Microsoft YaHei UI", 7), fg=C["fgm"], bg=C["bgc"]).pack(anchor="w")
     tkinter.Label(about_frame, text="仅供学习研究使用，使用者自行承担风险",
         font=("Microsoft YaHei UI", 7), fg=C["dg"], bg=C["bgc"]).pack(anchor="w")
+    # 版本来源路径: 打包版与源码版的 VERSION 位置不同, 排查"版本号不对"时先看这里
+    tkinter.Label(about_frame, text="版本来源: {}".format(get_manifest_path() or "(内置回退值)"),
+        font=("Microsoft YaHei UI", 7), fg=C["fgm"], bg=C["bgc"],
+        wraplength=520, justify="left").pack(anchor="w")
 
     # ── 分级重置 (P2-9) ──
     def _reset_defaults(all_settings=False):

@@ -1,6 +1,6 @@
 # A/C RPA - 自动化工作流工具
 
-version：v0.1.26
+version：v0.1.27
 
 轻量级桌面自动化工具，基于 Python + tkinter + pyautogui，通过 Excel 脚本实现图像识别定位、鼠标键盘自动化操作。
 
@@ -256,6 +256,8 @@ python tools/make_release.py --no-zip --purge-cdn main   # 5. 清 CDN 缓存 (�
 
 **联系**：yoho12138@aliyun.com
 **更新日志**：
+
+- v0.1.27 (2026-09-13): **以 v0.1.25 为基线重建，修复 v0.1.26 的不稳定接线** —— 在 v0.1.25 稳定基线上分组重放 v0.1.26 的改进并逐个验证，同时修正 v0.1.26 的两处接线缺陷：`_update_pending` 全局缺失，导致 `_periodic` 每 100ms 抛 `NameError`、状态栏与执行进度刷新链路中断；`show_update_dialog` 未导入，导致点击状态栏触发 `NameError`、更新入口失效。保留 v0.1.26 的全部优点：更新机制重构（GitHub Releases API 多源降级、完整语义化版本比较、sha256 与体积/容器校验、便携版一键重启自更新、打包版版本号来源修复）、engine 命令失败语义与工作流错误传播（stop_on_error/重试/并行失败）、发布工具链（`tools/make_release.py`、`tools/publish_release.py`、`bump_version.py`）、`res/` 等构建资源纳管与文档。另将运行时产物 `recent.json`/`recent_workflow.json` 加入忽略。
 
 - v0.1.26 (2026-09-13): **更新机制重构** —— 修复打包后版本号失真（EXE 此前只查项目根目录，冻结后必然回退到内置值，永远自报 v0.1.24，导致更新判断与"关于"页面全部失真）；检查环节改为多源降级（GitHub Releases API → raw/jsDelivr/Gitee 清单镜像）；版本比较改为完整语义化实现，支持 `v` 前缀、位数不齐与预发布后缀（此前 `0.1.26-beta` 会因 int() 抛错被静默判为无更新）；检查结果结构化，明确区分无更新/网络故障/清单损坏，不再把网络异常伪装成"已是最新"；某来源报出的版本不比本机新时继续探测其余来源取最高者，避免镜像缓存落后把真实新版本静默吞掉（实测 jsDelivr 分支别名与 Gitee 镜像均会滞后）；传输改为 requests→系统证书库双栈，修复企业 TLS 拦截环境下两个权威来源永久不可达；下载支持多候选直链逐个重试、流式进度、sha256 与体积/容器格式校验，并复核包内 VERSION、兼容 `v0.1.26.0` 四段 tag 写法；无 sha256 时不再使用不带版本信息的 `dist/` 兜底通道，避免静默装上旧包；新增便携版一键重启自更新（只替换主程序与 VERSION，不触碰用户数据）；新增 `tools/make_release.py` 发版助手（含 CDN 缓存清理），新增 `tools/publish_release.py` 发布助手（草稿→上传→发布三段式，适配本仓库 release 不可变；tag 由 `VERSION` 直链推导，避免复用被占用过的 tag；上传自动在 urllib 失败时切换到系统 curl 以绕开 schannel 吊销检查与代理对小请求/大请求的差异），`bump_version.py` 现同步 README 版本标记。另修复 `engine` 命令失败静默成功、`stop_on_error` 与重试失效问题（详见 v0.1.25 之后提交）
 - v0.1.25 (2026-08-10): 工作流Tab深度定制(操作库分类树+搜索+最近使用、command/variable/loop/log新节点、统一配置表单、右键复制/粘贴/禁用/注释、外层循环次数与最长执行时间控制、执行高亮、变量管理)、工作流引擎支持新节点及enabled/comment跳过、设置页导航与快捷键列表优化、版本号全局统一管理(bump_version.py)、README/使用说明在线优先打开、修复启动崩溃/最近使用失效/内联编辑popdown崩溃/找图OpenCV降级/暗黑模式工作流控件不变色/打包缺失模块

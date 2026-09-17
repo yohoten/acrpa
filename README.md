@@ -1,10 +1,12 @@
 # A/C RPA - 自动化工作流工具
 
-version：v0.1.25
+version：v0.1.26
 
 轻量级桌面自动化工具，基于 Python + tkinter + pyautogui，通过 Excel 脚本实现图像识别定位、鼠标键盘自动化操作。
 
-![image-20260720103402703](C:\Users\yohoten\AppData\Roaming\Typora\typora-user-images\image-20260720103402703.png)
+**下载最新版**：[GitHub Releases](https://github.com/yohoten/acrpa/releases/latest) · [Gitee 镜像](https://gitee.com/yohoten/acrpa)
+
+![](https://i.imgs.ovh/2026/09/13/7ada54bcbc739d30045ccc36922bac5f.png)
 
 ## ✨ 核心特点
 
@@ -18,40 +20,20 @@ version：v0.1.25
 - **AI 增强**：视觉定位、智能重试、异常检测、自然语言调试
 - **调试器**：断点/条件断点（标记旁显示表达式）/单步/变量监视/调用栈
 
-![image-20260720103428040](C:\Users\yohoten\AppData\Roaming\Typora\typora-user-images\image-20260720103428040.png)![image-20260720103443381](C:\Users\yohoten\AppData\Roaming\Typora\typora-user-images\image-20260720103443381.png)![image-20260720103509984](C:\Users\yohoten\AppData\Roaming\Typora\typora-user-images\image-20260720103509984.png)![image-20260720103532819](C:\Users\yohoten\AppData\Roaming\Typora\typora-user-images\image-20260720103532819.png)
+![](https://i.imgs.ovh/2026/09/13/873139bf6c702c6d85d59f9a359136a6.png)
 
 ## 📚 示例脚本库
 
 **全新推出！** 提供 11 个即用型模板，帮助你快速上手 ACRPA 自动化。
 
-### 🗂️ 模板分类
-
-```
-templates/
-├── 🌱 basic/              # 基础模板（5个）- 适合新手
-│   ├── 01_自动填写表单.xls
-│   ├── 02_批量下载文件.xls
-│   ├── 03_Excel数据处理.xls
-│   ├── 04_定时截图监控.xls
-│   └── 05_窗口管理示例.xls
-├── 🚀 advanced/           # 高级模板（4个）- 进阶用户
-│   ├── 06_条件分支示例.xls
-│   ├── 07_错误重试机制.xls
-│   ├── 08_变量运算示例.xls
-│   └── 09_多脚本串联.xls
-└── 🤖 ai_assisted/        # AI辅助模板（2个）- 智能化
-    ├── 10_AI视觉定位.xls
-    └── 11_自然语言指令.xls
-```
+![](https://i.imgs.ovh/2026/09/13/9b127df20cbb0ce77c55cd360ac0ea3b.png)
 
 ### 🎯 快速开始
 
-1. **选择模板**: 根据你的需求从 `templates/` 目录选择合适的模板
+1. **选择模板**: 根据你的需求从 `template/` 目录选择合适的模板
 2. **导入脚本**: 在 ACRPA 中点击"文件" → "导入脚本"，选择 `.xls` 文件
 3. **修改参数**: 根据实际需求调整窗口标题、坐标、输入内容等
 4. **测试运行**: 点击"运行"按钮（或按 F5）查看效果
-
-📖 **详细说明**: 查看 [templates/README.md](templates/README.md) 获取完整使用指南
 
 ---
 
@@ -61,6 +43,8 @@ templates/
 
 - Python 3.7+
 - pywin32（窗口管理功能必需）
+
+![](https://i.imgs.ovh/2026/09/13/a603299fcea344706ff8e72f9e1b2d70.png)
 
 ### 安装与运行
 
@@ -129,6 +113,8 @@ Excel 文件（`.xls`），第1行为标题，第3行开始为命令。
 
 **变量引用语法**：使用 `${variable_name}` 引用变量
 
+![](https://i.imgs.ovh/2026/09/13/03b8e909fc4ef1066291d6a5b0796a64.png)
+
 ## ⚙️ 配置说明
 
 `config.json` 文件：
@@ -175,15 +161,12 @@ Excel 文件（`.xls`），第1行为标题，第3行开始为命令。
 
 ## 📚 详细文档
 
-- [窗口管理功能指南](docs/窗口管理功能指南.md)
-- [DD驱动集成指南](docs/DD_DRIVER_GUIDE.md) [★]NEW
-- [使用说明](res/使用说明.txt)
+- [使用说明](使用说明.txt)
 - [脚本模板](template/脚本模板.xls)
-- [测试脚本](template/窗口管理测试.xls)
 
-### 🆕 DD 驱动增强（可选）
+### 🆕 DD 驱动增强
 
-ACRPA v0.1.22 支持 **DD 驱动**作为高性能输入后端：
+ACRPA v0.1.22 支持 **DD 驱动**（可选）作为高性能输入后端：
 
 **优势**：
 
@@ -205,11 +188,76 @@ ACRPA v0.1.22 支持 **DD 驱动**作为高性能输入后端：
 写入,Test@#$%,0.02,auto         # 自动选择最佳方式
 ```
 
-详见：[DD驱动集成指南](docs/DD_DRIVER_GUIDE.md)
+## ⇪ 软件更新
+
+程序启动 3 秒后自动检查新版本（可在「设置 → 系统」中关闭）。发现新版本时状态栏显示
+「新版本 vX.Y.Z 可用 — 点击更新」，点击进入更新窗口：
+
+1. **检查** —— 依次尝试 GitHub Releases API → 纯文本清单镜像（raw.githubusercontent →
+   jsDelivr → Gitee）。两个关键设计：
+   - **不会因单个来源不可达就定论**：旧实现只有一个 Gitee 地址，一旦不可达就把异常吞成
+     "已是最新"。现在会明确区分「无更新 / 网络故障 / 清单损坏」，且某个来源报出的版本
+     不比本机新时不会立刻收工，而是继续探测其余来源取版本最高者 —— 避免某个镜像缓存
+     落后（实测 jsDelivr 的分支别名、Gitee 镜像都会滞后）把真实的新版本静默吞掉。
+   - **传输双栈**：`requests` 因证书校验失败时自动改用系统证书库重试。在启用 TLS 拦截的
+     企业网络里，`requests` 自带的 certifi 验不过代理自签证书，而系统证书库可以 ——
+     只走 `requests` 会让两个权威来源永久不可达，只剩会缓存旧版本的镜像可用。
+2. **下载** —— 按候选直链逐个尝试（清单声明的直链 → Release 约定推导 → 仓库内 `dist/` 副本），
+   显示进度与体积；落盘后校验 sha256（清单提供时）、体积与 ZIP/EXE 容器格式，拒绝 HTML
+   错误页与半截包，并**复核包内 `VERSION`** —— 镜像返回旧包时自动换源，而不是装错版本。
+   Release 约定推导同时覆盖 `v0.1.26` 与 `v0.1.26.0` 两种 tag 写法，避免因 tag 约定不一致 404。
+3. **更新** —— 便携版可直接「🚀 立即重启更新」：程序退出 → 校验包内版本号 → 以 `.new` 中转
+   原子替换主程序与 `VERSION` → 自动重启。**只替换主程序，配置、脚本、模板、日志一律不动。**
+
+手动入口：「设置 → 快速操作 → 关于 ACRPA → ⇪ 检查更新」。
+更新包保存在程序目录的 `updates/` 下（保留最近一个，其余自动清理）。
+
+**版本号来源**：项目根目录 `VERSION` 文件 —— 首行是版本号，其后可写多条下载直链（按顺序尝试）
+与一行 `sha256:...` 校验和。打包版按 `EXE 同级目录 → 内嵌副本 → 项目根目录` 顺序查找，
+因此可直接在 EXE 旁放一份 `VERSION` 来覆盖版本号或切换更新通道。
+
+> 仓库内 `dist/ACRPA.zip` 是唯一**不带版本信息**的兜底通道，历史发布包甚至没有包内
+> `VERSION` 可供复核。因此它只在 `VERSION` 配置了 `sha256` 时才被使用 —— 否则宁可报错
+> 也不会静默装上旧包。建议发版时用 `--write-sha256` 把校验和写进 `VERSION`。
+>
+> 注意区分两份 `VERSION`：**项目根目录**那份带 `sha256` 行，是给客户端读的清单；
+> **发布包内**那份只保留版本号与直链 —— 校验和描述的是包本身，写进被校验的产物里
+> 必然自相矛盾（写进去哈希就变了），因此发版工具在打包时会把它剔除。
+
+**发版流程**：
+
+```bash
+python tools/bump_version.py --patch     # 1. 递增版本号 (同步 VERSION + README 标记)
+python build.py --clean                  # 2. 打包
+python tools/make_release.py --write-sha256   # 3. 生成 dist/ACRPA.zip + 校验和 + 回填 VERSION + Release 说明
+python tools/publish_release.py --exe    # 4. 建草稿 Release → 上传附件 → 发布 (一条命令)
+python tools/make_release.py --no-zip --purge-cdn main   # 5. 清 CDN 缓存 (见下)
+```
+
+> **第 4 步为什么必须走工具**：本仓库启用了 release 不可变，已发布的 Release 既不能改正文
+> 也不能再加附件（直接 POST 附件会得到 `422 Cannot upload assets to an immutable release.`），
+> 因此顺序必须是「建草稿 → 上传 → 发布」。另外，**一个 tag 一旦被某个已发布的 Release 占用过
+> 就不可复用** —— 即便那个 Release 已被删除，重新发布仍会报 `tag_name was used by an
+> immutable release`。届时需换 tag（如本版用的是 `v0.1.26.0`）并同步改 `VERSION` 的直链；
+> 工具的 tag 正是从直链推导的，改直链即改 tag，不会再撞车。
+
+发布时需注意三点（均由实测踩坑得出）：
+
+1. **Release tag 必须与 `VERSION` 声明的直链一致**（本版为 `v0.1.26.0`）。客户端优先走
+   Releases API 并直接采用 API 返回的直链与体积，因此只要 tag 与正文对得上就不会出错。
+   tag 由 `publish_release.py` 从直链自动推导，不要手工按 `v<版本号>` 拼。
+2. **Gitee 镜像需单独 push**，本地 `origin` 指向 Gitee 而推送目标常是 `github`，两者是两个仓库。
+   实测 Gitee 的 raw 路径对 `dist/` 下的大文件返回 403，故仅作最后兜底。
+3. **jsDelivr 会缓存分支别名**：推送新 `VERSION` 后实测仍持续返回旧版本号（按提交哈希访问
+   才即时生效，但客户端无从预知哈希）。因此发版后要执行第 5 步清缓存，否则只能走 jsDelivr
+   的网络会被这份落后的清单告知"已是最新"。
+
+---
 
 **联系**：yoho12138@aliyun.com
 **更新日志**：
 
+- v0.1.26 (2026-09-13): **更新机制重构** —— 修复打包后版本号失真（EXE 此前只查项目根目录，冻结后必然回退到内置值，永远自报 v0.1.24，导致更新判断与"关于"页面全部失真）；检查环节改为多源降级（GitHub Releases API → raw/jsDelivr/Gitee 清单镜像）；版本比较改为完整语义化实现，支持 `v` 前缀、位数不齐与预发布后缀（此前 `0.1.26-beta` 会因 int() 抛错被静默判为无更新）；检查结果结构化，明确区分无更新/网络故障/清单损坏，不再把网络异常伪装成"已是最新"；某来源报出的版本不比本机新时继续探测其余来源取最高者，避免镜像缓存落后把真实新版本静默吞掉（实测 jsDelivr 分支别名与 Gitee 镜像均会滞后）；传输改为 requests→系统证书库双栈，修复企业 TLS 拦截环境下两个权威来源永久不可达；下载支持多候选直链逐个重试、流式进度、sha256 与体积/容器格式校验，并复核包内 VERSION、兼容 `v0.1.26.0` 四段 tag 写法；无 sha256 时不再使用不带版本信息的 `dist/` 兜底通道，避免静默装上旧包；新增便携版一键重启自更新（只替换主程序与 VERSION，不触碰用户数据）；新增 `tools/make_release.py` 发版助手（含 CDN 缓存清理），新增 `tools/publish_release.py` 发布助手（草稿→上传→发布三段式，适配本仓库 release 不可变；tag 由 `VERSION` 直链推导，避免复用被占用过的 tag；上传自动在 urllib 失败时切换到系统 curl 以绕开 schannel 吊销检查与代理对小请求/大请求的差异），`bump_version.py` 现同步 README 版本标记。另修复 `engine` 命令失败静默成功、`stop_on_error` 与重试失效问题（详见 v0.1.25 之后提交）
 - v0.1.25 (2026-08-10): 工作流Tab深度定制(操作库分类树+搜索+最近使用、command/variable/loop/log新节点、统一配置表单、右键复制/粘贴/禁用/注释、外层循环次数与最长执行时间控制、执行高亮、变量管理)、工作流引擎支持新节点及enabled/comment跳过、设置页导航与快捷键列表优化、版本号全局统一管理(bump_version.py)、README/使用说明在线优先打开、修复启动崩溃/最近使用失效/内联编辑popdown崩溃/找图OpenCV降级/暗黑模式工作流控件不变色/打包缺失模块
 - v0.1.24 (2026-08-09): 设置页新增「高级设置」操作逻辑优化、工作流拖拽节点崩溃修复、设置页tab改为标题栏右侧⚙ 设置按钮、AI模型下拉框改用统一模型注册表、DD DLL路径配置真正生效、修复claude模型端点映射错误、清理冗余代码
 - v0.1.23 (2026-07-20): 模板选择对话框改为上下布局(上横向滚动按钮+下预览含滚轴)、托盘切换异常保护(防止闪退和崩溃)、恢复默认设置按钮改为绿色、修复录制后脚本未加载到编辑器Bug、修复card_log变量名冲突、修复emoji Tcl兼容性

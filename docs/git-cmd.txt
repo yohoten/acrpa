@@ -1,0 +1,69 @@
+# === 首次或有冲突时使用（stash + rebase + pop + push）===
+git stash
+git pull yohoten master --rebase
+git stash pop
+git add -A
+git commit -m "说明"
+git push yohoten main:master
+
+# === 无冲突时（日常使用）===
+git add -A
+git commit -m "说明"
+git push yohoten main:master
+
+# === 强制覆盖远程（慎用）===
+git push yohoten main:master --force
+
+ge auth login --token "你的Gitee私人令牌"   # 需 projects/pull_requests/issues/user_info scope
+ge auth status                              # 验证：Logged in as ...
+
+# ============ 每次发版只需改这三个变量 ============
+$VERSION = "v0.1.25"            # 本次版本号
+$REPO    = "yohoten/ACRPA"      # 仓库 owner/repo
+$TARGET  = "master"             # tag 目标分支（与你 push 的分支一致，勿用默认 main 以免打错）
+$HIST_DIR = "F:\（8）Desktop\Files\script_plugin\ACRPA\Earlier-versions"  # 历史 exe 目录（可选）
+
+# ============ 1. 构建（单文件 exe） ============
+python build.py                 # 产物：dist\ACRPA.exe
+
+# ============ 2. 写发布说明（建议文件方式，避免长命令转义） ============
+# 新建 notes.md，内容参考 README.md 更新日志
+
+# ============ 3. 创建 release（自动打 tag） ============
+ge release create $VERSION -R $REPO --target $TARGET -t "ACRPA $VERSION" -F notes.md
+
+# ============ 4. 上传当前版本 exe ============
+ge release upload $VERSION dist\ACRPA.exe -R $REPO
+
+# ============ 5.（可选）批量上传历史版本 exe ============
+# 一条命令传多个；文件名含空格/全角括号需加引号
+ge release upload $VERSION `
+  "$HIST_DIR\ACRPA v0.1.13.exe" "$HIST_DIR\ACRPA v0.1.14.exe" `
+  "$HIST_DIR\ACRPA v0.1.17.exe" "$HIST_DIR\ACRPA v0.1.19.exe" `
+  "$HIST_DIR\ACRPA v0.1.20.exe" "$HIST_DIR\ACRPA v0.1.22.exe" -R $REPO
+
+# ============ 6. 验证 ============
+ge release view $VERSION -R $REPO
+# 查看附件是否齐全（ge view 不列附件，用公开 API 确认）
+curl -s "https://gitee.com/api/v5/repos/$REPO/releases/tags/$VERSION" | ConvertFrom-Json | ForEach-Object { $_.assets.name }
+
+
+
+# 重跑时覆盖同名附件（CI 场景）
+ge release upload $VERSION dist\ACRPA.exe -R $REPO --clobber
+
+# 编辑已有 release 的说明
+ge release edit $VERSION -R $REPO -t "新标题" -F notes.md
+
+# 删除某个附件
+ge release delete-asset $VERSION "ACRPA v0.1.13.exe" -R $REPO --yes
+
+# 删除整个 release（保留 tag；tag 不可变，版本号错了只能发新版本）
+ge release delete $VERSION -R $REPO
+
+
+set VERSION=v0.1.25
+set REPO=yohoten/ACRPA
+ge release create %VERSION% -R %REPO% --target master -t "ACRPA %VERSION%" -F notes.md
+ge release upload %VERSION% dist\ACRPA.exe -R %REPO%
+

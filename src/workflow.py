@@ -310,6 +310,7 @@ class WorkflowEngine:
                         self._step_results[i] = "error"
                         log1("步骤 {} 执行失败: {}".format(i + 1, e), "error")
                         if getattr(state, 'STOP_ON_ERROR', True):
+                            self._stopped = True
                             break
                 # 超时检测 (无限循环时)
                 if max_minutes > 0 and (time.time() - start_time) >= max_minutes * 60:
@@ -386,16 +387,19 @@ class WorkflowEngine:
             eng = eng_mod.engine
             handler = commands.get_handler(cmd_name)
             if handler is None:
-                log1("未知命令: {}".format(cmd_name), "error")
-                return
+                raise WorkflowError("未知命令: {}".format(cmd_name))
             # 构造 RowAdapter 兼容对象 (ScriptData)
             from scriptdata import ScriptData
             params = step.get("params", []) or []
             sd = ScriptData(cmd_name, [str(p) if p is not None else "" for p in params][:9])
-            eng.execute(sd, base_dir)
+            result = eng.execute(sd, base_dir)
+            if not result.ok:
+                raise WorkflowError(result.message or "命令执行失败: {}".format(cmd_name))
             log1("  命令: {} {}".format(cmd_name, params[:3]))
+        except WorkflowError:
+            raise
         except Exception as e:
-            log1("命令执行失败 {}: {}".format(cmd_name, e), "error")
+            raise WorkflowError("命令执行失败 {}: {}".format(cmd_name, e))
 
     def _run_variable(self, step, base_dir):
         """执行 variable 节点: 设置工作流变量。
@@ -500,8 +504,7 @@ class WorkflowEngine:
             rows = _load_xls_script(script_path)
             log1("  加载 {} 行命令".format(len(rows)))
         except Exception as e:
-            log1("  脚本加载失败: {}".format(e), "error")
-            return
+            raise WorkflowError("脚本加载失败: {}".format(e))
 
         # 更新全局状态（兼容 autorun 的进度显示）
         state.exec_state["total_rows"] = len(rows)
@@ -517,12 +520,16 @@ class WorkflowEngine:
                 eng.variables[k] = v
             # 执行脚本
             eng.execute_script(rows, script_dir)
+            if getattr(eng, '_script_failed', False):
+                raise WorkflowError("脚本执行失败: {}".format(os.path.basename(script_path)))
             # 回写变量
             self._variables.update(eng.variables)
-        except ImportError:
-            log1("  无法导入 engine 模块", "error")
+        except ImportError as e:
+            raise WorkflowError("无法导入 engine 模块: {}".format(e))
+        except WorkflowError:
+            raise
         except Exception as e:
-            log1("  脚本执行异常: {}".format(e), "error")
+            raise WorkflowError("脚本执行异常: {}".format(e))
 
     def _run_parallel(self, step, base_dir):
         """并行执行多个子步骤"""
@@ -579,7 +586,9 @@ class WorkflowEngine:
         # 报告失败
         failed_indices = [i + 1 for i, e in enumerate(step_errors) if e]
         if failed_indices:
-            log1("  并行步骤 {} 执行失败".format(failed_indices), "warning")
+            message = "并行步骤 {} 执行失败".format(failed_indices)
+            log1(message, "error")
+            raise WorkflowError(message)
 
     def _run_condition(self, step, base_dir):
         """条件分支"""

@@ -107,6 +107,8 @@ def show_toast(root, message, msg_type="info", duration=2000):
 
 def _colors():
     """Modern flat-design palette: brand-blue primary, dark-readable text."""
+    # hlbg: 「当前行/变更项」高亮底色 (脚本树 running 行、变量树 changed 项);
+    #       旧实现写死 #FEF3C7, 暗色下刺眼, 现纳入主题色表统一随主题切换。
     if state.DARK_MODE:
         return dict(
             bg="#0b1120", bgc="#1a2332", fgt="#f1f5f9", fgb="#cbd5e0",
@@ -115,7 +117,7 @@ def _colors():
             logbg="#1a2332", logfg="#e2e8f0", ebg="#1a2332",
             err="#f87171", errbg="#3a2525", ok="#34d399",
             hover="#3b82f6", cardhover="#60a5fa", focus="#60a5fa",
-            flowbg="#0f172a")
+            flowbg="#0f172a", hlbg="#4a3a12")
     return dict(
         bg="#f5f6f8", bgc="#ffffff", fgt="#1a202c", fgb="#2d3748",
         fgm="#718096", ac="#2563eb", ach="#1d4ed8", acl="#eff6ff",
@@ -123,7 +125,7 @@ def _colors():
         logbg="#fdfdfd", logfg="#2d3748", ebg="#ffffff",
         err="#ef4444", errbg="#fff0f0", ok="#10b981",
         hover="#1d4ed8", cardhover="#3b82f6", focus="#2563eb",
-        flowbg="#f8fafc")
+        flowbg="#f8fafc", hlbg="#FEF3C7")
 
 
 C = _colors()

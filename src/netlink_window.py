@@ -218,6 +218,8 @@ class NetLinkWindow(object):
         self.root = root
         self.win = None
         self._pump_id = None
+        # 主题色表快照 (建窗时的 utils.C), 供 refresh_theme 做旧色→新色映射
+        self._theme_snapshot = None
         # ── 数据缓存 (仅在主线程被读写) ──
         self._peers = {}        # {node_id: {"name","host","port","version","online"}}
         self._states = {}       # {node_id: state_snapshot dict}
@@ -328,8 +330,111 @@ class NetLinkWindow(object):
         except Exception:
             pass
 
+    # ── 主题刷新 (D4) ───────────────────────────────
+    def refresh_theme(self):
+        """主题切换后重刷本窗口配色 (含各 Treeview/Text 的 tag 前景)。
+
+        utils.apply_theme 会重绑 utils.C, 但本窗口的面板/按钮颜色是建窗时写死的旧色,
+        且各 Treeview 的 tag 前景只在建窗时配置过一次 —— 若不重刷, 切换主题后本窗口仍停留在旧配色。
+        """
+        if not self.alive():
+            return
+        cur = utils.C
+        prev = self._theme_snapshot if isinstance(self._theme_snapshot, dict) else {}
+        # 旧色 → 旧键 → 新色 的取值映射: 保留语义 (强调色仍是强调色, 中性色仍是中性色)
+        vmap = {}
+        for k, v in prev.items():
+            if isinstance(v, str) and v:
+                vmap[v] = k
+
+        def _map_color(color):
+            try:
+                key = vmap.get(str(color))
+                if key and key in cur:
+                    return cur[key]
+            except Exception:
+                pass
+            return None
+
+        def _walk(p):
+            for w in p.winfo_children():
+                try:
+                    cls = w.winfo_class()
+                    if cls in ("Frame", "TFrame", "Label", "TLabel", "Button",
+                               "Entry", "Text", "Canvas", "Scrollbar",
+                               "Listbox", "Spinbox", "Checkbutton",
+                               "Radiobutton", "Menubutton"):
+                        for opt in ("bg", "fg", "activebackground",
+                                    "activeforeground", "selectbackground",
+                                    "selectforeground", "insertbackground",
+                                    "selectcolor", "troughcolor",
+                                    "highlightbackground"):
+                            try:
+                                old = w.cget(opt)
+                            except Exception:
+                                continue
+                            new = _map_color(old)
+                            if new and new != old:
+                                try:
+                                    w.configure(**{opt: new})
+                                except Exception:
+                                    pass
+                except Exception:
+                    pass
+                _walk(w)
+
+        # 本窗 + 已打开的子对话框 (存在则活, 不存在为空操作)
+        windows = [self.win]
+        for attr in ("_pair_dlg", "_audit_dlg", "_rs_dlg",
+                     "_shot_dlg", "_web_dlg"):
+            d = getattr(self, attr, None)
+            if d is not None:
+                windows.append(d)
+        for win in windows:
+            try:
+                if win is not None and win.winfo_exists():
+                    _walk(win)
+            except Exception:
+                pass
+        # Treeview / Text 的 tag 前景 (建窗时只配置过一次)
+        try:
+            self.tv.tag_configure("run", foreground=cur["sc"])
+            self.tv.tag_configure("pause", foreground=cur["wn"])
+            for t in ("idle", "off", "unauth"):
+                self.tv.tag_configure(t, foreground=cur["fgm"])
+        except Exception:
+            pass
+        try:
+            self.txt_log.tag_configure("err", foreground=cur["err"])
+            self.txt_log.tag_configure("wn", foreground=cur["wn"])
+        except Exception:
+            pass
+        try:
+            self.tv_cmd.tag_configure("cmdok", foreground=cur["sc"])
+            self.tv_cmd.tag_configure("cmdfail", foreground=cur["err"])
+            self.tv_cmd.tag_configure("cmdgray", foreground=cur["fgm"])
+        except Exception:
+            pass
+        try:
+            self.tv_xfer.tag_configure("xfer_run", foreground=cur["ac"])
+            self.tv_xfer.tag_configure("xfer_ok", foreground=cur["sc"])
+            self.tv_xfer.tag_configure("xfer_fail", foreground=cur["err"])
+        except Exception:
+            pass
+        if self._rs_tree is not None:
+            try:
+                self._rs_tree.tag_configure("rs_empty", foreground=cur["fgm"])
+            except Exception:
+                pass
+        self._theme_snapshot = dict(cur)
+        try:
+            self.win.update_idletasks()
+        except Exception:
+            pass
+
     def _build(self):
         C = utils.C
+        self._theme_snapshot = dict(C)
         win = tkinter.Toplevel(self.root)
         self.win = win
         win.title("设备互联 — ACRPA")
@@ -3125,6 +3230,15 @@ def open_netlink_window(root=None):
 def is_open():
     """设备互联窗口当前是否打开。"""
     return _win_instance is not None and _win_instance.alive()
+
+
+def refresh_theme():
+    """主题切换时由 ACRPA._refresh_theme 调用: 窗口存在则重刷配色。"""
+    if _win_instance is not None:
+        try:
+            _win_instance.refresh_theme()
+        except Exception:
+            pass
 
 
 def close_window():

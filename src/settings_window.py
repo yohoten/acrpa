@@ -33,8 +33,8 @@ _ensure_tray = None      # 托盘创建回调
 _destroy_tray = None     # 托盘销毁回调
 _toggle_fold = None      # Mini Bar 折叠切换回调
 _main_run = None         # 运行脚本回调 (定时调度保存)
-
 _win = None              # 当前打开的设置窗口
+_prev_colors = None      # 上次刷新时的主题色表快照 (语义色回填的兜底判定来源)
 _tip_win = None          # tooltip 窗口
 _sched_next_label = None # 定时调度「下次执行」标签 (打开设置窗口时注入，供主程序周期刷新)
 
@@ -66,8 +66,10 @@ def init_ctx(root_win=None, colors=None, fonts=None, app_root="", tlog=None,
     """注入 ACRPA.py 提供的依赖 (模块启动时调用一次)。"""
     global root, C, FONT_TITLE, FONT_BODY, FONT_SMALL, FONT_BUTTON
     global APP_ROOT, _tlog, _ensure_tray, _destroy_tray, _toggle_fold, _main_run
+    global _prev_colors
     root = root_win
     C = colors
+    _prev_colors = dict(colors) if isinstance(colors, dict) else None
     if fonts:
         FONT_TITLE, FONT_BODY, FONT_SMALL, FONT_BUTTON = fonts
     APP_ROOT = app_root
@@ -105,12 +107,36 @@ def _set_window_icon(window):
         pass
 
 
-def refresh_theme():
-    """主题切换后递归刷新已打开设置窗口的颜色 (供 ACRPA._refresh_theme 调用)。"""
+# 语义色分组 (与 ACRPA._SEMANTIC_GROUPS 同构): 组内任一键命中即归入该语义组。
+_SEMANTIC_GROUPS = (("sc", ("sc", "ok")), ("dg", ("dg", "err")),
+                    ("wn", ("wn",)), ("ac", ("ac", "hover", "focus")))
+
+
+def _semantic_bg_for(cur_bg, prev):
+    """语义按钮底色回填 (D2): 命中语义组返回当前主题色, 否则 None (中性按钮)。"""
+    for primary, keys in _SEMANTIC_GROUPS:
+        for k in keys:
+            if prev and prev.get(k) == cur_bg:
+                return C.get(primary)
+            if C.get(k) == cur_bg:
+                return C.get(primary)
+    return None
+
+
+def refresh_theme(prev=None):
+    """主题切换后递归刷新已打开设置窗口的颜色 (供 ACRPA._refresh_theme 调用)。
+
+    prev: 旧主题色表快照 (由 ACRPA._refresh_theme 显式传入)。语义按钮回填以
+    prev∪C 判定 —— 旧实现依赖恒为 None 的 C["old_*"], 会把 ▶运行/⏸暂停 等
+    语义按钮误判为中性按钮刷成灰 (与主窗口 D2 同源缺陷)。
+    """
+    global _prev_colors
     if _win is None or not _win.winfo_exists():
         return
+    if not isinstance(prev, dict):
+        prev = _prev_colors if isinstance(_prev_colors, dict) else {}
 
-    def _walk(p):
+    def _walk(p, prev):
         for w in p.winfo_children():
             try:
                 cls = w.winfo_class()
@@ -134,17 +160,11 @@ def refresh_theme():
                 elif cls == "Scrollbar":
                     w.configure(bg=C["bd"], activebackground=C["fgm"], troughcolor=C["logbg"])
                 elif cls == "Button":
-                    cur_bg = w.cget("bg")
-                    # Update semantic buttons to current theme colors
-                    _old_map = [("old_sc", "sc"), ("old_dg", "dg"),
-                                ("old_wn", "wn"), ("old_ac", "ac")]
-                    _updated = False
-                    for old_key, new_key in _old_map:
-                        if cur_bg == C.get(old_key):
-                            w.configure(bg=C[new_key])
-                            _updated = True
-                            break
-                    if not _updated and cur_bg not in (C["sc"], C["dg"], C["wn"], C["ac"]):
+                    # 语义按钮: 保留语义并更新为当前主题色; 中性按钮: 统一刷为卡片色
+                    _new_bg = _semantic_bg_for(w.cget("bg"), prev)
+                    if _new_bg is not None:
+                        w.configure(bg=_new_bg)
+                    else:
                         w.configure(bg=C["bgc"], fg=C["fgb"],
                             activebackground=C["acl"],
                             highlightbackground=C["bd"])
@@ -154,15 +174,39 @@ def refresh_theme():
                 elif cls == "Combobox":
                     w.configure(background=C["bgc"], fieldbackground=C["bgc"],
                         foreground=C["fgb"])
+                elif cls == "Canvas":
+                    # D5: 设置页滚动画布 (旧实现遗漏 → 暗色下仍为浅色)
+                    w.configure(bg=C["bg"])
+                elif cls == "Listbox":
+                    # D5: 列表控件 (旧实现遗漏)
+                    w.configure(bg=C["ebg"], fg=C["fgb"],
+                        selectbackground=C["ac"], selectforeground="white")
+                elif cls == "Spinbox":
+                    # D5: 数值框 (旧实现遗漏)
+                    w.configure(bg=C["ebg"], fg=C["fgb"],
+                        buttonbackground=C["bgc"], insertbackground=C["fgt"])
+                elif cls in ("Checkbutton", "Radiobutton"):
+                    # D5: 勾选/单选框 (旧实现遗漏)
+                    _pbg = str(p.cget("bg"))
+                    w.configure(bg=_pbg, fg=C["fgb"],
+                        activebackground=_pbg, activeforeground=C["fgt"],
+                        selectcolor=C["bgc"], highlightbackground=C["bd"])
+                elif cls == "Menu":
+                    # D5: 下拉/右键菜单 (旧实现遗漏)
+                    w.configure(bg=C["bgc"], fg=C["fgb"],
+                        activebackground=C["ac"], activeforeground="white",
+                        disabledforeground=C["fgm"])
             except Exception:
                 pass
-            _walk(w)
+            _walk(w, prev)
 
-    _walk(_win)
+    _walk(_win, prev)
     try:
         _win.update_idletasks()
     except Exception:
         pass
+    # 记录本次主题快照, 供下次 (无显式 prev 时) 判定
+    _prev_colors = dict(C) if isinstance(C, dict) else None
 
 
 def _close():
@@ -376,14 +420,16 @@ def _on_nav_click(key):
                 pass
             break
 
-
 def open_settings_window():
     """打开独立设置窗口；若已打开则聚焦。"""
     global _win, _sched_next_label, _nav_canvas, _nav_cards, _nav_labels, _nav_active_key
+    global _prev_colors
     if _win is not None and _win.winfo_exists():
         _win.lift()
         _win.focus_force()
         return
+    # 本窗口将以当前 C 建窗: 记录快照, 保证下次主题切换的语义色判定基准正确
+    _prev_colors = dict(C) if isinstance(C, dict) else None
     _nav_cards = []
     _nav_labels = {}
     _nav_active_key = None

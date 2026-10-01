@@ -94,7 +94,9 @@ _config_schema = [
     ("netlink_tls_cert",  "",  str),   # TLS 服务端证书 PEM 路径(启用 TLS 时必填)
     ("netlink_tls_key",   "",  str),   # TLS 服务端私钥 PEM 路径(启用 TLS 时必填)
     ("netlink_tls_pins",  [],  list),  # 已固定的对端证书指纹(sha256 hex，TOFU)
-    ("mini_bar_height", 30,  int),   # Mini Bar 高度 24-48（步进 4）
+    # 默认 30 → 28: Mini Bar 内容已改为铺满整高 (去掉 outer/inner 各 1px 上下留白),
+    # 28px 即可容纳 ACRPA_BUTTON(9pt) 文本 + 1px 描边, 视觉更紧凑。
+    ("mini_bar_height", 28,  int),   # Mini Bar 高度 24-48（步进 4）
     ("mini_bar_pos",    "",  str),   # Mini Bar 最近位置 "x+y"
     # ── AI 提供商/模型自定义 ──
     ("ai_provider",         "",  str),   # 提供商 id（空=按模型/URL 自动推断）

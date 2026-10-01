@@ -268,6 +268,139 @@ def check_mini_bar_guards():
         FAILS.append("_destroy_mini_bar 缺 after_cancel")
         _p("FAIL", "_destroy_mini_bar 缺 after_cancel")
 
+def check_theme_refresh_regressions():
+    """G. 暗黑模式「全应用色彩缺失」修复回归断言 (防回退护栏)。
+
+    G1. ACRPA._refresh_theme 内同步 dialogs.C (D1 弹窗沿用旧配色)
+    G2. 语义色判定不再依赖未初始化的 C["old_*"] (D2 语义按钮被刷灰主因)
+    G3. mini bar 主题同步元组补入 ac/bd/acl (签名健壮性)
+    G4. 不再有写死的 #FEF3C7 直接用于 tag_configure (D3 → 统一走 C["hlbg"])
+    G5. _refresh_theme 内重新 tag_configure 日志区与脚本树 (D3 tag 前景不刷新)
+    G6. settings_window.refresh_theme 接受旧快照 prev 参数 (D2 settings 同源缺陷)
+    G7. netlink_window 提供 refresh_theme 且 ACRPA 调用之 (D4)
+    G8. utils._colors 提供 hlbg 主题键 (D3 主题化高亮底色)
+    G9. _walk 覆盖 Menu/Checkbutton/Radiobutton (D5 覆盖不全)
+    """
+    a_src = _read("src/ACRPA.py")
+    a_tree = _parse("src/ACRPA.py")
+    rt = _find_func(a_tree, "_refresh_theme")
+    seg = ast.get_source_segment(a_src, rt) if rt is not None else None
+    if seg is None:
+        FAILS.append("G: 未找到 ACRPA._refresh_theme")
+        _p("FAIL", "G: 未找到 ACRPA._refresh_theme")
+        return
+
+    # G1. dialogs 颜色表重同步
+    if "dialogs.C = C" in seg:
+        _p("OK", "G1 _refresh_theme 同步 dialogs.C (D1)")
+    else:
+        FAILS.append("G1 _refresh_theme 未同步 dialogs.C")
+        _p("FAIL", "G1 _refresh_theme 未同步 dialogs.C (D1)")
+
+    # G2. 不得再读取/写入 C["old_*"]
+    old_names = ("old_sc", "old_dg", "old_wn", "old_ac")
+    hits = [n for n in old_names if n in seg]
+    if hits:
+        FAILS.append("G2 _refresh_theme 仍引用 C['old_*']: {}".format(hits))
+        _p("FAIL", "G2 _refresh_theme 仍引用 C['old_*']: {}".format(hits))
+    else:
+        _p("OK", "G2 语义色判定改用旧快照, 无 C['old_*'] 残留 (D2)")
+
+    # G2b. 存在旧快照变量 (局部变量 _prev)
+    if "_prev" in seg:
+        _p("OK", "G2b _refresh_theme 使用旧主题色快照 _prev")
+    else:
+        FAILS.append("G2b _refresh_theme 缺旧主题色快照 _prev")
+        _p("FAIL", "G2b _refresh_theme 缺旧主题色快照 _prev")
+
+    # G2c. AST 顺序断言: 旧快照 _prev = dict(C) 的行号必须 < C = _colors() 的行号。
+    # 防止「快照被移动到重绑之后」——那样 _prev 等于新主题, 语义色判定失效, D2 静默复发。
+    prev_line = None
+    colors_line = None
+    for sub in ast.walk(rt):
+        if not isinstance(sub, ast.Assign):
+            continue
+        for t in sub.targets:
+            if isinstance(t, ast.Name) and t.id == "_prev":
+                prev_line = sub.lineno
+            if isinstance(t, ast.Name) and t.id == "C" \
+                    and isinstance(sub.value, ast.Call) \
+                    and isinstance(sub.value.func, ast.Name) \
+                    and sub.value.func.id == "_colors":
+                colors_line = sub.lineno
+    if prev_line is not None and colors_line is not None and prev_line < colors_line:
+        _p("OK", "G2c _prev 快照行号 < C=_colors() 重绑行号 ({} < {})".format(
+            prev_line, colors_line))
+    else:
+        FAILS.append("G2c _prev 快照须先于 C=_colors() 重绑 (prev={}, colors={})".format(
+            prev_line, colors_line))
+        _p("FAIL", "G2c _prev 快照须先于 C=_colors() 重绑 (prev={}, colors={})".format(
+            prev_line, colors_line))
+
+    # G3. mini bar 主题同步元组含 ac/bd/acl
+    mb = _find_func(a_tree, "_sync_mini_bar_status")
+    mb_seg = ast.get_source_segment(a_src, mb) if mb is not None else ""
+    if 'C["ac"], C["bd"], C["acl"]' in (mb_seg or ""):
+        _p("OK", "G3 mini bar 主题同步元组含 ac/bd/acl")
+    else:
+        FAILS.append("G3 mini bar 主题同步元组缺 ac/bd/acl")
+        _p("FAIL", "G3 mini bar 主题同步元组缺 ac/bd/acl")
+
+    # G4. ACRPA.py 内不得再有写死的 #FEF3C7
+    if 'background="#FEF3C7"' not in a_src:
+        _p("OK", "G4 ACRPA.py 无写死 #FEF3C7 颜色值 (改用 C['hlbg'] ; 注释提及不计)")
+    else:
+        FAILS.append("G4 ACRPA.py 仍将 #FEF3C7 作为颜色值使用")
+        _p("FAIL", "G4 ACRPA.py 仍将 #FEF3C7 作为颜色值使用")
+
+    # G5. _refresh_theme 内重刷日志区 / 脚本树 tag
+    has_log_tag = 'tag_configure("error"' in seg and 'tag_configure("success"' in seg
+    has_tree_tag = 'tag_configure("running"' in seg
+    if has_log_tag and has_tree_tag:
+        _p("OK", "G5 _refresh_theme 重刷日志区 + 脚本树 tag (D3)")
+    else:
+        FAILS.append("G5 _refresh_theme 缺 tag 重刷 (log={} tree={})".format(
+            has_log_tag, has_tree_tag))
+        _p("FAIL", "G5 _refresh_theme 缺 tag 重刷 (log={} tree={})".format(
+            has_log_tag, has_tree_tag))
+
+    # G6. settings_window.refresh_theme 接受 prev
+    s_src = _read("src/settings_window.py")
+    if "def refresh_theme(prev=None):" in s_src:
+        _p("OK", "G6 settings_window.refresh_theme 接受 prev 旧快照 (D2)")
+    else:
+        FAILS.append("G6 settings_window.refresh_theme 未接受 prev 旧快照")
+        _p("FAIL", "G6 settings_window.refresh_theme 未接受 prev 旧快照")
+
+    # G7. netlink_window 主题刷新入口 + ACRPA 调用
+    n_src = _read("src/netlink_window.py")
+    if "def refresh_theme" in n_src and "netlink_window.refresh_theme()" in seg:
+        _p("OK", "G7 netlink_window.refresh_theme 存在且被 _refresh_theme 调用 (D4)")
+    else:
+        FAILS.append("G7 netlink_window 主题刷新入口缺失或未接入")
+        _p("FAIL", "G7 netlink_window 主题刷新入口缺失或未接入")
+
+    # G8. utils._colors 提供 hlbg
+    u_src = _read("src/utils.py")
+    if "hlbg=" in u_src.replace(" ", ""):
+        _p("OK", "G8 utils._colors 提供 hlbg 主题键")
+    else:
+        FAILS.append("G8 utils._colors 缺 hlbg 主题键")
+        _p("FAIL", "G8 utils._colors 缺 hlbg 主题键")
+
+    # G9. _walk 覆盖 Menu / Checkbutton / Radiobutton (主窗 + settings)
+    if '"Menu"' in seg and '"Checkbutton", "Radiobutton"' in seg:
+        _p("OK", "G9 ACRPA._walk 覆盖 Menu/Checkbutton/Radiobutton (D5)")
+    else:
+        FAILS.append("G9 ACRPA._walk 覆盖不全 (Menu/Checkbutton/Radiobutton)")
+        _p("FAIL", "G9 ACRPA._walk 覆盖不全 (Menu/Checkbutton/Radiobutton)")
+    if '"Menu"' in s_src and '"Canvas"' in s_src and '"Listbox"' in s_src \
+            and '"Spinbox"' in s_src:
+        _p("OK", "G9b settings._walk 覆盖 Menu/Canvas/Listbox/Spinbox (D5)")
+    else:
+        FAILS.append("G9b settings._walk 覆盖不全")
+        _p("FAIL", "G9b settings._walk 覆盖不全")
+
 
 def probe_deps():
     """F. 依赖探测: 打印真实 import 结果, 缺失仅 [WARN] (不假通过)。"""
@@ -287,7 +420,6 @@ def probe_deps():
             code, rc, tail.splitlines()[-1] if tail else ""))
     return rc
 
-
 def main():
     print("=== ACRPA 暗黑模式修复 + 互联按钮自测 (静态断言) ===")
     check_utils()
@@ -295,6 +427,7 @@ def main():
     check_acrpa_cursor_and_button()
     check_netlink_untouched()
     check_mini_bar_guards()
+    check_theme_refresh_regressions()
     probe_deps()
     print("=== 结果: {} ===".format(
         "FAIL ({})".format(len(FAILS)) if FAILS else "OK"))

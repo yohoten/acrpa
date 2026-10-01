@@ -1,0 +1,16 @@
+=== ACRPA Mini Bar 自测 (静态 AST 断言) ===
+[OK] state._config_schema 含 'mini_bar_height'
+[OK] state._config_schema 含 'mini_bar_pos'
+[OK] settings_window 存在 _apply_system_settings
+[OK] _apply_map 注册了 "system"
+[OK] _track_card_vars("system", ...) 已注册
+[OK] Mini Bar 函数无字面量 430/560
+[OK] 存在 _mb_animate_width
+[OK] 存在 after_cancel 调用 (定时器可取消)
+[OK] _sync_mini_bar_status 签名含主题色 C[...] ['bgc', 'dg', 'fgm', 'sc', 'wn']
+[OK] NetLink 块 'open_devlink' 出现 1 次
+[OK] NetLink 块 'set_control_hooks' 出现 1 次
+[OK] NetLink 块 'start_netlink' 出现 1 次
+[OK] NetLink 集成块未见改动
+[WARN] 解释器缺少依赖: pyautogui, xlrd, pyperclip (启动冒烟将跳过)
+=== 结果: OK ===

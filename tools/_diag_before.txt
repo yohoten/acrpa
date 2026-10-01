@@ -1,0 +1,244 @@
+
+========================================================================
+ACRPA Mini Bar 运行时几何诊断 (真实建窗)
+========================================================================
+[配置实测值]
+  state.MINI_BAR_HEIGHT = 32   (config.json 实测值)
+  state.MINI_BAR_WIDTH  = 430
+  state.MINI_BAR_OPACITY= 80
+  state.UI_SCALE        = 1.1
+  state.MINI_BAR_POS    = 150+150
+  state.DARK_MODE       = False
+  state.CONFIG_PATH     = d:\CodingEmber\ACRPA\config.json
+  state.folded          = False
+
+[UI 缩放 / DPI 对字体 pt 的影响]
+  utils.current_ui_scale() = 1.1
+  utils.dpi_factor()       = 1.2496924969249692
+  utils.fit_pt(9)          = 10  (ACRPA_BUTTON 基准 9pt)
+  utils.fit_pt(8)          = 9
+  tk scaling (px/pt)       = 1.6662566625666255
+  root.winfo_fpixels('1i') = 119.97047970479704
+  命名ACRPA_BUTTON 实际: family=Microsoft YaHei UI size=10 (pt) weight=bold
+  命名ACRPA_LOG 实际: family=Consolas size=10 (pt) weight=normal
+  命名ACRPA_ICON_MD 实际: family=Segoe UI Symbol size=12 (pt) weight=normal
+
+========================================================================
+形态: compact (紧凑)
+========================================================================
+[顶层窗口]
+  geometry()      = 430x32+150+150
+  winfo_width/height  = 430 x 32
+  winfo_reqwidth/reqheight = 438 x 33
+  winfo_rootx/rooty   = 150, 150
+  winfo_x/y           = 150, 150
+  → 窗口高是否等于配置高(32)? 是
+
+[子控件树]
+   # 类/类型           cls            x     y     w     h    reqh 映射        pack(side/fill/pad)                bg
+   0 Toplevel       Toplevel       0     0   430    32      33 Y         (无 pack)                           #ffffff
+   1 Frame          Frame          0     0   430     1       1 Y         side=top fill=x padx=0 pady=0      #2563eb
+   2 Frame          Frame          0     1   430    31      32 Y         side=top fill=both padx=0 pady=0   #ffffff
+   3 Label          Label          7     4    24    24      24 Y         side=left fill=none padx=(7, 3) pady=0 #ffffff
+   4 Canvas         Canvas        36     1    14    31      32 Y         side=left fill=none padx=2 pady=0  #ffffff
+   5 Label          Label         52     1    40    30      30 Y         side=left fill=none padx=(0, 4) pady=0 #ffffff 就绪
+   6 Label          Label       -150  -150     1     1      26 n         (无 pack)                           #ffffff
+   7 Progressbar    TProgressbar     0     1     1     1      18 n         (无 pack)                           -
+   8 Frame          Frame         99     6     1    21       1 Y         side=left fill=y padx=3 pady=5     #e2e8f0
+   9 Label          Label        104     1    65    31      26 Y         side=left fill=y padx=1 pady=0     #ef4444 ■ 停止
+  10 Label          Label        171     1    70    31      26 Y         side=left fill=y padx=1 pady=0     #10b981 ▶ 运行
+  11 Label          Label        243     1    79    31      26 Y         side=left fill=y padx=1 pady=0     #f59e0b ⏸ 暂停
+  12 Label          Label        324     1    40    31      26 Y         side=left fill=y padx=1 pady=0     #2563eb ⏭
+  13 Label          Label        366     1    58    31      26 Y         side=right fill=y padx=(1, 6) pady=0 #ffffff □ 展开
+
+[内容 bbox — 全部映射控件]
+  left=0 top=0 right=430 bottom=32
+  空白: 上=0 下=0 左=0 右=0  (窗口 430x32)
+  内容高度 = 32px / 窗口高 32px → 上下合计多余 0px
+[语义内容 bbox — 排除容器 Frame(outer/inner)]
+  left=0 top=0 right=430 bottom=32
+  空白: 上=0 下=0 左=0 右=0
+
+[子控件垂直占位 vs 窗口高 32]
+    Frame        y=  0 h=  1 reqh=  1  (上留 0 / 下留 31)
+    Frame        y=  1 h= 31 reqh= 32  (上留 1 / 下留 0)
+    Label        y=  4 h= 24 reqh= 24  (上留 4 / 下留 4)
+    Canvas       y=  1 h= 31 reqh= 32  (上留 1 / 下留 0)
+    Label        y=  1 h= 30 reqh= 30  (上留 1 / 下留 1)
+    Frame        y=  6 h= 21 reqh=  1  (上留 6 / 下留 5)
+    Label        y=  1 h= 31 reqh= 26  (上留 1 / 下留 0)
+    Label        y=  1 h= 31 reqh= 26  (上留 1 / 下留 0)
+    Label        y=  1 h= 31 reqh= 26  (上留 1 / 下留 0)
+    Label        y=  1 h= 31 reqh= 26  (上留 1 / 下留 0)
+    Label        y=  1 h= 31 reqh= 26  (上留 1 / 下留 0)
+
+[假设验证] 内容 reqheight > 窗口高 的控件: Toplevel(reqh=33)
+
+[截图] 已保存 F:\（8）Desktop\debug-acrpa\diag-minibar-紧凑.png (virtual 2560x1600, ratio=1.000, box=(150, 150, 580, 182))
+[像素空白检测 — 底色 #ffffff]  图像 430x32
+  纯底色行: 上 0 px / 下 0 px ; 纯底色列: 左 0 px / 右 0 px
+[ASCII 像素可视化] ('.'=条底色/空白 A=蓝 S=绿 X=红 W=琥珀 -=灰 B=黑)  5px/字符 2px/行
+   y=  0 |---------------------ttttttttttttttttttttttttttt-WWWWWWWWWWWWWWW-tttttttt-------------|
+   y=  2 |---------------------XXXXXXXXXXXXXSSSSSSSSSSSSSS-WWWWWWWWWWWWWWW-AAAAAAAA-------------|
+   y=  4 |---------------------XXXXXXXXXXXXXSSSSSSSSSSSSSS-WWWWWWWWWWWWWWW-AAAAAAAA-------------|
+   y=  6 |----t----------------XXXXXXXXXXXXXSSSSSSSSSSSSSS-WW---WWWWWWWWWW-AA---tAA-------------|
+   y=  8 |---t---------t--tt---XXXXX---X-XXXSSSSSS---St-tS-WWWWWWW---W---W-AAtAA-AA----XTT-TTT--|
+   y= 10 |-------------t-ttt---XXXXXXXX--XXXSSSSSS-SS-SSSS-WWWWWWW-WWWWWWW-AAAAA-AA----Xtt-t----|
+   y= 12 |---t-t--t--ttttttt---XXXXXXXX---XXSS-SSSt--StSSS-WWW-WWWWW-WXWWW-AAA---AA-tt-XtT-t----|
+   y= 14 |---Xtt--tt-ttt--t----XX-X-XXX--XXXSS--SS--tSS--S-WWW-WWW----WWWW-AAA---AA----XTT-TTT--|
+   y= 16 |---t----tt---t-ttt---XX-Xt-----XXXSS--SS----SSSS-WWW-WWW---t---W-AAA---AA----XTTtT----|
+   y= 18 |-----t--tt-ttt--tt---XX-XXt-W--XXXSS-tSS---SSSSS-WWW-WWW---Wt-WW-AAAAA-AA----tT--T----|
+   y= 20 |---ttA--t--t-ttt-t---XX-XXX-X---XXSS-SSS-SSSSSSS-WWWWWWW-WtWW-WW-AAAAA-AA-tt-TTT-T----|
+   y= 22 |----tt-----t-t---t---XXXXXX-XXXXXXSSSSSSS--SS-SS-WW---WW---WW-WW-AA-AA-AA----XT-------|
+   y= 24 |---------------------XXXXXXXXXXXXXSSSSSSSSSSSSSS-WWWWWWWWWWWWWWW-AAAAAAAA-------------|
+   y= 26 |---------------------XXXXXXXXXXXXXSSSSSSSSSSSSSS-WWWWWWWWWWWWWWW-AAAAAAAA-------------|
+   y= 28 |---------------------XXXXXXXXXXXXXSSSSSSSSSSSSSS-WWWWWWWWWWWWWWW-AAAAAAAA-------------|
+   y= 30 |---------------------BBBBBBBBBBBBBBBBBBBBBBBBBBB-BBBBBBBBBBBBBBB-BBBBBBBBBBBBBBBBBBBB-|
+
+========================================================================
+形态: run (运行)
+========================================================================
+[顶层窗口]
+  geometry()      = 560x32+150+150
+  winfo_width/height  = 560 x 32
+  winfo_reqwidth/reqheight = 768 x 39
+  winfo_rootx/rooty   = 150, 150
+  winfo_x/y           = 150, 150
+  → 窗口高是否等于配置高(32)? 是
+
+[子控件树]
+   # 类/类型           cls            x     y     w     h    reqh 映射        pack(side/fill/pad)                bg
+   0 Toplevel       Toplevel       0     0   560    32      39 Y         (无 pack)                           #ffffff
+   1 Frame          Frame          0     0   560     1       1 Y         side=top fill=x padx=0 pady=0      #2563eb
+   2 Frame          Frame          0     1   560    31      38 Y         side=top fill=both padx=0 pady=0   #ffffff
+   3 Label          Label        320     4    24    24      24 Y         side=left fill=none padx=(7, 3) pady=0 #ffffff
+   4 Canvas         Canvas       349     1    14    31      38 Y         side=left fill=none padx=2 pady=0  #ffffff
+   5 Label          Label        365     1    57    30      30 Y         side=left fill=none padx=(0, 4) pady=0 #ffffff 运行中
+   6 Label          Label          0     3   201    26      26 Y         side=left fill=none padx=(0, 4) pady=0 #ffffff 循环1/1  行3/10  01:0
+   7 Progressbar    TProgressbar   205     7   104    18      18 Y         side=left fill=none padx=(0, 4) pady=0 -
+   8 Frame          Frame        429     6     1    21       1 Y         side=left fill=y padx=3 pady=5     #e2e8f0
+   9 Label          Label        434     1    65    31      26 Y         side=left fill=y padx=1 pady=0     #ef4444 ■ 停止
+  10 Label          Label        501     1    58    31      26 Y         side=left fill=y padx=1 pady=0     #10b981 ▶ 运行
+  11 Label          Label        243     1    79    31      26 n         side=left fill=y padx=1 pady=0     #f59e0b ⏸ 暂停
+  12 Label          Label        324     1    40    31      26 n         side=left fill=y padx=1 pady=0     #2563eb ⏭
+  13 Label          Label        366     1    58    31      26 n         side=right fill=y padx=(1, 6) pady=0 #ffffff □ 展开
+
+[内容 bbox — 全部映射控件]
+  left=0 top=0 right=560 bottom=32
+  空白: 上=0 下=0 左=0 右=0  (窗口 560x32)
+  内容高度 = 32px / 窗口高 32px → 上下合计多余 0px
+[语义内容 bbox — 排除容器 Frame(outer/inner)]
+  left=0 top=0 right=560 bottom=32
+  空白: 上=0 下=0 左=0 右=0
+
+[子控件垂直占位 vs 窗口高 32]
+    Frame        y=  0 h=  1 reqh=  1  (上留 0 / 下留 31)
+    Frame        y=  1 h= 31 reqh= 38  (上留 1 / 下留 0)
+    Label        y=  4 h= 24 reqh= 24  (上留 4 / 下留 4)
+    Canvas       y=  1 h= 31 reqh= 38  (上留 1 / 下留 0)
+    Label        y=  1 h= 30 reqh= 30  (上留 1 / 下留 1)
+    Label        y=  3 h= 26 reqh= 26  (上留 3 / 下留 3)
+    Progressbar  y=  7 h= 18 reqh= 18  (上留 7 / 下留 7)
+    Frame        y=  6 h= 21 reqh=  1  (上留 6 / 下留 5)
+    Label        y=  1 h= 31 reqh= 26  (上留 1 / 下留 0)
+    Label        y=  1 h= 31 reqh= 26  (上留 1 / 下留 0)
+
+[假设验证] 内容 reqheight > 窗口高 的控件: Toplevel(reqh=39), Frame(reqh=38), Canvas(reqh=38)
+
+[截图] 已保存 F:\（8）Desktop\debug-acrpa\diag-minibar-运行.png (virtual 2560x1600, ratio=1.000, box=(150, 150, 710, 182))
+[像素空白检测 — 底色 #ffffff]  图像 560x32
+  纯底色行: 上 0 px / 下 0 px ; 纯底色列: 左 0 px / 右 0 px
+[ASCII 像素可视化] ('.'=条底色/空白 A=蓝 S=绿 X=红 W=琥珀 -=灰 B=黑)  6px/字符 2px/行
+   y=  0 |------------------------------------------------------------------------ttttttttttttttttttttt-|
+   y=  2 |------------------------------------------------------------------------XXXXXXXXXXXtSSSSSSSSS-|
+   y=  4 |------------------------------------------------------------------------XXXXXXXXXXXtSSSSSSSSS-|
+   y=  6 |----------------------------------ttttttttttttttttt---------------------XXXXXXXXXXXtSSSSSSSSS-|
+   y=  8 |-ttttt---------t-------------------tttt---------------tt-----tSS-SS-S---XXXXt--X-XXtSSS-------|
+   y= 10 |-tt-----------t------t----tt--t-t-tSSSS-------------------------S--SSS--XXXX-XX--XXtSSSSSS-SS-|
+   y= 12 |-t------t-----tt-t--------t-------tSSSS----------------------tSS---SSS--XXXX-X---WXt-SSt--SSS-|
+   y= 14 |-tt--t--t--------t--------t-----t-tSSSS----------------X---S-t-SSSSSSS--XX-X-XX--XXt-tS--S----|
+   y= 16 |-tt-t------------tt--t--------t-t-tSSSS--------------------S--SSS-tSSS--XX-X-----XXt--S----SS-|
+   y= 18 |-tt--------------tt-------t-----t-tSSSS-----------------t-SS--SS--tSSS--XX-X-----XXt-SS----SS-|
+   y= 20 |-t----t--t--------t-tt----tt--t---ttttt----------------tt-SS-S----t-S---XX-X-XX---XttSS-SS-SS-|
+   y= 22 |------------------------------------------------------t-A--S-SSS-t--S---XXXX--XXXXXtSSSS----S-|
+   y= 24 |--------------------------------------------------------t--S------------XXXXXXXXXXXtSSSSSSSSS-|
+   y= 26 |------------------------------------------------------------------------XXXXXXXXXXXtSSSSSSSSS-|
+   y= 28 |------------------------------------------------------------------------XXXXXXXXXXXtSSSSSSSSS-|
+   y= 30 |------------------------------------------------------------------------BBBBBBBBBBBBBBBBBBBBB-|
+
+========================================================================
+形态: icon (图标)
+========================================================================
+[顶层窗口]
+  geometry()      = 38x32+150+150
+  winfo_width/height  = 38 x 32
+  winfo_reqwidth/reqheight = 91 x 39
+  winfo_rootx/rooty   = 150, 150
+  winfo_x/y           = 150, 150
+  → 窗口高是否等于配置高(32)? 是
+
+[子控件树]
+   # 类/类型           cls            x     y     w     h    reqh 映射        pack(side/fill/pad)                bg
+   0 Toplevel       Toplevel       0     0    38    32      39 Y         (无 pack)                           #ffffff
+   1 Frame          Frame          0     0    38     1       1 Y         side=top fill=x padx=0 pady=0      #2563eb
+   2 Frame          Frame          0     1    38    31      38 Y         side=top fill=both padx=0 pady=0   #ffffff
+   3 Label          Label        320     4    24    24      24 n         (无 pack)                           #ffffff
+   4 Canvas         Canvas         2     1    14    31      38 Y         side=left fill=none padx=2 pady=0  #ffffff
+   5 Label          Label        365     1    57    30      30 n         (无 pack)                           #ffffff 就绪
+   6 Label          Label          0     3   201    26      26 n         (无 pack)                           #ffffff 循环1/1  行3/10  01:0
+   7 Progressbar    TProgressbar   205     7   104    18      18 n         (无 pack)                           -
+   8 Frame          Frame        429     6     1    21       1 n         (无 pack)                           #e2e8f0
+   9 Label          Label        434     1    65    31      26 n         (无 pack)                           #ef4444 ■ 停止
+  10 Label          Label        501     1    58    31      26 n         (无 pack)                           #10b981 ▶ 运行
+  11 Label          Label        243     1    79    31      26 n         (无 pack)                           #f59e0b ⏸ 暂停
+  12 Label          Label        324     1    40    31      26 n         (无 pack)                           #2563eb ⏭
+  13 Label          Label         19     1    13    31      26 Y         side=right fill=y padx=(1, 6) pady=0 #ffffff □ 展开
+
+[内容 bbox — 全部映射控件]
+  left=0 top=0 right=38 bottom=32
+  空白: 上=0 下=0 左=0 右=0  (窗口 38x32)
+  内容高度 = 32px / 窗口高 32px → 上下合计多余 0px
+[语义内容 bbox — 排除容器 Frame(outer/inner)]
+  left=0 top=0 right=38 bottom=32
+  空白: 上=0 下=0 左=0 右=0
+
+[子控件垂直占位 vs 窗口高 32]
+    Frame        y=  0 h=  1 reqh=  1  (上留 0 / 下留 31)
+    Frame        y=  1 h= 31 reqh= 38  (上留 1 / 下留 0)
+    Canvas       y=  1 h= 31 reqh= 38  (上留 1 / 下留 0)
+    Label        y=  1 h= 31 reqh= 26  (上留 1 / 下留 0)
+
+[假设验证] 内容 reqheight > 窗口高 的控件: Toplevel(reqh=39), Frame(reqh=38), Canvas(reqh=38)
+
+[截图] 已保存 F:\（8）Desktop\debug-acrpa\diag-minibar-图标.png (virtual 2560x1600, ratio=1.000, box=(150, 150, 188, 182))
+[像素空白检测 — 底色 #ffffff]  图像 38x32
+  纯底色行: 上 0 px / 下 0 px ; 纯底色列: 左 0 px / 右 0 px
+[ASCII 像素可视化] ('.'=条底色/空白 A=蓝 S=绿 X=红 W=琥珀 -=灰 B=黑)  1px/字符 2px/行
+   y=  0 |-------------------------------B------|
+   y=  2 |-------------------------------B------|
+   y=  4 |-------------------------------B------|
+   y=  6 |-------------------------------B------|
+   y=  8 |--------------------TTTTTTTTTTTB------|
+   y= 10 |--------------------TttttttttttB------|
+   y= 12 |--------------------T--tTt-tTT-B------|
+   y= 14 |--------ttt---------TTTTTTTTTTTB------|
+   y= 16 |-----ttttttttt------TttTTtttTTtB------|
+   y= 18 |----ttttttttttt-----A-TTttTt-ttB------|
+   y= 20 |----ttttttttttt-----t-TTttttTTtB------|
+   y= 22 |-----ttttttttt--------TTtt----tB------|
+   y= 24 |--------ttt--------------------B------|
+   y= 26 |-------------------------------B------|
+   y= 28 |-------------------------------B------|
+   y= 30 |-------------------BBTBBBBBBBBBB------|
+
+========================================================================
+汇总对照表 (修复前基线)
+========================================================================
+形态              窗口WxH    内容bbox高        上留白        下留白       右留白
+紧凑             430x32         32          0          0         0
+运行             560x32         32          0          0         0
+图标              38x32         32          0          0         0
+
+(注: bbox 基于控件几何; 像素行检测另见各形态 [像素空白检测])
+
+诊断完成。截图目录: F:\（8）Desktop\debug-acrpa

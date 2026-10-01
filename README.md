@@ -19,6 +19,7 @@ version：v0.1.27
 - **变量系统**：支持复杂数据处理和数学运算
 - **AI 增强**：视觉定位、智能重试、异常检测、自然语言调试
 - **调试器**：断点/条件断点（标记旁显示表达式）/单步/变量监视/调用栈
+- **多设备互联（NetLink）**：内网多机实时监控 + 远程操控 + 脚本分发，零新增依赖（纯标准库）
 
 ![](https://i.imgs.ovh/2026/09/13/873139bf6c702c6d85d59f9a359136a6.png)
 
@@ -163,6 +164,7 @@ Excel 文件（`.xls`），第1行为标题，第3行开始为命令。
 
 - [使用说明](使用说明.txt)
 - [脚本模板](template/脚本模板.xls)
+- [多设备局域网互联（NetLink）总览与部署指南](docs/netlink-总览与部署指南.md)
 
 ### 🆕 DD 驱动增强
 
@@ -187,6 +189,135 @@ ACRPA v0.1.22 支持 **DD 驱动**（可选）作为高性能输入后端：
 写入,你好世界,0.05,simulate     # 模拟按键（支持中文）
 写入,Test@#$%,0.02,auto         # 自动选择最佳方式
 ```
+
+## 🌐 多设备局域网互联（NetLink）
+
+> **开发中（未发布）**。定位：内网多机协同 —— 一台机器即可监控多台机器的运行状态，远程运行/暂停/停止，批量下发脚本，手机浏览器也能查看进度。
+
+完全基于 Python 标准库实现，**零新增依赖**，PyInstaller 打包体积几乎不变。
+
+### 功能矩阵（三档权限）
+
+| 能力 | 说明 | 最低权限 |
+| --- | --- | --- |
+| 多机实时监控 | 设备列表 + 运行状态 + 当前脚本 + 进度（第几行 / 第几循环 / 已运行时长）+ 实时日志流 + 定时任务状态 | 仅观察 |
+| 零配置发现 | UDP 广播自动发现同网段设备；VLAN / 多网卡环境可退回「手动填 IP:端口」静态对端 | 仅观察 |
+| 配对认证 | 被控端生成 6 位配对码（默认有效期 600s）；控制端输入即可配对；PIN 不上网，走 `PBKDF2-HMAC-SHA256` 派生密钥 + `nonce/HMAC` 挑战应答；连续 5 次错误锁定连接；密钥存 Windows 凭据库（不写 `config.json`）；配对后免 PIN 重连 | — |
+| 远程操控 | 运行 / 暂停 / 恢复 / 停止；**被控端首次操控弹确认框**（可「允许并记住此设备」）；**自动区分脚本与会话**（脚本走 `pause_event`、工作流走 `WorkflowEngine._pause_event`，已分叉）；指令串行化 + 全控制端广播回执 | 允许操控 |
+| 审计日志 | 所有远程指令与截图请求写入 `logs/netlink_audit_YYYYMMDD.log`（谁 / 何时 / 什么 / 结果），可按天数自动清理 | 允许操控 |
+| 脚本分发 | 把本地 `.xls/.xlsx/.json`（单文件上限 32 MB）推送到被控端 `<脚本目录>/received/`；64 KB 分块 + 逐块序号 + 结束帧 sha256 与大小双重校验；失败不留残留文件；支持**多设备批量下发**；可「推完即运行」 | 允许接收脚本 |
+| 远端脚本管理 | 查看被控端脚本清单（区分「脚本目录 / 已接收」）并直接远程运行 | 允许接收脚本 |
+| 远程截图 | 抓取被控端屏幕缩略图（默认 640 宽、质量 60；上限 1280 宽 / 质量 80），1 秒节流，图像只在内存编码传输不落盘 | 允许操控 |
+| 浏览器只读面板 | 内置 `http.server` 单页面板（默认端口 19712，**默认关闭**），手机 / 平板浏览器可直接看多机进度与日志；令牌鉴权（查询串 / Cookie / `Authorization: Bearer` 三形式）；**面板零写操作** | — |
+| TLS 可选加密 | 基于 stdlib `ssl` 的自签证书加密通道（需自备 PEM），对端证书 `sha256` 指纹 **TOFU 固定**，指纹不符直接拒连；**默认关闭** | — |
+
+三档权限：**仅观察** / **允许操控** / **允许接收脚本**。
+
+### 设计要点
+
+- **对等架构**：不设独立服务器，每个 ACRPA 实例内嵌一个节点，同时具备 Server（被连）与 Client（主动连）角色，同一条 TCP 连接全双工对等。
+- **零新增依赖**：纯标准库（`socket/threading/ssl/hashlib/hmac/http.server` 等），PyInstaller 体积几乎不变。
+- **不侵入执行引擎**：`engine.py / workflow.py / scheduler.py` 三文件**零改动**；通过既有的 `state` 状态量（`quit2`/`pause_event`/`exec_state`）与 `root.after` 回到主线程执行。
+- **崩溃隔离**：所有网络线程为 daemon，网络层异常不影响本地自动化；日志镜像通过 `utils` 的 sink 机制，总线未启动时零开销。
+
+### 快速上手
+
+1. 两台同网段 Windows 机器各装 ACRPA，分别在 **设置 → 网络互联** 里勾选「启用设备互联」，填写不同的设备名（端口保持默认）。
+2. 被控端把权限设为「允许操控」（需要传脚本则设为「允许接收脚本」）。
+3. 在设备互联窗口（主界面 **🌐 互联** 按钮）里，被控端点「配对码」查看 6 位码；控制端点「🔗 配对」输入该码。
+4. 配对成功后设备表会自动出现对方并实时刷新进度与日志（无需任何手工订阅）。
+5. 选中设备即可使用 `▶远程运行 / ⏸暂停 / ⏹停止 / 推脚本 / 📂远端脚本 / 📷截图`；被控端首次会弹确认框。
+
+### 配置项（22 项 `netlink_*`）
+
+| 键 | 默认值 | 含义 |
+| --- | --- | --- |
+| `netlink_enabled` | `False` | 启用设备互联 |
+| `netlink_port` | `19710` | TCP 监听端口 |
+| `netlink_device_name` | `""` | 本机显示名（空 = 主机名） |
+| `netlink_perm_level` | `"observe"` | 本机默认授予权限 observe/control/script |
+| `netlink_peers` | `[]` | 已配对设备白名单（不含密钥） |
+| `netlink_static_peers` | `[]` | 手动静态对端（发现失败兜底） |
+| `netlink_autodiscover` | `True` | UDP 自动发现 |
+| `netlink_discovery_port` | `19711` | UDP 发现端口 |
+| `netlink_ui_window` | `""` | 设备互联窗口几何记忆 |
+| `netlink_require_auth` | `True` | 启用配对认证 |
+| `netlink_pin_ttl` | `600` | 配对码有效期（秒） |
+| `netlink_confirm_control` | `True` | 首次远程操控需被控端弹窗确认 |
+| `netlink_confirmed_peers` | `[]` | 已确认过操控的设备指纹 |
+| `netlink_script_dir` | `""` | 允许远程运行的脚本目录（空 = 程序目录/scripts） |
+| `netlink_audit_days` | `0` | 审计日志保留天数（0 = 跟随 log_retention_days） |
+| `netlink_web_enabled` | `False` | 启用浏览器只读面板 |
+| `netlink_web_port` | `19712` | 面板监听端口 |
+| `netlink_web_bind` | `"0.0.0.0"` | 面板监听地址（127.0.0.1 = 仅本机） |
+| `netlink_tls` | `False` | 启用 TLS 加密 |
+| `netlink_tls_cert` | `""` | TLS 证书 PEM 路径 |
+| `netlink_tls_key` | `""` | TLS 私钥 PEM 路径 |
+| `netlink_tls_pins` | `[]` | 已固定的对端证书指纹（TOFU） |
+
+### 端口与防火墙
+
+| 用途 | 协议/端口 | 默认 |
+| --- | --- | --- |
+| 节点控制通道 | TCP 19710 | 可在设置改 |
+| UDP 广播发现 | UDP 19711 | 可在设置改 |
+| 浏览器只读面板 | TCP 19712 | **默认关闭**，可在设置改 |
+
+Windows 防火墙：首次监听会弹授权框，选「专用网络」；也可手动放行。
+
+### 文档索引
+
+| 文档 | 内容 |
+| --- | --- |
+| [`docs/netlink-总览与部署指南.md`](docs/netlink-总览与部署指南.md) | **推荐入口**：架构图、模块职责、配置全表、权限矩阵、端口表、两机部署步骤、测试矩阵、已知限制 |
+| [`docs/netlink-配对与权限说明.md`](docs/netlink-配对与权限说明.md) | 三档权限语义、首次配对流程、免配对重连、撤销位置、安全边界、故障排查 |
+| [`docs/netlink-远程操控使用说明.md`](docs/netlink-远程操控使用说明.md) | 操控按钮行为与前置条件、首次确认弹窗、回执三态、审计、限制 |
+| [`docs/netlink-脚本分发使用说明.md`](docs/netlink-脚本分发使用说明.md) | 推送/批量下发、落盘位置、完整性校验、远端脚本列表、故障排查 |
+| [`docs/netlink-远程截图说明.md`](docs/netlink-远程截图说明.md) | 权限要求、节流与分辨率/质量上限、隐私合规提示、故障排查 |
+| [`docs/netlink-网页只读面板说明.md`](docs/netlink-网页只读面板说明.md) | 启用步骤、访问链接与令牌、只读边界、安全提示、故障排查 |
+| [`docs/netlink-TLS加密说明.md`](docs/netlink-TLS加密说明.md) | 为何需要、OpenSSL 自签证书命令、TOFU 指纹固定、限制、故障排查 |
+| [`docs/netlink-phase1-验收清单.md`](docs/netlink-phase1-验收清单.md) | 只读监控的双机人工验收步骤 |
+| [`docs/netlink-phase2-验收清单.md`](docs/netlink-phase2-验收清单.md) | 配对/权限/远程操控的双机人工验收步骤 |
+
+### 自动化测试
+
+运行方式：`python tools/_test_netlink_xxx.py`（这 16 个脚本当前全部通过）。
+
+<details>
+<summary>展开 16 个测试脚本清单</summary>
+
+| 脚本 | 覆盖内容 |
+| --- | --- |
+| `tools/_smoke_netlink.py` | 帧 / 粘包 / 回环 / 总线 / 日志 sink |
+| `tools/_test_netlink_2node.py` | 双节点只读链路 |
+| `tools/_test_netlink_e2e.py` | Phase 1 · 10 项 |
+| `tools/_test_netlink_auth.py` | 认证 12 项 |
+| `tools/_test_netlink_control.py` | 操控 15 项 |
+| `tools/_test_netlink_phase2_e2e.py` | Phase 2 · 10 项 |
+| `tools/_test_netlink_transfer.py` | 分发 15 项 |
+| `tools/_test_netlink_phase3_e2e.py` | Phase 3 · 10 项 |
+| `tools/_test_netlink_screenshot.py` | 截图 10 项 |
+| `tools/_test_netlink_webui.py` | 面板 13 项 |
+| `tools/_test_netlink_tls.py` | TLS 10 项 |
+| `tools/_smoke_netlink_window.py` | 设备互联窗口烟测 |
+| `tools/_smoke_netlink_pairing_ui.py` | 配对 UI 烟测 |
+| `tools/_smoke_netlink_control_ui.py` | 操控 UI 烟测 |
+| `tools/_smoke_netlink_transfer_ui.py` | 分发 UI 烟测 |
+| `tools/_verify_netlink_package.py` | 打包完整性（交叉验证 17/17 个 netlink 模块） |
+
+</details>
+
+> 说明：其中 `_test_netlink_tls.py` 依赖本机具备 `cryptography` 或 `openssl` 才能跑真实握手，缺失时相关 4 条断言记 `[WARN]`。
+
+### 已知限制
+
+1. **真机跨机验收未执行**：自动化测试为同机双/三节点等价覆盖；跨机防火墙 / VLAN / 单向路由需按两份验收清单人工执行。
+2. **TLS 真实握手未验证**：开发机无 `cryptography`/`openssl`，无法生成测试 PEM，相关断言为 `[WARN]`（未假通过）；需在具备 OpenSSL 的机器复跑。
+3. **冻结 exe 存活检查为 `[WARN]`**：开发机缺 `pyautogui/xlrd/pyperclip` 运行期依赖，`run.py` 依赖预检先行退出（与互联功能无关）。
+4. **UDP 广播发现在 VLAN / 多网卡环境不可靠**，需用静态对端兜底。
+5. **浏览器面板未加密**（明文 HTTP + 令牌），仅建议可信内网启用；`netlink_tls` 默认关闭。
+6. **多控制端 / 3 台以上拓扑未压测**（串行化与广播已覆盖 2 控制端场景）。
+7. **TLS 为自签 + TOFU**：不做证书链验证；更换证书后需清空已固定指纹。
 
 ## ⇪ 软件更新
 
@@ -273,3 +404,17 @@ python tools/make_release.py --no-zip --purge-cdn main   # 5. 清 CDN 缓存 (�
 - v0.1.15 (2026-06-05): 集成DD驱动作为可选后端，实现"写入"命令双模式输入（direct/simulate），支持自动回退到PyAutoGUI
 - v0.1.14 (2026-05-24): 优化图色识别和OCR功能说明
 - v0.1.13 (2026-05-19): 优化 AI 生成器和模板，提升脚本规范和win命令
+
+---
+
+## 📷 待补充截图清单
+
+「多设备局域网互联（NetLink）」功能对外文档已就位，但相关界面截图尚未补齐。以下为待补画面、建议文件名与对应插入位置（`index.html` 中已按同样结构预置占位图与 `<!-- TODO(screenshot): ... -->` 注释）。
+
+| 建议文件名 | 需要截取的画面 | 对应页面位置 |
+| --- | --- | --- |
+| `img/netlink-devices.png` | 设备互联窗口主界面：设备列表 + 运行状态 + 当前脚本 + 进度（第几行 / 第几循环 / 已运行时长）+ 实时日志流 | `index.html` → 「多设备互联（NetLink）」区块 · NL 01 设备互联 |
+| `img/netlink-pairing.png` | 配对流程：被控端「配对码」弹窗（显示 6 位码与有效期）+ 控制端「🔗 配对」输入框 + 被控端首次操控确认框 | `index.html` → 「多设备互联（NetLink）」区块 · NL 02 配对认证 |
+| `img/netlink-webui.png` | 手机 / 平板浏览器打开只读面板：多机进度卡片 + 日志流（含令牌访问地址） | `index.html` → 「多设备互联（NetLink）」区块 · NL 03 浏览器面板 |
+
+> 补图后将 `index.html` 中对应 `<img>` 的 `src` 指向上述文件即可，并移除相邻的 `<!-- TODO(screenshot): ... -->` 注释。

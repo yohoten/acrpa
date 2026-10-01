@@ -725,6 +725,18 @@
     .mock-wrap{transform:none}
     .to-top{right:16px;bottom:16px;width:42px;height:42px}
   }
+
+  /* ==========================================================
+     NetLink · 多设备互联（追加样式，不改动既有规则）
+     ========================================================== */
+  .nl-shot-pending{
+    display:inline-block;margin-top:10px;
+    font-family:var(--mono);font-size:11.5px;color:var(--warn);
+    border:1px dashed rgba(251,191,36,.45);background:rgba(251,191,36,.05);
+    border-radius:8px;padding:5px 10px;
+  }
+  .nl-shot-wrap{background:rgba(255,255,255,.02)}
+  .nl-shot-wrap img{opacity:1}
 </style>
 </head>
 <body>
@@ -745,6 +757,7 @@
     <div class="nav-links">
       <a href="#screenshots">界面预览</a>
       <a href="#features">核心特性</a>
+      <a href="#netlink">多设备互联</a>
       <a href="#commands">命令系统</a>
       <a href="#workflow">工作流</a>
       <a href="#ai">AI 增强</a>
@@ -758,6 +771,7 @@
   <div class="mobile-nav" id="mobileNav">
     <a href="#screenshots">界面预览</a>
     <a href="#features">核心特性</a>
+    <a href="#netlink">多设备互联</a>
     <a href="#commands">命令系统</a>
     <a href="#workflow">工作流</a>
     <a href="#ai">AI 增强</a>
@@ -939,6 +953,65 @@
       <div class="card reveal"><div class="ico">🔄</div><h3>自动更新</h3><p>启动自检新版本，多源降级获取清单（GitHub Releases → 原始清单 → CDN 镜像）；下载带进度与 sha256 校验，镜像返回旧包自动换源，一键重启完成替换，不动配置与脚本。<span class="tag-new">v0.1.27</span></p></div>
       <div class="card reveal"><div class="ico">🌐</div><h3>浏览器自动化</h3><p>内置 Playwright 网页操作：打开网页、点击、输入、等待元素、整页 / 元素截图，桌面流程与网页流程可串在同一条脚本里。</p></div>
       <div class="card reveal"><div class="ico">🛡️</div><h3>安全守护</h3><p>失控保护（鼠标徒手甩动即中止）、最长执行时间限制、出错即停与失败重试策略，无人值守也能安全收尾。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= NetLink · 多设备互联 ================= -->
+<section id="netlink" style="background:linear-gradient(180deg,transparent,rgba(34,211,238,.045) 30%,rgba(34,211,238,.045) 70%,transparent)">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">NETLINK · LAN</span>
+      <h2>多设备局域网互联 · NetLink</h2>
+      <p class="sec-desc">内网多机进度一目了然，远程运行 / 暂停 / 停止，批量下发脚本，手机浏览器也能看 —— 完全基于 Python 标准库，零新增依赖。</p>
+    </div>
+    <div class="cards">
+      <div class="card reveal"><div class="ico">🖥️</div><h3>实时多机监控</h3><p>设备列表 + 运行状态 + 当前脚本 + 进度（第几行 / 第几循环 / 已运行时长）+ 实时日志流 + 定时任务状态，选中即看，无需手工订阅。</p></div>
+      <div class="card reveal"><div class="ico">🔐</div><h3>配对认证</h3><p>6 位配对码（默认 600s 有效）输入即配对；PIN 不上网，走 <b>PBKDF2-HMAC-SHA256</b> 派生密钥 + nonce/HMAC 挑战应答，连续 5 次错误锁定连接；密钥存 Windows 凭据库，配对后免 PIN 重连。</p></div>
+      <div class="card reveal"><div class="ico">🎛️</div><h3>远程操控</h3><p>运行 / 暂停 / 恢复 / 停止；被控端<b>首次操控弹确认框</b>（可记住此设备）；指令串行化 + 全控制端广播回执；所有远程指令与截图请求写入审计日志。</p></div>
+      <div class="card reveal"><div class="ico">📦</div><h3>脚本分发</h3><p>把本地 <b>.xls / .xlsx / .json</b> 推送到被控端；64 KB 分块 + 结束帧 sha256 与大小双重校验，失败不留残留文件；支持多设备批量下发与「推完即运行」。</p></div>
+      <div class="card reveal"><div class="ico">📱</div><h3>浏览器只读面板</h3><p>内置 <b>http.server</b> 单页面板（默认端口 19712，默认关闭），手机 / 平板浏览器直接看多机进度与日志；令牌鉴权（查询串 / Cookie / Bearer），面板零写操作。</p></div>
+      <div class="card reveal"><div class="ico">🛡️</div><h3>TLS 可选加密</h3><p>基于 stdlib <b>ssl</b> 的自签证书加密通道，对端证书 sha256 指纹 <b>TOFU 固定</b>，指纹不符直接拒连；默认关闭，按需启用。</p></div>
+    </div>
+
+    <!-- NetLink 截图区（占位，待补充真实截图） -->
+    <div class="showcase" style="margin-top:48px">
+      <div class="showcase-item reveal">
+        <div class="showcase-img nl-shot-wrap">
+          <!-- TODO(screenshot): 待补充「设备互联 · 设备列表 + 实时进度 + 日志流」画面，建议文件名 img/netlink-devices.png -->
+          <img src="img/netlink-devices.png" loading="lazy" alt="多设备互联 · 设备列表与实时进度（截图待补充）">
+        </div>
+        <div class="showcase-text">
+          <span class="num">NL 01 · 设备互联</span>
+          <h3>多机进度与日志一览</h3>
+          <p>设备列表、运行状态、当前脚本、第几行 / 第几循环 / 已运行时长与实时日志流集中在一个窗口，无需切换机器即可掌握全局。</p>
+          <span class="nl-shot-pending">🖼 截图为占位，待补充 img/netlink-devices.png</span>
+        </div>
+      </div>
+      <div class="showcase-item reveal rev">
+        <div class="showcase-img nl-shot-wrap">
+          <!-- TODO(screenshot): 待补充「配对码弹窗 + 控制端配对输入 + 首次操控确认框」画面，建议文件名 img/netlink-pairing.png -->
+          <img src="img/netlink-pairing.png" loading="lazy" alt="多设备互联 · 配对认证与首次操控确认（截图待补充）">
+        </div>
+        <div class="showcase-text">
+          <span class="num">NL 02 · 配对认证</span>
+          <h3>PIN + 挑战应答 + 凭据库</h3>
+          <p>被控端生成 6 位配对码，控制端输入即完成配对；密钥永不写入 config.json，配对后免 PIN 重连，首次操控还需被控端弹框确认。</p>
+          <span class="nl-shot-pending">🖼 截图为占位，待补充 img/netlink-pairing.png</span>
+        </div>
+      </div>
+      <div class="showcase-item reveal">
+        <div class="showcase-img nl-shot-wrap">
+          <!-- TODO(screenshot): 待补充「手机/平板浏览器打开只读面板」画面，建议文件名 img/netlink-webui.png -->
+          <img src="img/netlink-webui.png" loading="lazy" alt="多设备互联 · 浏览器只读面板（截图待补充）">
+        </div>
+        <div class="showcase-text">
+          <span class="num">NL 03 · 浏览器面板</span>
+          <h3>手机浏览器也能看</h3>
+          <p>内置只读网页面板（默认端口 19712，默认关闭），手机 / 平板扫码或输入地址即可查看多机进度与日志，面板不含任何写操作。</p>
+          <span class="nl-shot-pending">🖼 截图为占位，待补充 img/netlink-webui.png</span>
+        </div>
+      </div>
     </div>
   </div>
 </section>

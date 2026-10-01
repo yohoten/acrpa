@@ -1,0 +1,1924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACRPA · Lightweight Windows Desktop Automation · v0.1.28-beta</title>
+<meta name="description" content="ACRPA is a lightweight Windows desktop automation tool: Excel spreadsheets are your scripts. It supports image-based localization, window management, OCR, browser automation, record and replay, scheduled tasks, workflow orchestration and AI enhancement.">
+<meta name="keywords" content="ACRPA,RPA,desktop automation,automation script,Excel script,image recognition,window management,OCR,browser automation,workflow orchestration,scheduled tasks,AI enhancement,Python automation,Windows automation,portable">
+<meta name="author" content="yohoten">
+<meta name="theme-color" content="#070b15">
+<meta name="color-scheme" content="dark">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://yohoten.github.io/acrpa/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="ACRPA">
+<meta property="og:title" content="ACRPA · Lightweight Windows Desktop Automation · v0.1.28-beta">
+<meta property="og:description" content="Excel spreadsheets as scripts, image recognition + window management + OCR + browser automation + workflow orchestration + AI enhancement. A lightweight, portable Windows desktop automation tool.">
+<meta property="og:url" content="https://yohoten.github.io/acrpa/">
+<meta property="og:image" content="https://raw.githubusercontent.com/yohoten/acrpa/main/img/image1.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="ACRPA · Lightweight Windows Desktop Automation · v0.1.28-beta">
+<meta name="twitter:description" content="Excel spreadsheets as scripts, image recognition + window management + OCR + browser automation + workflow orchestration + AI enhancement. A lightweight, portable Windows desktop automation tool.">
+<meta name="twitter:image" content="https://raw.githubusercontent.com/yohoten/acrpa/main/img/image1.png">
+<link rel="icon" type="image/png" sizes="32x32" href="res/icon-32.png">
+<link rel="icon" type="image/png" sizes="128x128" href="res/icon.png">
+<link rel="apple-touch-icon" sizes="180x180" href="res/apple-touch-icon.png">
+<link rel="shortcut icon" type="image/x-icon" href="res/automation.ico">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"ACRPA","alternateName":"A/C RPA Desktop Automation Workflow Tool","applicationCategory":"UtilitiesApplication","applicationSubCategory":"RPA Desktop Automation","operatingSystem":"Windows","softwareVersion":"0.1.28-beta","datePublished":"2026-10-01","description":"Lightweight Windows desktop automation tool: Excel spreadsheets as scripts, with image-based localization, window management, OCR, browser automation, workflow orchestration, scheduled tasks and AI enhancement.","url":"https://yohoten.github.io/acrpa/","downloadUrl":"https://github.com/yohoten/acrpa/releases/download/v0.1.28-beta/ACRPA-v0.1.28-beta.exe","author":{"@type":"Person","name":"yohoten"},"offers":{"@type":"Offer","price":"0","priceCurrency":"CNY"}}
+</script>
+<noscript><style>.reveal{opacity:1 !important;transform:none !important}.timeline .tl-item{display:block !important}</style></noscript>
+<style>
+  :root{
+    --bg:#070b15;
+    --bg2:#0c1222;
+    --card:rgba(255,255,255,.035);
+    --card-hover:rgba(255,255,255,.06);
+    --border:rgba(255,255,255,.09);
+    --border-strong:rgba(255,255,255,.16);
+    --text:#e8ecf6;
+    --muted:#93a0bd;
+    --dim:#7b88a8;
+    --c1:#22d3ee;
+    --c2:#818cf8;
+    --c3:#e879f9;
+    --ok:#34d399;
+    --warn:#fbbf24;
+    --err:#f87171;
+    --mono:'Cascadia Code','JetBrains Mono','Consolas','Courier New',monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei','PingFang SC','Hiragino Sans GB',sans-serif;
+    --space-1:8px;--space-2:12px;--space-3:16px;--space-4:18px;--space-5:24px;--space-6:34px;--space-section:80px;
+    --radius-sm:8px;--radius-md:12px;--radius-lg:16px;--radius-pill:999px;
+    --dur-fast:.18s;--dur:.25s;--dur-slow:.45s;--dur-reveal:.6s;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  section[id],header[id]{scroll-margin-top:78px}
+  @media (prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto}
+    *,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important}
+    .reveal{opacity:1 !important;transform:none !important}
+  }
+  body{
+    font-family:var(--sans);
+    background:
+      radial-gradient(1000px 500px at 85% -5%, rgba(129,140,248,.14), transparent 60%),
+      radial-gradient(900px 500px at -10% 15%, rgba(34,211,238,.10), transparent 55%),
+      radial-gradient(800px 600px at 50% 120%, rgba(232,121,249,.08), transparent 60%),
+      var(--bg);
+    color:var(--text);
+    line-height:1.7;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  ::selection{background:rgba(34,211,238,.3)}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1140px;margin:0 auto;padding:0 24px}
+
+  /* ---------- Nav ---------- */
+  nav{
+    position:sticky;top:0;z-index:50;
+    backdrop-filter:blur(14px);
+    background:rgba(7,11,21,.72);
+    border-bottom:1px solid var(--border);
+  }
+  .nav-inner{display:flex;align-items:center;gap:28px;height:62px}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;letter-spacing:.3px}
+  .logo-badge{
+    width:34px;height:34px;flex:none;display:block;object-fit:contain;
+    filter:drop-shadow(0 3px 10px rgba(0,0,0,.55));
+    transition:transform .25s ease,filter .25s ease;
+  }
+  .logo:hover .logo-badge{
+    transform:scale(1.07) rotate(-4deg);
+    filter:drop-shadow(0 4px 14px rgba(99,172,255,.45));
+  }
+  .nav-links{display:flex;gap:22px;margin-left:auto}
+  .nav-links a{color:var(--muted);font-size:14px;transition:color .2s}
+  .nav-links a:hover{color:var(--text)}
+  .menu-toggle{
+    display:none;margin-left:auto;background:none;border:1px solid var(--border-strong);
+    color:var(--text);font-size:20px;width:40px;height:40px;border-radius:10px;cursor:pointer;
+    transition:background .18s;
+  }
+  .menu-toggle:hover{background:var(--card-hover)}
+  .mobile-nav{display:none}
+  .ver-pill{
+    font-family:var(--mono);font-size:12px;color:var(--c1);
+    border:1px solid rgba(34,211,238,.4);background:rgba(34,211,238,.08);
+    padding:3px 10px;border-radius:999px;white-space:nowrap;
+  }
+
+  /* ---------- Hero ---------- */
+  header{position:relative;padding:84px 0 70px}
+  .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
+  .hero-eyebrow{
+    display:inline-flex;align-items:center;gap:8px;
+    font-size:13px;color:var(--muted);
+    border:1px solid var(--border-strong);border-radius:999px;
+    padding:5px 14px;margin-bottom:22px;background:var(--card);
+  }
+  .hero-eyebrow .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok);animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+  h1{
+    font-size:clamp(34px,5vw,58px);line-height:1.12;font-weight:800;letter-spacing:-.5px;
+    margin-bottom:18px;
+  }
+  h1 .grad{
+    background:linear-gradient(92deg,var(--c1) 0%,var(--c2) 55%,var(--c3) 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .hero-sub{font-size:17px;color:var(--muted);max-width:560px;margin-bottom:28px}
+  .hero-cta{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:26px}
+  .btn{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:12px 24px;border-radius:12px;font-size:15px;font-weight:600;
+    transition:transform .18s,box-shadow .18s;cursor:pointer;
+  }
+  .btn-primary{
+    background:linear-gradient(135deg,var(--c1),var(--c2));
+    color:#06121f;box-shadow:0 10px 32px rgba(99,172,255,.36);
+    padding:15px 34px;font-size:17px;
+  }
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 14px 40px rgba(99,172,255,.5)}
+  .btn-ghost{border:1px solid var(--border-strong);color:var(--text);background:var(--card)}
+  .btn-ghost:hover{background:var(--card-hover);transform:translateY(-2px)}
+  .hero-tags{display:flex;gap:8px;flex-wrap:wrap}
+  .tag{
+    font-size:12px;color:var(--muted);border:1px solid var(--border);
+    border-radius:8px;padding:4px 10px;background:var(--card);
+  }
+  .tag b{color:var(--text);font-weight:600}
+
+  /* Hero app mock */
+  .mock-wrap{position:relative}
+  .mock{
+    border:1px solid var(--border-strong);border-radius:16px;overflow:hidden;
+    background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.015));
+    box-shadow:0 30px 80px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.03) inset;
+  }
+  .mock-bar{
+    display:flex;align-items:center;gap:8px;padding:11px 14px;
+    border-bottom:1px solid var(--border);background:rgba(0,0,0,.25);
+  }
+  .mock-dot{width:11px;height:11px;border-radius:50%}
+  .mock-dot.r{background:#ff5f57}.mock-dot.y{background:#febc2e}.mock-dot.g{background:#28c840}
+  .mock-title{font-size:12px;color:var(--dim);margin-left:8px;font-family:var(--mono);white-space:nowrap}
+  .mock-body{display:flex;min-height:340px}
+  .mock-tabs{width:92px;border-right:1px solid var(--border);padding:10px 8px;display:flex;flex-direction:column;gap:4px}
+  .mock-tab{
+    font-size:12px;padding:7px 8px;border-radius:8px;color:var(--dim);white-space:nowrap;
+  }
+  .mock-tab.on{background:rgba(34,211,238,.12);color:var(--c1);font-weight:600}
+  .mock-main{flex:1;padding:16px}
+  .mock-main h4{font-size:12px;color:var(--dim);margin-bottom:10px;font-weight:500}
+  .mtable{border:1px solid var(--border);border-radius:10px;overflow:hidden;font-family:var(--mono);font-size:12px}
+  .mtable .mrow{display:grid;grid-template-columns:88px 1fr;gap:0}
+  .mtable .mrow + .mrow{border-top:1px solid var(--border)}
+  .mtable .cmd{padding:8px 12px;border-right:1px solid var(--border);color:var(--c1);background:rgba(34,211,238,.05)}
+  .mtable .arg{padding:8px 12px;color:var(--muted)}
+  .mtable .arg em{color:var(--ok);font-style:normal}
+  .mock-flow{margin-top:14px;border:1px dashed rgba(129,140,248,.4);border-radius:10px;padding:14px 12px}
+  .mock-flow p{font-size:11px;color:var(--dim);margin-bottom:8px}
+  .flow-nodes{display:flex;align-items:center;gap:0;flex-wrap:wrap}
+  .fnode{
+    font-size:11px;font-family:var(--mono);padding:5px 10px;border-radius:8px;
+    border:1px solid var(--border-strong);
+  }
+  .fnode.n1{background:rgba(34,211,238,.12);color:var(--c1)}
+  .fnode.n2{background:rgba(129,140,248,.14);color:var(--c2)}
+  .fnode.n3{background:rgba(232,121,249,.12);color:var(--c3)}
+  .fnode.n4{background:rgba(52,211,153,.12);color:var(--ok)}
+  .farrow{color:var(--dim);margin:0 6px;font-size:12px}
+  .glow-ring{
+    position:absolute;inset:-8%;z-index:-1;border-radius:30px;
+    background:radial-gradient(500px 300px at 50% 50%, rgba(99,172,255,.20), transparent 70%);
+    filter:blur(6px);
+  }
+
+  /* ---------- Stats ---------- */
+  .stats{border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:rgba(255,255,255,.015)}
+  .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;padding:34px 0}
+  .stat{text-align:center}
+  .stat .num{
+    font-size:34px;font-weight:800;font-family:var(--mono);
+  }
+  .stat .num .grad{
+    background:linear-gradient(135deg,var(--c1),var(--c2));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .stat .lab{font-size:13px;color:var(--muted);margin-top:4px}
+
+  /* ---------- Sections ---------- */
+  section{padding:var(--space-section) 0}
+  .sec-head{margin-bottom:44px;max-width:720px}
+  .sec-tag{
+    display:inline-block;font-size:12px;font-weight:600;letter-spacing:1px;
+    color:var(--c2);border:1px solid rgba(129,140,248,.4);background:rgba(129,140,248,.08);
+    border-radius:6px;padding:4px 10px;margin-bottom:14px;
+  }
+  h2{font-size:clamp(26px,3.4vw,36px);font-weight:800;letter-spacing:-.3px;margin-bottom:12px}
+  .sec-desc{color:var(--muted);font-size:15px}
+  .section-tint-cyan{background:linear-gradient(180deg,transparent,rgba(34,211,238,.05) 40%,rgba(34,211,238,.05) 60%,transparent)}
+  .section-tint-indigo{background:linear-gradient(180deg,transparent,rgba(129,140,248,.05) 40%,rgba(129,140,248,.05) 60%,transparent)}
+  .section-tint-fuchsia{background:linear-gradient(180deg,transparent,rgba(232,121,249,.05) 40%,rgba(232,121,249,.05) 60%,transparent)}
+
+  /* Feature cards */
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .card{
+    background:var(--card);border:1px solid var(--border);border-radius:16px;
+    padding:26px 24px;transition:transform .22s,border-color .22s,background .22s;
+    position:relative;overflow:hidden;
+  }
+  .card:hover{transform:translateY(-4px);border-color:var(--border-strong);background:var(--card-hover);box-shadow:0 16px 38px rgba(0,0,0,.35)}
+  .card::before{
+    content:'';position:absolute;top:0;left:0;right:0;height:2px;
+    background:linear-gradient(90deg,transparent,rgba(99,172,255,.7),transparent);
+    opacity:0;transition:opacity .25s;
+  }
+  .card:hover::before{opacity:1}
+  .card .ico{
+    width:44px;height:44px;border-radius:12px;display:grid;place-items:center;
+    font-size:21px;margin-bottom:16px;
+    background:linear-gradient(135deg,rgba(34,211,238,.14),rgba(129,140,248,.14));
+    border:1px solid var(--border-strong);
+  }
+  .card h3{font-size:17px;margin-bottom:8px}
+  .card p{font-size:13.5px;color:var(--muted)}
+
+  /* Command system */
+  .cmd-tabs{
+    display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;
+    position:sticky;top:62px;z-index:20;
+    background:rgba(7,11,21,.88);backdrop-filter:blur(12px);
+    padding:10px 0;margin-left:-8px;margin-right:-8px;padding-left:8px;padding-right:8px;
+    border-radius:0 0 12px 12px;
+  }
+  .cmd-tab{
+    font-size:13px;padding:8px 16px;border-radius:999px;cursor:pointer;
+    border:1px solid var(--border);color:var(--muted);background:var(--card);
+    transition:all .18s;user-select:none;
+  }
+  .cmd-tab:hover{border-color:var(--border-strong);color:var(--text)}
+  .cmd-tab.on{
+    background:linear-gradient(135deg,rgba(34,211,238,.14),rgba(129,140,248,.14));
+    border-color:rgba(129,140,248,.5);color:var(--text);font-weight:600;
+  }
+  .cmd-panel{display:none}
+  .cmd-panel.on{display:block;animation:fadeIn .3s}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .cmd-table{width:100%;border-collapse:collapse;font-size:13.5px}
+  .cmd-table th{
+    text-align:left;font-size:12px;color:var(--dim);font-weight:600;letter-spacing:.6px;
+    padding:10px 14px;border-bottom:1px solid var(--border-strong);
+  }
+  .cmd-table td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+  .cmd-table tr:last-child td{border-bottom:none}
+  .cmd-table tr:hover td{background:rgba(255,255,255,.02)}
+  .col-cmd{width:150px}
+  .col-desc{width:46%}
+  .cmd-table code{
+    font-family:var(--mono);font-size:12.5px;color:var(--c1);
+    background:rgba(34,211,238,.07);border:1px solid rgba(34,211,238,.18);
+    padding:2px 8px;border-radius:6px;white-space:nowrap;
+  }
+  .cmd-table code:hover,.cmd-table .ex:hover{color:var(--text);border-color:rgba(34,211,238,.5)}
+  .cmd-table .ex{font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .cmd-table .ex b{color:var(--warn);font-weight:500}
+  .copied{outline:1px solid var(--ok);background:rgba(52,211,153,.12) !important}
+  .tag-new{
+    font-family:var(--mono);font-size:10.5px;color:var(--c1);
+    border:1px solid rgba(34,211,238,.4);background:rgba(34,211,238,.08);
+    border-radius:6px;padding:1px 6px;margin-left:6px;vertical-align:1px;white-space:nowrap;
+  }
+  .cmd-note{margin-top:14px;font-size:12.5px;color:var(--dim);line-height:1.7}
+  .cmd-note code{font-family:var(--mono);font-size:12px;color:var(--c1)}
+
+  /* Toast */
+  .toast{
+    position:fixed;left:50%;bottom:34px;transform:translateX(-50%) translateY(20px);
+    background:rgba(12,20,38,.96);border:1px solid rgba(52,211,153,.45);color:var(--text);
+    font-size:13.5px;padding:11px 22px;border-radius:999px;z-index:200;
+    opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;
+    box-shadow:0 12px 34px rgba(0,0,0,.5);backdrop-filter:blur(8px);
+    max-width:80vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast b{color:var(--ok)}
+
+  /* Workflow */
+  .wf-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:44px;align-items:center}
+  .wf-board{
+    border:1px solid var(--border-strong);border-radius:18px;padding:26px;
+    background:rgba(255,255,255,.02);
+  }
+  .wf-row{display:flex;align-items:center;gap:0;flex-wrap:wrap;margin-bottom:6px}
+  .wf-node{
+    display:flex;align-items:center;gap:10px;
+    padding:12px 18px;border-radius:12px;border:1px solid var(--border-strong);
+    font-size:13.5px;font-weight:600;
+  }
+  .wf-node .badge{font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:5px;background:rgba(0,0,0,.3)}
+  .wf-a{background:rgba(34,211,238,.10);color:var(--c1);border-color:rgba(34,211,238,.35)}
+  .wf-b{background:rgba(129,140,248,.12);color:var(--c2);border-color:rgba(129,140,248,.4)}
+  .wf-c{background:rgba(232,121,249,.10);color:var(--c3);border-color:rgba(232,121,249,.35)}
+  .wf-d{background:rgba(52,211,153,.10);color:var(--ok);border-color:rgba(52,211,153,.35)}
+  .wf-arrow{color:var(--dim);margin:0 8px}
+  .wf-side{border:1px dashed rgba(129,140,248,.4);border-radius:10px;padding:12px 16px;margin-top:14px;font-size:12.5px;color:var(--muted)}
+  .wf-list{display:flex;flex-direction:column;gap:14px}
+  .wf-item{display:flex;gap:14px}
+  .wf-item .dot2{
+    width:30px;height:30px;flex:none;border-radius:9px;display:grid;place-items:center;font-size:14px;
+    background:rgba(129,140,248,.12);border:1px solid rgba(129,140,248,.35);color:var(--c2);
+  }
+  .wf-item b{font-size:15px;display:block;margin-bottom:2px}
+  .wf-item p{font-size:13px;color:var(--muted)}
+
+  /* AI section */
+  .ai-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  .ai-card,.tmpl-card,.env-card{
+    transition:transform .22s,border-color .22s,box-shadow .22s,background .22s;
+  }
+  .ai-card:hover,.tmpl-card:hover,.env-card:hover{
+    transform:translateY(-4px);border-color:var(--border-strong);
+    box-shadow:0 14px 34px rgba(0,0,0,.35);background:var(--card-hover);
+  }
+  .ai-card:hover{border-color:rgba(232,121,249,.45)}
+  .ai-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px}
+  .ai-card .aico{font-size:24px;margin-bottom:12px}
+  .ai-card h3{font-size:15.5px;margin-bottom:6px}
+  .ai-card p{font-size:13px;color:var(--muted)}
+  .ai-note{
+    margin-top:22px;font-size:13px;color:var(--muted);
+    border:1px solid rgba(251,191,36,.3);background:rgba(251,191,36,.05);
+    border-radius:12px;padding:14px 18px;
+  }
+  .ai-note b{color:var(--warn)}
+
+  /* Templates */
+  .tmpl-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .tmpl-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px}
+  .tmpl-card h3{font-size:15px;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+  .tmpl-card ul{list-style:none;font-size:13px;color:var(--muted)}
+  .tmpl-card li{padding:4px 0;display:flex;gap:8px;align-items:baseline}
+  .tmpl-card li::before{content:'▸';color:var(--c2);font-size:11px}
+  .tmpl-badge{
+    font-size:11px;font-weight:600;border-radius:6px;padding:2px 8px;
+  }
+  .t-basic{color:var(--c1);background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.3)}
+  .t-adv{color:var(--c2);background:rgba(129,140,248,.1);border:1px solid rgba(129,140,248,.35)}
+  .t-ai{color:var(--c3);background:rgba(232,121,249,.1);border:1px solid rgba(232,121,249,.3)}
+
+  /* Env */
+  .env-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .env-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px}
+  .env-card h3{font-size:16px;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+  .pill-wrap{display:flex;flex-wrap:wrap;gap:8px}
+  .pill{
+    font-family:var(--mono);font-size:12px;color:var(--text);
+    background:rgba(255,255,255,.05);border:1px solid var(--border-strong);
+    padding:5px 12px;border-radius:999px;
+  }
+  .env-line{font-size:13.5px;color:var(--muted);padding:5px 0;border-bottom:1px dashed var(--border)}
+  .env-line:last-child{border-bottom:none}
+  .env-line code{font-family:var(--mono);font-size:12px;color:var(--c1)}
+
+  /* Changelog */
+  .timeline{position:relative;padding-left:30px;display:flex;flex-direction:column;gap:0}
+  .timeline::before{
+    content:'';position:absolute;left:8px;top:6px;bottom:6px;width:1px;
+    background:linear-gradient(180deg,var(--c1),var(--c2),var(--c3),transparent);
+  }
+  .tl-item{position:relative;padding:0 0 26px 14px}
+  .tl-item::before{
+    content:'';position:absolute;left:-26px;top:8px;width:11px;height:11px;border-radius:50%;
+    background:var(--bg);border:2px solid var(--c2);
+  }
+  .tl-item:first-child::before{border-color:var(--c1);box-shadow:0 0 12px rgba(34,211,238,.6)}
+  .tl-ver{font-family:var(--mono);font-size:15px;font-weight:700}
+  .tl-item:first-child .tl-ver{color:var(--c1)}
+  .tl-date{font-size:12px;color:var(--dim);font-family:var(--mono);margin:2px 0 6px}
+  .tl-item p{font-size:13.5px;color:var(--muted);max-width:860px}
+  .tl-item p code{
+    font-family:var(--mono);font-size:12px;color:var(--c1);
+    background:rgba(34,211,238,.07);border:1px solid rgba(34,211,238,.18);
+    padding:1px 6px;border-radius:5px;
+  }
+
+  /* Contact */
+  .contact{
+    border:1px solid var(--border-strong);border-radius:20px;
+    background:linear-gradient(135deg,rgba(34,211,238,.06),rgba(129,140,248,.08),rgba(232,121,249,.05));
+    padding:48px;text-align:center;
+  }
+  .contact h2{margin-bottom:10px}
+  .contact .sub{color:var(--muted);margin-bottom:26px}
+  .contact-flex{display:flex;align-items:center;justify-content:center;gap:34px;flex-wrap:wrap}
+  .qrcode{
+    width:104px;height:104px;border-radius:14px;padding:8px;
+    background:#fff;box-shadow:0 10px 30px rgba(0,0,0,.4);
+  }
+  .qrcode img{width:100%;height:100%;display:block;object-fit:contain}
+  .contact-info{text-align:left;font-size:14.5px;color:var(--muted)}
+  .contact-info .row{display:flex;align-items:center;gap:10px;padding:8px 0}
+  .contact-info b{color:var(--text)}
+  .contact-info code{font-family:var(--mono);color:var(--c1)}
+
+  footer{
+    border-top:1px solid var(--border);padding:26px 0;text-align:center;
+    color:var(--dim);font-size:13px;
+  }
+  footer a{color:var(--c2)}
+
+  /* Reveal */
+  .reveal{opacity:0;transform:translateY(22px);transition:opacity .6s ease,transform .6s ease}
+  .reveal.in{opacity:1;transform:none}
+
+  /* Download dropdown */
+  .dl-drop{position:relative;display:inline-block}
+  .btn-download{
+    display:inline-flex;align-items:center;gap:9px;
+    padding:14px 28px;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;
+    background:linear-gradient(135deg,var(--c3),var(--c2));color:#0b0d1a;
+    box-shadow:0 8px 26px rgba(232,121,249,.28);
+    transition:transform .18s,box-shadow .18s;border:none;font-family:var(--sans);
+  }
+  .btn-download:hover{transform:translateY(-2px);box-shadow:0 12px 34px rgba(232,121,249,.42)}
+  .btn-download .caret{font-size:12px;margin-left:2px;transition:transform .2s}
+  .dl-drop.open .caret{transform:rotate(180deg)}
+  .dl-menu{
+    position:absolute;top:calc(100% + 10px);left:0;min-width:270px;z-index:60;
+    background:rgba(14,20,38,.98);border:1px solid var(--border-strong);border-radius:12px;
+    padding:8px;display:none;box-shadow:0 18px 50px rgba(0,0,0,.5);
+    backdrop-filter:blur(12px);
+  }
+  .dl-menu.open{display:block;animation:fadeIn .2s}
+  .dl-menu a{
+    display:flex;flex-direction:column;gap:2px;padding:11px 14px;border-radius:8px;
+    color:var(--text);font-size:14.5px;font-weight:600;transition:background .15s;
+  }
+  .dl-menu a:hover{background:rgba(255,255,255,.07)}
+  .dl-menu a .gi{font-size:16px;margin-right:8px}
+  .dl-menu a small{color:var(--dim);font-size:11.5px;font-family:var(--mono);font-weight:400}
+  .dl-menu a .row{display:flex;align-items:center}
+
+  /* Screenshot showcase (Agivar-style) */
+  .showcase{display:flex;flex-direction:column;gap:48px}
+  .showcase-item{display:grid;grid-template-columns:1.25fr 1fr;gap:36px;align-items:center}
+  .showcase-item.rev .showcase-text{order:-1}
+  .showcase-img{
+    border:1px solid var(--border-strong);border-radius:16px;overflow:hidden;cursor:zoom-in;
+    background:linear-gradient(135deg,rgba(255,255,255,.04),rgba(255,255,255,.008));
+    box-shadow:0 22px 54px rgba(0,0,0,.38);
+    transition:transform .25s,box-shadow .25s,border-color .25s;
+  }
+  .showcase-img:hover{transform:translateY(-3px);border-color:rgba(129,140,248,.5);box-shadow:0 28px 64px rgba(0,0,0,.45)}
+  .showcase-img img{width:100%;height:auto;display:block;opacity:0;transition:opacity .45s ease}
+  .showcase-img img.loaded{opacity:1}
+  .showcase-text .num{
+    display:inline-block;font-family:var(--mono);font-size:12.5px;color:var(--c2);
+    border:1px solid rgba(129,140,248,.4);background:rgba(129,140,248,.08);
+    border-radius:999px;padding:3px 12px;margin-bottom:14px;letter-spacing:1px;
+  }
+  .showcase-text h3{font-size:clamp(21px,2.6vw,28px);margin-bottom:10px;font-weight:800}
+  .showcase-text p{color:var(--muted);font-size:14.5px;max-width:480px}
+  .showcase-text .hint{margin-top:14px;font-size:12.5px;color:var(--dim)}
+  .showcase-text .hint b{color:var(--c1);font-weight:600}
+
+  /* Lightbox */
+  .lb{
+    position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;
+    background:rgba(4,7,14,.92);backdrop-filter:blur(6px);padding:30px;
+  }
+  .lb.on{display:flex}
+  .lb img{max-width:94vw;max-height:88vh;border-radius:8px;box-shadow:0 20px 80px rgba(0,0,0,.7)}
+  .lb .lb-close{
+    position:absolute;top:18px;right:24px;font-size:30px;color:var(--muted);cursor:pointer;
+    width:44px;height:44px;display:grid;place-items:center;border-radius:50%;
+    border:1px solid var(--border-strong);background:rgba(255,255,255,.04);transition:all .18s;
+  }
+  .lb .lb-close:hover{color:#fff;background:rgba(255,255,255,.1)}
+  .lb .lb-nav{
+    position:absolute;top:50%;transform:translateY(-50%);font-size:34px;color:var(--muted);
+    cursor:pointer;user-select:none;padding:12px;transition:color .15s;
+  }
+  .lb .lb-nav:hover{color:#fff}
+  .lb .lb-prev{left:12px}
+  .lb .lb-next{right:12px}
+  .lb .lb-cap{position:absolute;bottom:18px;left:0;right:0;text-align:center;color:var(--muted);font-size:13px}
+
+  @media (max-width:960px){
+    .hero-grid,.wf-grid{grid-template-columns:1fr;gap:40px}
+    .cards,.ai-grid,.tmpl-grid{grid-template-columns:repeat(2,1fr)}
+    .showcase-item{grid-template-columns:1fr;gap:18px}
+    .showcase-item.rev .showcase-text{order:0}
+    .stats-grid{grid-template-columns:repeat(2,1fr);gap:28px}
+    .env-grid{grid-template-columns:1fr}
+    .nav-links{display:none}
+    .menu-toggle{display:grid;place-items:center;margin-left:0}
+    .lang-switch{margin-left:auto}
+    .mobile-nav{
+      display:none;position:fixed;top:62px;left:0;right:0;z-index:49;
+      background:rgba(10,15,30,.97);backdrop-filter:blur(12px);
+      border-bottom:1px solid var(--border);padding:10px 24px 16px;
+      flex-direction:column;gap:2px;box-shadow:0 18px 40px rgba(0,0,0,.4);
+    }
+    .mobile-nav.open{display:flex}
+    .mobile-nav a{
+      padding:13px 10px;color:var(--muted);font-size:15px;
+      border-bottom:1px solid var(--border);transition:color .15s,padding-left .15s;
+    }
+    .mobile-nav a:last-child{border-bottom:none}
+    .mobile-nav a:hover{color:var(--c1);padding-left:16px}
+  }
+  @media (max-width:600px){
+    .cards,.ai-grid,.tmpl-grid{grid-template-columns:1fr}
+    section{padding:56px 0}
+    header{padding:56px 0}
+    .contact{padding:32px 22px}
+  }
+
+  /* ==========================================================
+     visual enhancements v2 · aurora background / spotlight cards / scroll progress / parallax
+     ========================================================== */
+
+  /* --- 背景层：极光 + 网格 + 噪点 --- */
+  .bg-layer{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
+  .bg-grid{
+    position:absolute;inset:0;
+    background-image:
+      linear-gradient(rgba(255,255,255,.032) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(255,255,255,.032) 1px,transparent 1px);
+    background-size:58px 58px;
+    -webkit-mask-image:radial-gradient(ellipse 100% 62% at 50% 0%,#000 0%,rgba(0,0,0,.45) 46%,transparent 78%);
+    mask-image:radial-gradient(ellipse 100% 62% at 50% 0%,#000 0%,rgba(0,0,0,.45) 46%,transparent 78%);
+  }
+  .bg-noise{
+    position:absolute;inset:0;opacity:.045;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .aurora{position:absolute;display:block;border-radius:50%;filter:blur(72px);opacity:.42;will-change:transform}
+  .aurora.a1{width:600px;height:600px;left:56%;top:-16%;background:radial-gradient(circle,rgba(129,140,248,.75),transparent 64%);animation:drift1 30s ease-in-out infinite}
+  .aurora.a2{width:560px;height:560px;left:-14%;top:4%;background:radial-gradient(circle,rgba(34,211,238,.6),transparent 64%);animation:drift2 38s ease-in-out infinite}
+  .aurora.a3{width:640px;height:640px;left:26%;top:62%;background:radial-gradient(circle,rgba(232,121,249,.42),transparent 66%);animation:drift3 46s ease-in-out infinite}
+  @keyframes drift1{0%,100%{transform:translate3d(0,0,0) scale(1)}50%{transform:translate3d(-7%,9%,0) scale(1.14)}}
+  @keyframes drift2{0%,100%{transform:translate3d(0,0,0) scale(1.05)}50%{transform:translate3d(9%,6%,0) scale(.92)}}
+  @keyframes drift3{0%,100%{transform:translate3d(0,0,0) scale(.95)}50%{transform:translate3d(6%,-8%,0) scale(1.12)}}
+
+  /* --- 导航：滚动进度条 + 当前区块高亮 --- */
+  nav{transition:background .3s ease,box-shadow .3s ease}
+  nav.scrolled{background:rgba(7,11,21,.92);box-shadow:0 12px 34px rgba(0,0,0,.42)}
+  .nav-progress{
+    position:absolute;left:0;bottom:-1px;height:2px;width:0;
+    background:linear-gradient(90deg,var(--c1),var(--c2) 55%,var(--c3));
+    box-shadow:0 0 14px rgba(129,140,248,.7);
+  }
+  .nav-links a{position:relative;padding:6px 0}
+  .nav-links a::after{
+    content:'';position:absolute;left:0;right:0;bottom:-2px;height:2px;border-radius:2px;
+    background:linear-gradient(90deg,var(--c1),var(--c2));
+    transform:scaleX(0);transform-origin:left;transition:transform .25s ease;
+  }
+  .nav-links a:hover::after{transform:scaleX(1)}
+  .nav-links a.active{color:var(--text);font-weight:600}
+  .nav-links a.active::after{transform:scaleX(1)}
+  /* --- language switch --- */
+  .lang-switch{
+    display:inline-flex;align-items:center;gap:6px;flex-shrink:0;margin-left:0;
+    font-size:13px;color:var(--muted);text-decoration:none;white-space:nowrap;
+    border:1px solid var(--border-strong);border-radius:999px;padding:6px 12px;line-height:1;
+    transition:color .2s,border-color .2s,background .18s;
+  }
+  .lang-switch:hover{color:var(--c1);border-color:rgba(34,211,238,.55);background:rgba(34,211,238,.08)}
+  .lang-switch .globe{font-size:13px;line-height:1}
+  @keyframes navIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+  .mobile-nav.open{animation:navIn .22s ease}
+
+  /* --- Hero --- */
+  h1 .grad{background-size:220% 100%;animation:gradflow 9s ease-in-out infinite}
+  @keyframes gradflow{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+  .btn-primary{position:relative;overflow:hidden}
+  .btn-primary::after{
+    content:'';position:absolute;top:0;left:-70%;width:48%;height:100%;pointer-events:none;
+    background:linear-gradient(100deg,transparent,rgba(255,255,255,.5),transparent);
+    transform:skewX(-20deg);animation:shine 5.5s ease-in-out 1.4s infinite;
+  }
+  @keyframes shine{0%{left:-70%}60%,100%{left:150%}}
+  .btn-ghost:hover{
+    background:linear-gradient(135deg,rgba(34,211,238,.14),rgba(129,140,248,.14));
+    border-color:rgba(129,140,248,.45);
+  }
+  .tag{transition:border-color .2s,color .2s,transform .2s}
+  .tag:hover{color:var(--text);border-color:var(--border-strong);transform:translateY(-2px)}
+  .glow-ring{animation:breathe 7s ease-in-out infinite}
+  @keyframes breathe{0%,100%{opacity:.85;transform:scale(1)}50%{opacity:1;transform:scale(1.05)}}
+  .mock-wrap{transform:translate3d(calc(var(--px,0) * 12px),calc(var(--py,0) * 12px),0);transition:transform .45s cubic-bezier(.2,.7,.3,1)}
+  .run-caret{display:inline-block;color:var(--ok);animation:blink 1.1s steps(2,start) infinite}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
+  .mock-tab{transition:color .2s,background .2s}
+  .mtable .mrow{transition:background .2s}
+  .mtable .mrow:hover{background:rgba(255,255,255,.03)}
+
+  /* --- 卡片：鼠标聚光 --- */
+  .card,.ai-card,.tmpl-card,.env-card{--mx:50%;--my:0%;position:relative;overflow:hidden}
+  .card::after,.ai-card::after,.tmpl-card::after,.env-card::after{
+    content:'';position:absolute;inset:0;pointer-events:none;border-radius:inherit;
+    opacity:0;transition:opacity .35s ease;
+    background:radial-gradient(460px circle at var(--mx) var(--my),rgba(129,140,248,.18),transparent 62%);
+  }
+  .card:hover::after,.ai-card:hover::after,.tmpl-card:hover::after,.env-card:hover::after{opacity:1}
+
+  /* --- 章节标题装饰线 --- */
+  .sec-head h2{position:relative;padding-left:18px}
+  .sec-head h2::before{
+    content:'';position:absolute;left:0;top:.24em;bottom:.24em;width:4px;border-radius:4px;
+    background:linear-gradient(180deg,var(--c1),var(--c2));
+    box-shadow:0 0 14px rgba(34,211,238,.45);
+  }
+  .contact h2{padding-left:0}
+  .contact h2::before{display:none}
+
+  /* --- 统计条 --- */
+  .stats{position:relative}
+  .stats::before{
+    content:'';position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(90deg,transparent,rgba(129,140,248,.06),transparent);
+  }
+  .stats-grid{gap:0;padding:38px 0}
+  .stat{position:relative;padding:8px 10px}
+  .stat + .stat::before{
+    content:'';position:absolute;left:0;top:14%;height:72%;width:1px;
+    background:linear-gradient(180deg,transparent,var(--border-strong),transparent);
+  }
+  .stat .num .grad{filter:drop-shadow(0 0 20px rgba(34,211,238,.28))}
+
+  /* --- 命令系统 --- */
+  .cmd-tabs{gap:10px}
+  .cmd-tab{backdrop-filter:blur(6px)}
+  .cmd-tab.on{box-shadow:0 6px 20px rgba(129,140,248,.22)}
+  .cmd-table code{transition:color .18s,border-color .18s,background .18s,transform .12s}
+  .cmd-table code:active{transform:scale(.95)}
+  .cmd-table .ex{transition:color .18s}
+  .cmd-note{border-left:2px solid rgba(34,211,238,.35);padding-left:12px}
+
+  /* --- 截图展示 --- */
+  .showcase-img{position:relative}
+  .showcase-img::after{
+    content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+    background:linear-gradient(160deg,rgba(255,255,255,.07),transparent 42%);
+  }
+  .showcase-img img{transition:opacity .45s ease,transform .55s cubic-bezier(.2,.7,.3,1)}
+  .showcase-item:hover .showcase-img img{transform:scale(1.022)}
+  @media (min-width:961px){
+    .showcase-item:hover .showcase-img{
+      transform:perspective(1200px) translateY(-3px) rotateY(-1.6deg) rotateX(1.2deg);
+      border-color:rgba(129,140,248,.5);box-shadow:0 30px 70px rgba(0,0,0,.5);
+    }
+  }
+
+  /* --- 工作流 --- */
+  .wf-board{
+    background:linear-gradient(160deg,rgba(255,255,255,.035),rgba(255,255,255,.012));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 20px 50px rgba(0,0,0,.3);
+  }
+  .wf-node{transition:transform .2s ease,box-shadow .2s ease}
+  .wf-node:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(0,0,0,.38)}
+  .wf-item{transition:transform .22s ease}
+  .wf-item:hover{transform:translateX(4px)}
+  .wf-item .dot2{transition:box-shadow .25s,transform .25s}
+  .wf-item:hover .dot2{transform:scale(1.08);box-shadow:0 0 18px rgba(129,140,248,.35)}
+
+  /* --- AI / 模板 / 技术栈 --- */
+  .ai-card .aico{filter:drop-shadow(0 4px 12px rgba(232,121,249,.32))}
+  .tmpl-card li::before{transition:color .2s,transform .2s}
+  .tmpl-card:hover li::before{color:var(--c1);transform:translateX(3px)}
+  .pill{transition:border-color .2s,color .2s,transform .2s}
+  .pill:hover{border-color:rgba(34,211,238,.5);color:var(--c1);transform:translateY(-2px)}
+  .env-line{transition:color .2s,padding-left .2s}
+  .env-line:hover{color:var(--text);padding-left:6px}
+
+  /* --- 时间线 --- */
+  .timeline::before{left:8px}
+  .tl-item{padding:8px 0 24px 16px;border-radius:12px;transition:background .25s ease}
+  .tl-item::before{left:-27px}
+  .tl-item:hover{background:rgba(255,255,255,.022)}
+  .tl-item:first-child::before{animation:pulse 2.4s infinite}
+
+  /* --- 联系区 --- */
+  .contact{position:relative;overflow:hidden}
+  .contact::after{
+    content:'';position:absolute;width:420px;height:420px;right:-150px;top:-190px;border-radius:50%;
+    background:radial-gradient(circle,rgba(232,121,249,.22),transparent 65%);
+    filter:blur(20px);pointer-events:none;
+  }
+  .contact > *{position:relative;z-index:1}
+  .qrcode{transition:transform .25s ease,box-shadow .25s ease}
+  .qrcode:hover{transform:scale(1.05) rotate(-1.2deg);box-shadow:0 16px 40px rgba(0,0,0,.5)}
+
+  /* --- 页脚 --- */
+  footer{background:linear-gradient(180deg,transparent,rgba(129,140,248,.05))}
+  footer a{transition:color .2s}
+  footer a:hover{color:var(--c1)}
+
+  /* --- 回到顶部 --- */
+  .to-top{
+    position:fixed;right:26px;bottom:26px;width:46px;height:46px;border-radius:14px;
+    display:grid;place-items:center;z-index:80;cursor:pointer;font-size:18px;
+    color:var(--muted);background:rgba(12,18,34,.9);border:1px solid var(--border-strong);
+    backdrop-filter:blur(10px);opacity:0;pointer-events:none;transform:translateY(14px);
+    transition:opacity .25s ease,transform .25s ease,color .2s,border-color .2s,box-shadow .2s;
+  }
+  .to-top.show{opacity:1;pointer-events:auto;transform:none}
+  .to-top:hover{color:var(--c1);border-color:rgba(34,211,238,.5);box-shadow:0 12px 30px rgba(0,0,0,.45)}
+
+  /* --- 可访问性 --- */
+  a:focus-visible,button:focus-visible,.cmd-tab:focus-visible,.showcase-item[role="button"]:focus-visible,summary:focus-visible,.qrcode:focus-visible,.lang-switch:focus-visible,.lb [role="button"]:focus-visible{outline:2px solid var(--c1);outline-offset:3px;border-radius:10px}
+  .reveal{transition:opacity .6s ease,transform .6s cubic-bezier(.22,.7,.3,1)}
+
+  @media (max-width:960px){
+    .stat + .stat::before{display:none}
+    .stats-grid{gap:26px}
+    .bg-grid{background-size:44px 44px}
+    .mock-wrap{transform:none}
+    .to-top{right:16px;bottom:16px;width:42px;height:42px}
+  }
+
+  /* ==========================================================
+     NetLink multi-device (appended styles, existing rules untouched)
+     ========================================================== */
+  .nl-shot-wrap{background:rgba(255,255,255,.02)}
+  .nl-shot-wrap img{opacity:1}
+
+  /* ==========================================================
+     Changelog collapse (collapsed by default, latest 3 shown; button enabled by JS)
+     ========================================================== */
+  .timeline.is-collapsed .tl-item:nth-child(n+4){display:none}
+  .tl-toggle{
+    display:none;                              /* set to block once JS is ready; without JS all entries expand and no button shows */
+    margin:16px auto 0;cursor:pointer;
+    font-family:var(--mono);font-size:12.5px;color:var(--muted);
+    background:var(--card);border:1px solid var(--border);border-radius:999px;
+    padding:8px 20px;transition:border-color .2s,color .2s;
+  }
+  .tl-toggle:hover{border-color:var(--border-strong);color:var(--text)}
+  .tl-toggle:focus-visible{outline:2px solid var(--c1);outline-offset:2px}
+  .tl-toggle .tl-caret{display:inline-block;margin-left:8px;transition:transform .25s}
+  .tl-toggle[aria-expanded="true"] .tl-caret{transform:rotate(180deg)}
+
+
+  /* ==========================================================
+     use cases / security & trust / FAQ (adopted from index.new.html)
+     ========================================================== */
+  .scene-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .scene{border:1px solid var(--border);background:var(--card);border-radius:16px;padding:22px 24px}
+  .scene h3{font-size:16.5px;margin-bottom:14px}
+  .scene .ba{display:flex;flex-direction:column;gap:9px;font-size:13.5px;line-height:1.7}
+  .scene .before{color:var(--warn)}
+  .scene .arrowline{color:var(--dim);font-size:12px;font-family:var(--mono);text-align:center}
+  .scene .after{color:var(--ok)}
+  .sec-list{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .sec-item{border:1px solid var(--border);background:var(--card);border-radius:12px;padding:16px 18px;font-size:13.5px;color:var(--muted);line-height:1.7}
+  .sec-item b{color:var(--text)}
+  .sec-caution{margin-top:18px;font-size:12.5px;color:var(--dim);line-height:1.75;border:1px dashed rgba(251,191,36,.4);background:rgba(251,191,36,.05);border-radius:12px;padding:14px 18px}
+  .faq{max-width:840px;margin:0 auto}
+  .faq details{border:1px solid var(--border);background:var(--card);border-radius:12px;margin-bottom:12px;transition:border-color .2s}
+  .faq details[open]{border-color:var(--border-strong)}
+  .faq summary{cursor:pointer;list-style:none;font-weight:600;font-size:15px;color:var(--text);display:flex;justify-content:space-between;gap:12px;align-items:center;padding:15px 18px}
+  .faq summary::-webkit-details-marker{display:none}
+  .faq summary::after{content:'+';color:var(--c1);font-size:20px;font-family:var(--mono);flex:none}
+  .faq details[open] summary::after{content:'\2212'}
+  .faq .faq-body{padding:0 18px 16px;font-size:13.5px;color:var(--muted);line-height:1.8}
+  @media (max-width:720px){.scene-grid,.sec-list{grid-template-columns:1fr}}
+
+  /* ==========================================================
+     homepage revamp: trust badges / social badges / quickstart / audience rows /
+     known limits / ecosystem links / command reference fold (features flattened to a grid)
+     ========================================================== */
+  .hero-trust{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 0}
+  .badge-free{font-size:12.5px;color:var(--ok);background:rgba(52,211,153,.08);border:1px solid rgba(52,211,153,.30);border-radius:999px;padding:6px 12px}
+  .badge-cyan{font-size:12.5px;color:var(--c1);background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.32);border-radius:999px;padding:6px 12px}
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .step{border:1px solid var(--border);background:var(--card);border-radius:16px;padding:22px 24px}
+  .step .stepnum{font-family:var(--mono);font-size:26px;color:var(--c1);margin-bottom:12px}
+  .step h3{font-size:16px;margin-bottom:8px}
+  .step p{font-size:13.5px;color:var(--muted);line-height:1.7}
+  .scene .support{margin-top:10px;font-size:12px;color:var(--dim);font-family:var(--mono);border-top:1px dashed var(--border);padding-top:10px;line-height:1.6}
+
+  .limits{margin-top:22px;border:1px solid var(--border);border-radius:12px;background:var(--card);padding:18px 22px}
+  .limits h3{font-size:14.5px;margin-bottom:10px;color:var(--text)}
+  .limits ul{list-style:none;display:flex;flex-direction:column;gap:7px;margin:0;padding:0}
+  .limits li{font-size:13px;color:var(--muted);line-height:1.7;padding-left:16px;position:relative}
+  .limits li::before{content:'·';position:absolute;left:2px;color:var(--warn);font-weight:700}
+  .limits li b{color:var(--text)}
+
+  .eco-row{display:flex;flex-wrap:wrap;gap:20px;justify-content:center;margin-top:26px}
+  .doc-link{display:inline-flex;gap:6px;align-items:center;font-size:13.5px;color:var(--c1);text-decoration:none;border-bottom:1px solid rgba(34,211,238,.4)}
+  .doc-link:hover{border-bottom-color:var(--c1)}
+
+  .cmd-fold{margin-top:6px}
+  .cmd-fold>summary{cursor:pointer;list-style:none;font-size:14.5px;font-weight:600;color:var(--text);border:1px dashed var(--border-strong);border-radius:12px;padding:15px 18px;background:var(--card);display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+  .cmd-fold>summary::-webkit-details-marker{display:none}
+  .cmd-fold>summary::after{content:'\25BE';color:var(--c1);font-family:var(--mono)}
+  .cmd-fold[open]>summary{margin-bottom:18px}
+  .cmd-fold[open]>summary::after{content:'\25B4'}
+  .cmd-fold[open] .cmd-tabs{opacity:1;transform:none}
+  @media (max-width:720px){
+    .steps{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= background layer ================= -->
+<div class="bg-layer" aria-hidden="true">
+  <span class="aurora a1"></span>
+  <span class="aurora a2"></span>
+  <span class="aurora a3"></span>
+  <div class="bg-grid"></div>
+  <div class="bg-noise"></div>
+</div>
+
+<!-- ================= Nav ================= -->
+<nav>
+  <div class="wrap nav-inner">
+    <a class="logo" href="#top"><img class="logo-badge" src="res/icon.png" alt="ACRPA application icon" width="34" height="34" decoding="async">ACRPA</a>
+    <div class="nav-links">
+      <a href="#screenshots">Screenshots</a>
+      <a href="#features">Features</a>
+      <a href="#netlink">Multi-Device</a>
+      <a href="#commands">Commands</a>
+      <a href="#workflow">Workflow</a>
+      <a href="#ai">AI</a>
+      <a href="#templates">Templates</a>
+      <a href="#changelog">Changelog</a>
+      <a href="#contact">Contact</a>
+    </div>
+    <a class="lang-switch" href="index.html" hreflang="zh-CN" lang="zh-CN" aria-label="Switch to Chinese" title="切换到中文版"><span class="globe">🌐</span>中文</a>
+    <button class="menu-toggle" id="menuToggle" aria-label="Menu" aria-expanded="false">☰</button>
+  </div>
+  <div class="mobile-nav" id="mobileNav">
+    <a href="#screenshots">Screenshots</a>
+    <a href="#features">Features</a>
+    <a href="#netlink">Multi-Device</a>
+    <a href="#commands">Commands</a>
+    <a href="#workflow">Workflow</a>
+    <a href="#ai">AI</a>
+    <a href="#templates">Templates</a>
+    <a href="#changelog">Changelog</a>
+    <a href="#contact">Contact</a>
+  </div>
+  <span class="nav-progress" id="navProgress"></span>
+</nav>
+
+<!-- ================= Hero ================= -->
+<header id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="hero-eyebrow"><span class="dot"></span>Lightweight desktop automation · A/C RPA</span>
+      <h1>Fill in Excel,<br><span class="grad">automate everything</span></h1>
+      <p class="hero-sub">Write your steps into Excel (or just record them once) and let the computer do the rest — image recognition / window management / OCR / browser automation / workflow orchestration / NetLink multi-device / scheduled tasks / local AI enhancement, all built in.</p>
+      <div class="hero-cta">
+        <div class="dl-drop" id="dlDrop">
+          <button class="btn-download" id="dlToggle" aria-haspopup="true" aria-expanded="false">⬇ Download Installer <span class="caret">▾</span></button>
+          <div class="dl-menu" id="dlMenu">
+            <a href="https://github.com/yohoten/acrpa/releases/download/v0.1.28-beta/ACRPA-v0.1.28-beta.exe" data-download target="_blank" rel="noopener noreferrer">
+              <span class="row"><span class="gi">⬇</span> Direct download <span data-ver></span></span>
+              <small>ACRPA-v0.1.28-beta.exe · Portable · 13.4 MiB · Pre-release</small>
+            </a>
+            <a href="https://github.com/yohoten/acrpa/releases" target="_blank" rel="noopener noreferrer">
+              <span class="row"><span class="gi">⌥</span> GitHub repository</span>
+              <small>github.com/yohoten/acrpa</small>
+            </a>
+            <a href="https://gitee.com/yohoten/ACRPA/releases" target="_blank" rel="noopener noreferrer">
+              <span class="row"><span class="gi">◆</span> Gitee repository</span>
+              <small>gitee.com/yohoten/ACRPA</small>
+            </a>
+          </div>
+        </div>
+        <a class="btn btn-ghost" href="#screenshots">▶ See it in action</a>
+        <a class="btn btn-ghost" href="#contact">💬 Join the community</a>
+      </div>
+      <p style="font-size:12.5px;color:var(--dim);margin:-10px 0 22px">Latest: v0.1.28-beta (pre-release) · ACRPA-v0.1.28-beta.exe · 13.4 MiB · SHA-256 473f1db3…06d54</p>
+      <div class="hero-trust">
+        <span class="badge-free">✔ Completely free · MIT open source</span>
+        <span class="badge-free">✔ Single file · portable, no installation</span>
+        <span class="badge-free">✔ One PC manages many machines on the LAN</span>
+      </div>
+    </div>
+    <div class="mock-wrap">
+      <div class="glow-ring"></div>
+      <div class="mock">
+        <div class="mock-bar">
+          <span class="mock-dot r"></span><span class="mock-dot y"></span><span class="mock-dot g"></span>
+          <span class="mock-title">ACRPA Desktop Automation</span>
+        </div>
+        <div class="mock-body">
+          <div class="mock-tabs">
+            <div class="mock-tab">📜 Scripts</div>
+            <div class="mock-tab on">🧩 Workflow</div>
+            <div class="mock-tab">📚 Templates</div>
+            <div class="mock-tab">⚙ Settings</div>
+          </div>
+          <div class="mock-main">
+            <h4>script_example.xls · Running <span class="run-caret">▸</span></h4>
+            <div class="mtable">
+              <div class="mrow"><div class="cmd">Activate Window</div><div class="arg">Notepad</div></div>
+              <div class="mrow"><div class="cmd">Find Image</div><div class="arg">button.png, 0.9</div></div>
+              <div class="mrow"><div class="cmd">Type</div><div class="arg"><em>Hello World</em></div></div>
+              <div class="mrow"><div class="cmd">Wait</div><div class="arg">2.5</div></div>
+              <div class="mrow"><div class="cmd">Click Image</div><div class="arg">submit.png, 0.9</div></div>
+            </div>
+            <div class="mock-flow">
+              <p>Workflow diagram</p>
+              <div class="flow-nodes">
+                <span class="fnode n1">▶ Login script</span><span class="farrow">→</span>
+                <span class="fnode n2">Condition</span><span class="farrow">→</span>
+                <span class="fnode n3">Parallel ×2</span><span class="farrow">→</span>
+                <span class="fnode n4">✓ Done</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ================= Stats ================= -->
+<div class="stats">
+  <div class="wrap stats-grid">
+    <div class="stat"><div class="num"><span class="grad count" data-target="51">0</span></div><div class="lab">Built-in automation commands</div></div>
+    <div class="stat"><div class="num"><span class="grad count" data-target="10">0</span></div><div class="lab">Ready-to-use script templates</div></div>
+    <div class="stat"><div class="num"><span class="grad count" data-target="4">0</span></div><div class="lab">Step types · workflow orchestration</div></div>
+    <div class="stat"><div class="num"><span class="grad" data-ver></span></div><div class="lab"><span data-date></span> Latest version</div></div>
+  </div>
+</div>
+
+<!-- ================= Scenarios ================= -->
+<section id="scenarios" class="section-tint-cyan">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">USE CASES</span>
+      <h2>Who Uses ACRPA</h2>
+      <p class="sec-desc">No programming required. Find your role below — every scenario is backed by built-in templates, sample scripts or dedicated commands.</p>
+    </div>
+    <div class="scene-grid">
+      <div class="scene reveal">
+        <h3>🗂 Office Clerks / Admin</h3>
+        <div class="ba">
+          <div class="after">✅ Login, form filling, data collection, batch clicking, scheduled screenshot archiving — script a whole day of repetitive work once and let it run on time.</div>
+          <div class="support">Backed by: built-in templates "Login Flow / Form Filling / Data Collection / Batch Click"</div>
+        </div>
+      </div>
+      <div class="scene reveal">
+        <h3>💰 Finance / Bank Reconciliation</h3>
+        <div class="ba">
+          <div class="after">✅ Download bank receipts, OCR invoice capture and entry, automatic reconciliation data transfer between systems and Excel — no more manual copy-paste row by row.</div>
+          <div class="support">Backed by: Read Text / Wait Text / Click Text commands + bank receipt sample script</div>
+        </div>
+      </div>
+      <div class="scene reveal">
+        <h3>📊 Daily Reports &amp; Scheduled Monitoring</h3>
+        <div class="ba">
+          <div class="after">✅ Scheduled screenshot archiving, automatic daily report generation and delivery, execute daily / weekly / at fixed intervals — it runs even when you are away.</div>
+          <div class="support">Backed by: scheduled task engine + screenshot / send-mail sample scripts</div>
+        </div>
+      </div>
+      <div class="scene reveal">
+        <h3>🖥 Intranet Multi-Machine Ops</h3>
+        <div class="ba">
+          <div class="after">✅ One PC monitors the running status of many ACRPA instances on the LAN, pushes scripts in bulk with "run right after push", and progress is viewable from a phone browser.</div>
+          <div class="support">Backed by: NetLink multi-device linking (zero extra dependencies)</div>
+        </div>
+      </div>
+      <div class="scene reveal">
+        <h3>🧑‍💻 Developers / Power Users</h3>
+        <div class="ba">
+          <div class="after">✅ Python command with three privilege levels (sandbox / trusted / full), plugin API, AI script generation, and a debugger with breakpoints / single-step / variable watch.</div>
+          <div class="support">Backed by: Python extension + plugin system + built-in debugger</div>
+        </div>
+      </div>
+      <div class="scene reveal">
+        <h3>🛒 E-commerce · Bulk Listing</h3>
+        <div class="ba">
+          <div class="after">✅ Bulk product entry across platforms, scheduled price updates, stock checks, and automatic order status sync to Excel — hand the repetitive clicking over to a script.</div>
+          <div class="support">Backed by: batch click / form filling / Excel read-write / scheduled task sample scripts</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Quickstart ================= -->
+<section id="quickstart">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">HOW IT WORKS</span>
+      <h2>Up and Running in 3 Steps</h2>
+      <p class="sec-desc">From "record it once" to "fully automated" — in as little as 3 minutes.</p>
+    </div>
+    <div class="steps">
+      <div class="step reveal"><div class="stepnum">①</div><h3>Record it, or write it in Excel</h3><p>Use the built-in recorder to run through the steps once and generate a script automatically; or write one command per row directly in a .xls sheet — 51 built-in commands, if you can fill a spreadsheet you can write a script.</p></div>
+      <div class="step reveal"><div class="stepnum">②</div><h3>Tune parameters, let AI locate</h3><p>Just adjust the window title and parameters; if fixed coordinates are unstable, switch to "AI Find Image" and describe the element in plain language, or use OCR "Click Text" to locate by text — small UI changes stay adaptive.</p></div>
+      <div class="step reveal"><div class="stepnum">③</div><h3>Run it, then let it run</h3><p>Run immediately, debug with breakpoints, or hand it to the scheduler; you can also distribute scripts in bulk over NetLink to many machines on the LAN.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Screenshots ================= -->
+<section id="screenshots">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">SCREENSHOTS</span>
+      <h2>Interface Overview</h2>
+      <p class="sec-desc">Real ACRPA screens. Click any image to enlarge.</p>
+    </div>
+    <div class="showcase">
+      <div class="showcase-item reveal" data-full="img/image1.png" data-cap="Script Editing">
+        <div class="showcase-img"><img src="img/image1.png" loading="lazy" decoding="async" alt="Script editing screen" width="1396" height="919"></div>
+        <div class="showcase-text">
+          <span class="num">01 · Script Editing</span>
+          <h3>Your spreadsheet is the script</h3>
+          <p>Commands in column A, parameters in columns B–J — orchestrate automation without programming. Inline editing, copy-paste and breakpoint markers: the spreadsheet is the script, and there is no learning curve.</p>
+          <div class="hint">🖱 Click the image to enlarge</div>
+        </div>
+      </div>
+      <div class="showcase-item reveal rev" data-full="img/image2.png" data-cap="Execution &amp; Editing">
+        <div class="showcase-img"><img src="img/image2.png" loading="lazy" decoding="async" alt="Execution and editing screen" width="1390" height="918"></div>
+        <div class="showcase-text">
+          <span class="num">02 · Execution &amp; Editing</span>
+          <h3>Run control and debugging hub</h3>
+          <p>Run / pause / stop / single-step control, breakpoints and conditional breakpoints, variable watcher, call stack and execution time statistics — the run state is clear at a glance.</p>
+          <div class="hint">🖱 Click the image to enlarge</div>
+        </div>
+      </div>
+      <div class="showcase-item reveal" data-full="img/image3.png" data-cap="Workflow">
+        <div class="showcase-img"><img src="img/image3.png" loading="lazy" decoding="async" alt="Workflow screen" width="1399" height="921"></div>
+        <div class="showcase-text">
+          <span class="num">03 · Workflow</span>
+          <h3>Chain multiple scripts together</h3>
+          <p>Visual flow diagram (nodes / connectors / drag-and-drop) with four step types — script, parallel, condition and wait — and live highlighting of the executing node.</p>
+          <div class="hint">🖱 Click the image to enlarge</div>
+        </div>
+      </div>
+      <div class="showcase-item reveal rev" data-full="img/image4.png" data-cap="Settings">
+        <div class="showcase-img"><img src="img/image4.png" loading="lazy" decoding="async" alt="Settings navigation screen" width="1797" height="822"></div>
+        <div class="showcase-text">
+          <span class="num">04 · Settings</span>
+          <h3>Settings cards by category</h3>
+          <p>Basic execution / AI enhancement / scheduling / logs / advanced settings are managed on separate cards and saved independently; the model dropdown auto-matches the correct API endpoint.</p>
+          <div class="hint">🖱 Click the image to enlarge</div>
+        </div>
+      </div>
+      <div class="showcase-item reveal" data-full="img/image5.png" data-cap="Dark Mode">
+        <div class="showcase-img"><img src="img/image5.png" loading="lazy" decoding="async" alt="Dark mode screen" width="1901" height="740"></div>
+        <div class="showcase-text">
+          <span class="num">05 · Dark Mode</span>
+          <h3>Light / dark themes, one click</h3>
+          <p>Dark theme plus a collapsible Mini Bar status strip, resident in the system tray — more comfortable and easier on the eyes during long overnight automation runs.</p>
+          <div class="hint">🖱 Click the image to enlarge</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Features ================= -->
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">CORE FEATURES</span>
+      <h2>Core Features</h2>
+      <p class="sec-desc">From basic automation to intelligent workflows, ACRPA covers the entire desktop automation stack.</p>
+    </div>
+    <div class="cards" id="featureGrid">
+      <div class="card reveal"><div class="ico">📦</div><h3>Excel-driven scripts</h3><p>Uses <b>.xls</b> spreadsheets as script files — commands in column A, parameters in columns B–J. Orchestrate automation without programming; the learning cost is minimal.</p></div>
+      <div class="card reveal"><div class="ico">🖱</div><h3>Image-based localization</h3><p>Image recognition built on OpenCV / Pillow: full-screen and region-limited search, grayscale accelerated matching — locate and click any UI element precisely.</p></div>
+      <div class="card reveal"><div class="ico">🪟</div><h3>Window management</h3><p>Operate Windows directly: activate, close, minimize, wait for a window to appear or disappear. Window-relative coordinates make it 10–100× faster than image matching.</p></div>
+      <div class="card reveal"><div class="ico">🎬</div><h3>Record &amp; replay</h3><p>Record mouse and keyboard actions (including drag, scroll and window activation), with wait intervals inserted automatically. Replay in one click — repetitive work is never manual again.</p></div>
+      <div class="card reveal"><div class="ico">⏱</div><h3>Scheduled tasks</h3><p>Daily / weekly / interval / one-shot scheduling modes, executed silently in the background alongside the system tray and Mini Bar.</p></div>
+      <div class="card reveal"><div class="ico">⚡</div><h3>DD driver boost</h3><p>Optional kernel-level high-performance input backend that simulates real keyboard and mouse input and is hard to detect. Supports direct / simulate / auto write modes with automatic fallback.</p></div>
+      <div class="card reveal"><div class="ico">🧩</div><h3>Workflow orchestration</h3><p>Chain multiple scripts with a visual flow diagram (nodes / connectors / drag-and-drop) supporting four step types: script, parallel, condition and wait.</p></div>
+      <div class="card reveal"><div class="ico">📊</div><h3>Variable system</h3><p>Set variables, read the clipboard, substring / replace, math operations — ${var} syntax works throughout, so complex data is easy to handle.</p></div>
+      <div class="card reveal"><div class="ico">🔍</div><h3>OCR recognition</h3><p>Recognize text in a screen region, wait for text to appear, click on text. Compatible with PaddleOCR / Windows OCR / Tesseract — even dynamic interfaces can be automated.</p></div>
+      <div class="card reveal"><div class="ico">🐞</div><h3>Professional debugger</h3><p>Breakpoints / conditional breakpoints, single-step, variable watcher, call stack, execution timing, run-to-cursor and skip-line — problems become obvious.</p></div>
+      <div class="card reveal"><div class="ico">🌓</div><h3>Dark mode</h3><p>Switch between light and dark themes in one click. With the system tray and the Mini Bar floating status strip, automation runs quietly in the background.</p></div>
+      <div class="card reveal"><div class="ico">📜</div><h3>Logs &amp; marketplace</h3><p>Structured levelled logs with daily rotation, automatic cleanup and one-click export; built-in script marketplace (works offline) that keeps expanding the script ecosystem.</p></div>
+      <div class="card reveal"><div class="ico">🔄</div><h3>Automatic updates</h3><p>Self-checks for new versions at startup and fetches the manifest with multi-source fallback (GitHub Releases → raw manifest → CDN mirror). Downloads show progress and are verified by sha256; if a mirror serves an old package it switches source automatically, then a one-click restart completes the replacement without touching your config or scripts.<span class="tag-new" data-ver></span></p></div>
+      <div class="card reveal"><div class="ico">🌐</div><h3>Browser automation</h3><p>Built-in Playwright web automation: open a page, click, type, wait for elements, full-page or element screenshots — desktop and web steps can be chained in the same script.</p></div>
+      <div class="card reveal"><div class="ico">🛡️</div><h3>Safety guards</h3><p>Runaway protection (flick the mouse to abort immediately), maximum execution time limits, stop-on-error and failure retry policies — unattended runs still end safely.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= NetLink · multi-device ================= -->
+<section id="netlink" class="section-tint-cyan">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">NETLINK · MULTI-DEVICE</span>
+      <h2>One PC, Many LAN Machines · NetLink</h2>
+      <p class="sec-desc">See the progress of every machine on the LAN at a glance, run / pause / stop remotely, distribute scripts in bulk, and view it all from a phone browser — built entirely on the Python standard library with <b>zero extra dependencies</b>, a multi-machine control plane rarely found in tools this lightweight.</p>
+    </div>
+    <div class="reveal" style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-bottom:28px">
+      <span class="badge-cyan">⚡ Zero extra dependencies (pure stdlib)</span>
+      <span class="badge-cyan">📱 Phone browser dashboard</span>
+      <span class="badge-cyan">📦 Bulk script push · run after push</span>
+      <span class="badge-cyan">🔐 Pairing code + privilege levels + audit log</span>
+    </div>
+    <div class="cards">
+      <div class="card reveal"><div class="ico">🖥️</div><h3>Real-time multi-machine monitoring</h3><p>Device list plus run state, current script, progress (line number / loop count / elapsed time), live log stream and scheduled task status — select a device and see it immediately, no manual subscription needed.</p></div>
+      <div class="card reveal"><div class="ico">🔐</div><h3>Pairing authentication</h3><p>Enter a 6-digit pairing code (valid for 600s by default) to pair. The PIN never travels over the network: a <b>PBKDF2-HMAC-SHA256</b> derived key plus nonce/HMAC challenge-response is used, and 5 consecutive failures lock the connection. Keys are stored in the Windows credential store, so reconnects after pairing need no PIN.</p></div>
+      <div class="card reveal"><div class="ico">🎛️</div><h3>Remote control</h3><p>Run / pause / resume / stop. The controlled machine <b>prompts for confirmation on first control</b> (this device can be remembered). Commands are serialized and acknowledged to all controllers; every remote command and screenshot request is written to the audit log.</p></div>
+      <div class="card reveal"><div class="ico">📦</div><h3>Script distribution</h3><p>Push local <b>.xls / .xlsx / .json</b> files to controlled machines: 64 KB chunking with dual sha256 and size verification on the final frame, leaving no leftover files on failure. Supports bulk delivery to multiple devices and "run right after push".</p></div>
+      <div class="card reveal"><div class="ico">📱</div><h3>Read-only browser panel</h3><p>A built-in single-page panel served by <b>http.server</b> (default port 19712, off by default). Check multi-machine progress and logs straight from a phone or tablet browser; token auth (query string / cookie / bearer) with zero write operations.</p></div>
+      <div class="card reveal"><div class="ico">🛡️</div><h3>Optional TLS encryption</h3><p>Encrypted channel with a self-signed certificate based on the stdlib <b>ssl</b> module; the peer certificate sha256 fingerprint is <b>pinned (TOFU)</b> and mismatches are rejected outright. Off by default, enable as needed.</p></div>
+    </div>
+
+    <!-- NetLink screenshots -->
+    <div class="showcase" style="margin-top:48px">
+      <div class="showcase-item reveal" data-full="img/netlink-devices.png" data-cap="Multi-device · device list and live progress">
+        <div class="showcase-img nl-shot-wrap">
+          <img src="img/netlink-devices.png" loading="lazy" decoding="async" alt="Multi-device · device list and live progress" width="1520" height="735">
+        </div>
+        <div class="showcase-text">
+          <span class="num">NL 01 · Device Linking</span>
+          <h3>All machines, one screen</h3>
+          <p>Device list, run state, current script, line number / loop count / elapsed time and the live log stream all in one window — see the whole picture without switching machines.</p>
+        </div>
+      </div>
+      <div class="showcase-item reveal rev" data-full="img/netlink-pairing.png" data-cap="Multi-device · pairing and first-control confirmation">
+        <div class="showcase-img nl-shot-wrap">
+          <img src="img/netlink-pairing.png" loading="lazy" decoding="async" alt="Multi-device · pairing and first-control confirmation" width="1587" height="814">
+        </div>
+        <div class="showcase-text">
+          <span class="num">NL 02 · Pairing</span>
+          <h3>PIN + challenge-response + credential store</h3>
+          <p>The controlled machine generates a 6-digit pairing code and the controller enters it to pair. Keys are never written to config.json, reconnects need no PIN after pairing, and first-time control still requires confirmation on the controlled side.</p>
+        </div>
+      </div>
+      <div class="showcase-item reveal" data-full="img/netlink-webui.png" data-cap="Multi-device · read-only browser panel">
+        <div class="showcase-img nl-shot-wrap">
+          <img src="img/netlink-webui.png" loading="lazy" decoding="async" alt="Multi-device · read-only browser panel" width="1453" height="835">
+        </div>
+        <div class="showcase-text">
+          <span class="num">NL 03 · Browser Panel</span>
+          <h3>Viewable from a phone browser</h3>
+          <p>A built-in read-only web panel (default port 19712, off by default). Scan a QR code or type the address on a phone or tablet to view multi-machine progress and logs — the panel contains no write operations at all.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Commands ================= -->
+<section id="commands" class="section-tint-indigo">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">COMMAND SYSTEM</span>
+      <h2>Command System · 51 Built-in Commands</h2>
+      <p class="sec-desc">51 built-in commands: write one per row in Excel and use them right away. Click any command or example to copy it. See the <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a> for full documentation.</p>
+    </div>
+    <details class="cmd-fold">
+      <summary>Expand the Command Reference · 7 categories · 51 built-in commands<span style="color:var(--dim);font-weight:400;font-size:13px">Full docs in the <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a></span></summary>
+    <div class="cmd-tabs reveal">
+      <div class="cmd-tab on" data-tab="t1">🎯 Basic Ops</div>
+      <div class="cmd-tab" data-tab="t2">🪟 Windows</div>
+      <div class="cmd-tab" data-tab="t3">🧮 Variables &amp; Logic</div>
+      <div class="cmd-tab" data-tab="t4">🔍 OCR</div>
+      <div class="cmd-tab" data-tab="t5">🤖 AI</div>
+      <div class="cmd-tab" data-tab="t6">🧩 Workflow</div>
+      <div class="cmd-tab" data-tab="t7">🌐 Browser</div>
+    </div>
+
+    <div class="cmd-panel on" id="t1">
+      <table class="cmd-table">
+        <tr><th class="col-cmd">Command</th><th class="col-desc">Description</th><th>Example</th></tr>
+        <tr><td><code>找图</code></td><td>Search the whole screen for an image; on match, move the mouse to that position (hover)</td><td class="ex">找图, <b>hello</b>, 0.9</td></tr>
+        <tr><td><code>点图</code></td><td>Find an image and click it, with precision control</td><td class="ex">点图, <b>submit</b>, 0.9</td></tr>
+        <tr><td><code>区域找图 / 区域点图</code></td><td>Limit the scan region for faster matching, with grayscale acceleration</td><td class="ex">区域找图, icon, 0.8, 100,100,500,500</td></tr>
+        <tr><td><code>坐标</code></td><td>Click at the given screen coordinates; button, click count and interval are configurable</td><td class="ex">坐标, 500, 300, left, 1, 0.1</td></tr>
+        <tr><td><code>悬停</code></td><td>Move the mouse to the given coordinates</td><td class="ex">悬停, 500, 300</td></tr>
+        <tr><td><code>按键 / 热键</code></td><td>Simulate key presses and combinations (Ctrl+C / Ctrl+V and so on)</td><td class="ex">热键, ctrl, c</td></tr>
+        <tr><td><code>输入 / 写入</code></td><td>Paste-style input (unaffected by the IME) or character-by-character simulated typing (DD driver supported)</td><td class="ex">写入, Hello, 0.05, auto</td></tr>
+        <tr><td><code>等待</code></td><td>Delay / wait, supports random ranges (for example 1.0-3.0)</td><td class="ex">等待, 1.0-3.0</td></tr>
+        <tr><td><code>滚轮 / 拖拽 / 相移</code></td><td>Scroll, drag to given coordinates, or move relative to the current mouse position</td><td class="ex">滚轮, -3</td></tr>
+        <tr><td><code>按下 / 释放</code></td><td>Hold and release a key to implement press-and-drag and other complex actions</td><td class="ex">按下, a</td></tr>
+        <tr><td><code>复制 / 粘贴</code></td><td>Built-in shortcut combinations (Ctrl+A+C / Ctrl+A+V)</td><td class="ex">复制</td></tr>
+        <tr><td><code>代码</code></td><td>Execute Python code from a specified txt file (the program built-in libraries can be called)</td><td class="ex">代码, my_code</td></tr>
+        <tr><td><code>截屏</code></td><td>Take and save a screenshot; a timestamp is appended to the filename automatically</td><td class="ex">截屏, shot, E:/ACRPA/screenshots</td></tr>
+      </table>
+    </div>
+
+    <div class="cmd-panel" id="t2">
+      <table class="cmd-table">
+        <tr><th class="col-cmd">Command</th><th class="col-desc">Description</th><th>Example</th></tr>
+        <tr><td><code>激活窗口</code></td><td>Activate the window with the given title; fuzzy matching supported</td><td class="ex">激活窗口, Notepad</td></tr>
+        <tr><td><code>关闭窗口</code></td><td>Close the specified window</td><td class="ex">关闭窗口, Untitled - Notepad</td></tr>
+        <tr><td><code>最小化 / 最大化窗口</code></td><td>Minimize the window to the taskbar / maximize it</td><td class="ex">最小化窗口, Calculator</td></tr>
+        <tr><td><code>获取窗口位置</code></td><td>Get the window coordinates and size and save them to variables</td><td class="ex">获取窗口位置, Notepad, x, y, w, h</td></tr>
+        <tr><td><code>等待窗口</code></td><td>Wait for a window to appear or disappear, with a configurable timeout</td><td class="ex">等待窗口, Chrome, 10, exists</td></tr>
+        <tr><td><code>窗口坐标</code></td><td>Click relative to the window top-left corner; stays accurate even after the window moves ★</td><td class="ex">窗口坐标, Notepad, 100, 50</td></tr>
+      </table>
+    </div>
+
+    <div class="cmd-panel" id="t3">
+      <table class="cmd-table">
+        <tr><th class="col-cmd">Command</th><th class="col-desc">Description</th><th>Example</th></tr>
+        <tr><td><code>设置变量</code></td><td>Set a variable value; numbers are converted automatically and ${var} references work throughout</td><td class="ex">设置变量, count, 100</td></tr>
+        <tr><td><code>读取剪贴板</code></td><td>Read clipboard content into a variable</td><td class="ex">读取剪贴板, clip_text</td></tr>
+        <tr><td><code>字符串处理</code></td><td>Substring / replace operations on strings</td><td class="ex">字符串处理, text, substring, 0:5, result</td></tr>
+        <tr><td><code>数学运算</code></td><td>Perform math calculations; ${var} references are supported</td><td class="ex">数学运算, ${x}*${y}+1, sum</td></tr>
+        <tr><td><code>如果 / 否则 / 结束如果</code></td><td>Conditional branch control flow</td><td class="ex">如果, ${count}&gt;10</td></tr>
+        <tr><td><code>循环开始 / 循环结束</code></td><td>Loop block, by iteration count or condition expression</td><td class="ex">循环开始, 5</td></tr>
+        <tr><td><code>跳出循环</code></td><td>Break out of the current loop immediately</td><td class="ex">跳出循环</td></tr>
+      </table>
+    </div>
+
+    <div class="cmd-panel" id="t4">
+      <table class="cmd-table">
+        <tr><th class="col-cmd">Command</th><th class="col-desc">Description</th><th>Example</th></tr>
+        <tr><td><code>识别文字</code></td><td>OCR the text in a given screen region and store it in a variable</td><td class="ex">识别文字, 0, 0, 800, 300, ocr_text</td></tr>
+        <tr><td><code>等待文字</code></td><td>Wait for specified text to appear / disappear, with a configurable search region</td><td class="ex">等待文字, Submit succeeded, 10, exists</td></tr>
+        <tr><td><code>点击文字</code></td><td>Find the text position and click it; confidence and search region are configurable</td><td class="ex">点击文字, Login now, 0.8</td></tr>
+      </table>
+    </div>
+
+    <div class="cmd-panel" id="t5">
+      <table class="cmd-table">
+        <tr><th class="col-cmd">Command</th><th class="col-desc">Description</th><th>Example</th></tr>
+        <tr><td><code>AI找图</code></td><td>Describe a UI element in natural language; AI analyzes the screenshot and locates it (click / hover / find only)</td><td class="ex">AI找图, the login button, 0.8, click</td></tr>
+        <tr><td><code>AI识别界面</code></td><td>AI analyzes all UI elements on the current screen; results are stored in a ${prefix}_elements variable</td><td class="ex">AI识别界面, ui</td></tr>
+        <tr><td><code>AI优化建议</code></td><td>AI analyzes historical execution data and gives script optimization suggestions</td><td class="ex">AI优化建议, log</td></tr>
+        <tr><td><code>[AI] 调试</code></td><td>Ask AI in natural language; AI analyzes the logs and answers debugging questions</td><td class="ex">click the [AI] Debug button</td></tr>
+      </table>
+    </div>
+
+    <div class="cmd-panel" id="t6">
+      <table class="cmd-table">
+        <tr><th class="col-cmd">Command</th><th class="col-desc">Description</th><th>Example</th></tr>
+        <tr><td><code>运行工作流</code></td><td>Invoke a workflow file (.json / .yaml) to run multi-script orchestration</td><td class="ex">运行工作流, workflow.json</td></tr>
+        <tr><td><code>工作流变量</code></td><td>Set workflow-level shared variables for use by multiple sub-steps</td><td class="ex">工作流变量, var_name, value</td></tr>
+      </table>
+    </div>
+
+    <div class="cmd-panel" id="t7">
+      <table class="cmd-table">
+        <tr><th class="col-cmd">Command</th><th class="col-desc">Description</th><th>Example</th></tr>
+        <tr><td><code>打开网页</code></td><td>Open a URL in the built-in browser; suitable for post-login data retrieval, web form filling and similar flows</td><td class="ex">打开网页, https://example.com</td></tr>
+        <tr><td><code>浏览器点击</code></td><td>Click a web element by CSS selector or visible text</td><td class="ex">浏览器点击, #login-btn</td></tr>
+        <tr><td><code>浏览器输入</code></td><td>Fill text into the specified input box (located by selector)</td><td class="ex">浏览器输入, #username, admin</td></tr>
+        <tr><td><code>等待元素</code></td><td>Wait for a web element to appear / disappear, with a configurable timeout</td><td class="ex">等待元素, .result, 10, 出现</td></tr>
+        <tr><td><code>浏览器截图</code></td><td>Save a full-page or specific-element screenshot</td><td class="ex">浏览器截图, result, page</td></tr>
+      </table>
+      <p class="cmd-note">Browser commands are implemented on <code>Playwright</code>, installed on demand (about 155 MB, not bundled with the main program); if it is missing, the command shows how to install it. Desktop and web steps can be chained serially in the same script.</p>
+    </div>
+    </details>
+  </div>
+</section>
+
+<!-- ================= Workflow ================= -->
+<section id="workflow">
+  <div class="wrap wf-grid">
+    <div class="wf-board reveal">
+      <p style="font-size:12px;color:var(--dim);margin-bottom:16px">Visual workflow diagram · nodes arranged by drag and drop</p>
+      <div class="wf-row">
+        <div class="wf-node wf-a"><span class="badge">▶</span>Login script</div>
+        <span class="wf-arrow">→</span>
+        <div class="wf-node wf-b"><span class="badge">◇</span>Condition: logged in?</div>
+      </div>
+      <div style="display:flex;justify-content:space-around;padding:2px 0 0 30px">
+        <span class="wf-arrow">↙</span><span class="wf-arrow">↘</span>
+      </div>
+      <div style="display:flex;gap:30px;justify-content:space-around">
+        <div class="wf-node wf-c"><span class="badge">☰</span>Parallel: data collection</div>
+        <div class="wf-node wf-d"><span class="badge">⟳</span>Retry ×3</div>
+      </div>
+      <div style="text-align:center;padding:4px 0">
+        <span class="wf-arrow">↓</span>
+      </div>
+      <div class="wf-row" style="justify-content:center">
+        <div class="wf-node wf-d"><span class="badge">✓</span>Build report · done</div>
+      </div>
+      <div class="wf-side">💡 During execution the current node is highlighted in green and failed nodes are marked in red; outer loop count and maximum execution minutes are configurable.</div>
+    </div>
+    <div>
+      <div class="sec-head reveal" style="margin-bottom:28px">
+        <span class="sec-tag">WORKFLOW</span>
+        <h2>Workflow Orchestration</h2>
+        <p class="sec-desc">Chain several scripts into one pipeline and schedule it visually with a flow diagram.</p>
+      </div>
+      <div class="wf-list">
+        <div class="wf-item reveal"><div class="dot2">📜</div><div><b>Four step types</b><p>Script (sequential), parallel (run several sub-steps at once), condition (if/else branch) and wait (delay).</p></div></div>
+        <div class="wf-item reveal"><div class="dot2">🧩</div><div><b>Categorized action library</b><p>Flow control / mouse / keyboard / recognition / window / file / variable / browser, with search filtering and recent items; double-click to add a node quickly.</p></div></div>
+        <div class="wf-item reveal"><div class="dot2">📝</div><div><b>Node-level control</b><p>Four node types — command / variable / loop / log — share one edit form and support enable-disable, comments, cloning, copy-paste and reordering.</p></div></div>
+        <div class="wf-item reveal"><div class="dot2">🎯</div><div><b>Execution highlighting</b><p>The running node is highlighted live with result tracking; failed nodes are marked red, making debugging direct and efficient.</p></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= AI ================= -->
+<section id="ai" class="section-tint-fuchsia">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">AI ENHANCED</span>
+      <h2>AI Enhanced · From Automation to Intelligence</h2>
+      <p class="sec-desc">Add an API key to unlock four AI capabilities, with a unified model registry covering DeepSeek / Qwen / GPT / Claude.</p>
+    </div>
+    <div class="ai-grid">
+      <div class="ai-card reveal"><div class="aico">👁️</div><h3>AI visual localization</h3><p>Describe a UI element in natural language (for example "the login button"); AI analyzes the screenshot, locates it intelligently and clicks or hovers.</p></div>
+      <div class="ai-card reveal"><div class="aico">🔄</div><h3>AI smart retry</h3><p>After a failure AI analyzes the cause and adaptively adjusts parameters before retrying — smarter than a fixed retry count.</p></div>
+      <div class="ai-card reveal"><div class="aico">🚨</div><h3>AI anomaly detection</h3><p>AI continuously watches for abnormal screens and states during a run and warns early, preventing incorrect operations from spreading.</p></div>
+      <div class="ai-card reveal"><div class="aico">💬</div><h3>Natural-language debugging</h3><p>Ask AI directly about logs and execution issues; it analyzes them and returns conclusions plus optimization advice — debugging with no barrier to entry.</p></div>
+    </div>
+    <div class="ai-note reveal">💡 AI features require an API key in Settings (DeepSeek / Qwen / GPT / Claude supported); the model dropdown auto-matches the correct API endpoint, so no manual configuration is needed.</div>
+  </div>
+</section>
+
+<!-- ================= Templates ================= -->
+<section id="templates">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">TEMPLATES</span>
+      <h2>Sample Script Library · Ready to Run</h2>
+      <p class="sec-desc">Ten ready-to-use templates cover office, system and interaction scenarios — import one and run it. Combined with conditions, loops and AI generation, they can be quickly adapted into complex flows.</p>
+    </div>
+    <div class="tmpl-grid">
+      <div class="tmpl-card reveal">
+        <h3><span class="tmpl-badge t-basic">Office</span> Office · Daily Tasks</h3>
+        <ul>
+          <li>Login flow</li>
+          <li>Form filling</li>
+          <li>Data collection</li>
+          <li>Text editing</li>
+        </ul>
+      </div>
+      <div class="tmpl-card reveal">
+        <h3><span class="tmpl-badge t-adv">System</span> System · OS Operations</h3>
+        <ul>
+          <li>Page screenshot</li>
+          <li>File download</li>
+          <li>Window switching</li>
+        </ul>
+      </div>
+      <div class="tmpl-card reveal">
+        <h3><span class="tmpl-badge t-ai">Interaction</span> Interaction · UI Operations</h3>
+        <ul>
+          <li>Batch clicking</li>
+          <li>Scroll browsing</li>
+          <li>Context menu</li>
+        </ul>
+      </div>
+    </div>
+    <div class="reveal" style="margin-top:22px;font-size:13.5px;color:var(--muted);border:1px solid var(--border);border-radius:12px;padding:16px 20px;background:var(--card)">
+      📂 Quick start: pick a template → "File" → "Import Script" and choose a .xls → adjust the window title and parameters → click "Run" (or press F5) to see it work.<br>
+      <span style="color:var(--dim)">Bonus business samples — send mail, bank receipts, interval clicking, script templates and more — ship as bundled .xls files, ready to import and use.</span>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Env ================= -->
+<section id="env">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">TECH STACK</span>
+      <h2>Tech Stack &amp; Runtime</h2>
+      <p class="sec-desc">Lightweight, fast cold start, small footprint. Available as an install-free exe or run from source.</p>
+    </div>
+    <div class="env-grid">
+      <div class="env-card reveal">
+        <h3>🧰 Tech Stack</h3>
+        <div class="pill-wrap">
+          <span class="pill">Python 3.7+</span>
+          <span class="pill">tkinter</span>
+          <span class="pill">PyAutoGUI</span>
+          <span class="pill">OpenCV</span>
+          <span class="pill">Pillow</span>
+          <span class="pill">pywin32</span>
+          <span class="pill">DD driver</span>
+          <span class="pill">PaddleOCR</span>
+          <span class="pill">Windows OCR</span>
+          <span class="pill">Tesseract</span>
+          <span class="pill">AI API</span>
+          <span class="pill">Playwright</span>
+        </div>
+        <p style="margin-top:16px;font-size:13px;color:var(--dim)">Packaged as a single-file exe — double-click and go. If OpenCV is unavailable it falls back to Pillow matching automatically, so it stays stable instead of crashing.</p>
+        <p style="margin-top:12px"><a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">Full documentation / README →</a></p>
+      </div>
+      <div class="env-card reveal">
+        <h3>⚙️ Key Configuration (config.json)</h3>
+        <div class="env-line"><code>dark_mode</code> Light / dark theme switch</div>
+        <div class="env-line"><code>retry_max / retry_interval</code> Failure retry count and interval</div>
+        <div class="env-line"><code>image_timeout</code> Image match timeout in seconds</div>
+        <div class="env-line"><code>api_key / api_model</code> AI key and model selection</div>
+        <div class="env-line"><code>use_dd_driver</code> DD driver high-performance input</div>
+        <div class="env-line"><code>minimize_to_tray / mini_bar_enabled</code> Tray residency and collapsible status bar</div>
+        <div class="env-line"><code>sched_enabled / sched_tasks</code> Scheduled task execution</div>
+        <div class="env-line"><code>log_level / log_retention_days</code> Log level and retention days</div>
+        <div class="env-line"><code>stop_on_error / failsafe</code> Stop-on-error and runaway protection</div>
+        <div class="env-line"><code>check_update / app_protect</code> Startup update self-check and process guard</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Changelog ================= -->
+<section id="changelog">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">CHANGELOG</span>
+      <h2>Release History</h2>
+      <p class="sec-desc">Continuous iteration, recently focused on the update mechanism, workflow orchestration, AI enhancement and stability. See <a class="doc-link" href="https://github.com/yohoten/acrpa/releases" target="_blank" rel="noopener">GitHub Releases →</a> for the full history.</p>
+    </div>
+    <div class="timeline is-collapsed" id="timeline">
+      <div class="tl-item reveal"><div class="tl-ver" data-ver></div><div class="tl-date" data-date></div><p>Rebuilt on the v0.1.25 baseline to fix the unstable wiring introduced in v0.1.26: an undefined <code>_update_pending</code> made <code>_periodic</code> throw a <code>NameError</code> every 100 ms, which broke the status-bar and execution-progress refresh path and prevented the update flag from being set; and an unimported <code>show_update_dialog</code> made the status-bar update entry point dead on click. All v0.1.26 improvements are retained: the reworked update mechanism (multi-source fallback / semantic version comparison / sha256 verification / one-click restart self-update for the portable build / fixed version source for the packaged build), engine-level command failure semantics with workflow error propagation, and the release toolchain with build assets under management.</p></div>
+      <div class="tl-item reveal"><div class="tl-ver">v0.1.26</div><div class="tl-date">2026-09-13</div><p>Update mechanism reworked: fixed the distorted version number after packaging (the EXE always reported an old version, breaking update checks and the About page entirely). Update checks now use multi-source fallback (GitHub Releases → raw manifest → CDN mirror) and return as soon as one source works; if a source reports a version that is not new enough, the remaining sources are probed and the highest is taken, so a stale mirror cache or a network glitch no longer yields a false "already up to date". Version comparison handles the v prefix, uneven segment counts and pre-release suffixes. Network transport is dual-stack (requests → system certificate store), fixing silent failures behind corporate TLS interception. Downloads retry multiple candidate direct links one by one, stream progress, verify sha256 and size, and re-check the VERSION inside the package, switching source automatically when a mirror serves an old package. A new in-app update window and one-click restart self-update for the portable build replace only the main program and VERSION — config, scripts, templates and logs are never touched. Also fixed "command failure silently reported as success" together with the broken <code>stop_on_error</code> and retry behaviour.</p></div>
+      <div class="tl-item reveal"><div class="tl-ver">v0.1.25</div><div class="tl-date">2026-08-10</div><p>Deep customization of the Workflow tab: categorized action tree with search and recent items; new command / variable / loop / log nodes sharing one configuration form, with right-click copy / paste / disable / comment; control over outer loop count and maximum execution time; execution highlighting and variable management; centrally managed version numbers.</p></div>
+      <div class="tl-item reveal"><div class="tl-ver">v0.1.24</div><div class="tl-date">2026-08-09</div><p>New Advanced Settings page (maximum execution time / globally bound window / recording mode / OCR backend / headless browser and more); every settings card gets its own "Apply ✓"; the model dropdown now uses a unified registry (DeepSeek / Qwen / GPT / Claude); fixed the DD DLL path not taking effect and the wrong Claude endpoint mapping.</p></div>
+      <div class="tl-item reveal"><div class="tl-ver">v0.1.23</div><div class="tl-date">2026-07-20</div><p>Template picker dialog switched to a top-bottom layout; exception protection when toggling the tray; a "restore defaults" button; fixed issues such as the script not loading after recording and the <code>card_log</code> variable name collision.</p></div>
+      <div class="tl-item reveal"><div class="tl-ver">v0.1.22</div><div class="tl-date">2026-07-20</div><p>Structured logging upgrade (log levels / timestamps / daily rotation / automatic cleanup); settings page rebuilt as six independent cards; a record button added to the script editing toolbar.</p></div>
+      <div class="tl-item reveal"><div class="tl-ver">v0.1.21</div><div class="tl-date">2026-07-18</div><p>System tray icon with balloon notifications and a context menu; Mini Bar collapsed mode (a floating always-on-top status strip) that is draggable, follows the theme and updates its status live.</p></div>
+      <div class="tl-item reveal"><div class="tl-ver">v0.1.20</div><div class="tl-date">2026-07-17</div><p>Visual workflow diagram (nodes + connectors + drag and drop); window-relative coordinate system; recording enhancements (drag / scroll / window activation); improved conditional breakpoint UI and LRU eviction for the image cache.</p></div>
+      <div class="tl-item reveal"><div class="tl-ver">v0.1.19</div><div class="tl-date">2026-07-16</div><p>AI enhancement module released: visual localization (AI find image / AI inspect UI), smart retry, anomaly detection, flow optimization suggestions and natural-language debugging.</p></div>
+      <div class="tl-item reveal"><div class="tl-ver">v0.1.18</div><div class="tl-date">2026-07-06</div><p>OCR text recognition commands, a script marketplace panel, debugger enhancements (execution timing / skip line / run to cursor / in-place variable editing) and package size optimization.</p></div>
+      <div class="tl-item reveal"><div class="tl-ver">v0.1.17 → v0.1.13</div><div class="tl-date">2026-06 — 2026-07</div><p>Integrated the DD driver high-performance input backend; unified shutdown cleanup; AI generator and template improvements; more complete documentation for image/color recognition and OCR.</p></div>
+    </div>
+    <button type="button" class="tl-toggle" id="tlToggle" aria-expanded="false" aria-controls="timeline"><span class="tl-toggle-label">Show more release notes</span><span class="tl-caret">▾</span></button>
+  </div>
+</section>
+
+<!-- ================= Trust ================= -->
+<section id="trust">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">SECURITY · TRUST</span>
+      <h2>Safe Enough to Double-Click, Open Enough to Read</h2>
+      <p class="sec-desc">The hardest question for a desktop automation tool is "should I dare install it?". ACRPA answers with: open source, local, install-free.</p>
+    </div>
+    <div class="sec-list">
+      <div class="sec-item reveal"><b>🔓 Open and auditable</b>｜MIT licensed, source fully public and mirrored on GitHub and Gitee — anyone can review it and build it themselves.</div>
+      <div class="sec-item reveal"><b>🔑 Keys stay on your machine</b>｜AI API keys are stored in the Windows credential store, never written to config.json, and your activity is never uploaded.</div>
+      <div class="sec-item reveal"><b>💻 Local-first execution</b>｜Core automation runs on your machine with no server dependency; with AI disabled it is fully offline.</div>
+      <div class="sec-item reveal"><b>📦 Portable, no installer</b>｜A single-file exe that runs once unzipped. It writes nothing to the system and installs no runtime — deleting the folder uninstalls it.</div>
+    </div>
+    <div class="sec-caution reveal">⚠️ On first run Windows may show "Unknown publisher" / SmartScreen. This is normal and happens because the binary is not signed with a paid code-signing certificate — click "More info → Run anyway", or add the install folder to your antivirus allowlist.</div>
+    <div class="limits reveal">
+      <h3>Known Limitations (Stated Honestly)</h3>
+      <ul>
+        <li>The current <span data-ver></span> is a <b>pre-release (beta)</b>; validate it in a test environment before putting it into production.</li>
+        <li>The exe is not signed with a paid certificate, so SmartScreen or antivirus software may block the first run (see the note above for how to proceed).</li>
+        <li>Scripts support <b>.xls</b> only (.xlsx is not supported yet); image assets must be PNG, and avoid non-ASCII characters in paths and filenames.</li>
+        <li>NetLink is designed for the local network (LAN); real-world cross-machine validation is still in progress and the web panel is off by default.</li>
+        <li>AI features need your own API key (DeepSeek / Qwen / OpenAI / local Ollama and other OpenAI-compatible endpoints are supported).</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ================= FAQ ================= -->
+<section id="faq" class="section-tint-indigo">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">FAQ</span>
+      <h2>Frequently Asked Questions</h2>
+      <p class="sec-desc">A few things you may want to know before downloading.</p>
+    </div>
+    <div class="faq reveal">
+      <details><summary>Do I need Python installed?</summary><div class="faq-body">No. Download the portable exe and double-click to run — no Python installation required. You only need Python 3.7+ if you want to modify the source.</div></details>
+      <details><summary>Which operating systems are supported?</summary><div class="faq-body">Windows (x64) desktop only, available as a portable build and an installer. macOS and Linux are not supported at this time.</div></details>
+      <details><summary>What format are scripts in?</summary><div class="faq-body">Excel <b>.xls</b> spreadsheets (.xlsx is not supported yet): one command per row, with the command name in column A and parameters in the following columns. Ten templates and a recorder are built in to generate scripts automatically. Image assets must be PNG, and avoid non-ASCII characters in paths and filenames.</div></details>
+      <details><summary>Is it really free? Can I use it commercially?</summary><div class="faq-body">Completely free under the MIT license. Individuals and companies alike may use, modify and commercialize it. No feature or time limits, no ads, no in-app purchases.</div></details>
+      <details><summary>Antivirus or SmartScreen flags it. What now?</summary><div class="faq-body">Because the binary is not signed with a paid certificate, the first run may be blocked. Click "More info → Run anyway" or add the folder to your allowlist; you are also welcome to build from source and verify it yourself.</div></details>
+      <details><summary>Do the AI features cost extra?</summary><div class="faq-body">ACRPA itself is free. AI uses your own model key (DeepSeek / Qwen / OpenAI / Anthropic / local Ollama and so on) and is billed by that provider based on usage. Without AI it runs fully offline at zero cost.</div></details>
+      <details><summary>How is it different from other RPA tools?</summary><div class="faq-body">It is lighter (single file, no installation), more approachable (an Excel spreadsheet is the script, so anyone can read and write it), supports local AI visual localization, and is fully open source so you can modify the code for free.</div></details>
+      <details><summary>Are my scripts and data safe?</summary><div class="faq-body">Automation runs locally, keys are kept in the system credential store, and the program neither collects nor uploads your operational data.</div></details>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Contact ================= -->
+<section id="contact">
+  <div class="wrap">
+    <div class="contact reveal">
+      <h2>Start Your Automation Journey</h2>
+      <p class="sub">Questions, ideas, or want to contribute? Get in touch with the author.</p>
+      <div class="contact-flex">
+        <div class="qrcode"><img src="data:image/png;base64,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V/q+weX5y3QGVjGdnKbR3cC9jXdxPTrEC9dfJFb86bZbAry6oo2H2vZyLTy8cqb5SiCbJlbFysPtd5fid6tswanYkW76oRmx2IrLKltxKDZssrXUwkW4rbG5IQICdtmKJEql46zEAZSdr5j2LwiFSiqHbMNWnGNhrjf8Y1GQcCmO4rHt2GRbaWZWyVI8nhWn6igVzEuChFNxYhGXlxcs69ljmCY5Pc/r8XcXRRKlslhcMwo1aYqk3lTJWTj2Yi+dxcZEmGZZY7lfJnkjzyIFZZjmLdsumJjk9XzxFwuk4litxIAVuIlC1pEqKgiCsOIcF0NkrVg3VxhTeFEuZh/l9HyJ5LotwP8t/+/Kf/+m53+x/DfA/8Xy3wD/F8v/AX0jAjLBb82zAAABBWVYSWZNTQAqAAAACAAFAQAAAwAAAAEDeAAAAQEAAwAAAAEDdAAAATEAAgAAACAAAABKh2kABAAAAAEAAABqARIABAAAAAEAAAAAAAAAAEFuZHJvaWQgUEQyMzU5Ql9BXzE2LjIuMTEuMC5XMTAAAASQAwACAAAAFAAAAKCSkQACAAAABDAwMgCQEQACAAAABwAAALSSCAAEAAAAAQAAAAAAAAAAMjAyNjowNToxMiAxNDo0NzoyMwArMDg6MDAAAAMBAAADAAAAAQN4AAABMQACAAAAIAAAAOUBAQADAAAAAQN0AAAAAAAAQW5kcm9pZCBQRDIzNTlCX0FfMTYuMi4xMS4wLlcxMABbbArZAAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI2LTA1LTEyVDA2OjUyOjU0KzAwOjAwKQnWPQAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNi0wNS0xMlQwNjo1Mjo1NCswMDowMFhUboEAAAAodEVYdGRhdGU6dGltZXN0YW1wADIwMjYtMDUtMTJUMDY6NTM6MDYrMDA6MDA//DstAAAAKXRFWHRleGlmOkRhdGVUaW1lT3JpZ2luYWwAMjAyNjowNToxMiAxNDo0NzoyM37PFhgAAAATdEVYdGV4aWY6RXhpZk9mZnNldAAxMDZ0L+2+AAAAFHRFWHRleGlmOkltYWdlTGVuZ3RoADg4NL38XJsAAAATdEVYdGV4aWY6SW1hZ2VXaWR0aAA4ODhnNgA9AAAAEnRFWHRleGlmOkxpZ2h0U291cmNlADB4BWtIAAAAHnRFWHRleGlmOk9mZnNldFRpbWVPcmlnaW5hbAArMDg6MDDAtrZqAAAALXRFWHRleGlmOlNvZnR3YXJlAEFuZHJvaWQgUEQyMzU5Ql9BXzE2LjIuMTEuMC5XMTCyyRmlAAAAG3RFWHRleGlmOlN1YlNlY1RpbWVPcmlnaW5hbAAwMDJV0H2qAAAAHnRFWHRpY2M6Y29weXJpZ2h0AEdvb2dsZSBJbmMuIDIwMTasCzM4AAAAM3RFWHRpY2M6ZGVzY3JpcHRpb24ARGlzcGxheSBQMyBHYW11dCB3aXRoIHNSR0IgVHJhbnNmZXInN/p6AAAAAElFTkSuQmCC" alt="WeChat QR code" width="88" height="88" decoding="async"></div>
+        <div class="qrcode"><img src="res/qq-group.jpg" alt="ACRPA QQ group QR code" width="1024" height="968" decoding="async"></div>
+        <div class="contact-info">
+          <div class="row">📧 Email: <b><code>yoho12138@aliyun.com</code></b></div>
+          <div class="row">🤝 Scan to add on WeChat and swap automation tips</div>
+          <div class="row">🐧 QQ group: <b><code>682075338</code></b></div>
+          <div class="row">⭐ Suggestions, bug reports and contributions are all welcome</div>
+        </div>
+      </div>
+      <div class="eco-row reveal">
+        <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">📖 Documentation / README</a>
+        <a class="doc-link" href="https://github.com/yohoten/acrpa/releases" target="_blank" rel="noopener">⬇ All releases</a>
+        <a class="doc-link" href="#templates">🏪 Templates</a>
+        <a class="doc-link" href="#changelog">📜 Changelog</a>
+        <a class="doc-link" href="mailto:yoho12138@aliyun.com">📮 Send feedback</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    ACRPA · A/C RPA Desktop Automation &nbsp;|&nbsp; © copyright 2026 by yohoten</div>
+</footer>
+
+<!-- Lightbox -->
+<div class="lb" id="lightbox" role="dialog" aria-modal="true" aria-label="Enlarged screenshot">
+  <span class="lb-close" id="lbClose" tabindex="0" role="button" aria-label="Close enlarged image">✕</span>
+  <span class="lb-nav lb-prev" id="lbPrev" tabindex="0" role="button" aria-label="Previous image">‹</span>
+  <img id="lbImg" src="" alt="Enlarged screenshot">
+  <span class="lb-nav lb-next" id="lbNext" tabindex="0" role="button" aria-label="Next image">›</span>
+  <div class="lb-cap" id="lbCap"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+<button class="to-top" id="toTop" aria-label="Back to top" title="Back to top">↑</button>
+
+<script>
+  // Command tabs
+  document.querySelectorAll('.cmd-tab').forEach(function(tab){
+    tab.addEventListener('click', function(){
+      document.querySelectorAll('.cmd-tab').forEach(function(t){t.classList.remove('on')});
+      document.querySelectorAll('.cmd-panel').forEach(function(p){p.classList.remove('on')});
+      tab.classList.add('on');
+      document.getElementById(tab.dataset.tab).classList.add('on');
+    });
+  });
+
+  // Reveal on scroll (scroll-listener based, robust in sandboxed preview)
+  function isInView(el){
+    var r = el.getBoundingClientRect();
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+    return r.top < vh * 0.92 && r.bottom > 0;
+  }
+  function revealOnScroll(){
+    document.querySelectorAll('.reveal:not(.in)').forEach(function(el){
+      if(isInView(el)) el.classList.add('in');
+    });
+  }
+  window.addEventListener('scroll', revealOnScroll, {passive:true});
+  document.addEventListener('scroll', revealOnScroll, {passive:true});
+  window.addEventListener('resize', revealOnScroll);
+  revealOnScroll();
+
+  // Lightbox for screenshots (keyboard accessible)
+  (function(){
+    var lb = document.getElementById('lightbox');
+    var lbImg = document.getElementById('lbImg');
+    var lbCap = document.getElementById('lbCap');
+    var lbClose = document.getElementById('lbClose');
+    var lbPrev = document.getElementById('lbPrev');
+    var lbNext = document.getElementById('lbNext');
+    var shots = Array.prototype.slice.call(document.querySelectorAll('[data-full]'));
+    var cur = 0, lastFocus = null;
+    lbImg.setAttribute('tabindex','-1');
+    function caption(el){
+      var n = el.querySelector('.shot-num');
+      return el.dataset.cap || (n ? 'ACRPA screenshot ' + n.textContent : 'ACRPA interface preview');
+    }
+    function show(i){
+      if(!shots.length) return;
+      lastFocus = document.activeElement;
+      cur = (i + shots.length) % shots.length;
+      var el = shots[cur];
+      lbImg.src = el.dataset.full;
+      lbImg.alt = caption(el);
+      lbCap.textContent = lbImg.alt;
+      lb.classList.add('on');
+      document.body.style.overflow = 'hidden';
+      setTimeout(function(){ lbImg.focus(); }, 0);
+    }
+    function hide(){
+      lb.classList.remove('on');
+      document.body.style.overflow = '';
+      if(lastFocus && lastFocus.focus) lastFocus.focus();
+    }
+    function onClickKey(el, cb){
+      el.addEventListener('keydown', function(e){
+        if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); cb(); }
+      });
+    }
+    shots.forEach(function(el, i){
+      el.setAttribute('role','button');
+      el.setAttribute('tabindex','0');
+      el.setAttribute('aria-label','View larger: ' + caption(el));
+      el.addEventListener('click', function(){ show(i); });
+      el.addEventListener('keydown', function(e){
+        if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); show(i); }
+      });
+    });
+    lbClose.addEventListener('click', hide);
+    onClickKey(lbClose, hide);
+    lbPrev.addEventListener('click', function(e){ e.stopPropagation(); show(cur-1); });
+    onClickKey(lbPrev, function(){ show(cur-1); });
+    lbNext.addEventListener('click', function(e){ e.stopPropagation(); show(cur+1); });
+    onClickKey(lbNext, function(){ show(cur+1); });
+    lb.addEventListener('click', function(e){ if(e.target === lb) hide(); });
+    document.addEventListener('keydown', function(e){
+      if(!lb.classList.contains('on')) return;
+      if(e.key === 'Escape'){ e.preventDefault(); hide(); }
+      if(e.key === 'ArrowLeft') show(cur-1);
+      if(e.key === 'ArrowRight') show(cur+1);
+    });
+  })();
+
+  // Mobile nav toggle
+  (function(){
+    var tg = document.getElementById('menuToggle');
+    var nav = document.getElementById('mobileNav');
+    if(!tg || !nav) return;
+    tg.addEventListener('click', function(){
+      var open = nav.classList.toggle('open');
+      tg.setAttribute('aria-expanded', open ? 'true' : 'false');
+      tg.textContent = open ? '✕' : '☰';
+    });
+    nav.querySelectorAll('a').forEach(function(a){
+      a.addEventListener('click', function(){ nav.classList.remove('open'); tg.textContent='☰'; tg.setAttribute('aria-expanded','false'); });
+    });
+  })();
+
+  // Download dropdown
+  (function(){
+    var drop = document.getElementById('dlDrop');
+    if(!drop) return;
+    var tg = document.getElementById('dlToggle');
+    var menu = document.getElementById('dlMenu');
+    tg.addEventListener('click', function(e){
+      e.stopPropagation();
+      var open = menu.classList.toggle('open');
+      drop.classList.toggle('open', open);
+      tg.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    document.addEventListener('click', function(e){
+      if(!drop.contains(e.target)){
+        menu.classList.remove('open'); drop.classList.remove('open'); tg.setAttribute('aria-expanded','false');
+      }
+    });
+    document.addEventListener('keydown', function(e){
+      if(e.key === 'Escape'){ menu.classList.remove('open'); drop.classList.remove('open'); tg.setAttribute('aria-expanded','false'); }
+    });
+  })();
+
+  // Copy command + toast
+  (function(){
+    var toast = document.getElementById('toast');
+    var timer = null;
+    function showToast(msg){
+      toast.innerHTML = msg;
+      toast.classList.add('show');
+      clearTimeout(timer);
+      timer = setTimeout(function(){ toast.classList.remove('show'); }, 1800);
+    }
+    function copy(text, label){
+      function success(){ showToast('✅ Copied <b>' + label + '</b>'); }
+      function asyncFallback(){
+        showToast('📋 Copying…');
+        try{
+          if(navigator.clipboard && navigator.clipboard.writeText){
+            navigator.clipboard.writeText(text).then(success, function(){ showToast('⚠️ Copy did not finish, please select and copy manually'); });
+            return;
+          }
+        }catch(e){}
+        showToast('⚠️ Copy did not finish, please select and copy manually');
+      }
+      var ta = document.createElement('textarea');
+      ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.select();
+      var ok = false;
+      try{ ok = document.execCommand('copy'); }catch(e){ ok = false; }
+      document.body.removeChild(ta);
+      if(ok) success(); else asyncFallback();
+    }
+    document.querySelectorAll('.cmd-table code, .cmd-table .ex').forEach(function(el){
+      el.style.cursor = 'pointer';
+      el.title = 'Click to copy';
+      el.addEventListener('click', function(e){
+        e.stopPropagation();
+        copy(el.textContent.trim(), el.textContent.trim());
+        el.classList.add('copied');
+        setTimeout(function(){ el.classList.remove('copied'); }, 800);
+      });
+    });
+  })();
+
+  // Screenshot fade-in after load (with load-failure fallback)
+  document.querySelectorAll('.showcase-img img').forEach(function(im){
+    if(im.complete && im.naturalWidth > 0){ im.classList.add('loaded'); }
+    else {
+      im.addEventListener('load', function(){ im.classList.add('loaded'); });
+      im.addEventListener('error', function(){ im.classList.add('loaded'); });
+    }
+  });
+
+  // Animated stat counters
+  function animate(el){
+    var target = parseInt(el.dataset.target, 10) || 0;
+    var dur = 1200, start = null;
+    function step(ts){
+      if(!start) start = ts;
+      var p = Math.min((ts - start) / dur, 1);
+      var ease = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(target * ease);
+      if(p < 1) requestAnimationFrame(step);
+      else el.textContent = target;
+    }
+    requestAnimationFrame(step);
+  }
+  function startCounters(){
+    document.querySelectorAll('.count').forEach(function(el){
+      if(el.dataset.done) return;
+      if(isInView(el)){
+        el.dataset.done = '1';
+        animate(el);
+      }
+    });
+  }
+  (function(){
+    window.addEventListener('scroll', startCounters, {passive:true});
+    document.addEventListener('scroll', startCounters, {passive:true});
+    window.addEventListener('resize', startCounters);
+    startCounters();
+  })();
+
+  // Safety sweep: periodically check until all revealed / counted
+  (function(){
+    var sweep = setInterval(function(){
+      var pending = document.querySelectorAll('.reveal:not(.in), .count:not([data-done])').length;
+      revealOnScroll();
+      startCounters();
+      if(pending === 0) clearInterval(sweep);
+    }, 400);
+  })();
+</script>
+
+<script>
+  /* ===== 视觉增强交互：滚动进度 / 区块高亮 / 卡片聚光 / 视差 / 回到顶部 ===== */
+  (function(){
+    var nav = document.querySelector('nav');
+    var bar = document.getElementById('navProgress');
+    var top = document.getElementById('toTop');
+    var links = Array.prototype.slice.call(document.querySelectorAll('.nav-links a'));
+    var targets = links.map(function(a){
+      var h = a.getAttribute('href') || '';
+      return h.charAt(0) === '#' ? document.getElementById(h.slice(1)) : null;
+    });
+
+    function onScroll(){
+      var y = window.pageYOffset || document.documentElement.scrollTop || 0;
+      var max = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1);
+      if(bar) bar.style.width = Math.min(y / max * 100, 100) + '%';
+      if(nav) nav.classList.toggle('scrolled', y > 12);
+      if(top) top.classList.toggle('show', y > 620);
+
+      var idx = -1;
+      for(var i = 0; i < targets.length; i++){
+        var t = targets[i];
+        if(t && t.getBoundingClientRect().top <= 150) idx = i;
+      }
+      for(var j = 0; j < links.length; j++) links[j].classList.toggle('active', j === idx);
+    }
+
+    window.addEventListener('scroll', onScroll, {passive:true});
+    window.addEventListener('resize', onScroll);
+    onScroll();
+
+    if(top) top.addEventListener('click', function(){
+      window.scrollTo({top:0, behavior:'smooth'});
+    });
+  })();
+
+  /* 卡片聚光跟随 */
+  (function(){
+    var cards = document.querySelectorAll('.card,.ai-card,.tmpl-card,.env-card');
+    Array.prototype.forEach.call(cards, function(el){
+      el.addEventListener('pointermove', function(e){
+        var r = el.getBoundingClientRect();
+        el.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 100).toFixed(2) + '%');
+        el.style.setProperty('--my', ((e.clientY - r.top) / r.height * 100).toFixed(2) + '%');
+      }, {passive:true});
+    });
+  })();
+
+  /* Hero 视差（仅宽屏、非减弱动效） */
+  (function(){
+    var wrap = document.querySelector('.mock-wrap');
+    if(!wrap) return;
+    if(window.matchMedia && window.matchMedia('(max-width:960px)').matches) return;
+    window.addEventListener('mousemove', function(e){
+      var x = (e.clientX / window.innerWidth - .5) * 2;
+      var y = (e.clientY / window.innerHeight - .5) * 2;
+      wrap.style.setProperty('--px', x.toFixed(3));
+      wrap.style.setProperty('--py', y.toFixed(3));
+    }, {passive:true});
+  })();
+
+  /* 同组元素入场错峰 */
+  (function(){
+    Array.prototype.forEach.call(document.querySelectorAll('.reveal'), function(el){
+      var p = el.parentElement;
+      if(!p) return;
+      var sibs = Array.prototype.filter.call(p.children, function(c){
+        return c.classList && c.classList.contains('reveal');
+      });
+      var i = sibs.indexOf(el);
+      if(i > 0) el.style.transitionDelay = Math.min(i, 6) * 70 + 'ms';
+    });
+  })();
+</script>
+
+<script>
+  /* ================= 单一版本来源 · 更新日志折叠 =================
+     For a new release, edit ACRPA_RELEASE below only: every version number,
+     release date, download link and newest changelog entry is rendered from it,
+     avoiding a dozen manual edits and download URLs that 404.
+     Note: <title> / og:title / twitter:title / JSON-LD in <head> keep static
+     text as a fallback for search engines and no-JS environments; the script below
+     syncs them at runtime. For fully precise SEO, update those static strings too. */
+  var ACRPA_RELEASE = {
+    version: "0.1.28-beta",      // version for display (may include a pre-release suffix)
+    tag: "v0.1.28-beta",         // GitHub Release tag (used for the direct download link; pre-release tag for this build)
+    date: "2026-10-01",          // release date
+    ghUser: "yohoten",
+    ghRepo: "acrpa",
+    asset: "ACRPA-v0.1.28-beta.exe"  // Release asset filename
+  };
+
+  // —— render version / date / download link ——
+  (function(){
+    var R = ACRPA_RELEASE, shown = "v" + R.version;
+    function fill(attr, val){
+      var n = document.querySelectorAll('[' + attr + ']');
+      for(var i = 0; i < n.length; i++){ n[i].textContent = val; }
+    }
+    fill('data-ver', shown);
+    fill('data-date', R.date);
+    var url = "https://github.com/" + R.ghUser + "/" + R.ghRepo +
+              "/releases/download/" + R.tag + "/" + R.asset;
+    var dls = document.querySelectorAll('[data-download]');
+    for(var i = 0; i < dls.length; i++){ dls[i].setAttribute('href', url); }
+    try{
+      var title = "ACRPA · Lightweight Windows Desktop Automation · " + shown;
+      document.title = title;
+      var metas = document.querySelectorAll(
+        'meta[property="og:title"], meta[name="twitter:title"]');
+      for(var j = 0; j < metas.length; j++){ metas[j].setAttribute('content', title); }
+    }catch(e){}
+  })();
+
+  // —— generic fold: changelog / core features ——
+  function makeFold(cfg){
+    var grid = document.getElementById(cfg.grid);
+    var btn = document.getElementById(cfg.btn);
+    if(!grid || !btn) return;
+    var items = grid.querySelectorAll(cfg.item);
+    var total = items.length;
+    var label = btn.querySelector('.tl-toggle-label');
+    function render(open){
+      if(open){
+        grid.classList.remove('is-collapsed');
+        btn.setAttribute('aria-expanded', 'true');
+        if(label) label.textContent = cfg.collapse;
+        for(var i = 0; i < items.length; i++){ items[i].classList.add('in'); }
+      }else{
+        grid.classList.add('is-collapsed');
+        btn.setAttribute('aria-expanded', 'false');
+        if(label) label.textContent = cfg.expand.replace('{n}', total);
+      }
+    }
+    btn.style.display = 'block';
+    render(false);
+    btn.addEventListener('click', function(){
+      render(grid.classList.contains('is-collapsed'));
+    });
+  }
+  makeFold({
+    grid: 'timeline', btn: 'tlToggle', item: '.tl-item',
+    expand: 'Show more release notes ({n} total · showing the latest 3)',
+    collapse: 'Collapse release notes'
+  });
+
+</script>
+
+<script>
+  /* language switch: keep the current anchor when switching */
+  (function(){
+    var a = document.querySelector('.lang-switch');
+    if(!a) return;
+    a.addEventListener('click', function(){
+      var h = window.location.hash;
+      if(h && h.length > 1){
+        a.setAttribute('href', a.getAttribute('href').split('#')[0] + h);
+      }
+    });
+  })();
+</script>
+
+</body>
+</html>

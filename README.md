@@ -1,41 +1,73 @@
-# A/C RPA - 自动化工作流工具
+# ACRPA — 桌面自动化工作流工具
 
-version：v0.1.28-beta（预发布 / Pre-release）
+> **当前版本**：`v0.1.28-beta`（预发布 / Pre-release） · 许可证 **MIT** · 平台 **Windows x64**
 
-轻量级桌面自动化工具，基于 Python + tkinter + pyautogui，通过 Excel 脚本实现图像识别定位、鼠标键盘自动化操作。
+把操作步骤写进一张 Excel 表格（或用「录制」跑一遍），剩下的交给电脑 —— 图像识别定位、窗口管理、OCR、浏览器自动化、工作流编排、NetLink 多机互联、定时任务与本地 AI 增强全部内置。单文件便携版，免安装，双击即用。
 
-**下载 v0.1.28-beta（预发布）**：[GitHub Release 页面](https://github.com/yohoten/acrpa/releases/tag/v0.1.28-beta) · [资产直链](https://github.com/yohoten/acrpa/releases/download/v0.1.28-beta/ACRPA-v0.1.28-beta.exe) · [Gitee 发行版列表](https://gitee.com/yohoten/ACRPA/releases)
+- 项目主页：[`index.html`](index.html) · English：[`index.en.html`](index.en.html)
+- 下载：[GitHub Release](https://github.com/yohoten/acrpa/releases/tag/v0.1.28-beta) · [Gitee 发行版](https://gitee.com/yohoten/ACRPA/releases)
 
-![](https://i.imgs.ovh/2026/09/13/7ada54bcbc739d30045ccc36922bac5f.png)
+![ACRPA 脚本编辑主界面](img/image1.png)
 
+## 目录
+
+- [核心特点](#features)
+- [下载与校验](#download)
+- [快速开始](#quickstart)
+- [脚本与模板](#templates)
+- [脚本格式与命令总表](#script-format)
+- [配置说明](#config)
+- [多设备局域网互联（NetLink）](#netlink)
+- [软件更新](#update)
+- [DD 驱动增强（可选）](#dd-driver)
+- [常见问题](#faq)
+- [详细文档](#docs)
+- [界面截图](#screenshots)
+- [更新日志](#changelog)
+- [联系](#contact)
+- [许可证](#license)
+
+---
+
+<a id="features"></a>
 ## ✨ 核心特点
 
-- 轻量冷启动，占用小；Excel脚本驱动，操作简单；
-- 图像识别定位，精准点击；
-- 支持录制回放（含拖拽录制）、定时工作；
-- 深浅切换、错误重试、日志导出、Py脚本置入；
-- **窗口管理**：直接操作Windows窗口，无需图像识别；支持窗口相对坐标
-- **工作流编排**：多脚本串联 + 可视化流程图（节点/连线/拖拽）
-- **变量系统**：支持复杂数据处理和数学运算
-- **AI 增强**：视觉定位、智能重试、异常检测、自然语言调试
-- **调试器**：断点/条件断点（标记旁显示表达式）/单步/变量监视/调用栈
-- **多设备互联（NetLink）**：内网多机实时监控 + 远程操控 + 脚本分发，零新增依赖（纯标准库）
-- **六项体验优化**：Mini Bar 三形态重做、暗黑模式显示修复、自定义 AI 提供商、Python 代码扩展、界面缩放（`ui_scale`）、互联按钮瘦身
+- **轻量冷启动**：基于 Python + tkinter + pyautogui，占用小，便携版无需安装。
+- **Excel 脚本驱动**：把步骤写进 `.xls` 表格即可运行，也能用「录制」自动生成。
+- **图像识别定位**：全屏 / 区域找图，精度可调，支持 OpenCV 降级与 LRU 图像缓存。
+- **窗口管理**：直接操作 Windows 窗口（激活 / 关闭 / 最小化 / 最大化 / 等待 / 相对坐标），无需图像识别，速度比找图快一个量级。
+- **OCR 文字识别**：识别文字、等待文字、点击文字，后端可选 Paddle / WinRT / Tesseract。
+- **浏览器自动化**（可选，需 `pip install playwright`）：打开网页、点击元素、填写表单、等待元素、截图。
+- **工作流编排**：多脚本串联 + 可视化流程图（节点 / 连线 / 拖拽）+ 流程控制命令（如果 / 循环 / 跳出）。
+- **变量系统**：设置变量、读取剪贴板、字符串处理、数学运算，支持复杂数据处理。
+- **AI 增强**：视觉定位（AI 找图 / AI 识别界面）、智能重试、异常检测、自然语言调试。
+- **调试器**：断点 / 条件断点（标记旁显示表达式）/ 单步 / 变量监视 / 调用栈。
+- **录制回放**：含拖拽录制、滚轮录制、窗口激活录制，支持绝对坐标与窗口相对坐标两种模式。
+- **定时执行**：多任务定时调度（一次 / 每天 / 每周），轮询间隔可配。
+- **深浅主题与 Mini Bar**：深色模式、Mini Bar 三形态折叠悬浮条、界面缩放（`ui_scale`）。
+- **代码扩展**：`Python` 命令执行 Python 代码（AST 预检 + 沙箱 + 三层超时 + 审计），权限分 `sandbox / trusted / full`。
+- **多设备互联（NetLink）**：内网多机实时监控 + 远程操控 + 脚本分发，纯标准库实现、零新增依赖。
 
-![](https://i.imgs.ovh/2026/09/13/873139bf6c702c6d85d59f9a359136a6.png)
+![ACRPA 深色模式界面](img/image5.png)
 
-## ⬇️ 下载 v0.1.28-beta
+---
 
-> ⚠️ **Beta 预发布（Pre-release）**：本版可能存在问题，建议先在同版本测试机上验证后再投入使用。`python_full_enabled`（Python full 权限）与 `netlink_tls`（TLS 加密）**默认关闭**。
+<a id="download"></a>
+## ⬇️ 下载与校验
 
-- **GitHub（推荐）**：[Release 页面](https://github.com/yohoten/acrpa/releases/tag/v0.1.28-beta) · 资产直链 [ACRPA-v0.1.28-beta.exe](https://github.com/yohoten/acrpa/releases/download/v0.1.28-beta/ACRPA-v0.1.28-beta.exe)
-- **Gitee**：[发行版列表页](https://gitee.com/yohoten/ACRPA/releases)（Gitee 发行版的附件正在补充，可先使用 GitHub 下载）
+> ⚠️ **Beta 预发布（Pre-release）**：本版可能存在问题，建议先在同版本测试机上验证后再投入使用。
+> `python_full_enabled`（Python full 权限）与 `netlink_tls`（TLS 加密）**默认关闭**。
 
-**文件名与大小**：`ACRPA-v0.1.28-beta.exe`（14047384 字节 / 约 13.4 MiB，便携版，双击即用，无需安装）
+| 渠道 | 链接 |
+| --- | --- |
+| GitHub（推荐） | [Release 页面](https://github.com/yohoten/acrpa/releases/tag/v0.1.28-beta) · 资产直链 [`ACRPA-v0.1.28-beta.exe`](https://github.com/yohoten/acrpa/releases/download/v0.1.28-beta/ACRPA-v0.1.28-beta.exe) |
+| Gitee | [发行版列表页](https://gitee.com/yohoten/ACRPA/releases)（附件陆续补充，可先使用 GitHub 下载） |
+
+**文件名与大小**：`ACRPA-v0.1.28-beta.exe` —— 14,047,384 字节（13.4 MiB / 14.05 MB），便携版，双击即用。
 
 **SHA-256**：`473f1db3da347a1310213e4fd70955f111f0fc397eb9e1ee7f5913d2b2606d54`
 
-校验命令（Windows）：
+校验命令：
 
 ```bat
 certutil -hashfile "ACRPA-v0.1.28-beta.exe" SHA256
@@ -49,7 +81,7 @@ Get-FileHash .\ACRPA-v0.1.28-beta.exe -Algorithm SHA256
 
 完整说明见 [`docs/releases/v0.1.28-beta.md`](docs/releases/v0.1.28-beta.md)。
 
-**NetLink 多设备互联（新增，纯标准库零新增依赖）**
+**一、NetLink 多设备互联（新增，纯标准库零新增依赖）**
 
 1. **实时多机监控**：设备列表 + 运行状态 + 当前脚本 + 进度（第几行 / 第几循环 / 已运行时长）+ 实时日志流 + 定时任务状态。
 2. **零配置发现**：UDP 广播自动发现同网段设备；VLAN / 多网卡环境可退回「手动填 IP:端口」静态对端。
@@ -58,206 +90,279 @@ Get-FileHash .\ACRPA-v0.1.28-beta.exe -Algorithm SHA256
 5. **脚本分发与远端脚本管理**：64 KB 分块 + 结束帧 sha256 与大小双重校验，失败不留残留；支持多设备批量下发与「推完即运行」。
 6. **远程截图 / 浏览器只读面板 / TLS / 审计日志**：截图 1 秒节流且不落盘；面板令牌鉴权、零写操作；TLS 自签 + TOFU 指纹固定；所有远程指令与截图请求写入审计日志。
 
-**六项体验优化**
+**二、六项体验优化**
 
-7. **Mini Bar 全面重做**：图标态 / 紧凑态 / 运行态三形态，尺寸可配、位置记忆、平滑动画；并修复「设置 → 系统」卡设置此前不生效的问题。
+7. **Mini Bar 全面重做**：图标态 / 紧凑态 / 运行态三形态，尺寸可配、位置记忆、平滑动画；并修复「设置 → 系统」中部分设置此前不生效的问题。
 8. **暗黑模式显示修复**：新增主题安全取值护栏 `themed()`，Toast 四类跟随主题，19 处输入框 / 文本域补齐 `insertbackground`。
 9. **主界面互联按钮瘦身**：标题栏 `🌐 互联` → `🌐`。
 10. **自定义 AI 提供商 / Python 代码扩展 / 字体缩放**：自定义 AI 提供商与 BaseURL（密钥入 Windows 凭据库）、新增 `Python` 命令（沙箱 + AST 预检 + 三层超时 + 审计）、命名字体 + `ui_scale` 7 档 + DPI 感知。
 
-> 本版为 **Beta 预发布（Pre-release）**，可能存在问题，建议先在测试机验证。
-
-## 📚 示例脚本库
-
-**全新推出！** 提供 11 个即用型模板，帮助你快速上手 ACRPA 自动化。
-
-![](https://i.imgs.ovh/2026/09/13/9b127df20cbb0ce77c55cd360ac0ea3b.png)
-
-### 🎯 快速开始
-
-1. **选择模板**: 根据你的需求从 `template/` 目录选择合适的模板
-2. **导入脚本**: 在 ACRPA 中点击"文件" → "导入脚本"，选择 `.xls` 文件
-3. **修改参数**: 根据实际需求调整窗口标题、坐标、输入内容等
-4. **测试运行**: 点击"运行"按钮（或按 F5）查看效果
-
 ---
 
-## [格式] 快速开始
+<a id="quickstart"></a>
+## 🚀 快速开始
 
 ### 环境要求
 
-- Python 3.7+
-- pywin32（窗口管理功能必需）
+- Windows x64（pywin32 为窗口管理功能的必需依赖）
+- Python 3.8 及以上（本项目在 3.9 上开发与打包）
+- 依赖见 [`requirements.txt`](requirements.txt)
 
-![](https://i.imgs.ovh/2026/09/13/a603299fcea344706ff8e72f9e1b2d70.png)
-
-### 安装与运行
+### 从源码运行
 
 ```bash
-# 虚拟环境
-py -3.7 -m venv .venv
-.venv\Scripts\activate          # Windows
+# 1. 创建并激活虚拟环境
+py -3.9 -m venv .venv
+.venv\Scripts\activate
+
+# 2. 安装依赖（清华镜像，可换成官方源）
 pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
-cd ACRPA && python run.py \\ cd src && python ACRPA.py # 运行
+# 3. 运行（在项目根目录执行）
+python run.py
 ```
 
-或releses直接双击 `ACRPA.exe`（Windows）。
+> `run.py` 会自动把项目根目录与 `src/` 加入 `sys.path` 并做依赖预检，无需手动 `cd src`。
 
-`VERSION`版本号全局同步：只需写入 VERSION 文件第一行，其余模块自动同步；`--verify` 会扫描 `src/` 确认无旧版本号残留。
+**免源码方式**：从 Releases 下载 `ACRPA-v0.1.28-beta.exe`，双击直接运行，无需安装、无需 Python 环境。
 
-1. 运行 `python tools/bump_version.py --patch`（或指定版本号：`python tools/bump_version.py 0.x.xx `）
-2. 运行 `python tools/bump_version.py --verify` 确认无残留
+### 版本管理
 
-## 📄 脚本格式
+版本号统一由项目根目录的 [`VERSION`](VERSION) 文件驱动：首行写版本号，其后可写多条下载直链（按顺序尝试）与一行 `sha256:...` 校验和。
 
-Excel 文件（`.xls`），第1行为标题，第3行开始为命令。
+```bash
+python tools/bump_version.py --patch        # 递增版本号（同步 VERSION 与 README 版本标记）
+python tools/bump_version.py 0.1.29         # 或指定版本号
+python tools/bump_version.py --verify       # 扫描 src/ 确认无旧版本号残留
+```
 
-| 列  | 字段    | 说明                           |
-| --- | ------- | ------------------------------ |
-| A   | 命令    | 操作类型（找图、按键、等待等） |
-| B   | 参数1   | 主要参数（图片名、键名、秒数） |
-| C~G | 参数2~6 | 辅助参数（精度、坐标、区域等） |
+打包版按 `EXE 同级目录 → 内嵌副本 → 项目根目录` 顺序查找 `VERSION`，因此可直接在 EXE 旁放一份 `VERSION` 来覆盖版本号或切换更新通道。
 
-### 命令总表
+---
 
-| 命令               | 参数示例                       | 说明                             |
-| :----------------- | :----------------------------- | :------------------------------- |
-| **基础命令** |                                |                                  |
-| 找图               | button.png, 0.9                | 全屏查找图片                     |
-| 点图               | submit.png, 0.9                | 找到并点击                       |
-| 区域找图           | icon.png, 0.8, 100,100,500,500 | 限定区域查找                     |
-| 按键               | enter, 1                       | 按键（可指定次数）               |
-| 热键               | ctrl, c                        | 组合键                           |
-| 输入               | Hello World                    | 粘贴输入（Ctrl+V）               |
-| 写入               | Hello,0.05,auto                | 逐字输入（支持DD驱动增强）       |
-| 等待               | 2.5                            | 延时（秒，支持随机范围 1.0-3.0） |
-| 坐标               | 500, 300                       | 点击屏幕坐标                     |
-| 滚轮               | -3                             | 滚动行数                         |
-| **窗口管理** |                                |                                  |
-| 激活窗口           | 记事本                         | 激活指定窗口（支持模糊匹配）     |
-| 关闭窗口           | 无标题 - 记事本                | 关闭指定窗口                     |
-| 最小化窗口         | 计算器                         | 最小化窗口到任务栏               |
-| 最大化窗口         | 资源管理器                     | 最大化窗口                       |
-| 获取窗口位置       | 记事本,x,y,w,h                 | 获取窗口坐标和大小               |
-| 等待窗口           | Chrome,10,存在                 | 等待窗口出现/消失                |
-| 窗口坐标           | 记事本,100,50                  | 相对于窗口左上角点击 [★]NEW     |
-| **变量增强** |                                |                                  |
-| 设置变量           | count,100                      | 设置变量值                       |
-| 读取剪贴板         | clip_text                      | 读取剪贴板到变量                 |
-| 字符串处理         | text,截取,0:5,result           | 字符串操作                       |
-| 数学运算           | x+*x*+{y},sum                | 数学计算                         |
-| **工作流**   |                                |                                  |
-| 运行工作流         | workflow.json                  | 调用工作流文件执行多脚本编排     |
-| 工作流变量         | var_name,value                 | 设置工作流级共享变量             |
-| **AI 增强**  |                                |                                  |
-| AI找图             | 登录按钮,0.8,click             | AI分析截图,自然语言描述找元素    |
-| AI识别界面         | ui                             | AI列出所有UI元素存入变量         |
-| AI优化建议         | log                            | AI分析执行数据给出优化建议       |
-| [AI] 调试          | 点击[AI]调试按钮               | 自然语言提问,AI分析日志回答      |
-| **代码扩展** |                                |                                  |
-| Python             | result = 1 + 1, sandbox         | 执行 Python 代码（AST 预检 + 沙箱），权限可选 [★]NEW |
+<a id="templates"></a>
+## 📦 脚本与模板
 
-**变量引用语法**：使用 `${variable_name}` 引用变量
+- **内置场景模板 10 个**（应用内「模板」对话框直接选用）：登录流程、表单填写、数据采集、批量点击、页面截图、文件下载、窗口切换、文本编辑、滚动浏览、右键菜单。
+- **`template/` 目录示例脚本 5 个 + 工作流 1 个**：`脚本模板.xls`、`发送邮件.xls`、`数据采集.xls`、`网银票载.xls`、`间隔点击.xls`、`workflow001.json`。
 
-![](https://i.imgs.ovh/2026/09/13/03b8e909fc4ef1066291d6a5b0796a64.png)
+![ACRPA 执行编辑界面](img/image2.png)
 
+### 上手四步
+
+1. **选择模板**：从 `template/` 目录或应用内模板对话框挑一个最接近的脚本。
+2. **导入脚本**：菜单「文件 → 导入脚本」，选择 `.xls` 文件。
+3. **修改参数**：按实际需求调整窗口标题、坐标、输入内容等。
+4. **测试运行**：点击「运行」（或按 <kbd>F5</kbd>）查看效果。
+
+---
+
+<a id="script-format"></a>
+## 📄 脚本格式与命令总表
+
+脚本为 Excel 文件（`.xls`，**不支持 `.xlsx`**）：第 1 行为标题，第 3 行起为命令。
+
+| 列 | 字段 | 说明 |
+| --- | --- | --- |
+| A | 命令 | 操作类型（找图、按键、等待等） |
+| B | 参数 1 | 主要参数（图片名、键名、秒数等） |
+| C ~ G | 参数 2 ~ 6 | 辅助参数（精度、坐标、区域等） |
+
+### 基础命令
+
+| 命令 | 参数 | 说明 |
+| --- | --- | --- |
+| 找图 | `button.png, 0.96` | 全屏查找图片并悬停 |
+| 区域找图 | `icon.png, 0.8, 100, 100, 500, 500, 灰度` | 限定区域查找（更快） |
+| 点图 | `submit.png, 0.96` | 找到图片并点击 |
+| 区域点图 | `icon.png, 0.9, 左, 上, 宽, 高, 灰度, 按键, 次数` | 限定区域找图并点击 |
+| 按键 | `enter, 1` | 模拟键盘按键（可指定次数） |
+| 热键 | `ctrl, c` | 组合键 |
+| 输入 | `Hello World` | 剪贴板方式输入（Ctrl+V） |
+| 写入 | `Hello, 0.05, auto` | 逐字输入，模式 `auto/direct/simulate` |
+| 等待 | `2.5` | 延时（秒，支持随机范围 `1.0-3.0`） |
+| 坐标 | `500, 300` | 点击屏幕坐标 |
+| 悬停 | `500, 300` | 鼠标移动到坐标 |
+| 拖拽 | `600, 400` | 鼠标拖拽到坐标 |
+| 滚轮 | `-3` | 滚动（负=下，正=上） |
+| 相移 | `10, -5` | 相对当前位置移动 |
+| 按下 / 释放 | `shift` | 按下 / 释放按键不松开 |
+| 复制 / 粘贴 | 无参数 | `Ctrl+A, Ctrl+C` / `Ctrl+A, Ctrl+V` |
+| 截屏 | `shot1, 保存路径` | 截图并保存 |
+| 代码 | `myscript` | 执行 txt 中的 Python 代码（文件名不含后缀） |
+
+### 流程控制
+
+| 命令 | 参数 | 说明 |
+| --- | --- | --- |
+| 如果 | `条件表达式` | 条件判断，为真则执行 |
+| 否则 | 无参数 | 否则分支 |
+| 结束如果 | 无参数 | 结束条件块 |
+| 循环开始 | `次数` 或 `条件表达式` | 开始循环 |
+| 循环结束 | 无参数 | 结束当前循环 |
+| 跳出循环 | 无参数 | 立即跳出循环 |
+
+### 窗口管理
+
+| 命令 | 参数 | 说明 |
+| --- | --- | --- |
+| 激活窗口 | `记事本` | 激活指定窗口（支持模糊匹配） |
+| 关闭窗口 | `无标题 - 记事本` | 关闭指定窗口 |
+| 最小化窗口 | `计算器` | 最小化到任务栏 |
+| 最大化窗口 | `资源管理器` | 最大化窗口 |
+| 获取窗口位置 | `记事本, x, y, w, h` | 窗口坐标与大小存入变量 |
+| 等待窗口 | `Chrome, 10, 存在` | 等待窗口出现 / 消失 |
+| 窗口坐标 | `记事本, 100, 50` | 相对窗口左上角点击（窗口移动后仍准确） |
+
+### 变量操作
+
+| 命令 | 参数 | 说明 |
+| --- | --- | --- |
+| 设置变量 | `count, 100` | 设置变量值 |
+| 读取剪贴板 | `clip_text` | 剪贴板内容读入变量 |
+| 字符串处理 | `text, 截取, 0,5, result` | 截取 / 替换字符串 |
+| 数学运算 | `a + b, result` | 执行数学计算并存入变量 |
+
+### OCR 文字识别
+
+| 命令 | 参数 | 说明 |
+| --- | --- | --- |
+| 识别文字 | `左, 上, 宽, 高, 变量名` | OCR 识别屏幕区域文字并存入变量 |
+| 等待文字 | `提交成功, 10, 存在, 左, 上, 宽, 高` | 等待指定文字出现 / 消失 |
+| 点击文字 | `提交成功, 0.9, 左, 左, 上, 宽, 高` | 找到文字位置并点击 |
+
+### AI 增强
+
+| 命令 | 参数 | 说明 |
+| --- | --- | --- |
+| AI找图 | `登录按钮, 0.8, click` | AI 分析截屏，自然语言描述找元素 |
+| AI识别界面 | `ui` | AI 列出所有 UI 元素存入变量 |
+| AI优化建议 | `log` | AI 分析执行数据给出优化建议 |
+
+> 另有应用内 **[AI] 调试** 入口：自然语言提问，AI 分析日志作答。
+
+### 工作流与代码扩展
+
+| 命令 | 参数 | 说明 |
+| --- | --- | --- |
+| 运行工作流 | `workflow.json` | 调用工作流文件执行多脚本编排 |
+| 工作流变量 | `var_name, value` | 设置工作流级共享变量 |
+| Python | `result = 1 + 1, sandbox` | 执行 Python 代码（AST 预检 + 沙箱），权限可选 `sandbox/trusted/full` |
+
+### 浏览器自动化（可选，需 `pip install playwright`）
+
+| 命令 | 参数 | 说明 |
+| --- | --- | --- |
+| 打开网页 | `https://example.com` | 浏览器打开指定 URL |
+| 浏览器点击 | `#submit` 或 `text=登录` | 点击页面元素 |
+| 浏览器输入 | `#user, admin` | 在输入框填入文本 |
+| 等待元素 | `#loading, 10, 消失` | 等待元素出现 / 消失 |
+| 浏览器截图 | `shot1, page` | 截取页面或元素截图 |
+
+### 变量引用
+
+使用 `${variable_name}` 引用变量，例如：
+
+```
+输入    ${username}
+写入    ${clip_text}, 0.05, auto
+等待    ${delay}
+```
+
+---
+
+<a id="config"></a>
 ## ⚙️ 配置说明
 
-`config.json` 文件：
+配置文件为程序目录下的 `config.json`（首次运行自动生成）。以下默认值取自 `src/state.py` 的配置 schema：
 
 ```json
 {
-  "dark_mode": false,      // 深浅色切换
-  "retry_max": 1,          // 最大重试次数
-  "retry_interval": 2.0,   // 重试间隔(s)
-  "image_timeout": 3.0,    // 图像超时(s)
-  "api_key": "",           // ai密钥，eg:skr-XXXXXX...
-  "api_model": "",         // ai模型选择
-  "ai_smart_retry": false, // AI智能重试(需API Key)
-  "ai_anomaly_detect": false, // AI异常检测(需API Key)
-  "minimize_to_tray": false,  // 关闭时最小化到系统托盘
-  "mini_bar_enabled": true,   // 启用Mini Bar折叠模式
-   ...
+  "dark_mode": false,             // 深色模式
+  "retry_max": 3,                 // 命令失败最大重试次数
+  "retry_interval": 1.0,          // 重试间隔（秒）
+  "image_timeout": 5.0,           // 图像查找超时（秒）
+  "stop_on_error": true,          // 出错时立即停止
+  "api_key": "",                  // AI 密钥，例如 sk-xxxxxx
+  "api_model": "deepseek-v4-flash",
+  "ai_smart_retry": false,        // AI 智能重试（需 API Key）
+  "ai_anomaly_detect": false,     // AI 异常检测（需 API Key）
+  "minimize_to_tray": false,      // 关闭时最小化到系统托盘
+  "mini_bar_enabled": true        // 启用 Mini Bar 折叠模式
 }
 ```
 
-### 本轮新增配置项（10 项）
+![ACRPA 设置页导航](img/image4.png)
+
+### 常用配置项
 
 | 键 | 默认值 | 含义 |
 | --- | --- | --- |
-| `mini_bar_height` | `30` | Mini Bar 高度 24-48（步进 4） |
+| `dark_mode` | `false` | 深色模式 |
+| `retry_max` | `3` | 命令失败最大重试次数 |
+| `retry_interval` | `1.0` | 重试间隔（秒） |
+| `image_timeout` | `5.0` | 图像查找超时（秒） |
+| `stop_on_error` | `true` | 脚本出错时立即停止 |
+| `max_execution_minutes` | `0` | 最长执行时间（分钟，0 = 不限） |
+| `bound_window_title` | `""` | 全局绑定窗口标题（空 = 不绑定） |
+| `failsafe` | `true` | 鼠标移到屏幕左上角急停 |
+| `input_mode` | `"sendinput"` | 输入模式 `sendinput` / `dd` / `sendmessage` |
+| `use_dd_driver` | `false` | 启用 DD 驱动（需自备 DLL，见下文） |
+| `api_key` / `api_model` | `""` / `"deepseek-v4-flash"` | AI 密钥与模型 |
+| `ai_smart_retry` / `ai_anomaly_detect` | `false` | AI 智能重试 / 异常检测 |
+| `sched_enabled` / `sched_poll_interval` | `false` / `30` | 定时调度开关与轮询间隔（秒） |
+| `log_level` | `1` | 日志级别 `0=DEBUG 1=INFO 2=WARNING 3=ERROR` |
+| `log_retention_days` | `7` | 日志保留天数 |
+| `recording_mode` | `"absolute"` | 录制模式 `absolute`（绝对坐标）/ `relative`（窗口相对） |
+| `ocr_preferred_backend` | `"auto"` | OCR 后端 `auto` / `paddle` / `winrt` / `tesseract` |
+| `browser_headless` | `true` | 浏览器无头模式 |
+| `minimize_to_tray` | `false` | 关闭时最小化到系统托盘 |
+| `mini_bar_enabled` / `mini_bar_width` / `mini_bar_opacity` | `true` / `430` / `80` | Mini Bar 开关、宽度（px）、透明度（%） |
+
+### NetLink 配置项
+
+| 键 | 默认值 | 含义 |
+| --- | --- | --- |
+| `netlink_enabled` | `false` | 启用设备互联 |
+| `netlink_port` | `19710` | TCP 监听端口 |
+| `netlink_device_name` | `""` | 本机显示名（空 = 取主机名） |
+| `netlink_perm_level` | `"observe"` | 权限档 `observe` / `control` / `script` |
+| `netlink_autodiscover` | `true` | UDP 自动发现开关 |
+| `netlink_discovery_port` | `19711` | UDP 发现端口 |
+| `netlink_static_peers` | `[]` | 手动填写的静态对端 `IP:PORT` |
+| `netlink_require_auth` | `true` | 启用配对认证 |
+| `netlink_pin_ttl` | `600` | 配对码有效期（秒） |
+| `netlink_confirm_control` | `true` | 首次远程操控需被控端确认 |
+| `netlink_script_dir` | `""` | 允许远程运行的脚本目录（空 = 程序目录 `scripts/`） |
+| `netlink_audit_days` | `0` | 审计日志保留天数（0 = 跟随日志保留天数） |
+| `netlink_web_enabled` | `false` | 启用浏览器只读面板 |
+| `netlink_web_port` | `19712` | 面板监听端口 |
+| `netlink_web_bind` | `"0.0.0.0"` | 面板监听地址 |
+| `netlink_tls` | `false` | TLS 加密（默认关闭） |
+| `netlink_tls_cert` / `netlink_tls_key` | `""` | TLS 证书 / 私钥 PEM 路径 |
+| `netlink_tls_pins` | `[]` | 已固定的对端证书指纹（`sha256` hex，TOFU） |
+
+### v0.1.28 新增配置项（10 项）
+
+| 键 | 默认值 | 含义 |
+| --- | --- | --- |
+| `mini_bar_height` | `28` | Mini Bar 高度 24–48（步进 4） |
 | `mini_bar_pos` | `""` | Mini Bar 最近位置 `"x+y"` |
 | `ai_provider` | `""` | AI 提供商 id（空 = 自动推断） |
 | `ai_base_url` | `""` | AI BaseURL（空 = 用预设） |
 | `ai_model` | `""` | 覆盖模型名（空 = 用 `api_model`） |
-| `ai_custom_providers` | `[]` | 自定义提供商 `[{id,name,base_url,models}]` |
-| `python_default_perm` | `"sandbox"` | Python 命令默认权限 sandbox/trusted/full |
-| `python_full_enabled` | `False` | 是否允许 full 权限（默认关闭） |
+| `ai_custom_providers` | `[]` | 自定义提供商 `[{id, name, base_url, models}]` |
+| `python_default_perm` | `"sandbox"` | Python 命令默认权限 `sandbox` / `trusted` / `full` |
+| `python_full_enabled` | `false` | 是否允许 `full` 权限（默认关闭） |
 | `python_timeout` | `30` | Python 代码超时（秒） |
-| `ui_scale` | `1.0` | 界面缩放 0.8-1.5 |
+| `ui_scale` | `1.0` | 界面缩放 0.8–1.5 |
 
-```json
-```
+---
 
-## ❓ 常见问题
-
-**找不到图片？**
-
-- 检查图片路径、识别精度（建议0.8~0.95）、目标窗口是否置前。
-
-**图像识别慢？**
-
-- **优先使用窗口管理命令**代替图像识别，速度快10-100倍
-- 使用区域找图缩小范围、降低精度、减小图片尺寸。
-
-**脚本格式错误？**
-
-- 必须使用 `.xls` 格式（不支持 `.xlsx`），可用 Excel 另存为。
-
-**录制不准确？**
-
-- 录制前关闭无关窗口，操作速度平稳，完成后手动修正脚本。
-
-**窗口管理功能不可用？**
-
-- 确保已安装pywin32：`pip install pywin32`
-- 以管理员身份运行ACRPA可获得更好效果
-
-## 📚 详细文档
-
-- [使用说明](使用说明.txt)
-- [脚本模板](template/脚本模板.xls)
-- [多设备局域网互联（NetLink）总览与部署指南](docs/netlink-总览与部署指南.md)
-- [Python 代码扩展使用说明](docs/python扩展使用说明.md)
-
-### 🆕 DD 驱动增强
-
-ACRPA v0.1.22 支持 **DD 驱动**（可选）作为高性能输入后端：
-
-**优势**：
-
-- ✅ 内核级模拟，难以检测，支持回退到 PyAutoGUI；
-- ✅ 后台操作，无需激活窗口，输入速度提升；
-
-**快速启用**：
-
-1. 下载 `dd.54900.dll` 从 [官方仓库](https://github.com/ddxoft/master)
-2. 放入 `ACRPA/lib/dd_driver/` 目录
-3. 在 `config.json` 中设置 `"use_dd_driver": true`
-4. 以管理员身份运行程序
-
-**Excel 示例**：
-
-```
-写入,Hello World,0.02,direct    # 使用DD_str直接输入（最快）
-写入,你好世界,0.05,simulate     # 模拟按键（支持中文）
-写入,Test@#$%,0.02,auto         # 自动选择最佳方式
-```
-
+<a id="netlink"></a>
 ## 🌐 多设备局域网互联（NetLink）
 
-> **已随 v0.1.28-beta 预发布提供独立 EXE 下载**（见上方「下载 v0.1.28-beta」小节；预发布，建议先在测试机验证）。定位：内网多机协同 —— 一台机器即可监控多台机器的运行状态，远程运行/暂停/停止，批量下发脚本，手机浏览器也能查看进度。
+> 已随 v0.1.28-beta 提供独立 EXE 下载（见上文「下载与校验」）。定位：内网多机协同 —— 一台机器即可监控多台机器的运行状态，远程运行 / 暂停 / 停止，批量下发脚本，手机浏览器也能查看进度。
 
 完全基于 Python 标准库实现，**零新增依赖**，PyInstaller 打包体积几乎不变。
 
@@ -278,281 +383,217 @@ ACRPA v0.1.22 支持 **DD 驱动**（可选）作为高性能输入后端：
 
 三档权限：**仅观察** / **允许操控** / **允许接收脚本**。
 
+![NetLink 设备互联窗口](img/netlink-devices.png)
+
 ### 设计要点
 
 - **对等架构**：不设独立服务器，每个 ACRPA 实例内嵌一个节点，同时具备 Server（被连）与 Client（主动连）角色，同一条 TCP 连接全双工对等。
-- **零新增依赖**：纯标准库（`socket/threading/ssl/hashlib/hmac/http.server` 等），PyInstaller 体积几乎不变。
-- **不侵入执行引擎**：`engine.py / workflow.py / scheduler.py` 三文件**零改动**；通过既有的 `state` 状态量（`quit2`/`pause_event`/`exec_state`）与 `root.after` 回到主线程执行。
+- **零新增依赖**：纯标准库（`socket` / `threading` / `ssl` / `hashlib` / `hmac` / `http.server` 等），PyInstaller 体积几乎不变。
+- **不侵入执行引擎**：`engine.py / workflow.py / scheduler.py` 三文件**零改动**；通过既有的 `state` 状态量（`quit2` / `pause_event` / `exec_state`）与 `root.after` 回到主线程执行。
 - **崩溃隔离**：所有网络线程为 daemon，网络层异常不影响本地自动化；日志镜像通过 `utils` 的 sink 机制，总线未启动时零开销。
 
 ### 快速上手
 
 1. 两台同网段 Windows 机器各装 ACRPA，分别在 **设置 → 网络互联** 里勾选「启用设备互联」，填写不同的设备名（端口保持默认）。
 2. 被控端把权限设为「允许操控」（需要传脚本则设为「允许接收脚本」）。
-3. 在设备互联窗口（主界面 **🌐 互联** 按钮）里，被控端点「配对码」查看 6 位码；控制端点「🔗 配对」输入该码。
+3. 在设备互联窗口（主界面 **🌐** 按钮）里，被控端点「配对码」查看 6 位码；控制端点「🔗 配对」输入该码。
 4. 配对成功后设备表会自动出现对方并实时刷新进度与日志（无需任何手工订阅）。
-5. 选中设备即可使用 `▶远程运行 / ⏸暂停 / ⏹停止 / 推脚本 / 📂远端脚本 / 📷截图`；被控端首次会弹确认框。
+5. 选中设备即可使用 `▶ 远程运行 / ⏸ 暂停 / ⏹ 停止 / 推脚本 / 📂 远端脚本 / 📷 截图`；被控端首次会弹确认框。
 
-### 配置项（22 项 `netlink_*`）
+---
 
-| 键 | 默认值 | 含义 |
-| --- | --- | --- |
-| `netlink_enabled` | `False` | 启用设备互联 |
-| `netlink_port` | `19710` | TCP 监听端口 |
-| `netlink_device_name` | `""` | 本机显示名（空 = 主机名） |
-| `netlink_perm_level` | `"observe"` | 本机默认授予权限 observe/control/script |
-| `netlink_peers` | `[]` | 已配对设备白名单（不含密钥） |
-| `netlink_static_peers` | `[]` | 手动静态对端（发现失败兜底） |
-| `netlink_autodiscover` | `True` | UDP 自动发现 |
-| `netlink_discovery_port` | `19711` | UDP 发现端口 |
-| `netlink_ui_window` | `""` | 设备互联窗口几何记忆 |
-| `netlink_require_auth` | `True` | 启用配对认证 |
-| `netlink_pin_ttl` | `600` | 配对码有效期（秒） |
-| `netlink_confirm_control` | `True` | 首次远程操控需被控端弹窗确认 |
-| `netlink_confirmed_peers` | `[]` | 已确认过操控的设备指纹 |
-| `netlink_script_dir` | `""` | 允许远程运行的脚本目录（空 = 程序目录/scripts） |
-| `netlink_audit_days` | `0` | 审计日志保留天数（0 = 跟随 log_retention_days） |
-| `netlink_web_enabled` | `False` | 启用浏览器只读面板 |
-| `netlink_web_port` | `19712` | 面板监听端口 |
-| `netlink_web_bind` | `"0.0.0.0"` | 面板监听地址（127.0.0.1 = 仅本机） |
-| `netlink_tls` | `False` | 启用 TLS 加密 |
-| `netlink_tls_cert` | `""` | TLS 证书 PEM 路径 |
-| `netlink_tls_key` | `""` | TLS 私钥 PEM 路径 |
-| `netlink_tls_pins` | `[]` | 已固定的对端证书指纹（TOFU） |
-
-### 端口与防火墙
-
-| 用途 | 协议/端口 | 默认 |
-| --- | --- | --- |
-| 节点控制通道 | TCP 19710 | 可在设置改 |
-| UDP 广播发现 | UDP 19711 | 可在设置改 |
-| 浏览器只读面板 | TCP 19712 | **默认关闭**，可在设置改 |
-
-Windows 防火墙：首次监听会弹授权框，选「专用网络」；也可手动放行。
-
-### 文档索引
-
-| 文档 | 内容 |
-| --- | --- |
-| [`docs/netlink-总览与部署指南.md`](docs/netlink-总览与部署指南.md) | **推荐入口**：架构图、模块职责、配置全表、权限矩阵、端口表、两机部署步骤、测试矩阵、已知限制 |
-| [`docs/netlink-配对与权限说明.md`](docs/netlink-配对与权限说明.md) | 三档权限语义、首次配对流程、免配对重连、撤销位置、安全边界、故障排查 |
-| [`docs/netlink-远程操控使用说明.md`](docs/netlink-远程操控使用说明.md) | 操控按钮行为与前置条件、首次确认弹窗、回执三态、审计、限制 |
-| [`docs/netlink-脚本分发使用说明.md`](docs/netlink-脚本分发使用说明.md) | 推送/批量下发、落盘位置、完整性校验、远端脚本列表、故障排查 |
-| [`docs/netlink-远程截图说明.md`](docs/netlink-远程截图说明.md) | 权限要求、节流与分辨率/质量上限、隐私合规提示、故障排查 |
-| [`docs/netlink-网页只读面板说明.md`](docs/netlink-网页只读面板说明.md) | 启用步骤、访问链接与令牌、只读边界、安全提示、故障排查 |
-| [`docs/netlink-TLS加密说明.md`](docs/netlink-TLS加密说明.md) | 为何需要、OpenSSL 自签证书命令、TOFU 指纹固定、限制、故障排查 |
-| [`docs/netlink-phase1-验收清单.md`](docs/netlink-phase1-验收清单.md) | 只读监控的双机人工验收步骤 |
-| [`docs/netlink-phase2-验收清单.md`](docs/netlink-phase2-验收清单.md) | 配对/权限/远程操控的双机人工验收步骤 |
-| [`docs/python扩展使用说明.md`](docs/python扩展使用说明.md) | Python 命令三级权限、AST 预检、三层超时、AcrpaAPI、审计日志与示例 |
-
-### 自动化测试
-
-运行方式：`python tools/_test_netlink_xxx.py`（这 16 个脚本当前全部通过）。
-
-<details>
-<summary>展开 16 个测试脚本清单</summary>
-
-| 脚本 | 覆盖内容 |
-| --- | --- |
-| `tools/_smoke_netlink.py` | 帧 / 粘包 / 回环 / 总线 / 日志 sink |
-| `tools/_test_netlink_2node.py` | 双节点只读链路 |
-| `tools/_test_netlink_e2e.py` | Phase 1 · 10 项 |
-| `tools/_test_netlink_auth.py` | 认证 12 项 |
-| `tools/_test_netlink_control.py` | 操控 15 项 |
-| `tools/_test_netlink_phase2_e2e.py` | Phase 2 · 10 项 |
-| `tools/_test_netlink_transfer.py` | 分发 15 项 |
-| `tools/_test_netlink_phase3_e2e.py` | Phase 3 · 10 项 |
-| `tools/_test_netlink_screenshot.py` | 截图 10 项 |
-| `tools/_test_netlink_webui.py` | 面板 13 项 |
-| `tools/_test_netlink_tls.py` | TLS 10 项 |
-| `tools/_smoke_netlink_window.py` | 设备互联窗口烟测 |
-| `tools/_smoke_netlink_pairing_ui.py` | 配对 UI 烟测 |
-| `tools/_smoke_netlink_control_ui.py` | 操控 UI 烟测 |
-| `tools/_smoke_netlink_transfer_ui.py` | 分发 UI 烟测 |
-| `tools/_verify_netlink_package.py` | 打包完整性（交叉验证 17/17 个 netlink 模块） |
-
-</details>
-
-> 说明：其中 `_test_netlink_tls.py` 依赖本机具备 `cryptography` 或 `openssl` 才能跑真实握手，缺失时相关 4 条断言记 `[WARN]`。
-
-### 优化自测脚本（5 项）
-
-本轮体验优化配套的独立自测脚本，运行方式同为 `python tools/_xxx.py`：
-
-| 脚本 | 覆盖内容 |
-| --- | --- |
-| `tools/_smoke_mini_bar.py` | Mini Bar 三形态 / 尺寸 / 透明度 / 位置记忆与动画烟测 |
-| `tools/_smoke_dark_mode.py` | 主题安全取值护栏、Toast 主题化、insertbackground 覆盖检查 |
-| `tools/_test_ai_provider.py` | 自定义 AI 提供商 / 模型 / BaseURL 与凭据库存取、两段式连通性探测 |
-| `tools/_test_python_sandbox.py` | Python 命令 AST 预检 / 三级权限 / 三层超时 / 审计日志 |
-| `tools/_smoke_ui_scale.py` | 命名字体角色与 ui_scale 7 档即时生效 |
-
-### 已知限制
-
-1. **真机跨机验收未执行**：自动化测试为同机双/三节点等价覆盖；跨机防火墙 / VLAN / 单向路由需按两份验收清单人工执行。
-2. **TLS 真实握手未验证**：开发机无 `cryptography`/`openssl`，无法生成测试 PEM，相关断言为 `[WARN]`（未假通过）；需在具备 OpenSSL 的机器复跑。
-3. **冻结 exe 存活检查为 `[WARN]`**：开发机缺 `pyautogui/xlrd/pyperclip` 运行期依赖，`run.py` 依赖预检先行退出（与互联功能无关）。
-4. **UDP 广播发现在 VLAN / 多网卡环境不可靠**，需用静态对端兜底。
-5. **浏览器面板未加密**（明文 HTTP + 令牌），仅建议可信内网启用；`netlink_tls` 默认关闭。
-6. **多控制端 / 3 台以上拓扑未压测**（串行化与广播已覆盖 2 控制端场景）。
-7. **TLS 为自签 + TOFU**：不做证书链验证；更换证书后需清空已固定指纹。
-
-## 🎛️ 六项体验优化
-
-> 本轮围绕「更顺手的小窗、更清晰的暗色、可换 AI、可写 Python、可缩放字体」集中优化，六项改动均已落地并配套独立自测脚本。
-
-### ① Mini Bar 全面重做
-
-- **三形态**：**图标态**（空闲 30 秒自动收起为边长 = 高度 + 6 的正方形，仅保留状态点与展开按钮）、**紧凑态**（默认，宽度 = 配置宽度）、**运行态**（运行或录制时自动展开 +130px 容纳进度条，高度 +6）。
-- **可配置**：高度 24–48（步进 4）、宽度 380–900、透明度 30–100。
-- **动画与缓存**：宽度**平滑过渡动画**；**差分缓存**（变更签名含主题色，切换明暗主题即时刷新）。
-- **位置记忆**：拖动位置写入配置、重启恢复，并做屏幕范围夹取防越界。
-- **Canvas 状态点**：空闲灰 / 运行绿 / 暂停呼吸（800ms 周期）/ 脚本失败告警闪烁 3 次 / 录制红。
-- **缺陷修复**：「设置 → 系统」卡的 Mini Bar 宽度 / 高度 / 透明度此前**从未真正生效**（`_apply_map` 缺少 `system` 注册、变量未被追踪、`ACRPA.py` 读的是字面量），现已**统一收口**为 `_apply_system_settings()` —— 一处修复同时解决宽度 / 高度 / 透明度与开机自启 / 托盘等整卡设置。
-
-### ② 暗黑模式显示修复
-
-- 新增主题安全取值护栏 `utils.themed(key, fallback)`，杜绝「主题色被硬编码绕过」。
-- Toast 通知四类（info / success / warning / error）全部改为**跟随主题**，warning 按主题取深色前景（对比度约 7:1）。
-- 清理硬编码占位符色 `#9CA3AF`。
-- **19 处输入框 / 文本域补齐 `insertbackground`**，深色模式冷启动时光标不再看不见。
-
-### ③ 主界面互联按钮瘦身
-
-- 标题栏 `🌐 互联` → `🌐`（字号 11，与设置按钮视觉对齐），hover 提示与点击行为保留。
-
-### ④ 自定义 AI 提供商 / 模型 / API Key
-
-- 内置 6 个预设：**DeepSeek / 通义千问（阿里云兼容模式）/ OpenAI / Ollama（本地）/ 自定义 / Anthropic**。
-- 可自定义 BaseURL 与模型名，可**新增 / 删除自定义提供商**。
-- 密钥存入 **Windows 凭据库**（`ACRPA/ai_key/<provider>`），**绝不写入 `config.json`**。
-- `[测试连接]` **两段式探测**：先 `GET /models`，遇 `404 / 405` 自动回退最小 `chat/completions`；Anthropic 明确提示「不使用 OpenAI 兼容接口，暂不支持」而非发出必然失败的请求。
-- **向后兼容**：既有 `api_key` + `api_model` 配置继续可用。
-
-### ⑤ Python 代码扩展（新增 `Python` 命令）
-
-- **三级权限**：`sandbox`（默认）/ `trusted` / `full`（**默认关闭**）。
-- **AST 静态预检**：`import` / `open` / `eval` / `exec` / `__import__` / `getattr` / dunder 属性 / `with` / `lambda` / `class` / `global` / `nonlocal` 按权限分级拒绝，失败原因以稳定英文短句给出。
-- **三层超时**：`sandbox` / `trusted` 用行级 trace 中断（并保证 trace 被清理，不影响后续执行）；`full` 用**独立子进程 + 超时强杀**（未引入 `multiprocessing`）。
-- **审计日志** `logs/acrpa_py_YYYYMMDD.log`：只记录 `code_sha1` / 长度 / 首行摘要 / 权限 / 耗时 / 结果，**不写代码全文**。
-- **`AcrpaAPI`**：`log` / `click` / `type_text` / `key_press` / `find_image` / `wait` / `sleep` / `get_var` / `set_var` / `run_command` 等。
-- **插件 handler 签名自适应**：旧的两参 `h(row, script_dir)` 插件零改动可用。
-- **已知限制（务必留意）**：脚本级钩子**仅在单脚本场景生效**；工作流经 `workflow.py` 直接调用 handler，不经过 `execute_script`，故工作流下钩子不触发。
-
-**Excel 用法示例**：命令列（A）填 `Python`，参数列（B）填代码，第二参数列（C）可空或填权限级别（`sandbox` / `trusted` / `full`）。
-
-```
-命令(A) = Python
-参数1(B) = result = 1 + 1
-参数2(C) = sandbox          # 可空；空则用 python_default_perm（默认 sandbox）
-
-# 被拒示例：sandbox 权限下 import 会被 AST 预检拒绝
-参数1(B) = import os
-```
-
-### ⑥ 显示大小与字体缩放
-
-- 10 个**命名字体角色** + 全局 `ui_scale` **7 档**（0.8 / 0.9 / 1.0 / 1.1 / 1.2 / 1.3 / 1.5）。
-- **60 处硬编码字体**统一改为命名字体，切换档位**即时生效**（主界面 / 设置 / 设备互联 / 对话框同步）。
-- **DPI 感知**（Per-Monitor v2），150% / 200% 系统缩放下不再被位图拉伸模糊。
-- **入口**：设置 → 系统 → **界面缩放**（说明「部分尺寸需重启完全生效」）。
-
+<a id="update"></a>
 ## ⇪ 软件更新
 
-程序启动 3 秒后自动检查新版本（可在「设置 → 系统」中关闭）。发现新版本时状态栏显示
-「新版本 vX.Y.Z 可用 — 点击更新」，点击进入更新窗口：
+程序启动 3 秒后自动检查新版本（可在「设置 → 系统」中关闭）。发现新版本时状态栏显示「新版本 vX.Y.Z 可用 — 点击更新」，点击进入更新窗口：
 
-1. **检查** —— 依次尝试 GitHub Releases API → 纯文本清单镜像（raw.githubusercontent →
-   jsDelivr → Gitee）。两个关键设计：
-   - **不会因单个来源不可达就定论**：旧实现只有一个 Gitee 地址，一旦不可达就把异常吞成
-     "已是最新"。现在会明确区分「无更新 / 网络故障 / 清单损坏」，且某个来源报出的版本
-     不比本机新时不会立刻收工，而是继续探测其余来源取版本最高者 —— 避免某个镜像缓存
-     落后（实测 jsDelivr 的分支别名、Gitee 镜像都会滞后）把真实的新版本静默吞掉。
-   - **传输双栈**：`requests` 因证书校验失败时自动改用系统证书库重试。在启用 TLS 拦截的
-     企业网络里，`requests` 自带的 certifi 验不过代理自签证书，而系统证书库可以 ——
-     只走 `requests` 会让两个权威来源永久不可达，只剩会缓存旧版本的镜像可用。
-2. **下载** —— 按候选直链逐个尝试（清单声明的直链 → Release 约定推导 → 仓库内 `dist/` 副本），
-   显示进度与体积；落盘后校验 sha256（清单提供时）、体积与 ZIP/EXE 容器格式，拒绝 HTML
-   错误页与半截包，并**复核包内 `VERSION`** —— 镜像返回旧包时自动换源，而不是装错版本。
-   Release 约定推导同时覆盖 `v0.1.26` 与 `v0.1.26.0` 两种 tag 写法，避免因 tag 约定不一致 404。
-3. **更新** —— 便携版可直接「🚀 立即重启更新」：程序退出 → 校验包内版本号 → 以 `.new` 中转
-   原子替换主程序与 `VERSION` → 自动重启。**只替换主程序，配置、脚本、模板、日志一律不动。**
+1. **检查** —— 依次尝试 GitHub Releases API → 纯文本清单镜像（raw.githubusercontent → jsDelivr → Gitee）。两个关键设计：
+   - **不会因单个来源不可达就定论**：旧实现只有一个 Gitee 地址，一旦不可达就把异常吞成「已是最新」。现在会明确区分「无更新 / 网络故障 / 清单损坏」，且某个来源报出的版本不比本机新时不会立刻收工，而是继续探测其余来源取版本最高者 —— 避免某个镜像缓存落后（实测 jsDelivr 的分支别名、Gitee 镜像都会滞后）把真实的新版本静默吞掉。
+   - **传输双栈**：`requests` 因证书校验失败时自动改用系统证书库重试。在启用 TLS 拦截的企业网络里，`requests` 自带的 certifi 验不过代理自签证书，而系统证书库可以 —— 只走 `requests` 会让两个权威来源永久不可达，只剩会缓存旧版本的镜像可用。
+2. **下载** —— 按候选直链逐个尝试（清单声明的直链 → Release 约定推导 → 仓库内 `dist/` 副本），显示进度与体积；落盘后校验 sha256（清单提供时）、体积与 ZIP/EXE 容器格式，拒绝 HTML 错误页与半截包，并**复核包内 `VERSION`** —— 镜像返回旧包时自动换源，而不是装错版本。Release 约定推导同时覆盖 `v0.1.26` 与 `v0.1.26.0` 两种 tag 写法，避免因 tag 约定不一致 404。
+3. **更新** —— 便携版可直接「🚀 立即重启更新」：程序退出 → 校验包内版本号 → 以 `.new` 中转原子替换主程序与 `VERSION` → 自动重启。**只替换主程序，配置、脚本、模板、日志一律不动。**
 
-手动入口：「设置 → 快速操作 → 关于 ACRPA → ⇪ 检查更新」。
-更新包保存在程序目录的 `updates/` 下（保留最近一个，其余自动清理）。
+手动入口：「设置 → 快速操作 → 关于 ACRPA → ⇪ 检查更新」。更新包保存在程序目录的 `updates/` 下（保留最近一个，其余自动清理）。
 
-**版本号来源**：项目根目录 `VERSION` 文件 —— 首行是版本号，其后可写多条下载直链（按顺序尝试）
-与一行 `sha256:...` 校验和。打包版按 `EXE 同级目录 → 内嵌副本 → 项目根目录` 顺序查找，
-因此可直接在 EXE 旁放一份 `VERSION` 来覆盖版本号或切换更新通道。
+**版本号来源**：项目根目录 `VERSION` 文件 —— 首行是版本号，其后可写多条下载直链（按顺序尝试）与一行 `sha256:...` 校验和。打包版按 `EXE 同级目录 → 内嵌副本 → 项目根目录` 顺序查找，因此可直接在 EXE 旁放一份 `VERSION` 来覆盖版本号或切换更新通道。
 
-> 仓库内 `dist/ACRPA.zip` 是唯一**不带版本信息**的兜底通道，历史发布包甚至没有包内
-> `VERSION` 可供复核。因此它只在 `VERSION` 配置了 `sha256` 时才被使用 —— 否则宁可报错
-> 也不会静默装上旧包。建议发版时用 `--write-sha256` 把校验和写进 `VERSION`。
+> 仓库内 `dist/ACRPA.zip` 是唯一**不带版本信息**的兜底通道，历史发布包甚至没有包内 `VERSION` 可供复核。因此它只在 `VERSION` 配置了 `sha256` 时才被使用 —— 否则宁可报错也不会静默装上旧包。建议发版时用 `--write-sha256` 把校验和写进 `VERSION`。
 >
-> 注意区分两份 `VERSION`：**项目根目录**那份带 `sha256` 行，是给客户端读的清单；
-> **发布包内**那份只保留版本号与直链 —— 校验和描述的是包本身，写进被校验的产物里
-> 必然自相矛盾（写进去哈希就变了），因此发版工具在打包时会把它剔除。
+> 注意区分两份 `VERSION`：**项目根目录**那份带 `sha256` 行，是给客户端读的清单；**发布包内**那份只保留版本号与直链 —— 校验和描述的是包本身，写进被校验的产物里必然自相矛盾（写进去哈希就变了），因此发版工具在打包时会把它剔除。
 
 **发版流程**：
 
 ```bash
-python tools/bump_version.py --patch     # 1. 递增版本号 (同步 VERSION + README 标记)
-python build.py --clean                  # 2. 打包
-python tools/make_release.py --write-sha256   # 3. 生成 dist/ACRPA.zip + 校验和 + 回填 VERSION + Release 说明
-python tools/publish_release.py --exe    # 4. 建草稿 Release → 上传附件 → 发布 (一条命令)
-python tools/make_release.py --no-zip --purge-cdn main   # 5. 清 CDN 缓存 (见下)
+python tools/bump_version.py --patch              # 1. 递增版本号（同步 VERSION + README 标记）
+python build.py --clean                            # 2. 打包
+python tools/make_release.py --write-sha256        # 3. 生成 dist/ACRPA.zip + 校验和 + 回填 VERSION + Release 说明
+python tools/publish_release.py --exe              # 4. 建草稿 Release → 上传附件 → 发布（一条命令）
+python tools/make_release.py --no-zip --purge-cdn main   # 5. 清 CDN 缓存
 ```
 
-> **第 4 步为什么必须走工具**：本仓库启用了 release 不可变，已发布的 Release 既不能改正文
-> 也不能再加附件（直接 POST 附件会得到 `422 Cannot upload assets to an immutable release.`），
-> 因此顺序必须是「建草稿 → 上传 → 发布」。另外，**一个 tag 一旦被某个已发布的 Release 占用过
-> 就不可复用** —— 即便那个 Release 已被删除，重新发布仍会报 `tag_name was used by an
-> immutable release`。届时需换 tag（如本版用的是 `v0.1.26.0`）并同步改 `VERSION` 的直链；
-> 工具的 tag 正是从直链推导的，改直链即改 tag，不会再撞车。
+> **第 4 步为什么必须走工具**：本仓库启用了 release 不可变，已发布的 Release 既不能改正文也不能再加附件（直接 POST 附件会得到 `422 Cannot upload assets to an immutable release.`），因此顺序必须是「建草稿 → 上传 → 发布」。另外，**一个 tag 一旦被某个已发布的 Release 占用过就不可复用** —— 即便那个 Release 已被删除，重新发布仍会报 `tag_name was used by an immutable release`。届时需换 tag（常见做法是在版本号后补第四段，如 `v0.1.26.0`）并同步改 `VERSION` 的直链；工具的 tag 正是从直链推导的，改直链即改 tag，不会再撞车。
 
 发布时需注意三点（均由实测踩坑得出）：
 
-1. **Release tag 必须与 `VERSION` 声明的直链一致**（本版为 `v0.1.26.0`）。客户端优先走
-   Releases API 并直接采用 API 返回的直链与体积，因此只要 tag 与正文对得上就不会出错。
-   tag 由 `publish_release.py` 从直链自动推导，不要手工按 `v<版本号>` 拼。
-2. **Gitee 镜像需单独 push**，本地 `origin` 指向 Gitee 而推送目标常是 `github`，两者是两个仓库。
-   实测 Gitee 的 raw 路径对 `dist/` 下的大文件返回 403，故仅作最后兜底。
-3. **jsDelivr 会缓存分支别名**：推送新 `VERSION` 后实测仍持续返回旧版本号（按提交哈希访问
-   才即时生效，但客户端无从预知哈希）。因此发版后要执行第 5 步清缓存，否则只能走 jsDelivr
-   的网络会被这份落后的清单告知"已是最新"。
+1. **Release tag 必须与 `VERSION` 声明的直链一致**。客户端优先走 Releases API 并直接采用 API 返回的直链与体积，因此只要 tag 与正文对得上就不会出错。tag 由 `publish_release.py` 从直链自动推导，不要手工按 `v<版本号>` 拼。
+2. **Gitee 镜像需单独 push**，本地 `origin` 指向 Gitee 而推送目标常是 `github`，两者是两个仓库。实测 Gitee 的 raw 路径对 `dist/` 下的大文件返回 403，故仅作最后兜底。
+3. **jsDelivr 会缓存分支别名**：推送新 `VERSION` 后实测仍持续返回旧版本号（按提交哈希访问才即时生效，但客户端无从预知哈希）。因此发版后要执行第 5 步清缓存，否则只能走 jsDelivr 的网络会被这份落后的清单告知「已是最新」。
 
 ---
 
-**联系**：yoho12138@aliyun.com
-**更新日志**：
+<a id="dd-driver"></a>
+## 🆕 DD 驱动增强（可选）
 
-- v0.1.28-beta (2026-10-01): **Beta 预发布（Pre-release）** —— 新增 **NetLink 多设备互联**（内网多机实时监控 + 零配置 UDP 发现 + 6 位配对码与 `PBKDF2-HMAC-SHA256` 挑战应答 + 三档权限 + 远程运行/暂停/恢复/停止 + 脚本分发与远端脚本管理 + 远程截图 + 浏览器只读面板 + TLS 可选加密 + 审计日志，纯标准库零新增依赖），并落地 **六项体验优化**（Mini Bar 三形态重做、暗黑模式显示修复、互联按钮瘦身、自定义 AI 提供商 / 模型 / BaseURL、Python 代码扩展、字体与显示缩放）。本版为预发布，可能存在问题，建议先在同版本测试机验证；`python_full_enabled` 与 `netlink_tls` 默认关闭。独立 EXE 已在 GitHub Release 提供下载（`ACRPA-v0.1.28-beta.exe`，14,047,384 字节）。完整说明见 [`docs/releases/v0.1.28-beta.md`](docs/releases/v0.1.28-beta.md)。
+ACRPA 自 v0.1.22 起支持 **DD 驱动**作为高性能输入后端：
 
-- v0.1.27 (2026-09-13): **以 v0.1.25 为基线重建，修复 v0.1.26 的不稳定接线** —— 在 v0.1.25 稳定基线上分组重放 v0.1.26 的改进并逐个验证，同时修正 v0.1.26 的两处接线缺陷：`_update_pending` 全局缺失，导致 `_periodic` 每 100ms 抛 `NameError`、状态栏与执行进度刷新链路中断；`show_update_dialog` 未导入，导致点击状态栏触发 `NameError`、更新入口失效。保留 v0.1.26 的全部优点：更新机制重构（GitHub Releases API 多源降级、完整语义化版本比较、sha256 与体积/容器校验、便携版一键重启自更新、打包版版本号来源修复）、engine 命令失败语义与工作流错误传播（stop_on_error/重试/并行失败）、发布工具链（`tools/make_release.py`、`tools/publish_release.py`、`bump_version.py`）、`res/` 等构建资源纳管与文档。另将运行时产物 `recent.json`/`recent_workflow.json` 加入忽略。
+**优势**
 
-- v0.1.26 (2026-09-13): **更新机制重构** —— 修复打包后版本号失真（EXE 此前只查项目根目录，冻结后必然回退到内置值，永远自报 v0.1.24，导致更新判断与"关于"页面全部失真）；检查环节改为多源降级（GitHub Releases API → raw/jsDelivr/Gitee 清单镜像）；版本比较改为完整语义化实现，支持 `v` 前缀、位数不齐与预发布后缀（此前 `0.1.26-beta` 会因 int() 抛错被静默判为无更新）；检查结果结构化，明确区分无更新/网络故障/清单损坏，不再把网络异常伪装成"已是最新"；某来源报出的版本不比本机新时继续探测其余来源取最高者，避免镜像缓存落后把真实新版本静默吞掉（实测 jsDelivr 分支别名与 Gitee 镜像均会滞后）；传输改为 requests→系统证书库双栈，修复企业 TLS 拦截环境下两个权威来源永久不可达；下载支持多候选直链逐个重试、流式进度、sha256 与体积/容器格式校验，并复核包内 VERSION、兼容 `v0.1.26.0` 四段 tag 写法；无 sha256 时不再使用不带版本信息的 `dist/` 兜底通道，避免静默装上旧包；新增便携版一键重启自更新（只替换主程序与 VERSION，不触碰用户数据）；新增 `tools/make_release.py` 发版助手（含 CDN 缓存清理），新增 `tools/publish_release.py` 发布助手（草稿→上传→发布三段式，适配本仓库 release 不可变；tag 由 `VERSION` 直链推导，避免复用被占用过的 tag；上传自动在 urllib 失败时切换到系统 curl 以绕开 schannel 吊销检查与代理对小请求/大请求的差异），`bump_version.py` 现同步 README 版本标记。另修复 `engine` 命令失败静默成功、`stop_on_error` 与重试失效问题（详见 v0.1.25 之后提交）
-- v0.1.25 (2026-08-10): 工作流Tab深度定制(操作库分类树+搜索+最近使用、command/variable/loop/log新节点、统一配置表单、右键复制/粘贴/禁用/注释、外层循环次数与最长执行时间控制、执行高亮、变量管理)、工作流引擎支持新节点及enabled/comment跳过、设置页导航与快捷键列表优化、版本号全局统一管理(bump_version.py)、README/使用说明在线优先打开、修复启动崩溃/最近使用失效/内联编辑popdown崩溃/找图OpenCV降级/暗黑模式工作流控件不变色/打包缺失模块
-- v0.1.24 (2026-08-09): 设置页新增「高级设置」操作逻辑优化、工作流拖拽节点崩溃修复、设置页tab改为标题栏右侧⚙ 设置按钮、AI模型下拉框改用统一模型注册表、DD DLL路径配置真正生效、修复claude模型端点映射错误、清理冗余代码
-- v0.1.23 (2026-07-20): 模板选择对话框改为上下布局(上横向滚动按钮+下预览含滚轴)、托盘切换异常保护(防止闪退和崩溃)、恢复默认设置按钮改为绿色、修复录制后脚本未加载到编辑器Bug、修复card_log变量名冲突、修复emoji Tcl兼容性
-- v0.1.22 (2026-07-20): 结构化日志升级(LogLevel分级/日期时间戳/每日轮转/自动清理)、设置页重构为6张独立卡片(基础执行/AI增强/定时调度/日志/系统/快速操作)、脚本编辑工具栏新增录制按钮、新增日志配置项、借鉴AutomationOperation优化
-- v0.1.21 (2026-07-18): 系统托盘图标(Shell_NotifyIcon + WNDPROC子类化)、Mini Bar折叠模式(置顶悬浮状态条)、托盘右键菜单(恢复/退出)、托盘气泡通知、Mini Bar拖拽/主题同步/状态实时更新、修复minimize_to_tray无恢复入口缺陷
-- v0.1.20 (2026-07-17): 工作流流程图可视化(节点+连线+拖拽)、窗口相对坐标体系、录制增强(拖拽/滚轮/窗口激活)、条件断点UI增强(标记旁显示表达式)、图像缓存LRU淘汰、预编译正则优化、state.py Model层变更通知、打包排除turtle模块
-- v0.1.19 (2026-07-16): AI 增强模块 — 视觉定位(AI找图/AI识别界面)、智能重试、异常检测、流程优化建议、自然语言调试
-- v0.1.18 (2026-07-06): OCR文字识别命令、脚本市场面板、调试器增强(执行计时/跳过行/运行到光标/变量就地编辑)、打包体积优化
-- v0.1.17 (2026-07-05): 集成DD驱动v63330，添加高性能输入后端支持；优化设置界面UI，新增DD驱动配置选项；完善打包配置，自动包含DLL文件；创建详细的DD驱动集成文档和测试脚本
-- v0.1.16 (2026-07-05): 修复sys.exit()问题，实现统一退出清理机制；优化程序稳定性，完善资源释放流程
-- v0.1.15 (2026-06-05): 集成DD驱动作为可选后端，实现"写入"命令双模式输入（direct/simulate），支持自动回退到PyAutoGUI
-- v0.1.14 (2026-05-24): 优化图色识别和OCR功能说明
-- v0.1.13 (2026-05-19): 优化 AI 生成器和模板，提升脚本规范和win命令
+- ✅ 内核级模拟，难以检测，失败可回退到 PyAutoGUI；
+- ✅ 后台操作，无需激活窗口，输入速度提升。
+
+**快速启用**
+
+1. 从 [官方仓库](https://github.com/ddxoft/master) 下载 `dd.54900.dll`；
+2. 放入 `lib/dd_driver/` 目录；
+3. 在 `config.json` 中设置 `"use_dd_driver": true`；
+4. 以管理员身份运行程序。
+
+**Excel 示例**
+
+```
+写入,Hello World,0.02,direct    # 使用 DD_str 直接输入（最快）
+写入,你好世界,0.05,simulate     # 模拟按键（支持中文）
+写入,Test@#$%,0.02,auto         # 自动选择最佳方式
+```
 
 ---
 
-## 📷 截图状态
+<a id="faq"></a>
+## ❓ 常见问题
 
-「多设备局域网互联（NetLink）」功能的界面截图**已补齐**，`index.html` 中对应 `<img>` 已指向真实文件：
+**找不到图片？**
 
-| 文件名 | 画面 | 状态 |
-| --- | --- | --- |
-| `img/netlink-devices.png` | 设备互联窗口：设备列表 + 运行状态 + 当前脚本 + 进度（第几行 / 第几循环 / 已运行时长）+ 实时日志流 | 已补齐 |
-| `img/netlink-pairing.png` | 配对流程：被控端「配对码」弹窗（6 位码与有效期）+ 控制端「🔗 配对」输入框 + 被控端首次操控确认框 | 已补齐 |
-| `img/netlink-webui.png` | 手机 / 平板浏览器只读面板：多机进度卡片 + 日志流（含令牌访问地址） | 已补齐 |
+- 检查图片路径、识别精度（建议 0.8 ~ 0.95）、目标窗口是否置前。
+
+**图像识别慢？**
+
+- **优先使用窗口管理命令**代替图像识别，速度快 10–100 倍；
+- 使用区域找图缩小范围、降低精度、减小图片尺寸。
+
+**脚本格式错误？**
+
+- 必须使用 `.xls` 格式（不支持 `.xlsx`），可用 Excel「另存为」转换。
+
+**录制不准确？**
+
+- 录制前关闭无关窗口，操作速度平稳，完成后手动修正脚本。
+
+**窗口管理功能不可用？**
+
+- 确保已安装 pywin32：`pip install pywin32`；
+- 以管理员身份运行 ACRPA 可获得更好效果。
+
+**AI 功能不可用？**
+
+- 在「设置 → AI 增强」填写 `api_key`（或选择自定义提供商与 BaseURL）；密钥存入 Windows 凭据库，不写进 `config.json`。
+
+**NetLink 搜不到设备？**
+
+- 确认两端都在同一网段且已勾选「启用设备互联」；
+- VLAN / 多网卡环境请在「静态对端」里手动填写 `IP:端口`；
+- 检查 Windows 防火墙是否放行 TCP `19710` 与 UDP `19711`。
+
+---
+
+<a id="docs"></a>
+## 📚 详细文档
+
+**入门**
+
+- [使用说明](使用说明.txt)
+- [脚本模板](template/脚本模板.xls)
+
+**NetLink 多设备互联**
+
+- [总览与部署指南](docs/netlink-总览与部署指南.md)
+- [配对与权限说明](docs/netlink-配对与权限说明.md)
+- [远程操控使用说明](docs/netlink-远程操控使用说明.md)
+- [脚本分发使用说明](docs/netlink-脚本分发使用说明.md)
+- [远程截图说明](docs/netlink-远程截图说明.md)
+- [网页只读面板说明](docs/netlink-网页只读面板说明.md)
+- [TLS 加密说明](docs/netlink-TLS加密说明.md)
+
+**扩展与其他**
+
+- [Python 代码扩展使用说明](docs/python扩展使用说明.md)
+- [版本发布说明](docs/releases/v0.1.28-beta.md)
+
+---
+
+<a id="screenshots"></a>
+## 🖼 界面截图
+
+| 文件 | 画面 |
+| --- | --- |
+| `img/image1.png` | 脚本编辑界面 |
+| `img/image2.png` | 执行编辑界面 |
+| `img/image3.png` | 工作流可视化编排 |
+| `img/image4.png` | 设置页导航 |
+| `img/image5.png` | 深色模式界面 |
+| `img/netlink-devices.png` | 设备互联窗口：设备列表 + 运行状态 + 当前脚本 + 进度 + 实时日志流 |
+| `img/netlink-pairing.png` | 配对流程：被控端配对码弹窗 + 控制端配对输入 + 首次操控确认框 |
+| `img/netlink-webui.png` | 浏览器只读面板：多机进度卡片 + 日志流 |
+
+---
+
+<a id="changelog"></a>
+## 🗒️ 更新日志
+
+- **v0.1.28-beta**（2026-10-01）**Beta 预发布** —— 新增 **NetLink 多设备互联**（内网多机实时监控 + 零配置 UDP 发现 + 6 位配对码与 `PBKDF2-HMAC-SHA256` 挑战应答 + 三档权限 + 远程运行 / 暂停 / 恢复 / 停止 + 脚本分发与远端脚本管理 + 远程截图 + 浏览器只读面板 + TLS 可选加密 + 审计日志，纯标准库零新增依赖），并落地 **六项体验优化**（Mini Bar 三形态重做、暗黑模式显示修复、互联按钮瘦身、自定义 AI 提供商 / 模型 / BaseURL、Python 代码扩展、字体与显示缩放）。本版为预发布，可能存在问题，建议先在同版本测试机验证；`python_full_enabled` 与 `netlink_tls` 默认关闭。独立 EXE 已在 GitHub Release 提供下载（`ACRPA-v0.1.28-beta.exe`，14,047,384 字节）。完整说明见 [`docs/releases/v0.1.28-beta.md`](docs/releases/v0.1.28-beta.md)。
+
+- **v0.1.27**（2026-09-13）以 v0.1.25 为基线重建，修复 v0.1.26 的不稳定接线 —— 在 v0.1.25 稳定基线上分组重放 v0.1.26 的改进并逐个验证，同时修正 v0.1.26 的两处接线缺陷：`_update_pending` 全局缺失，导致 `_periodic` 每 100 ms 抛 `NameError`、状态栏与执行进度刷新链路中断；`show_update_dialog` 未导入，导致点击状态栏触发 `NameError`、更新入口失效。保留 v0.1.26 的全部优点：更新机制重构（GitHub Releases API 多源降级、完整语义化版本比较、sha256 与体积 / 容器校验、便携版一键重启自更新、打包版版本号来源修复）、engine 命令失败语义与工作流错误传播（`stop_on_error` / 重试 / 并行失败）、发布工具链（`tools/make_release.py`、`tools/publish_release.py`、`bump_version.py`）、`res/` 等构建资源纳管与文档。另将运行时产物 `recent.json` / `recent_workflow.json` 加入忽略。
+
+- **v0.1.26**（2026-09-13）更新机制重构 —— 修复打包后版本号失真（EXE 此前只查项目根目录，冻结后必然回退到内置值，永远自报 v0.1.24，导致更新判断与「关于」页面全部失真）；检查环节改为多源降级（GitHub Releases API → raw / jsDelivr / Gitee 清单镜像）；版本比较改为完整语义化实现，支持 `v` 前缀、位数不齐与预发布后缀（此前 `0.1.26-beta` 会因 `int()` 抛错被静默判为无更新）；检查结果结构化，明确区分无更新 / 网络故障 / 清单损坏，不再把网络异常伪装成「已是最新」；某来源报出的版本不比本机新时继续探测其余来源取最高者，避免镜像缓存落后把真实新版本静默吞掉；传输改为 requests → 系统证书库双栈，修复企业 TLS 拦截环境下两个权威来源永久不可达；下载支持多候选直链逐个重试、流式进度、sha256 与体积 / 容器格式校验，并复核包内 `VERSION`、兼容四段 tag 写法；无 sha256 时不再使用不带版本信息的 `dist/` 兜底通道，避免静默装上旧包；新增便携版一键重启自更新（只替换主程序与 `VERSION`，不触碰用户数据）；新增 `tools/make_release.py` 发版助手（含 CDN 缓存清理）与 `tools/publish_release.py` 发布助手（草稿 → 上传 → 发布三段式，适配本仓库 release 不可变；tag 由 `VERSION` 直链推导，避免复用被占用过的 tag），`bump_version.py` 现同步 README 版本标记。另修复 `engine` 命令失败静默成功、`stop_on_error` 与重试失效问题。详见 [`docs/releases/v0.1.26.md`](docs/releases/v0.1.26.md)。
+
+- **v0.1.25**（2026-08-10）工作流 Tab 深度定制（操作库分类树 + 搜索 + 最近使用、command / variable / loop / log 新节点、统一配置表单、右键复制 / 粘贴 / 禁用 / 注释、外层循环次数与最长执行时间控制、执行高亮、变量管理）；工作流引擎支持新节点及 `enabled` / `comment` 跳过；设置页导航与快捷键列表优化；版本号全局统一管理（`bump_version.py`）；README / 使用说明在线优先打开；修复启动崩溃 / 最近使用失效 / 内联编辑 popdown 崩溃 / 找图 OpenCV 降级 / 暗黑模式工作流控件不变色 / 打包缺失模块。
+
+- **v0.1.24**（2026-08-09）设置页新增「高级设置」与操作逻辑优化；工作流拖拽节点崩溃修复；设置页 Tab 改为标题栏右侧 ⚙ 按钮；AI 模型下拉框改用统一模型注册表；DD DLL 路径配置真正生效；修复 claude 模型端点映射错误；清理冗余代码。
+
+- **v0.1.23**（2026-07-20）模板选择对话框改为上下布局（上横向滚动按钮 + 下预览含滚轴）；托盘切换异常保护（防止闪退和崩溃）；恢复默认设置按钮改为绿色；修复录制后脚本未加载到编辑器的 Bug；修复 `card_log` 变量名冲突；修复 emoji 的 Tcl 兼容性。
+
+- **v0.1.22**（2026-07-20）结构化日志升级（LogLevel 分级 / 日期时间戳 / 每日轮转 / 自动清理）；设置页重构为 6 张独立卡片（基础执行 / AI 增强 / 定时调度 / 日志 / 系统 / 快速操作）；脚本编辑工具栏新增录制按钮；新增日志配置项；借鉴 AutomationOperation 优化。
+
+- **v0.1.21**（2026-07-18）系统托盘图标（`Shell_NotifyIcon` + `WNDPROC` 子类化）；Mini Bar 折叠模式（置顶悬浮状态条）；托盘右键菜单（恢复 / 退出）；托盘气泡通知；Mini Bar 拖拽 / 主题同步 / 状态实时更新；修复 `minimize_to_tray` 无恢复入口缺陷。
+
+- **v0.1.20**（2026-07-17）工作流流程图可视化（节点 + 连线 + 拖拽）；窗口相对坐标体系；录制增强（拖拽 / 滚轮 / 窗口激活）；条件断点 UI 增强（标记旁显示表达式）；图像缓存 LRU 淘汰；预编译正则优化；`state.py` Model 层变更通知；打包排除 turtle 模块。
+
+- **v0.1.19**（2026-07-16）AI 增强模块 —— 视觉定位（AI 找图 / AI 识别界面）、智能重试、异常检测、流程优化建议、自然语言调试。
+
+- **v0.1.18**（2026-07-06）OCR 文字识别命令、脚本市场面板、调试器增强（执行计时 / 跳过行 / 运行到光标 / 变量就地编辑）、打包体积优化。
+
+- **v0.1.17**（2026-07-05）集成 DD 驱动 v63330，添加高性能输入后端支持；优化设置界面 UI，新增 DD 驱动配置选项；完善打包配置，自动包含 DLL 文件；创建 DD 驱动集成文档与测试脚本。
+
+- **v0.1.16**（2026-07-05）修复 `sys.exit()` 问题，实现统一退出清理机制；优化程序稳定性，完善资源释放流程。
+
+- **v0.1.15**（2026-06-05）集成 DD 驱动作为可选后端，实现「写入」命令双模式输入（direct / simulate），支持自动回退到 PyAutoGUI。
+
+- **v0.1.14**（2026-05-24）优化图色识别和 OCR 功能说明。
+
+- **v0.1.13**（2026-05-19）优化 AI 生成器和模板，提升脚本规范与 win 命令。
+
+---
+
+<a id="contact"></a>
+## 📮 联系
+
+- 邮箱：yoho12138@aliyun.com
+- QQ 交流群：**682075338**（扫码加入，二维码见 `res/qq-group.jpg`）
+- 微信：扫码添加（二维码见 `res/wechat_qrcode.png`）
+- 欢迎提出建议、报告 Bug、参与共建。
+
+---
+
+<a id="license"></a>
+## 📄 许可证
+
+[MIT](LICENSE) © 2026 yohoten

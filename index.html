@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ACRPA · A/C RPA 自动化工作流工具 · v0.1.27</title>
+<title>ACRPA · A/C RPA 自动化工作流工具 · v0.1.28-beta</title>
 <meta name="description" content="ACRPA 是一款轻量级 Windows 桌面自动化工具：Excel 表格即脚本，支持图像识别定位、窗口管理、OCR 文字识别、浏览器自动化、录制回放、定时任务、工作流编排与 AI 增强，让重复工作一键完成。">
 <meta name="keywords" content="ACRPA,RPA,桌面自动化,自动化脚本,Excel 脚本,图像识别找图,窗口管理,OCR 文字识别,浏览器自动化,工作流编排,定时任务,AI 增强,Python 自动化,Windows 自动化,免安装">
 <meta name="author" content="yohoten">
@@ -13,12 +13,12 @@
 <link rel="canonical" href="https://yohoten.github.io/acrpa/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ACRPA">
-<meta property="og:title" content="ACRPA · A/C RPA 自动化工作流工具 · v0.1.27">
+<meta property="og:title" content="ACRPA · A/C RPA 自动化工作流工具 · v0.1.28-beta">
 <meta property="og:description" content="Excel 表格即脚本，图像识别 + 窗口管理 + OCR + 浏览器自动化 + 工作流编排 + AI 增强，轻量免安装的 Windows 桌面自动化工具。">
 <meta property="og:url" content="https://yohoten.github.io/acrpa/">
 <meta property="og:image" content="https://raw.githubusercontent.com/yohoten/acrpa/main/img/image1.png">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="ACRPA · A/C RPA 自动化工作流工具 · v0.1.27">
+<meta name="twitter:title" content="ACRPA · A/C RPA 自动化工作流工具 · v0.1.28-beta">
 <meta name="twitter:description" content="Excel 表格即脚本，图像识别 + 窗口管理 + OCR + 浏览器自动化 + 工作流编排 + AI 增强，轻量免安装的 Windows 桌面自动化工具。">
 <meta name="twitter:image" content="https://raw.githubusercontent.com/yohoten/acrpa/main/img/image1.png">
 <link rel="icon" type="image/png" sizes="32x32" href="res/icon-32.png">
@@ -26,7 +26,7 @@
 <link rel="apple-touch-icon" sizes="180x180" href="res/apple-touch-icon.png">
 <link rel="shortcut icon" type="image/x-icon" href="res/automation.ico">
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"ACRPA","alternateName":"A/C RPA 自动化工作流工具","applicationCategory":"UtilitiesApplication","applicationSubCategory":"RPA 桌面自动化","operatingSystem":"Windows","softwareVersion":"0.1.27","datePublished":"2026-09-17","description":"轻量级 Windows 桌面自动化工具：Excel 表格即脚本，支持图像识别定位、窗口管理、OCR、浏览器自动化、工作流编排、定时任务与 AI 增强。","url":"https://yohoten.github.io/acrpa/","downloadUrl":"https://github.com/yohoten/acrpa/releases/download/v0.1.27.0/ACRPA.zip","author":{"@type":"Person","name":"yohoten"},"offers":{"@type":"Offer","price":"0","priceCurrency":"CNY"}}
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"ACRPA","alternateName":"A/C RPA 自动化工作流工具","applicationCategory":"UtilitiesApplication","applicationSubCategory":"RPA 桌面自动化","operatingSystem":"Windows","softwareVersion":"0.1.28-beta","datePublished":"2026-10-01","description":"轻量级 Windows 桌面自动化工具：Excel 表格即脚本，支持图像识别定位、窗口管理、OCR、浏览器自动化、工作流编排、定时任务与 AI 增强。","url":"https://yohoten.github.io/acrpa/","downloadUrl":"https://github.com/yohoten/acrpa/releases/download/v0.1.28-beta/ACRPA-v0.1.28-beta.exe","author":{"@type":"Person","name":"yohoten"},"offers":{"@type":"Offer","price":"0","priceCurrency":"CNY"}}
 </script>
 <noscript><style>.reveal{opacity:1 !important;transform:none !important}.timeline .tl-item{display:block !important}</style></noscript>
 <style>
@@ -39,7 +39,7 @@
     --border-strong:rgba(255,255,255,.16);
     --text:#e8ecf6;
     --muted:#93a0bd;
-    --dim:#5d6a88;
+    --dim:#7b88a8;
     --c1:#22d3ee;
     --c2:#818cf8;
     --c3:#e879f9;
@@ -48,6 +48,9 @@
     --err:#f87171;
     --mono:'Cascadia Code','JetBrains Mono','Consolas','Courier New',monospace;
     --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','Microsoft YaHei','PingFang SC','Hiragino Sans GB',sans-serif;
+    --space-1:8px;--space-2:12px;--space-3:16px;--space-4:18px;--space-5:24px;--space-6:34px;--space-section:80px;
+    --radius-sm:8px;--radius-md:12px;--radius-lg:16px;--radius-pill:999px;
+    --dur-fast:.18s;--dur:.25s;--dur-slow:.45s;--dur-reveal:.6s;
   }
   *{margin:0;padding:0;box-sizing:border-box}
   html{scroll-behavior:smooth}
@@ -161,7 +164,7 @@
   }
   .mock-dot{width:11px;height:11px;border-radius:50%}
   .mock-dot.r{background:#ff5f57}.mock-dot.y{background:#febc2e}.mock-dot.g{background:#28c840}
-  .mock-title{font-size:12px;color:var(--dim);margin-left:8px;font-family:var(--mono)}
+  .mock-title{font-size:12px;color:var(--dim);margin-left:8px;font-family:var(--mono);white-space:nowrap}
   .mock-body{display:flex;min-height:340px}
   .mock-tabs{width:92px;border-right:1px solid var(--border);padding:10px 8px;display:flex;flex-direction:column;gap:4px}
   .mock-tab{
@@ -208,7 +211,7 @@
   .stat .lab{font-size:13px;color:var(--muted);margin-top:4px}
 
   /* ---------- Sections ---------- */
-  section{padding:80px 0}
+  section{padding:var(--space-section) 0}
   .sec-head{margin-bottom:44px;max-width:720px}
   .sec-tag{
     display:inline-block;font-size:12px;font-weight:600;letter-spacing:1px;
@@ -217,6 +220,9 @@
   }
   h2{font-size:clamp(26px,3.4vw,36px);font-weight:800;letter-spacing:-.3px;margin-bottom:12px}
   .sec-desc{color:var(--muted);font-size:15px}
+  .section-tint-cyan{background:linear-gradient(180deg,transparent,rgba(34,211,238,.05) 40%,rgba(34,211,238,.05) 60%,transparent)}
+  .section-tint-indigo{background:linear-gradient(180deg,transparent,rgba(129,140,248,.05) 40%,rgba(129,140,248,.05) 60%,transparent)}
+  .section-tint-fuchsia{background:linear-gradient(180deg,transparent,rgba(232,121,249,.05) 40%,rgba(232,121,249,.05) 60%,transparent)}
 
   /* Feature cards */
   .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
@@ -270,6 +276,8 @@
   .cmd-table td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:top}
   .cmd-table tr:last-child td{border-bottom:none}
   .cmd-table tr:hover td{background:rgba(255,255,255,.02)}
+  .col-cmd{width:150px}
+  .col-desc{width:46%}
   .cmd-table code{
     font-family:var(--mono);font-size:12.5px;color:var(--c1);
     background:rgba(34,211,238,.07);border:1px solid rgba(34,211,238,.18);
@@ -411,7 +419,7 @@
     width:104px;height:104px;border-radius:14px;padding:8px;
     background:#fff;box-shadow:0 10px 30px rgba(0,0,0,.4);
   }
-  .qrcode img{width:100%;height:100%;display:block}
+  .qrcode img{width:100%;height:100%;display:block;object-fit:contain}
   .contact-info{text-align:left;font-size:14.5px;color:var(--muted)}
   .contact-info .row{display:flex;align-items:center;gap:10px;padding:8px 0}
   .contact-info b{color:var(--text)}
@@ -466,7 +474,7 @@
     transition:transform .25s,box-shadow .25s,border-color .25s;
   }
   .showcase-img:hover{transform:translateY(-3px);border-color:rgba(129,140,248,.5);box-shadow:0 28px 64px rgba(0,0,0,.45)}
-  .showcase-img img{width:100%;display:block;opacity:0;transition:opacity .45s ease}
+  .showcase-img img{width:100%;height:auto;display:block;opacity:0;transition:opacity .45s ease}
   .showcase-img img.loaded{opacity:1}
   .showcase-text .num{
     display:inline-block;font-family:var(--mono);font-size:12.5px;color:var(--c2);
@@ -508,7 +516,8 @@
     .stats-grid{grid-template-columns:repeat(2,1fr);gap:28px}
     .env-grid{grid-template-columns:1fr}
     .nav-links{display:none}
-    .menu-toggle{display:grid;place-items:center}
+    .menu-toggle{display:grid;place-items:center;margin-left:0}
+    .lang-switch{margin-left:auto}
     .mobile-nav{
       display:none;position:fixed;top:62px;left:0;right:0;z-index:49;
       background:rgba(10,15,30,.97);backdrop-filter:blur(12px);
@@ -574,6 +583,15 @@
   .nav-links a:hover::after{transform:scaleX(1)}
   .nav-links a.active{color:var(--text);font-weight:600}
   .nav-links a.active::after{transform:scaleX(1)}
+  /* --- 语言切换 --- */
+  .lang-switch{
+    display:inline-flex;align-items:center;gap:6px;flex-shrink:0;margin-left:0;
+    font-size:13px;color:var(--muted);text-decoration:none;white-space:nowrap;
+    border:1px solid var(--border-strong);border-radius:999px;padding:6px 12px;line-height:1;
+    transition:color .2s,border-color .2s,background .18s;
+  }
+  .lang-switch:hover{color:var(--c1);border-color:rgba(34,211,238,.55);background:rgba(34,211,238,.08)}
+  .lang-switch .globe{font-size:13px;line-height:1}
   @keyframes navIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
   .mobile-nav.open{animation:navIn .22s ease}
 
@@ -715,7 +733,7 @@
   .to-top:hover{color:var(--c1);border-color:rgba(34,211,238,.5);box-shadow:0 12px 30px rgba(0,0,0,.45)}
 
   /* --- 可访问性 --- */
-  a:focus-visible,button:focus-visible,.cmd-tab:focus-visible{outline:2px solid var(--c1);outline-offset:3px;border-radius:10px}
+  a:focus-visible,button:focus-visible,.cmd-tab:focus-visible,.showcase-item[role="button"]:focus-visible,summary:focus-visible,.qrcode:focus-visible,.lang-switch:focus-visible,.lb [role="button"]:focus-visible{outline:2px solid var(--c1);outline-offset:3px;border-radius:10px}
   .reveal{transition:opacity .6s ease,transform .6s cubic-bezier(.22,.7,.3,1)}
 
   @media (max-width:960px){
@@ -729,12 +747,6 @@
   /* ==========================================================
      NetLink · 多设备互联（追加样式，不改动既有规则）
      ========================================================== */
-  .nl-shot-pending{
-    display:inline-block;margin-top:10px;
-    font-family:var(--mono);font-size:11.5px;color:var(--warn);
-    border:1px dashed rgba(251,191,36,.45);background:rgba(251,191,36,.05);
-    border-radius:8px;padding:5px 10px;
-  }
   .nl-shot-wrap{background:rgba(255,255,255,.02)}
   .nl-shot-wrap img{opacity:1}
 
@@ -754,43 +766,6 @@
   .tl-toggle .tl-caret{display:inline-block;margin-left:8px;transition:transform .25s}
   .tl-toggle[aria-expanded="true"] .tl-caret{transform:rotate(180deg)}
 
-  /* ==========================================================
-     核心特性 · 扑克牌堆（手持扇形：绕底部支点旋转铺成扇面，
-     悬停 / 聚焦的那张抬起转正、放大浮到最前看详情）
-     仅在脚本给 #featureGrid 加上 .js-fan 后生效；无 JS / 减弱动效 / 窄屏
-     均回退为普通网格，保证内容始终可读。
-     ========================================================== */
-  #featureGrid.js-fan{
-    display:block;position:relative;
-    height:308px;margin:12px auto 0;max-width:980px;padding-top:74px;
-  }
-  #featureGrid.js-fan .card{
-    position:absolute;left:50%;bottom:22px;
-    width:178px;min-height:240px;text-align:left;
-    transform-origin:50% 255%;
-    transform:translate(-50%,0) rotate(var(--rot,0deg));
-    z-index:var(--z,1);
-    transition:transform .4s cubic-bezier(.2,.75,.25,1),box-shadow .4s,border-color .4s;
-    box-shadow:0 12px 26px rgba(0,0,0,.34);cursor:pointer;
-  }
-  #featureGrid.js-fan .card:hover,
-  #featureGrid.js-fan .card:focus-visible{
-    transform:translate(-50%,-90px) rotate(0deg) scale(1.16);
-    z-index:999;border-color:var(--c1);
-    box-shadow:0 28px 64px rgba(0,0,0,.55);
-  }
-  #featureGrid.js-fan .card:focus{outline:none}
-  #featureGrid.js-fan .card:focus-visible{outline:2px solid var(--c1);outline-offset:4px}
-  .feat-hint{display:none;text-align:center;font-size:12.5px;color:var(--dim);margin:24px auto 0}
-  #featureGrid.js-fan + .feat-hint{display:block}
-  @media (max-width:720px){
-    /* 窄屏不做牌堆，回退成单列网格，卡片完整可读 */
-    #featureGrid.js-fan{display:grid;grid-template-columns:1fr;height:auto;max-width:none;padding-top:0;margin-top:18px}
-    #featureGrid.js-fan .card{position:static;left:auto;bottom:auto;width:auto;min-height:0;transform:none;box-shadow:none}
-    #featureGrid.js-fan .card:hover,
-    #featureGrid.js-fan .card:focus-visible{transform:none;border-color:var(--border);box-shadow:none;outline:none}
-    #featureGrid.js-fan + .feat-hint{display:none}
-  }
 
   /* ==========================================================
      使用场景 / 安全信任 / 常见问题（采纳自 index.new.html）
@@ -815,6 +790,42 @@
   .faq details[open] summary::after{content:'\2212'}
   .faq .faq-body{padding:0 18px 16px;font-size:13.5px;color:var(--muted);line-height:1.8}
   @media (max-width:720px){.scene-grid,.sec-list{grid-template-columns:1fr}}
+
+  /* ==========================================================
+     主页改版：信任徽章 / 社交徽章 / 三步上手 / 人群场景支持行 /
+     已知限制 / 生态入口 / 命令速查折叠（核心特性已回平铺网格）
+     ========================================================== */
+  .hero-trust{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0 0}
+  .badge-free{font-size:12.5px;color:var(--ok);background:rgba(52,211,153,.08);border:1px solid rgba(52,211,153,.30);border-radius:999px;padding:6px 12px}
+  .badge-cyan{font-size:12.5px;color:var(--c1);background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.32);border-radius:999px;padding:6px 12px}
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  .step{border:1px solid var(--border);background:var(--card);border-radius:16px;padding:22px 24px}
+  .step .stepnum{font-family:var(--mono);font-size:26px;color:var(--c1);margin-bottom:12px}
+  .step h3{font-size:16px;margin-bottom:8px}
+  .step p{font-size:13.5px;color:var(--muted);line-height:1.7}
+  .scene .support{margin-top:10px;font-size:12px;color:var(--dim);font-family:var(--mono);border-top:1px dashed var(--border);padding-top:10px;line-height:1.6}
+
+  .limits{margin-top:22px;border:1px solid var(--border);border-radius:12px;background:var(--card);padding:18px 22px}
+  .limits h3{font-size:14.5px;margin-bottom:10px;color:var(--text)}
+  .limits ul{list-style:none;display:flex;flex-direction:column;gap:7px;margin:0;padding:0}
+  .limits li{font-size:13px;color:var(--muted);line-height:1.7;padding-left:16px;position:relative}
+  .limits li::before{content:'·';position:absolute;left:2px;color:var(--warn);font-weight:700}
+  .limits li b{color:var(--text)}
+
+  .eco-row{display:flex;flex-wrap:wrap;gap:20px;justify-content:center;margin-top:26px}
+  .doc-link{display:inline-flex;gap:6px;align-items:center;font-size:13.5px;color:var(--c1);text-decoration:none;border-bottom:1px solid rgba(34,211,238,.4)}
+  .doc-link:hover{border-bottom-color:var(--c1)}
+
+  .cmd-fold{margin-top:6px}
+  .cmd-fold>summary{cursor:pointer;list-style:none;font-size:14.5px;font-weight:600;color:var(--text);border:1px dashed var(--border-strong);border-radius:12px;padding:15px 18px;background:var(--card);display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}
+  .cmd-fold>summary::-webkit-details-marker{display:none}
+  .cmd-fold>summary::after{content:'\25BE';color:var(--c1);font-family:var(--mono)}
+  .cmd-fold[open]>summary{margin-bottom:18px}
+  .cmd-fold[open]>summary::after{content:'\25B4'}
+  .cmd-fold[open] .cmd-tabs{opacity:1;transform:none}
+  @media (max-width:720px){
+    .steps{grid-template-columns:1fr}
+  }
 </style>
 </head>
 <body>
@@ -843,9 +854,8 @@
       <a href="#changelog">更新日志</a>
       <a href="#contact">联系</a>
     </div>
+    <a class="lang-switch" href="index.en.html" hreflang="en" lang="en" aria-label="切换到英文版" title="Switch to English"><span class="globe">🌐</span>EN</a>
     <button class="menu-toggle" id="menuToggle" aria-label="菜单" aria-expanded="false">☰</button>
-    <span class="ver-pill" data-ver></span>
-    <span class="ver-pill" style="color:var(--warn);border-color:rgba(251,191,36,.45);background:rgba(251,191,36,.08)">Pre-release</span>
   </div>
   <div class="mobile-nav" id="mobileNav">
     <a href="#screenshots">界面预览</a>
@@ -866,17 +876,16 @@
   <div class="wrap hero-grid">
     <div>
       <span class="hero-eyebrow"><span class="dot"></span>轻量级桌面自动化工具 · A/C RPA</span>
-      <h1>让重复工作，<br><span class="grad">一键自动完成</span></h1>
-      <p class="hero-sub">
-        ACRPA 是一款基于 Python + tkinter 的轻量级桌面自动化工具。以 Excel 表格为脚本、以图像识别与窗口管理为手段，
-        支持录制回放、定时任务、工作流编排与 AI 增强，让繁琐重复的操作真正「一次编写，永久省心」。
-      </p>
+      <h1>会填 Excel，<br><span class="grad">就会做自动化</span></h1>
+      <p class="hero-sub">把操作写进 Excel（或用「录制」跑一遍），剩下的交给电脑 —— 图像识别 / 窗口管理 / OCR / 浏览器自动化 / 工作流编排 / NetLink 多机互联 / 定时任务 / 本地 AI 增强，全部内置。</p>
       <div class="hero-cta">
-        <a class="btn btn-primary" href="#features">✨ 开始使用</a>
-        <a class="btn btn-ghost" href="#commands">📋 命令速查</a>
-                <div class="dl-drop" id="dlDrop">
+        <div class="dl-drop" id="dlDrop">
           <button class="btn-download" id="dlToggle" aria-haspopup="true" aria-expanded="false">⬇ 下载安装包 <span class="caret">▾</span></button>
           <div class="dl-menu" id="dlMenu">
+            <a href="https://github.com/yohoten/acrpa/releases/download/v0.1.28-beta/ACRPA-v0.1.28-beta.exe" data-download target="_blank" rel="noopener noreferrer">
+              <span class="row"><span class="gi">⬇</span> 直接下载 <span data-ver></span></span>
+              <small>ACRPA-v0.1.28-beta.exe · 便携版 · 13.4 MiB · 预发布</small>
+            </a>
             <a href="https://github.com/yohoten/acrpa/releases" target="_blank" rel="noopener noreferrer">
               <span class="row"><span class="gi">⌥</span> GitHub 仓库</span>
               <small>github.com/yohoten/acrpa</small>
@@ -887,17 +896,14 @@
             </a>
           </div>
         </div>
-        <a class="btn-download" data-download href="https://github.com/yohoten/acrpa/releases/download/v0.1.28-beta/ACRPA-v0.1.28-beta.exe" target="_blank" rel="noopener noreferrer">⬇ 从 GitHub 下载</a>
-        <a class="btn btn-ghost" href="https://gitee.com/yohoten/ACRPA/releases" target="_blank" rel="noopener noreferrer">◆ Gitee 发行版</a>
+        <a class="btn btn-ghost" href="#screenshots">▶ 看演示</a>
+        <a class="btn btn-ghost" href="#contact">💬 交流共创</a>
       </div>
-      <p style="font-size:12.5px;color:var(--dim);margin:-10px 0 22px">v0.1.28-beta（预发布）· ACRPA-v0.1.28-beta.exe · 13.4 MiB · SHA-256 473f1db3…06d54 —— Gitee 发行版附件正在补充，可先使用 GitHub 下载</p>
-      <div class="hero-tags">
-        <span class="tag">📦 Excel 脚本驱动</span>
-        <span class="tag">🖱 图像识别定位</span>
-        <span class="tag">🪟 窗口管理</span>
-        <span class="tag">🤖 AI 增强</span>
-        <span class="tag">⏱ 定时任务</span>
-        <span class="tag">🌐 浏览器自动化</span>
+      <p style="font-size:12.5px;color:var(--dim);margin:-10px 0 22px">最新版：v0.1.28-beta（预发布）· ACRPA-v0.1.28-beta.exe · 13.4 MiB · SHA-256 473f1db3…06d54</p>
+      <div class="hero-trust">
+        <span class="badge-free">✔ 完全免费 · 开源 MIT</span>
+        <span class="badge-free">✔ 单文件 · 免安装解压即用</span>
+        <span class="badge-free">✔ 一台管多台内网机器</span>
       </div>
     </div>
     <div class="mock-wrap">
@@ -905,7 +911,7 @@
       <div class="mock">
         <div class="mock-bar">
           <span class="mock-dot r"></span><span class="mock-dot y"></span><span class="mock-dot g"></span>
-          <span class="mock-title">ACRPA <span data-ver></span></span>
+          <span class="mock-title">ACRPA Desktop Automation</span>
         </div>
         <div class="mock-body">
           <div class="mock-tabs">
@@ -942,7 +948,7 @@
 <!-- ================= Stats ================= -->
 <div class="stats">
   <div class="wrap stats-grid">
-    <div class="stat"><div class="num"><span class="grad count" data-target="50">0</span></div><div class="lab">内置自动化命令</div></div>
+    <div class="stat"><div class="num"><span class="grad count" data-target="51">0</span></div><div class="lab">内置自动化命令</div></div>
     <div class="stat"><div class="num"><span class="grad count" data-target="10">0</span></div><div class="lab">即用型脚本模板</div></div>
     <div class="stat"><div class="num"><span class="grad count" data-target="4">0</span></div><div class="lab">步骤类型 · 工作流编排</div></div>
     <div class="stat"><div class="num"><span class="grad" data-ver></span></div><div class="lab"><span data-date></span> 最新版本</div></div>
@@ -950,30 +956,72 @@
 </div>
 
 <!-- ================= Scenarios ================= -->
-<section id="scenarios" style="background:linear-gradient(180deg,transparent,rgba(34,211,238,.05) 40%,rgba(34,211,238,.05) 60%,transparent)">
+<section id="scenarios" class="section-tint-cyan">
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="sec-tag">USE CASES</span>
-      <h2>这些重复劳动，本该自动完成</h2>
-      <p class="sec-desc">不用会编程。把「每天在电脑前做的机械操作」交给 ACRPA。</p>
+      <h2>谁在用 ACRPA</h2>
+      <p class="sec-desc">不用会编程。按你的角色对号入座 —— 每个场景都有内置模板、示例脚本或命令直接支撑。</p>
     </div>
     <div class="scene-grid">
       <div class="scene reveal">
-        <h3>📊 每日对账 / 数据搬运</h3>
+        <h3>🗂 办公文员 / 行政</h3>
         <div class="ba">
-          <div class="before">😮‍💨 之前：每天在网银、ERP、Excel 之间来回复制粘贴 1–2 小时，看花眼还容易填错行。</div>
-          <div class="arrowline">↓ 用 ACRPA</div>
-          <div class="after">✅ 之后：步骤写进一张 Excel（或直接「录制」跑一遍），定时自动开窗口、找按钮、填表、截图归档，人不用在场。</div>
+          <div class="after">✅ 登录、表单填写、数据采集、批量点击、定时截图归档 —— 全天的重复操作一次编好，到点自动跑。</div>
+          <div class="support">支撑：内置模板「登录流程 / 表单填写 / 数据采集 / 批量点击」</div>
         </div>
       </div>
       <div class="scene reveal">
-        <h3>🤖 不写代码也能「智能」自动化</h3>
+        <h3>💰 财务 / 网银对账</h3>
         <div class="ba">
-          <div class="before">😮‍💨 之前：传统脚本靠固定坐标，界面一改版就点错，每次都要回去找程序员改。</div>
-          <div class="arrowline">↓ 用 ACRPA</div>
-          <div class="after">✅ 之后：「AI 找图」用大白话描述元素、OCR「点击文字」按文字定位，界面小改也能自适应，失败还能 AI 分析重试。</div>
+          <div class="after">✅ 网银票据下载、发票 OCR 识别录入、对账数据在系统与 Excel 之间自动搬运，不再手动抄行。</div>
+          <div class="support">支撑：识别文字 / 等待文字 / 点击文字 命令 + 网银票据示例脚本</div>
         </div>
       </div>
+      <div class="scene reveal">
+        <h3>📊 日报与定时监控</h3>
+        <div class="ba">
+          <div class="after">✅ 定时截屏存档、日报自动生成发送、按每天 / 每周 / 固定间隔自动执行，人不在也能跑。</div>
+          <div class="support">支撑：定时任务调度 + 截屏 / 发送邮件 示例脚本</div>
+        </div>
+      </div>
+      <div class="scene reveal">
+        <h3>🖥 内网多机运维</h3>
+        <div class="ba">
+          <div class="after">✅ 一台电脑监控内网多台 ACRPA 的运行状态，批量推送脚本「推完即运行」，手机浏览器也能看进度。</div>
+          <div class="support">支撑：NetLink 多设备互联（零新增依赖）</div>
+        </div>
+      </div>
+      <div class="scene reveal">
+        <h3>🧑‍💻 开发者 / 极客</h3>
+        <div class="ba">
+          <div class="after">✅ Python 命令三级权限（sandbox / trusted / full）、插件 API、AI 生成脚本、断点 / 单步 / 变量监视调试器。</div>
+          <div class="support">支撑：Python 扩展 + 插件系统 + 内置调试器</div>
+        </div>
+      </div>
+      <div class="scene reveal">
+        <h3>🛒 电商运营 · 批量上下架</h3>
+        <div class="ba">
+          <div class="after">✅ 多平台商品信息批量录入、定时改价、库存巡检、订单状态自动同步到 Excel，把重复点击交给脚本。</div>
+          <div class="support">支撑：批量点击 / 表单填写 / Excel 读写 / 定时任务示例脚本</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= Quickstart ================= -->
+<section id="quickstart">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">HOW IT WORKS</span>
+      <h2>三步上手</h2>
+      <p class="sec-desc">从「录一遍」到「全自动」，最快 3 分钟。</p>
+    </div>
+    <div class="steps">
+      <div class="step reveal"><div class="stepnum">①</div><h3>录一遍，或写进 Excel</h3><p>用内置「录制」把操作跑一遍，自动生成脚本；或直接在 .xls 表格里一行写一条命令 —— 51 条内置命令，会填表就会写。</p></div>
+      <div class="step reveal"><div class="stepnum">②</div><h3>调参数，AI 定位</h3><p>改改窗口标题与参数即可；固定坐标不稳就换「AI 找图」用大白话描述元素，或 OCR「点击文字」按文字定位，界面小改也自适应。</p></div>
+      <div class="step reveal"><div class="stepnum">③</div><h3>运行，交给它</h3><p>立即运行、断点调试，或交给定时调度自动跑；也可以经 NetLink 把脚本批量分发到内网多台机器一起执行。</p></div>
     </div>
   </div>
 </section>
@@ -983,12 +1031,12 @@
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="sec-tag">SCREENSHOTS</span>
-      <h2>界面一览 · 五大核心界面</h2>
+      <h2>界面一览</h2>
       <p class="sec-desc">ACRPA 实际运行界面展示，点击图片可放大查看。</p>
     </div>
     <div class="showcase">
       <div class="showcase-item reveal" data-full="img/image1.png" data-cap="脚本编辑">
-        <div class="showcase-img"><img src="img/image1.png" loading="lazy" alt="脚本编辑界面"></div>
+        <div class="showcase-img"><img src="img/image1.png" loading="lazy" decoding="async" alt="脚本编辑界面" width="1396" height="919"></div>
         <div class="showcase-text">
           <span class="num">01 · 脚本编辑</span>
           <h3>Excel 表格即脚本</h3>
@@ -997,7 +1045,7 @@
         </div>
       </div>
       <div class="showcase-item reveal rev" data-full="img/image2.png" data-cap="执行编辑">
-        <div class="showcase-img"><img src="img/image2.png" loading="lazy" alt="执行编辑界面"></div>
+        <div class="showcase-img"><img src="img/image2.png" loading="lazy" decoding="async" alt="执行编辑界面" width="1390" height="918"></div>
         <div class="showcase-text">
           <span class="num">02 · 执行编辑</span>
           <h3>运行控制与调试中枢</h3>
@@ -1006,7 +1054,7 @@
         </div>
       </div>
       <div class="showcase-item reveal" data-full="img/image3.png" data-cap="工作流">
-        <div class="showcase-img"><img src="img/image3.png" loading="lazy" alt="工作流界面"></div>
+        <div class="showcase-img"><img src="img/image3.png" loading="lazy" decoding="async" alt="工作流界面" width="1399" height="921"></div>
         <div class="showcase-text">
           <span class="num">03 · 工作流</span>
           <h3>多脚本串联编排</h3>
@@ -1015,7 +1063,7 @@
         </div>
       </div>
       <div class="showcase-item reveal rev" data-full="img/image4.png" data-cap="设置导航">
-        <div class="showcase-img"><img src="img/image4.png" loading="lazy" alt="设置导航界面"></div>
+        <div class="showcase-img"><img src="img/image4.png" loading="lazy" decoding="async" alt="设置导航界面" width="1797" height="822"></div>
         <div class="showcase-text">
           <span class="num">04 · 设置导航</span>
           <h3>分类设置卡片</h3>
@@ -1024,7 +1072,7 @@
         </div>
       </div>
       <div class="showcase-item reveal" data-full="img/image5.png" data-cap="暗黑模式">
-        <div class="showcase-img"><img src="img/image5.png" loading="lazy" alt="暗黑模式界面"></div>
+        <div class="showcase-img"><img src="img/image5.png" loading="lazy" decoding="async" alt="暗黑模式界面" width="1901" height="740"></div>
         <div class="showcase-text">
           <span class="num">05 · 暗黑模式</span>
           <h3>亮暗主题一键切换</h3>
@@ -1061,17 +1109,22 @@
       <div class="card reveal"><div class="ico">🌐</div><h3>浏览器自动化</h3><p>内置 Playwright 网页操作：打开网页、点击、输入、等待元素、整页 / 元素截图，桌面流程与网页流程可串在同一条脚本里。</p></div>
       <div class="card reveal"><div class="ico">🛡️</div><h3>安全守护</h3><p>失控保护（鼠标徒手甩动即中止）、最长执行时间限制、出错即停与失败重试策略，无人值守也能安全收尾。</p></div>
     </div>
-    <div class="feat-hint" id="featHint"></div>
   </div>
 </section>
 
 <!-- ================= NetLink · 多设备互联 ================= -->
-<section id="netlink" style="background:linear-gradient(180deg,transparent,rgba(34,211,238,.045) 30%,rgba(34,211,238,.045) 70%,transparent)">
+<section id="netlink" class="section-tint-cyan">
   <div class="wrap">
     <div class="sec-head reveal">
-      <span class="sec-tag">NETLINK · LAN</span>
-      <h2>多设备局域网互联 · NetLink</h2>
-      <p class="sec-desc">内网多机进度一目了然，远程运行 / 暂停 / 停止，批量下发脚本，手机浏览器也能看 —— 完全基于 Python 标准库，零新增依赖。</p>
+      <span class="sec-tag">NETLINK · MULTI-DEVICE</span>
+      <h2>一台管多台内网机器 · NetLink</h2>
+      <p class="sec-desc">内网多机进度一目了然，远程运行 / 暂停 / 停止，批量下发脚本，手机浏览器也能看 —— 完全基于 Python 标准库，<b>零新增依赖</b>，同类轻量工具少有的多机控制面。</p>
+    </div>
+    <div class="reveal" style="display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-bottom:28px">
+      <span class="badge-cyan">⚡ 零新增依赖（纯标准库）</span>
+      <span class="badge-cyan">📱 手机浏览器看板</span>
+      <span class="badge-cyan">📦 批量推送脚本 · 推完即运行</span>
+      <span class="badge-cyan">🔐 配对码 + 权限分级 + 审计日志</span>
     </div>
     <div class="cards">
       <div class="card reveal"><div class="ico">🖥️</div><h3>实时多机监控</h3><p>设备列表 + 运行状态 + 当前脚本 + 进度（第几行 / 第几循环 / 已运行时长）+ 实时日志流 + 定时任务状态，选中即看，无需手工订阅。</p></div>
@@ -1082,39 +1135,36 @@
       <div class="card reveal"><div class="ico">🛡️</div><h3>TLS 可选加密</h3><p>基于 stdlib <b>ssl</b> 的自签证书加密通道，对端证书 sha256 指纹 <b>TOFU 固定</b>，指纹不符直接拒连；默认关闭，按需启用。</p></div>
     </div>
 
-    <!-- NetLink 截图区（占位，待补充真实截图） -->
+    <!-- NetLink 截图区 -->
     <div class="showcase" style="margin-top:48px">
-      <div class="showcase-item reveal">
+      <div class="showcase-item reveal" data-full="img/netlink-devices.png" data-cap="多设备互联 · 设备列表与实时进度">
         <div class="showcase-img nl-shot-wrap">
-          <img src="img/netlink-devices.png" loading="lazy" alt="多设备互联 · 设备列表与实时进度">
+          <img src="img/netlink-devices.png" loading="lazy" decoding="async" alt="多设备互联 · 设备列表与实时进度" width="1520" height="735">
         </div>
         <div class="showcase-text">
           <span class="num">NL 01 · 设备互联</span>
           <h3>多机进度与日志一览</h3>
           <p>设备列表、运行状态、当前脚本、第几行 / 第几循环 / 已运行时长与实时日志流集中在一个窗口，无需切换机器即可掌握全局。</p>
-          <div class="hint">🖼 真实界面截图 · img/netlink-devices.png</div>
         </div>
       </div>
-      <div class="showcase-item reveal rev">
+      <div class="showcase-item reveal rev" data-full="img/netlink-pairing.png" data-cap="多设备互联 · 配对认证与首次操控确认">
         <div class="showcase-img nl-shot-wrap">
-          <img src="img/netlink-pairing.png" loading="lazy" alt="多设备互联 · 配对认证与首次操控确认">
+          <img src="img/netlink-pairing.png" loading="lazy" decoding="async" alt="多设备互联 · 配对认证与首次操控确认" width="1587" height="814">
         </div>
         <div class="showcase-text">
           <span class="num">NL 02 · 配对认证</span>
           <h3>PIN + 挑战应答 + 凭据库</h3>
           <p>被控端生成 6 位配对码，控制端输入即完成配对；密钥永不写入 config.json，配对后免 PIN 重连，首次操控还需被控端弹框确认。</p>
-          <div class="hint">🖼 真实界面截图 · img/netlink-pairing.png</div>
         </div>
       </div>
-      <div class="showcase-item reveal">
+      <div class="showcase-item reveal" data-full="img/netlink-webui.png" data-cap="多设备互联 · 浏览器只读面板">
         <div class="showcase-img nl-shot-wrap">
-          <img src="img/netlink-webui.png" loading="lazy" alt="多设备互联 · 浏览器只读面板">
+          <img src="img/netlink-webui.png" loading="lazy" decoding="async" alt="多设备互联 · 浏览器只读面板" width="1453" height="835">
         </div>
         <div class="showcase-text">
           <span class="num">NL 03 · 浏览器面板</span>
           <h3>手机浏览器也能看</h3>
           <p>内置只读网页面板（默认端口 19712，默认关闭），手机 / 平板扫码或输入地址即可查看多机进度与日志，面板不含任何写操作。</p>
-          <div class="hint">🖼 真实界面截图 · img/netlink-webui.png</div>
         </div>
       </div>
     </div>
@@ -1122,13 +1172,15 @@
 </section>
 
 <!-- ================= Commands ================= -->
-<section id="commands" style="background:linear-gradient(180deg,transparent,rgba(129,140,248,.045) 30%,rgba(129,140,248,.045) 70%,transparent)">
+<section id="commands" class="section-tint-indigo">
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="sec-tag">COMMAND SYSTEM</span>
-      <h2>命令系统 · 50 条内置命令</h2>
-      <p class="sec-desc">按分类查看全部内置命令，每条命令在 Excel 表格中即可直接使用，点击命令或示例可复制。</p>
+      <h2>命令系统 · 51 条内置命令</h2>
+      <p class="sec-desc">51 条内置命令，一行一条写进 Excel 即可直接使用，点击命令或示例可复制；完整说明见 <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a></p>
     </div>
+    <details class="cmd-fold">
+      <summary>展开「命令速查表」· 7 大类 · 51 条内置命令<span style="color:var(--dim);font-weight:400;font-size:13px">完整文档见 <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a></span></summary>
     <div class="cmd-tabs reveal">
       <div class="cmd-tab on" data-tab="t1">🎯 基础操作</div>
       <div class="cmd-tab" data-tab="t2">🪟 窗口管理</div>
@@ -1141,7 +1193,7 @@
 
     <div class="cmd-panel on" id="t1">
       <table class="cmd-table">
-        <tr><th style="width:150px">命令</th><th style="width:46%">说明</th><th>示例</th></tr>
+        <tr><th class="col-cmd">命令</th><th class="col-desc">说明</th><th>示例</th></tr>
         <tr><td><code>找图</code></td><td>全屏查找图片，找到后将鼠标移动到该位置（悬停）</td><td class="ex">找图, <b>hello</b>, 0.9</td></tr>
         <tr><td><code>点图</code></td><td>查找图片并点击，支持精度控制</td><td class="ex">点图, <b>submit</b>, 0.9</td></tr>
         <tr><td><code>区域找图 / 区域点图</code></td><td>限定扫描区域，速度更快，支持灰度匹配加速</td><td class="ex">区域找图, icon, 0.8, 100,100,500,500</td></tr>
@@ -1160,7 +1212,7 @@
 
     <div class="cmd-panel" id="t2">
       <table class="cmd-table">
-        <tr><th style="width:150px">命令</th><th style="width:46%">说明</th><th>示例</th></tr>
+        <tr><th class="col-cmd">命令</th><th class="col-desc">说明</th><th>示例</th></tr>
         <tr><td><code>激活窗口</code></td><td>激活指定标题的窗口，支持模糊匹配</td><td class="ex">激活窗口, 记事本</td></tr>
         <tr><td><code>关闭窗口</code></td><td>关闭指定窗口</td><td class="ex">关闭窗口, 无标题 - 记事本</td></tr>
         <tr><td><code>最小化 / 最大化窗口</code></td><td>窗口最小化到任务栏 / 最大化显示</td><td class="ex">最小化窗口, 计算器</td></tr>
@@ -1172,7 +1224,7 @@
 
     <div class="cmd-panel" id="t3">
       <table class="cmd-table">
-        <tr><th style="width:150px">命令</th><th style="width:46%">说明</th><th>示例</th></tr>
+        <tr><th class="col-cmd">命令</th><th class="col-desc">说明</th><th>示例</th></tr>
         <tr><td><code>设置变量</code></td><td>设置变量值，支持数字自动转换，全程用 ${var} 引用</td><td class="ex">设置变量, count, 100</td></tr>
         <tr><td><code>读取剪贴板</code></td><td>读取剪贴板内容存入变量</td><td class="ex">读取剪贴板, clip_text</td></tr>
         <tr><td><code>字符串处理</code></td><td>字符串截取 / 替换操作</td><td class="ex">字符串处理, text, 截取, 0:5, result</td></tr>
@@ -1185,7 +1237,7 @@
 
     <div class="cmd-panel" id="t4">
       <table class="cmd-table">
-        <tr><th style="width:150px">命令</th><th style="width:46%">说明</th><th>示例</th></tr>
+        <tr><th class="col-cmd">命令</th><th class="col-desc">说明</th><th>示例</th></tr>
         <tr><td><code>识别文字</code></td><td>OCR 识别屏幕指定区域文字并存入变量</td><td class="ex">识别文字, 0, 0, 800, 300, ocr_text</td></tr>
         <tr><td><code>等待文字</code></td><td>等待指定文字出现 / 消失，可限定搜索区域</td><td class="ex">等待文字, 提交成功, 10, 存在</td></tr>
         <tr><td><code>点击文字</code></td><td>找到文字位置并点击，支持置信度与搜索区域</td><td class="ex">点击文字, 立即登录, 0.8</td></tr>
@@ -1194,7 +1246,7 @@
 
     <div class="cmd-panel" id="t5">
       <table class="cmd-table">
-        <tr><th style="width:150px">命令</th><th style="width:46%">说明</th><th>示例</th></tr>
+        <tr><th class="col-cmd">命令</th><th class="col-desc">说明</th><th>示例</th></tr>
         <tr><td><code>AI找图</code></td><td>用自然语言描述界面元素，AI 分析截图并定位（点击 / 悬停 / 仅查找）</td><td class="ex">AI找图, 登录按钮, 0.8, click</td></tr>
         <tr><td><code>AI识别界面</code></td><td>AI 分析当前屏幕所有 UI 元素，结果存入 ${前缀}_elements 变量</td><td class="ex">AI识别界面, ui</td></tr>
         <tr><td><code>AI优化建议</code></td><td>AI 分析历史执行数据，给出脚本优化建议</td><td class="ex">AI优化建议, log</td></tr>
@@ -1204,7 +1256,7 @@
 
     <div class="cmd-panel" id="t6">
       <table class="cmd-table">
-        <tr><th style="width:150px">命令</th><th style="width:46%">说明</th><th>示例</th></tr>
+        <tr><th class="col-cmd">命令</th><th class="col-desc">说明</th><th>示例</th></tr>
         <tr><td><code>运行工作流</code></td><td>调用工作流文件（.json / .yaml）执行多脚本编排</td><td class="ex">运行工作流, workflow.json</td></tr>
         <tr><td><code>工作流变量</code></td><td>设置工作流级共享变量，供多个子步骤使用</td><td class="ex">工作流变量, var_name, value</td></tr>
       </table>
@@ -1212,7 +1264,7 @@
 
     <div class="cmd-panel" id="t7">
       <table class="cmd-table">
-        <tr><th style="width:150px">命令</th><th style="width:46%">说明</th><th>示例</th></tr>
+        <tr><th class="col-cmd">命令</th><th class="col-desc">说明</th><th>示例</th></tr>
         <tr><td><code>打开网页</code></td><td>用内置浏览器打开网址，适用于登录后取数、网页填表等流程</td><td class="ex">打开网页, https://example.com</td></tr>
         <tr><td><code>浏览器点击</code></td><td>按 CSS 选择器或可见文字点击网页元素</td><td class="ex">浏览器点击, #login-btn</td></tr>
         <tr><td><code>浏览器输入</code></td><td>向指定输入框填入文本（选择器定位）</td><td class="ex">浏览器输入, #username, admin</td></tr>
@@ -1221,6 +1273,7 @@
       </table>
       <p class="cmd-note">浏览器命令基于 <code>Playwright</code> 实现，按需安装（约 155 MB，不随主程序打包）；未安装时命令会提示安装方法。桌面流程与网页流程可在同一条脚本中串行编排。</p>
     </div>
+    </details>
   </div>
 </section>
 
@@ -1266,7 +1319,7 @@
 </section>
 
 <!-- ================= AI ================= -->
-<section id="ai" style="background:linear-gradient(180deg,transparent,rgba(232,121,249,.05) 40%,rgba(232,121,249,.05) 60%,transparent)">
+<section id="ai" class="section-tint-fuchsia">
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="sec-tag">AI ENHANCED</span>
@@ -1351,6 +1404,7 @@
           <span class="pill">Playwright</span>
         </div>
         <p style="margin-top:16px;font-size:13px;color:var(--dim)">打包为单文件 exe，双击即用；无 OpenCV 时自动降级为 Pillow 匹配，稳而不崩。</p>
+        <p style="margin-top:12px"><a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">查看完整文档 / README →</a></p>
       </div>
       <div class="env-card reveal">
         <h3>⚙️ 关键配置（config.json）</h3>
@@ -1375,7 +1429,7 @@
     <div class="sec-head reveal">
       <span class="sec-tag">CHANGELOG</span>
       <h2>更新历程</h2>
-      <p class="sec-desc">持续迭代，近期聚焦更新机制、工作流编排、AI 增强与稳定性。</p>
+      <p class="sec-desc">持续迭代，近期聚焦更新机制、工作流编排、AI 增强与稳定性；完整历史见 <a class="doc-link" href="https://github.com/yohoten/acrpa/releases" target="_blank" rel="noopener">GitHub Releases →</a></p>
     </div>
     <div class="timeline is-collapsed" id="timeline">
       <div class="tl-item reveal"><div class="tl-ver" data-ver></div><div class="tl-date" data-date></div><p>以 v0.1.25 为基线重建，修复 v0.1.26 的不稳定接线：<code>_update_pending</code> 未定义导致 <code>_periodic</code> 每 100ms 抛 <code>NameError</code>、状态栏与执行进度刷新链路中断且更新提示置位失败；<code>show_update_dialog</code> 未导入导致点击状态栏更新入口失效。完整保留 v0.1.26 的优点：更新机制重构（多源降级 / 语义化版本比较 / sha256 校验 / 便携版一键重启自更新 / 打包版版本号来源修复）、engine 命令失败语义与工作流错误传播、发布工具链与构建资源纳管。</p></div>
@@ -1409,11 +1463,21 @@
       <div class="sec-item reveal"><b>📦 免安装便携</b>｜单文件 exe 解压即用，不写系统、不装运行时，卸载即删目录。</div>
     </div>
     <div class="sec-caution reveal">⚠️ 首次运行 Windows 可能提示「未知发布者 / SmartScreen」，因未做付费代码签名所致，属正常现象 —— 点「更多信息 → 仍要运行」，或将安装目录加入杀软白名单即可。</div>
+    <div class="limits reveal">
+      <h3>已知限制（诚实告知）</h3>
+      <ul>
+        <li>当前 <span data-ver></span> 为<b>预发布（beta）</b>版本，建议先在测试环境验证后再投入生产使用。</li>
+        <li>exe 未做付费代码签名，首次运行可能触发 SmartScreen / 杀软拦截（处理方式见上方提示）。</li>
+        <li>脚本仅支持 <b>.xls</b> 格式（暂不支持 .xlsx）；识图素材需为 PNG，路径 / 文件名请避免中文。</li>
+        <li>NetLink 面向内网（LAN）设计，跨机真机验收仍在进行中，Web 面板默认关闭。</li>
+        <li>AI 需自备 API Key（支持 DeepSeek / 通义千问 / OpenAI / Ollama 本地等 OpenAI 兼容端点）。</li>
+      </ul>
+    </div>
   </div>
 </section>
 
 <!-- ================= FAQ ================= -->
-<section id="faq" style="background:linear-gradient(180deg,transparent,rgba(129,140,248,.05) 40%,rgba(129,140,248,.05) 60%,transparent)">
+<section id="faq" class="section-tint-indigo">
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="sec-tag">FAQ</span>
@@ -1422,7 +1486,8 @@
     </div>
     <div class="faq reveal">
       <details><summary>不装 Python 能用吗？</summary><div class="faq-body">能。下载「便携版 exe」双击即用，无需安装 Python；只有想改源码时才需要 Python 3.7+。</div></details>
-      <details><summary>支持哪些系统？</summary><div class="faq-body">Windows 桌面系统，提供 x64 便携压缩包（及安装版）。</div></details>
+      <details><summary>支持哪些系统？</summary><div class="faq-body">仅支持 Windows（x64）桌面系统，提供便携版与安装包；暂不支持 macOS / Linux。</div></details>
+      <details><summary>脚本是什么格式？</summary><div class="faq-body">Excel 的 <b>.xls</b> 表格（暂不支持 .xlsx）：一行一条命令，A 列写命令名、后续列写参数；也内置 10 个模板和「录制」功能可自动生成。识图素材需为 PNG，路径与文件名请避免中文。</div></details>
       <details><summary>真的免费？能商用吗？</summary><div class="faq-body">完全免费，MIT 开源协议，个人与企业均可自由使用、修改与商用；无功能或时长限制，无广告、无内购。</div></details>
       <details><summary>杀毒软件 / SmartScreen 报毒怎么办？</summary><div class="faq-body">因未做付费代码签名，首次运行可能被拦截。可点「更多信息 → 仍要运行」或把目录加入白名单；也欢迎从源码自行构建校验。</div></details>
       <details><summary>AI 功能要额外付费吗？</summary><div class="faq-body">ACRPA 本身免费。AI 用你自己的模型 Key（DeepSeek / 通义千问 / OpenAI / Anthropic / 本地 Ollama 等），费用由对应服务商按量计；不用 AI 则完全离线、零成本。</div></details>
@@ -1440,11 +1505,20 @@
       <p class="sub">有问题、有想法、想参与共建？欢迎联系作者</p>
       <div class="contact-flex">
         <div class="qrcode"><img src="data:image/png;base64,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V/q+weX5y3QGVjGdnKbR3cC9jXdxPTrEC9dfJFb86bZbAry6oo2H2vZyLTy8cqb5SiCbJlbFysPtd5fid6tswanYkW76oRmx2IrLKltxKDZssrXUwkW4rbG5IQICdtmKJEql46zEAZSdr5j2LwiFSiqHbMNWnGNhrjf8Y1GQcCmO4rHt2GRbaWZWyVI8nhWn6igVzEuChFNxYhGXlxcs69ljmCY5Pc/r8XcXRRKlslhcMwo1aYqk3lTJWTj2Yi+dxcZEmGZZY7lfJnkjzyIFZZjmLdsumJjk9XzxFwuk4litxIAVuIlC1pEqKgiCsOIcF0NkrVg3VxhTeFEuZh/l9HyJ5LotwP8t/+/Kf/+m53+x/DfA/8Xy3wD/F8v/AX0jAjLBb82zAAABBWVYSWZNTQAqAAAACAAFAQAAAwAAAAEDeAAAAQEAAwAAAAEDdAAAATEAAgAAACAAAABKh2kABAAAAAEAAABqARIABAAAAAEAAAAAAAAAAEFuZHJvaWQgUEQyMzU5Ql9BXzE2LjIuMTEuMC5XMTAAAASQAwACAAAAFAAAAKCSkQACAAAABDAwMgCQEQACAAAABwAAALSSCAAEAAAAAQAAAAAAAAAAMjAyNjowNToxMiAxNDo0NzoyMwArMDg6MDAAAAMBAAADAAAAAQN4AAABMQACAAAAIAAAAOUBAQADAAAAAQN0AAAAAAAAQW5kcm9pZCBQRDIzNTlCX0FfMTYuMi4xMS4wLlcxMABbbArZAAAAJXRFWHRkYXRlOmNyZWF0ZQAyMDI2LTA1LTEyVDA2OjUyOjU0KzAwOjAwKQnWPQAAACV0RVh0ZGF0ZTptb2RpZnkAMjAyNi0wNS0xMlQwNjo1Mjo1NCswMDowMFhUboEAAAAodEVYdGRhdGU6dGltZXN0YW1wADIwMjYtMDUtMTJUMDY6NTM6MDYrMDA6MDA//DstAAAAKXRFWHRleGlmOkRhdGVUaW1lT3JpZ2luYWwAMjAyNjowNToxMiAxNDo0NzoyM37PFhgAAAATdEVYdGV4aWY6RXhpZk9mZnNldAAxMDZ0L+2+AAAAFHRFWHRleGlmOkltYWdlTGVuZ3RoADg4NL38XJsAAAATdEVYdGV4aWY6SW1hZ2VXaWR0aAA4ODhnNgA9AAAAEnRFWHRleGlmOkxpZ2h0U291cmNlADB4BWtIAAAAHnRFWHRleGlmOk9mZnNldFRpbWVPcmlnaW5hbAArMDg6MDDAtrZqAAAALXRFWHRleGlmOlNvZnR3YXJlAEFuZHJvaWQgUEQyMzU5Ql9BXzE2LjIuMTEuMC5XMTCyyRmlAAAAG3RFWHRleGlmOlN1YlNlY1RpbWVPcmlnaW5hbAAwMDJV0H2qAAAAHnRFWHRpY2M6Y29weXJpZ2h0AEdvb2dsZSBJbmMuIDIwMTasCzM4AAAAM3RFWHRpY2M6ZGVzY3JpcHRpb24ARGlzcGxheSBQMyBHYW11dCB3aXRoIHNSR0IgVHJhbnNmZXInN/p6AAAAAElFTkSuQmCC" alt="微信二维码" width="88" height="88" decoding="async"></div>
+        <div class="qrcode"><img src="res/qq-group.jpg" alt="QQ 交流群二维码" width="1024" height="968" decoding="async"></div>
         <div class="contact-info">
           <div class="row">📧 邮箱：<b><code>yoho12138@aliyun.com</code></b></div>
           <div class="row">🤝 扫码添加微信，交流自动化经验</div>
+          <div class="row">🐧 QQ 交流群：<b><code>682075338</code></b></div>
           <div class="row">⭐ 欢迎提出建议、报告 Bug、参与共建</div>
         </div>
+      </div>
+      <div class="eco-row reveal">
+        <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">📖 使用文档 / README</a>
+        <a class="doc-link" href="https://github.com/yohoten/acrpa/releases" target="_blank" rel="noopener">⬇ 全部版本下载</a>
+        <a class="doc-link" href="#templates">🏪 模板库</a>
+        <a class="doc-link" href="#changelog">📜 更新日志</a>
+        <a class="doc-link" href="mailto:yoho12138@aliyun.com">📮 反馈建议</a>
       </div>
     </div>
   </div>
@@ -1452,16 +1526,15 @@
 
 <footer>
   <div class="wrap">
-    ACRPA · A/C RPA 自动化工作流工具 &nbsp;|&nbsp; <span data-ver></span>（<span data-date></span>）&nbsp;|&nbsp; 基于 Python + tkinter + PyAutoGUI 构建
-  </div>
+    ACRPA · A/C RPA Desktop Automation &nbsp;|&nbsp; © copyright 2026 by yohoten</div>
 </footer>
 
 <!-- Lightbox -->
-<div class="lb" id="lightbox">
-  <span class="lb-close" id="lbClose">✕</span>
-  <span class="lb-nav lb-prev" id="lbPrev">‹</span>
-  <img id="lbImg" src="" alt="放大预览">
-  <span class="lb-nav lb-next" id="lbNext">›</span>
+<div class="lb" id="lightbox" role="dialog" aria-modal="true" aria-label="界面截图大图">
+  <span class="lb-close" id="lbClose" tabindex="0" role="button" aria-label="关闭大图">✕</span>
+  <span class="lb-nav lb-prev" id="lbPrev" tabindex="0" role="button" aria-label="上一张">‹</span>
+  <img id="lbImg" src="" alt="界面截图大图">
+  <span class="lb-nav lb-next" id="lbNext" tabindex="0" role="button" aria-label="下一张">›</span>
   <div class="lb-cap" id="lbCap"></div>
 </div>
 
@@ -1495,37 +1568,62 @@
   window.addEventListener('resize', revealOnScroll);
   revealOnScroll();
 
-  // Lightbox for screenshots
+  // Lightbox for screenshots (keyboard accessible)
   (function(){
     var lb = document.getElementById('lightbox');
     var lbImg = document.getElementById('lbImg');
     var lbCap = document.getElementById('lbCap');
+    var lbClose = document.getElementById('lbClose');
+    var lbPrev = document.getElementById('lbPrev');
+    var lbNext = document.getElementById('lbNext');
     var shots = Array.prototype.slice.call(document.querySelectorAll('[data-full]'));
-    var cur = 0;
+    var cur = 0, lastFocus = null;
+    lbImg.setAttribute('tabindex','-1');
+    function caption(el){
+      var n = el.querySelector('.shot-num');
+      return el.dataset.cap || (n ? 'ACRPA 界面截图 ' + n.textContent : 'ACRPA 界面预览');
+    }
     function show(i){
       if(!shots.length) return;
+      lastFocus = document.activeElement;
       cur = (i + shots.length) % shots.length;
       var el = shots[cur];
       lbImg.src = el.dataset.full;
-      var n = el.querySelector('.shot-num');
-      lbCap.textContent = el.dataset.cap || (n ? 'ACRPA 界面截图 ' + n.textContent : 'ACRPA 界面预览');
+      lbImg.alt = caption(el);
+      lbCap.textContent = lbImg.alt;
       lb.classList.add('on');
       document.body.style.overflow = 'hidden';
+      setTimeout(function(){ lbImg.focus(); }, 0);
     }
     function hide(){
       lb.classList.remove('on');
       document.body.style.overflow = '';
+      if(lastFocus && lastFocus.focus) lastFocus.focus();
+    }
+    function onClickKey(el, cb){
+      el.addEventListener('keydown', function(e){
+        if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); cb(); }
+      });
     }
     shots.forEach(function(el, i){
+      el.setAttribute('role','button');
+      el.setAttribute('tabindex','0');
+      el.setAttribute('aria-label','查看大图：' + caption(el));
       el.addEventListener('click', function(){ show(i); });
+      el.addEventListener('keydown', function(e){
+        if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); show(i); }
+      });
     });
-    document.getElementById('lbClose').addEventListener('click', hide);
-    document.getElementById('lbPrev').addEventListener('click', function(e){ e.stopPropagation(); show(cur-1); });
-    document.getElementById('lbNext').addEventListener('click', function(e){ e.stopPropagation(); show(cur+1); });
+    lbClose.addEventListener('click', hide);
+    onClickKey(lbClose, hide);
+    lbPrev.addEventListener('click', function(e){ e.stopPropagation(); show(cur-1); });
+    onClickKey(lbPrev, function(){ show(cur-1); });
+    lbNext.addEventListener('click', function(e){ e.stopPropagation(); show(cur+1); });
+    onClickKey(lbNext, function(){ show(cur+1); });
     lb.addEventListener('click', function(e){ if(e.target === lb) hide(); });
     document.addEventListener('keydown', function(e){
       if(!lb.classList.contains('on')) return;
-      if(e.key === 'Escape') hide();
+      if(e.key === 'Escape'){ e.preventDefault(); hide(); }
       if(e.key === 'ArrowLeft') show(cur-1);
       if(e.key === 'ArrowRight') show(cur+1);
     });
@@ -1610,10 +1708,13 @@
     });
   })();
 
-  // Screenshot fade-in after load
+  // Screenshot fade-in after load (with load-failure fallback)
   document.querySelectorAll('.showcase-img img').forEach(function(im){
     if(im.complete && im.naturalWidth > 0){ im.classList.add('loaded'); }
-    else { im.addEventListener('load', function(){ im.classList.add('loaded'); }); }
+    else {
+      im.addEventListener('load', function(){ im.classList.add('loaded'); });
+      im.addEventListener('error', function(){ im.classList.add('loaded'); });
+    }
   });
 
   // Animated stat counters
@@ -1803,28 +1904,21 @@
     collapse: '收起更新日志'
   });
 
-  // —— 核心特性 · 扑克牌堆（手持扇形） ——
+</script>
+
+<script>
+  /* 语言切换：切换时保留当前锚点位置 */
   (function(){
-    var grid = document.getElementById('featureGrid');
-    if(!grid) return;
-    // 尊重「减弱动效」偏好：不铺牌堆，保留普通网格
-    if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    var cards = Array.prototype.slice.call(grid.querySelectorAll(':scope > .card'));
-    var n = cards.length;
-    if(!n) return;
-    var center = (n - 1) / 2;
-    var step = 4.2;   // 每张旋转步进（度），决定扇面张开幅度
-    cards.forEach(function(card, i){
-      card.style.setProperty('--rot', ((i - center) * step).toFixed(2) + 'deg');
-      card.style.setProperty('--z', i + 1);
-      card.setAttribute('tabindex', '0');
-      var h3 = card.querySelector('h3');
-      card.setAttribute('aria-label', '核心特性：' + (h3 ? h3.textContent.trim() : ''));
+    var a = document.querySelector('.lang-switch');
+    if(!a) return;
+    a.addEventListener('click', function(){
+      var h = window.location.hash;
+      if(h && h.length > 1){
+        a.setAttribute('href', a.getAttribute('href').split('#')[0] + h);
+      }
     });
-    grid.classList.add('js-fan');       // 加上后折叠样式生效；无 JS / 窄屏 / 减弱动效自动回退网格
-    var hint = document.getElementById('featHint');
-    if(hint) hint.textContent = '将鼠标移到卡片上（或点击 / Tab 聚焦）查看该项 · 共 ' + n + ' 项';
   })();
 </script>
+
 </body>
 </html>

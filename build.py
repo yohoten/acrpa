@@ -29,6 +29,9 @@ _PROJECT_MODULES = [
     "state", "scriptdata", "templates", "utils", "commands",
     "engine", "recorder", "scheduler", "updater",
     "marketplace", "ocr_backend", "dd_backend", "safe_eval",
+    "netlink_window",
+    # Python 扩展 (自定义代码沙箱 + AcrpaAPI)
+    "acrpa_api", "py_sandbox",
 ]
 
 # ── 核心依赖 hidden imports (仅导入真正用到的子模块) ──
@@ -48,6 +51,20 @@ HIDDEN_IMPORTS = _PROJECT_MODULES + [
     "queue", "json", "datetime", "ctypes", "shutil", "re",
     "threading", "ast", "asyncio",
     "csv", "configparser",
+    # Python 扩展 (full 权限子进程 + 异常回溯)
+    "subprocess", "traceback",
+    # NetLink 多设备互联
+    "netlink", "netlink.protocol", "netlink.connection", "netlink.bus",
+    "netlink.discovery", "netlink.server", "netlink.client",
+    "netlink.agent", "netlink.node", "netlink.security",
+    "netlink.control", "netlink.audit", "netlink.transfer", "netlink.screen",
+    "netlink.webui", "netlink.tls",
+    "netlink_window",
+    # netlink 用到的 stdlib (headless 收集保险)
+    "socket", "select", "ssl", "_ssl", "hmac", "secrets", "winreg", "uuid",
+    # NetLink 网页面板 (Phase4-2: http.server + 内联 HTML)
+    "http.server", "socketserver", "html", "html.entities",
+    "urllib.parse", "mimetypes", "email", "email.parser", "email.message",
 ]
 
 # ── 附加数据文件 (随 exe 解压) ──
@@ -150,8 +167,7 @@ EXCLUDE_MODULES = [
     "lib2to3", "lib2to3.*",
     "multiprocessing", "concurrent.futures.process",
     # asyncio 由 ocr_backend.py (winrt OCR) 使用，保留
-    "html", "html.*",
-    "http.server",
+    # html / http.server 已解禁: NetLink 网页面板 (netlink.webui) 需要
     "xml", "xml.*",
     "xmlrpc", "xmlrpc.*",
     # configparser 由 requests→http.cookiejar 使用, AI 功能需要, 不能排除

@@ -19,6 +19,8 @@ version：v0.1.27
 - **变量系统**：支持复杂数据处理和数学运算
 - **AI 增强**：视觉定位、智能重试、异常检测、自然语言调试
 - **调试器**：断点/条件断点（标记旁显示表达式）/单步/变量监视/调用栈
+- **多设备互联（NetLink）**：内网多机实时监控 + 远程操控 + 脚本分发，零新增依赖（纯标准库）
+- **六项体验优化**：Mini Bar 三形态重做、暗黑模式显示修复、自定义 AI 提供商、Python 代码扩展、界面缩放（`ui_scale`）、互联按钮瘦身
 
 ![](https://i.imgs.ovh/2026/09/13/873139bf6c702c6d85d59f9a359136a6.png)
 
@@ -110,6 +112,8 @@ Excel 文件（`.xls`），第1行为标题，第3行开始为命令。
 | AI识别界面         | ui                             | AI列出所有UI元素存入变量         |
 | AI优化建议         | log                            | AI分析执行数据给出优化建议       |
 | [AI] 调试          | 点击[AI]调试按钮               | 自然语言提问,AI分析日志回答      |
+| **代码扩展** |                                |                                  |
+| Python             | result = 1 + 1, sandbox         | 执行 Python 代码（AST 预检 + 沙箱），权限可选 [★]NEW |
 
 **变量引用语法**：使用 `${variable_name}` 引用变量
 
@@ -133,6 +137,24 @@ Excel 文件（`.xls`），第1行为标题，第3行开始为命令。
   "mini_bar_enabled": true,   // 启用Mini Bar折叠模式
    ...
 }
+```
+
+### 本轮新增配置项（10 项）
+
+| 键 | 默认值 | 含义 |
+| --- | --- | --- |
+| `mini_bar_height` | `30` | Mini Bar 高度 24-48（步进 4） |
+| `mini_bar_pos` | `""` | Mini Bar 最近位置 `"x+y"` |
+| `ai_provider` | `""` | AI 提供商 id（空 = 自动推断） |
+| `ai_base_url` | `""` | AI BaseURL（空 = 用预设） |
+| `ai_model` | `""` | 覆盖模型名（空 = 用 `api_model`） |
+| `ai_custom_providers` | `[]` | 自定义提供商 `[{id,name,base_url,models}]` |
+| `python_default_perm` | `"sandbox"` | Python 命令默认权限 sandbox/trusted/full |
+| `python_full_enabled` | `False` | 是否允许 full 权限（默认关闭） |
+| `python_timeout` | `30` | Python 代码超时（秒） |
+| `ui_scale` | `1.0` | 界面缩放 0.8-1.5 |
+
+```json
 ```
 
 ## ❓ 常见问题
@@ -163,6 +185,8 @@ Excel 文件（`.xls`），第1行为标题，第3行开始为命令。
 
 - [使用说明](使用说明.txt)
 - [脚本模板](template/脚本模板.xls)
+- [多设备局域网互联（NetLink）总览与部署指南](docs/netlink-总览与部署指南.md)
+- [Python 代码扩展使用说明](docs/python扩展使用说明.md)
 
 ### 🆕 DD 驱动增强
 
@@ -187,6 +211,208 @@ ACRPA v0.1.22 支持 **DD 驱动**（可选）作为高性能输入后端：
 写入,你好世界,0.05,simulate     # 模拟按键（支持中文）
 写入,Test@#$%,0.02,auto         # 自动选择最佳方式
 ```
+
+## 🌐 多设备局域网互联（NetLink）
+
+> **已开发完成（随源码提供，尚未单独发布安装包）**。定位：内网多机协同 —— 一台机器即可监控多台机器的运行状态，远程运行/暂停/停止，批量下发脚本，手机浏览器也能查看进度。
+
+完全基于 Python 标准库实现，**零新增依赖**，PyInstaller 打包体积几乎不变。
+
+### 功能矩阵（三档权限）
+
+| 能力 | 说明 | 最低权限 |
+| --- | --- | --- |
+| 多机实时监控 | 设备列表 + 运行状态 + 当前脚本 + 进度（第几行 / 第几循环 / 已运行时长）+ 实时日志流 + 定时任务状态 | 仅观察 |
+| 零配置发现 | UDP 广播自动发现同网段设备；VLAN / 多网卡环境可退回「手动填 IP:端口」静态对端 | 仅观察 |
+| 配对认证 | 被控端生成 6 位配对码（默认有效期 600s）；控制端输入即可配对；PIN 不上网，走 `PBKDF2-HMAC-SHA256` 派生密钥 + `nonce/HMAC` 挑战应答；连续 5 次错误锁定连接；密钥存 Windows 凭据库（不写 `config.json`）；配对后免 PIN 重连 | — |
+| 远程操控 | 运行 / 暂停 / 恢复 / 停止；**被控端首次操控弹确认框**（可「允许并记住此设备」）；**自动区分脚本与会话**（脚本走 `pause_event`、工作流走 `WorkflowEngine._pause_event`，已分叉）；指令串行化 + 全控制端广播回执 | 允许操控 |
+| 审计日志 | 所有远程指令与截图请求写入 `logs/netlink_audit_YYYYMMDD.log`（谁 / 何时 / 什么 / 结果），可按天数自动清理 | 允许操控 |
+| 脚本分发 | 把本地 `.xls/.xlsx/.json`（单文件上限 32 MB）推送到被控端 `<脚本目录>/received/`；64 KB 分块 + 逐块序号 + 结束帧 sha256 与大小双重校验；失败不留残留文件；支持**多设备批量下发**；可「推完即运行」 | 允许接收脚本 |
+| 远端脚本管理 | 查看被控端脚本清单（区分「脚本目录 / 已接收」）并直接远程运行 | 允许接收脚本 |
+| 远程截图 | 抓取被控端屏幕缩略图（默认 640 宽、质量 60；上限 1280 宽 / 质量 80），1 秒节流，图像只在内存编码传输不落盘 | 允许操控 |
+| 浏览器只读面板 | 内置 `http.server` 单页面板（默认端口 19712，**默认关闭**），手机 / 平板浏览器可直接看多机进度与日志；令牌鉴权（查询串 / Cookie / `Authorization: Bearer` 三形式）；**面板零写操作** | — |
+| TLS 可选加密 | 基于 stdlib `ssl` 的自签证书加密通道（需自备 PEM），对端证书 `sha256` 指纹 **TOFU 固定**，指纹不符直接拒连；**默认关闭** | — |
+
+三档权限：**仅观察** / **允许操控** / **允许接收脚本**。
+
+### 设计要点
+
+- **对等架构**：不设独立服务器，每个 ACRPA 实例内嵌一个节点，同时具备 Server（被连）与 Client（主动连）角色，同一条 TCP 连接全双工对等。
+- **零新增依赖**：纯标准库（`socket/threading/ssl/hashlib/hmac/http.server` 等），PyInstaller 体积几乎不变。
+- **不侵入执行引擎**：`engine.py / workflow.py / scheduler.py` 三文件**零改动**；通过既有的 `state` 状态量（`quit2`/`pause_event`/`exec_state`）与 `root.after` 回到主线程执行。
+- **崩溃隔离**：所有网络线程为 daemon，网络层异常不影响本地自动化；日志镜像通过 `utils` 的 sink 机制，总线未启动时零开销。
+
+### 快速上手
+
+1. 两台同网段 Windows 机器各装 ACRPA，分别在 **设置 → 网络互联** 里勾选「启用设备互联」，填写不同的设备名（端口保持默认）。
+2. 被控端把权限设为「允许操控」（需要传脚本则设为「允许接收脚本」）。
+3. 在设备互联窗口（主界面 **🌐 互联** 按钮）里，被控端点「配对码」查看 6 位码；控制端点「🔗 配对」输入该码。
+4. 配对成功后设备表会自动出现对方并实时刷新进度与日志（无需任何手工订阅）。
+5. 选中设备即可使用 `▶远程运行 / ⏸暂停 / ⏹停止 / 推脚本 / 📂远端脚本 / 📷截图`；被控端首次会弹确认框。
+
+### 配置项（22 项 `netlink_*`）
+
+| 键 | 默认值 | 含义 |
+| --- | --- | --- |
+| `netlink_enabled` | `False` | 启用设备互联 |
+| `netlink_port` | `19710` | TCP 监听端口 |
+| `netlink_device_name` | `""` | 本机显示名（空 = 主机名） |
+| `netlink_perm_level` | `"observe"` | 本机默认授予权限 observe/control/script |
+| `netlink_peers` | `[]` | 已配对设备白名单（不含密钥） |
+| `netlink_static_peers` | `[]` | 手动静态对端（发现失败兜底） |
+| `netlink_autodiscover` | `True` | UDP 自动发现 |
+| `netlink_discovery_port` | `19711` | UDP 发现端口 |
+| `netlink_ui_window` | `""` | 设备互联窗口几何记忆 |
+| `netlink_require_auth` | `True` | 启用配对认证 |
+| `netlink_pin_ttl` | `600` | 配对码有效期（秒） |
+| `netlink_confirm_control` | `True` | 首次远程操控需被控端弹窗确认 |
+| `netlink_confirmed_peers` | `[]` | 已确认过操控的设备指纹 |
+| `netlink_script_dir` | `""` | 允许远程运行的脚本目录（空 = 程序目录/scripts） |
+| `netlink_audit_days` | `0` | 审计日志保留天数（0 = 跟随 log_retention_days） |
+| `netlink_web_enabled` | `False` | 启用浏览器只读面板 |
+| `netlink_web_port` | `19712` | 面板监听端口 |
+| `netlink_web_bind` | `"0.0.0.0"` | 面板监听地址（127.0.0.1 = 仅本机） |
+| `netlink_tls` | `False` | 启用 TLS 加密 |
+| `netlink_tls_cert` | `""` | TLS 证书 PEM 路径 |
+| `netlink_tls_key` | `""` | TLS 私钥 PEM 路径 |
+| `netlink_tls_pins` | `[]` | 已固定的对端证书指纹（TOFU） |
+
+### 端口与防火墙
+
+| 用途 | 协议/端口 | 默认 |
+| --- | --- | --- |
+| 节点控制通道 | TCP 19710 | 可在设置改 |
+| UDP 广播发现 | UDP 19711 | 可在设置改 |
+| 浏览器只读面板 | TCP 19712 | **默认关闭**，可在设置改 |
+
+Windows 防火墙：首次监听会弹授权框，选「专用网络」；也可手动放行。
+
+### 文档索引
+
+| 文档 | 内容 |
+| --- | --- |
+| [`docs/netlink-总览与部署指南.md`](docs/netlink-总览与部署指南.md) | **推荐入口**：架构图、模块职责、配置全表、权限矩阵、端口表、两机部署步骤、测试矩阵、已知限制 |
+| [`docs/netlink-配对与权限说明.md`](docs/netlink-配对与权限说明.md) | 三档权限语义、首次配对流程、免配对重连、撤销位置、安全边界、故障排查 |
+| [`docs/netlink-远程操控使用说明.md`](docs/netlink-远程操控使用说明.md) | 操控按钮行为与前置条件、首次确认弹窗、回执三态、审计、限制 |
+| [`docs/netlink-脚本分发使用说明.md`](docs/netlink-脚本分发使用说明.md) | 推送/批量下发、落盘位置、完整性校验、远端脚本列表、故障排查 |
+| [`docs/netlink-远程截图说明.md`](docs/netlink-远程截图说明.md) | 权限要求、节流与分辨率/质量上限、隐私合规提示、故障排查 |
+| [`docs/netlink-网页只读面板说明.md`](docs/netlink-网页只读面板说明.md) | 启用步骤、访问链接与令牌、只读边界、安全提示、故障排查 |
+| [`docs/netlink-TLS加密说明.md`](docs/netlink-TLS加密说明.md) | 为何需要、OpenSSL 自签证书命令、TOFU 指纹固定、限制、故障排查 |
+| [`docs/netlink-phase1-验收清单.md`](docs/netlink-phase1-验收清单.md) | 只读监控的双机人工验收步骤 |
+| [`docs/netlink-phase2-验收清单.md`](docs/netlink-phase2-验收清单.md) | 配对/权限/远程操控的双机人工验收步骤 |
+| [`docs/python扩展使用说明.md`](docs/python扩展使用说明.md) | Python 命令三级权限、AST 预检、三层超时、AcrpaAPI、审计日志与示例 |
+
+### 自动化测试
+
+运行方式：`python tools/_test_netlink_xxx.py`（这 16 个脚本当前全部通过）。
+
+<details>
+<summary>展开 16 个测试脚本清单</summary>
+
+| 脚本 | 覆盖内容 |
+| --- | --- |
+| `tools/_smoke_netlink.py` | 帧 / 粘包 / 回环 / 总线 / 日志 sink |
+| `tools/_test_netlink_2node.py` | 双节点只读链路 |
+| `tools/_test_netlink_e2e.py` | Phase 1 · 10 项 |
+| `tools/_test_netlink_auth.py` | 认证 12 项 |
+| `tools/_test_netlink_control.py` | 操控 15 项 |
+| `tools/_test_netlink_phase2_e2e.py` | Phase 2 · 10 项 |
+| `tools/_test_netlink_transfer.py` | 分发 15 项 |
+| `tools/_test_netlink_phase3_e2e.py` | Phase 3 · 10 项 |
+| `tools/_test_netlink_screenshot.py` | 截图 10 项 |
+| `tools/_test_netlink_webui.py` | 面板 13 项 |
+| `tools/_test_netlink_tls.py` | TLS 10 项 |
+| `tools/_smoke_netlink_window.py` | 设备互联窗口烟测 |
+| `tools/_smoke_netlink_pairing_ui.py` | 配对 UI 烟测 |
+| `tools/_smoke_netlink_control_ui.py` | 操控 UI 烟测 |
+| `tools/_smoke_netlink_transfer_ui.py` | 分发 UI 烟测 |
+| `tools/_verify_netlink_package.py` | 打包完整性（交叉验证 17/17 个 netlink 模块） |
+
+</details>
+
+> 说明：其中 `_test_netlink_tls.py` 依赖本机具备 `cryptography` 或 `openssl` 才能跑真实握手，缺失时相关 4 条断言记 `[WARN]`。
+
+### 优化自测脚本（5 项）
+
+本轮体验优化配套的独立自测脚本，运行方式同为 `python tools/_xxx.py`：
+
+| 脚本 | 覆盖内容 |
+| --- | --- |
+| `tools/_smoke_mini_bar.py` | Mini Bar 三形态 / 尺寸 / 透明度 / 位置记忆与动画烟测 |
+| `tools/_smoke_dark_mode.py` | 主题安全取值护栏、Toast 主题化、insertbackground 覆盖检查 |
+| `tools/_test_ai_provider.py` | 自定义 AI 提供商 / 模型 / BaseURL 与凭据库存取、两段式连通性探测 |
+| `tools/_test_python_sandbox.py` | Python 命令 AST 预检 / 三级权限 / 三层超时 / 审计日志 |
+| `tools/_smoke_ui_scale.py` | 命名字体角色与 ui_scale 7 档即时生效 |
+
+### 已知限制
+
+1. **真机跨机验收未执行**：自动化测试为同机双/三节点等价覆盖；跨机防火墙 / VLAN / 单向路由需按两份验收清单人工执行。
+2. **TLS 真实握手未验证**：开发机无 `cryptography`/`openssl`，无法生成测试 PEM，相关断言为 `[WARN]`（未假通过）；需在具备 OpenSSL 的机器复跑。
+3. **冻结 exe 存活检查为 `[WARN]`**：开发机缺 `pyautogui/xlrd/pyperclip` 运行期依赖，`run.py` 依赖预检先行退出（与互联功能无关）。
+4. **UDP 广播发现在 VLAN / 多网卡环境不可靠**，需用静态对端兜底。
+5. **浏览器面板未加密**（明文 HTTP + 令牌），仅建议可信内网启用；`netlink_tls` 默认关闭。
+6. **多控制端 / 3 台以上拓扑未压测**（串行化与广播已覆盖 2 控制端场景）。
+7. **TLS 为自签 + TOFU**：不做证书链验证；更换证书后需清空已固定指纹。
+
+## 🎛️ 六项体验优化
+
+> 本轮围绕「更顺手的小窗、更清晰的暗色、可换 AI、可写 Python、可缩放字体」集中优化，六项改动均已落地并配套独立自测脚本。
+
+### ① Mini Bar 全面重做
+
+- **三形态**：**图标态**（空闲 30 秒自动收起为边长 = 高度 + 6 的正方形，仅保留状态点与展开按钮）、**紧凑态**（默认，宽度 = 配置宽度）、**运行态**（运行或录制时自动展开 +130px 容纳进度条，高度 +6）。
+- **可配置**：高度 24–48（步进 4）、宽度 380–900、透明度 30–100。
+- **动画与缓存**：宽度**平滑过渡动画**；**差分缓存**（变更签名含主题色，切换明暗主题即时刷新）。
+- **位置记忆**：拖动位置写入配置、重启恢复，并做屏幕范围夹取防越界。
+- **Canvas 状态点**：空闲灰 / 运行绿 / 暂停呼吸（800ms 周期）/ 脚本失败告警闪烁 3 次 / 录制红。
+- **缺陷修复**：「设置 → 系统」卡的 Mini Bar 宽度 / 高度 / 透明度此前**从未真正生效**（`_apply_map` 缺少 `system` 注册、变量未被追踪、`ACRPA.py` 读的是字面量），现已**统一收口**为 `_apply_system_settings()` —— 一处修复同时解决宽度 / 高度 / 透明度与开机自启 / 托盘等整卡设置。
+
+### ② 暗黑模式显示修复
+
+- 新增主题安全取值护栏 `utils.themed(key, fallback)`，杜绝「主题色被硬编码绕过」。
+- Toast 通知四类（info / success / warning / error）全部改为**跟随主题**，warning 按主题取深色前景（对比度约 7:1）。
+- 清理硬编码占位符色 `#9CA3AF`。
+- **19 处输入框 / 文本域补齐 `insertbackground`**，深色模式冷启动时光标不再看不见。
+
+### ③ 主界面互联按钮瘦身
+
+- 标题栏 `🌐 互联` → `🌐`（字号 11，与设置按钮视觉对齐），hover 提示与点击行为保留。
+
+### ④ 自定义 AI 提供商 / 模型 / API Key
+
+- 内置 6 个预设：**DeepSeek / 通义千问（阿里云兼容模式）/ OpenAI / Ollama（本地）/ 自定义 / Anthropic**。
+- 可自定义 BaseURL 与模型名，可**新增 / 删除自定义提供商**。
+- 密钥存入 **Windows 凭据库**（`ACRPA/ai_key/<provider>`），**绝不写入 `config.json`**。
+- `[测试连接]` **两段式探测**：先 `GET /models`，遇 `404 / 405` 自动回退最小 `chat/completions`；Anthropic 明确提示「不使用 OpenAI 兼容接口，暂不支持」而非发出必然失败的请求。
+- **向后兼容**：既有 `api_key` + `api_model` 配置继续可用。
+
+### ⑤ Python 代码扩展（新增 `Python` 命令）
+
+- **三级权限**：`sandbox`（默认）/ `trusted` / `full`（**默认关闭**）。
+- **AST 静态预检**：`import` / `open` / `eval` / `exec` / `__import__` / `getattr` / dunder 属性 / `with` / `lambda` / `class` / `global` / `nonlocal` 按权限分级拒绝，失败原因以稳定英文短句给出。
+- **三层超时**：`sandbox` / `trusted` 用行级 trace 中断（并保证 trace 被清理，不影响后续执行）；`full` 用**独立子进程 + 超时强杀**（未引入 `multiprocessing`）。
+- **审计日志** `logs/acrpa_py_YYYYMMDD.log`：只记录 `code_sha1` / 长度 / 首行摘要 / 权限 / 耗时 / 结果，**不写代码全文**。
+- **`AcrpaAPI`**：`log` / `click` / `type_text` / `key_press` / `find_image` / `wait` / `sleep` / `get_var` / `set_var` / `run_command` 等。
+- **插件 handler 签名自适应**：旧的两参 `h(row, script_dir)` 插件零改动可用。
+- **已知限制（务必留意）**：脚本级钩子**仅在单脚本场景生效**；工作流经 `workflow.py` 直接调用 handler，不经过 `execute_script`，故工作流下钩子不触发。
+
+**Excel 用法示例**：命令列（A）填 `Python`，参数列（B）填代码，第二参数列（C）可空或填权限级别（`sandbox` / `trusted` / `full`）。
+
+```
+命令(A) = Python
+参数1(B) = result = 1 + 1
+参数2(C) = sandbox          # 可空；空则用 python_default_perm（默认 sandbox）
+
+# 被拒示例：sandbox 权限下 import 会被 AST 预检拒绝
+参数1(B) = import os
+```
+
+### ⑥ 显示大小与字体缩放
+
+- 10 个**命名字体角色** + 全局 `ui_scale` **7 档**（0.8 / 0.9 / 1.0 / 1.1 / 1.2 / 1.3 / 1.5）。
+- **60 处硬编码字体**统一改为命名字体，切换档位**即时生效**（主界面 / 设置 / 设备互联 / 对话框同步）。
+- **DPI 感知**（Per-Monitor v2），150% / 200% 系统缩放下不再被位图拉伸模糊。
+- **入口**：设置 → 系统 → **界面缩放**（说明「部分尺寸需重启完全生效」）。
 
 ## ⇪ 软件更新
 
@@ -273,3 +499,15 @@ python tools/make_release.py --no-zip --purge-cdn main   # 5. 清 CDN 缓存 (�
 - v0.1.15 (2026-06-05): 集成DD驱动作为可选后端，实现"写入"命令双模式输入（direct/simulate），支持自动回退到PyAutoGUI
 - v0.1.14 (2026-05-24): 优化图色识别和OCR功能说明
 - v0.1.13 (2026-05-19): 优化 AI 生成器和模板，提升脚本规范和win命令
+
+---
+
+## 📷 截图状态
+
+「多设备局域网互联（NetLink）」功能的界面截图**已补齐**，`index.html` 中对应 `<img>` 已指向真实文件：
+
+| 文件名 | 画面 | 状态 |
+| --- | --- | --- |
+| `img/netlink-devices.png` | 设备互联窗口：设备列表 + 运行状态 + 当前脚本 + 进度（第几行 / 第几循环 / 已运行时长）+ 实时日志流 | 已补齐 |
+| `img/netlink-pairing.png` | 配对流程：被控端「配对码」弹窗（6 位码与有效期）+ 控制端「🔗 配对」输入框 + 被控端首次操控确认框 | 已补齐 |
+| `img/netlink-webui.png` | 手机 / 平板浏览器只读面板：多机进度卡片 + 日志流（含令牌访问地址） | 已补齐 |

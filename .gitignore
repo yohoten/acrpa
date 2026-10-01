@@ -67,5 +67,9 @@ Thumbs.db
 *.spec
 !ACRPA.spec
 
+# PyInstaller 构建产物
+dist/
+build/
+
 # UPX (如果使用)
 upx.exe

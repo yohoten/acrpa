@@ -5,6 +5,7 @@ P1 Enhancement: Structured logging with LogLevel, daily rotation, and retention 
 """
 import queue, time, os, glob
 import tkinter
+import tkinter.font
 import state
 
 # ── LogLevel constants ( ) ──
@@ -58,15 +59,17 @@ def show_toast(root, message, msg_type="info", duration=2000):
         msg_type: "info", "success", "warning", or "error"
         duration: Auto-dismiss time in ms (0 = no auto-dismiss)
     """
-    # Color mapping for different message types
-    colors = {
-        "info": ("#2563EB", "ℹ"),      # Blue
-        "success": ("#10B981", "✓"),   # Green
-        "warning": ("#F59E0B", "⚠"),   # Yellow
-        "error": ("#EF4444", "✗")      # Red
-    }
-    
-    bg_color, icon = colors.get(msg_type, colors["info"])
+    # 主题化配色：C 会被 apply_theme() 重绑，故函数内实时取色，禁止模块级写死
+    icon_map = {"info": "ℹ", "success": "✓", "warning": "⚠", "error": "✗"}
+    bg_map = {"info": C["ac"], "success": C["sc"], "warning": C["wn"], "error": C["dg"]}
+    # warning 的琥珀色在深浅两套配色下都偏亮，白字对比不足，改用深色文字；
+    # info/success/error 三色饱和度足够，白字在两种主题下均清晰可读。
+    if msg_type == "warning":
+        fg_color = C["bg"] if state.DARK_MODE else C["fgt"]
+    else:
+        fg_color = "white"
+    bg_color = bg_map.get(msg_type, bg_map["info"])
+    icon = icon_map.get(msg_type, icon_map["info"])
     
     # Create toast window
     toast = tkinter.Toplevel(root)
@@ -90,7 +93,7 @@ def show_toast(root, message, msg_type="info", duration=2000):
     label_text = "{}  {}".format(icon, message)
     label = tkinter.Label(content, text=label_text,
         font=FONT_BUTTON,
-        fg="white", bg=bg_color)
+        fg=fg_color, bg=bg_color)
     label.pack()
     
     # Auto-dismiss
@@ -125,12 +128,169 @@ def _colors():
 
 C = _colors()
 
-# Font constants - compact sizes
-FONT_TITLE = ("Microsoft YaHei UI",10,"bold")
-FONT_BODY  = ("Microsoft YaHei UI",9)
-FONT_LOG   = ("Consolas",9)
-FONT_SMALL = ("Microsoft YaHei UI",8)
-FONT_BUTTON= ("Microsoft YaHei UI",9,"bold")
+
+def themed(key, fallback=None):
+    """安全读取当前主题色：C 会被 apply_theme() 重新绑定，故每次实时取。
+    取不到时回退到 fallback（再取不到回退到 C.get('fgt')）。"""
+    try:
+        return C[key]
+    except Exception:
+        if fallback is not None:
+            return fallback
+        try:
+            return C.get("fgt")
+        except Exception:
+            return None
+
+
+# ── Font roles (Tk 命名字体) ──
+# 注意: FONT_* 现为「命名字体角色名」字符串, 不再是 (family,size,weight) 元组。
+# 字族/字号/字重由下方 _FONT_SPECS + ui_scale 统一落到 Tk 命名字体上, 任何
+# widget 只需引用角色名; 切换缩放档位时仅 fontconfigure 名字, 不必重建 widget。
+FONT_TITLE  = "ACRPA_TITLE"
+FONT_BODY   = "ACRPA_BODY"
+FONT_LOG    = "ACRPA_LOG"
+FONT_SMALL  = "ACRPA_SMALL"
+FONT_BUTTON = "ACRPA_BUTTON"
+FONT_SMALL_BOLD = "ACRPA_SMALL_BOLD"
+FONT_TINY       = "ACRPA_TINY"
+FONT_ICON       = "ACRPA_ICON"
+FONT_ICON_MD    = "ACRPA_ICON_MD"
+FONT_ICON_LG    = "ACRPA_ICON_LG"
+
+# 字体角色表: 角色名 -> (字族, 基准 pt, 字重) —— 全项目唯一字体定义源
+_FONT_SPECS = {
+    "ACRPA_TITLE":      ("Microsoft YaHei UI", 10, "bold"),
+    "ACRPA_BODY":       ("Microsoft YaHei UI", 9,  "normal"),
+    "ACRPA_SMALL":      ("Microsoft YaHei UI", 8,  "normal"),
+    "ACRPA_SMALL_BOLD": ("Microsoft YaHei UI", 8,  "bold"),
+    "ACRPA_TINY":       ("Microsoft YaHei UI", 7,  "normal"),
+    "ACRPA_BUTTON":     ("Microsoft YaHei UI", 9,  "bold"),
+    "ACRPA_LOG":        ("Consolas",           9,  "normal"),
+    "ACRPA_ICON":       ("Segoe UI Symbol",    9,  "normal"),
+    "ACRPA_ICON_MD":    ("Segoe UI Symbol",   11,  "normal"),
+    "ACRPA_ICON_LG":    ("Segoe UI Symbol",   12,  "normal"),
+}
+
+# ── UI 缩放 (pt 制) ──
+UI_SCALE_DEFAULT = 1.0
+UI_SCALE_MIN     = 0.8
+UI_SCALE_MAX     = 1.5
+
+_font_root = None   # init_fonts() 记录的 root, 供 dpi_factor()/set_ui_scale() 复用
+# 命名字体句柄强引用: tkinter.font.Font 的 __del__ 会 font delete 自己创建的字体,
+# 若不保留引用, 刚建好的命名字体立刻被回收删除 (实测 TclError: does not already exist)。
+_font_cache = {}
+
+
+def dpi_factor():
+    """屏幕 DPI 相对 96 的倍率; 需 root 存在 (winfo_fpixels("1i")/96)。
+
+    无 root 或取值失败 -> 1.0。DPI 档位 (100%/150%/200% 的写死因子) 暂不固化:
+    需在实机三档实测后再决定是否切换到像素制, 此处只提供可配置骨架。
+    """
+    r = _font_root
+    if r is None:
+        return 1.0
+    try:
+        return max(0.5, min(4.0, float(r.winfo_fpixels("1i")) / 96.0))
+    except Exception:
+        return 1.0
+
+
+def current_ui_scale():
+    """读取 state.UI_SCALE 并 clamp 到 [UI_SCALE_MIN, UI_SCALE_MAX]; 失败返回 1.0。"""
+    try:
+        v = float(getattr(state, "UI_SCALE", UI_SCALE_DEFAULT))
+    except Exception:
+        return UI_SCALE_DEFAULT
+    return max(UI_SCALE_MIN, min(UI_SCALE_MAX, v))
+
+
+def fit_pt(size, scale=None):
+    """基准 pt -> 生效 pt: max(6, round(size * ui_scale))。不含 dpi_factor。
+
+    Tk 命名字体在该平台下由 `tk scaling` 处理 pt->px, 故此处再乘 dpi_factor
+    会双重放大; 实机 DPI 实测前一律不乘。
+    """
+    try:
+        s = current_ui_scale() if scale is None else float(scale)
+    except Exception:
+        s = UI_SCALE_DEFAULT
+    try:
+        return max(6, int(round(float(size) * s)))
+    except Exception:
+        return 6
+
+
+def scaled(value):
+    """设计像素 -> 实际像素: round(value * dpi_factor() * ui_scale), 下限 1。"""
+    try:
+        return max(1, int(round(float(value) * dpi_factor() * current_ui_scale())))
+    except Exception:
+        return 1
+
+
+def font(role):
+    """返回可传给 Tk 的命名字体字符串; 未知角色回退 FONT_BODY。"""
+    return role if role in _FONT_SPECS else FONT_BODY
+
+
+def init_fonts(root):
+    """创建/刷新全部命名字体。必须在 Tk() 之后、创建任何 widget 之前调用。
+
+    幂等: 已存在的命名字体只 configure(family/size/weight), 不重复创建。
+    root 为 None 或 Tk 不可用 -> 静默返回, 保证无 GUI 环境 import utils 不受影响。
+    """
+    global _font_root
+    if root is None:
+        return
+    _font_root = root
+    scale = current_ui_scale()
+    for role, (family, size, weight) in _FONT_SPECS.items():
+        pt = fit_pt(size, scale)
+        f = None
+        try:
+            # 已存在: 仅改属性 (幂等; nametofont 自带 delete_font=False)
+            f = tkinter.font.nametofont(role, root=root)
+        except Exception:
+            # 首次: 创建命名; 必须保留强引用并关闭自动删除, 否则初始化即被回收
+            try:
+                f = tkinter.font.Font(root=root, name=role, exists=False,
+                                      family=family, size=pt, weight=weight)
+                f.delete_font = False
+                _font_cache[role] = f
+                continue
+            except Exception:
+                continue
+        try:
+            f.configure(family=family, size=pt, weight=weight)
+        except Exception:
+            pass
+
+
+def set_ui_scale(scale):
+    """clamp 到 [0.8,1.5] -> 写 state.UI_SCALE -> 立即 fontconfigure 全部角色。
+
+    返回实际生效值。root 尚未建立时只改 state (下次 init_fonts 生效)。
+    """
+    try:
+        v = float(scale)
+    except Exception:
+        v = UI_SCALE_DEFAULT
+    v = max(UI_SCALE_MIN, min(UI_SCALE_MAX, v))
+    try:
+        state.UI_SCALE = v
+    except Exception:
+        pass
+    if _font_root is not None:
+        for role, (family, size, weight) in _FONT_SPECS.items():
+            try:
+                tkinter.font.nametofont(role, root=_font_root).configure(
+                    size=fit_pt(size, v))
+            except Exception:
+                pass
+    return v
 
 PAD = {"padx":12,"pady":6}
 PI  = {"padx":10,"pady":5}
@@ -258,7 +418,7 @@ def apply_theme(root_widget, style):
                     background=C["bgc"], foreground=C["fgb"],
                     fieldbackground=C["bgc"], borderwidth=0)
     style.configure("Treeview.Heading",
-                    font=(*FONT_SMALL, "bold"),
+                    font=FONT_SMALL_BOLD,
                     background=C["ac"], foreground="white", relief="flat", borderwidth=0)
     style.map("Treeview",
               background=[("selected", C["acl"])],
@@ -273,6 +433,31 @@ def apply_theme(root_widget, style):
 
 # === Logging bridge ===
 _tlog = None
+
+# === Log sink mirror (NetLink) ===
+_log_sinks = []   # [(sink_fn,), ...] 由 netlink 注册
+
+
+def register_log_sink(fn):
+    """注册日志镜像回调 fn(msg, tag, level, caller_file, caller_func)。重复注册只登记一次。"""
+    if fn not in _log_sinks:
+        _log_sinks.append(fn)
+
+
+def unregister_log_sink(fn):
+    global _log_sinks
+    _log_sinks = [f for f in _log_sinks if f is not fn]
+
+
+def _broadcast_log(msg, tag, level, caller_file="", caller_func=""):
+    """把一条日志镜像给所有 sink。总线未启动时零开销；任何 sink 抛错静默忽略。"""
+    if not _log_sinks:
+        return
+    for fn in list(_log_sinks):
+        try:
+            fn(msg, tag, level, caller_file, caller_func)
+        except Exception:
+            pass
 
 def set_tlog(instance):
     global _tlog; _tlog = instance
@@ -363,6 +548,7 @@ class ThreadSafeLog:
             caller_func: Source function name (auto-captured by log1)
             level: Log level int (LOG_DEBUG=0, LOG_INFO=1, LOG_WARNING=2, LOG_ERROR=3)
         """
+        _broadcast_log(msg, tag, level, caller_file, caller_func)
         self._q.put((msg, tag, caller_file, caller_func, level))
 
     def flush(self, root_widget):

@@ -37,14 +37,27 @@ def _screenshot_to_base64(region=None):
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 
+def _active_model():
+    """当前生效的模型名（跟随提供商/模型自定义配置，异常时回退 state.API_MODEL）。"""
+    try:
+        from ai_client import resolve_model
+        return resolve_model()
+    except Exception:
+        return state.API_MODEL
+
+
 def _get_ai_client():
-    """延迟创建 AI 客户端（检测 API 配置）"""
-    if not state.API_KEY:
+    """延迟创建 AI 客户端（检测 API 配置，支持自定义提供商/模型）。"""
+    try:
+        from ai_client import create_client_active, APIError, resolve_api_key
+    except Exception as e:
+        log1("AI 客户端不可用: {}".format(e), "error")
+        return None
+    if not resolve_api_key():
         log1("AI 增强功能需要配置 API Key", "warning")
         return None
     try:
-        from ai_client import create_client, APIError
-        return create_client(state.API_KEY, state.API_MODEL)
+        return create_client_active()
     except Exception as e:
         log1("创建 AI 客户端失败: {}".format(e), "error")
         return None
@@ -57,7 +70,7 @@ def _call_ai(messages, temperature=0.3, max_tokens=2000, timeout=90):
         return None
     try:
         resp = client.chat_completions(
-            model=state.API_MODEL,
+            model=_active_model(),
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
@@ -71,8 +84,13 @@ def _call_ai(messages, temperature=0.3, max_tokens=2000, timeout=90):
 
 def _call_vision(prompt, screenshot_base64=None, temperature=0.3, max_tokens=2000):
     """调用视觉模型（带图片的 AI 请求）"""
-    if not state.API_KEY:
-        return None
+    try:
+        from ai_client import resolve_api_key
+        if not resolve_api_key():
+            return None
+    except Exception:
+        if not state.API_KEY:
+            return None
 
     messages = []
     if screenshot_base64:
@@ -97,7 +115,7 @@ def _call_vision(prompt, screenshot_base64=None, temperature=0.3, max_tokens=200
         if not client:
             return None
         resp = client.chat_completions(
-            model=state.API_MODEL,
+            model=_active_model(),
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,

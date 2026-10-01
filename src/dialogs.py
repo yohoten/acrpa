@@ -18,7 +18,8 @@ from tkinter import ttk, filedialog, messagebox
 
 import state
 from engine import engine
-from utils import _btn, _darken, log1, show_toast, attach_tooltip
+from utils import (_btn, _darken, log1, show_toast, attach_tooltip, themed,
+                   FONT_LOG, FONT_TINY)
 
 # ── 依赖注入上下文 (由 ACRPA.py 在启动时调用 init_ctx 填充) ──
 root = None              # 主窗口
@@ -227,7 +228,7 @@ def show_help_dialog():
         txt_frame.grid(row=1, column=0, sticky="nsew", padx=6, pady=(0,6))
         txt_frame.columnconfigure(0, weight=1); txt_frame.rowconfigure(0, weight=1)
 
-        help_txt = tkinter.Text(txt_frame, font=("Microsoft YaHei UI", 9), wrap="word",
+        help_txt = tkinter.Text(txt_frame, font=FONT_BODY, wrap="word",
             bg=C["logbg"], fg=C["logfg"], relief="flat", bd=0, padx=10, pady=8,
             selectbackground=C["acl"], selectforeground=C["fgt"], cursor="arrow")
         help_txt.grid(row=0, column=0, sticky="nsew")
@@ -237,10 +238,10 @@ def show_help_dialog():
         help_scroll.grid(row=0, column=1, sticky="ns")
         help_txt.config(yscrollcommand=help_scroll.set); help_scroll.config(command=help_txt.yview)
 
-        help_txt.tag_configure("h", font=("Microsoft YaHei UI", 9, "bold"), foreground=C["fgt"])
-        help_txt.tag_configure("cmd", font=("Microsoft YaHei UI", 9, "bold"), foreground=C["ac"])
+        help_txt.tag_configure("h", font=FONT_BUTTON, foreground=C["fgt"])
+        help_txt.tag_configure("cmd", font=FONT_BUTTON, foreground=C["ac"])
         help_txt.tag_configure("desc", foreground=C["fgb"])
-        help_txt.tag_configure("param", foreground=C["fgm"], font=("Microsoft YaHei UI", 8))
+        help_txt.tag_configure("param", foreground=C["fgm"], font=FONT_SMALL)
         help_txt.tag_configure("sep", foreground=C["bd"])
 
         import commands
@@ -378,7 +379,7 @@ def open_version_history():
         dd.columnconfigure(0, weight=1)
         dd.rowconfigure(0, weight=1)
 
-        dtxt = tkinter.Text(dd, font=("Consolas", 9), bg=C["logbg"], fg=C["logfg"],
+        dtxt = tkinter.Text(dd, font=FONT_LOG, bg=C["logbg"], fg=C["logfg"],
             wrap="none", relief="flat", bd=0, padx=10, pady=8)
         dtxt.grid(row=0, column=0, sticky="nsew")
         ds = tkinter.Scrollbar(dd, orient="vertical", command=dtxt.yview, width=6)
@@ -421,18 +422,18 @@ def open_ai_panel():
 
     # === Row 0: Title Label ===
     title_label = tkinter.Label(dlg, text="描述你要实现的操作",
-        font=("Microsoft YaHei UI", 10, "bold"),
+        font=FONT_TITLE,
         bg=C["bgc"], fg=C["fgt"])
     title_label.grid(row=0, column=0, sticky="w", padx=16, pady=(12, 4))
 
     # === Row 1: Input Text Area ===
-    prompt_txt = tkinter.Text(dlg, height=4, font=("Microsoft YaHei UI", 10),
+    prompt_txt = tkinter.Text(dlg, height=4, font=FONT_BODY,
         bg=C["logbg"], fg=C["logfg"], wrap="word", relief="solid", bd=1,
         padx=8, pady=6)
     prompt_txt.grid(row=1, column=0, sticky="ew", padx=16, pady=(0, 8))
     prompt_txt.insert("1.0", "快速示例：打开记事本程序，输入'Hello World'，然后保存文件到桌面")
     prompt_txt.tag_add("placeholder", "1.0", "end")
-    prompt_txt.tag_configure("placeholder", foreground="#9CA3AF")
+    prompt_txt.tag_configure("placeholder", foreground=themed("fgm"))
 
     def _on_prompt_focus_in(event):
         if prompt_txt.tag_ranges("placeholder"):
@@ -464,7 +465,7 @@ def open_ai_panel():
     btn_frame.grid(row=0, column=0, sticky="w")
 
     for i, name in enumerate(example_names):
-        btn = tkinter.Button(btn_frame, text=name, font=("Microsoft YaHei UI", 7),
+        btn = tkinter.Button(btn_frame, text=name, font=FONT_TINY,
             bg=C["bgc"], fg=C["ac"], relief="raised", bd=2, cursor="hand2",
             activebackground=C["acl"], activeforeground=C["ach"],
             command=lambda n=name: _set_quick_example(AI_QUICK_PROMPTS[n]))
@@ -476,7 +477,7 @@ def open_ai_panel():
     preview_label.grid(row=3, column=0, sticky="w", padx=16, pady=(8, 2))
 
     # === Row 4: Preview Text Area (expands) ===
-    result_txt = tkinter.Text(dlg, height=12, font=("Consolas", 10),
+    result_txt = tkinter.Text(dlg, height=12, font=FONT_LOG,
         bg=C["logbg"], fg=C["logfg"], wrap="word", relief="solid", bd=1,
         padx=8, pady=6)
     result_txt.grid(row=4, column=0, sticky="nsew", padx=16, pady=(0, 8))
@@ -549,18 +550,20 @@ def open_ai_panel():
 
         def _generate_thread():
             try:
-                from ai_client import create_client, APIError, APIAuthError, APIRateLimitError, APITimeoutError
+                from ai_client import (create_client_active, resolve_model,
+                                       APIError, APIAuthError, APIRateLimitError,
+                                       APITimeoutError)
                 from templates import build_ai_prompt, normalize_ai_output
 
                 # Build prompt
                 prompt = build_ai_prompt(user_input)
 
-                # Create AI client
-                client = create_client(state.API_KEY, state.API_MODEL)
+                # Create AI client（跟随自定义提供商/模型配置）
+                client = create_client_active()
 
                 # Call AI API
                 response = client.chat_completions(
-                    model=state.API_MODEL,
+                    model=resolve_model(),
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.3,
                     max_tokens=2000,
@@ -769,7 +772,7 @@ def open_ai_debug_dialog():
         "有哪些优化建议?",
     ]
     for i, q in enumerate(quick_questions):
-        btn = tkinter.Button(quick_frame, text=q, font=("Microsoft YaHei UI", 7),
+        btn = tkinter.Button(quick_frame, text=q, font=FONT_TINY,
             bg=C["acl"], fg=C["ac"], relief="raised", bd=1, cursor="hand2",
             command=lambda qq=q: question_var.set(qq))
         btn.pack(side="left", padx=1, pady=1)
@@ -798,7 +801,7 @@ def open_ai_debug_dialog():
     answer_frame.columnconfigure(0, weight=1)
     answer_frame.rowconfigure(0, weight=1)
 
-    answer_txt = tkinter.Text(answer_frame, font=("Microsoft YaHei UI", 9),
+    answer_txt = tkinter.Text(answer_frame, font=FONT_BODY,
         bg=C["logbg"], fg=C["logfg"], wrap="word", relief="flat", bd=0,
         padx=10, pady=8, state="disabled",
         selectbackground=C["acl"], selectforeground=C["fgt"])

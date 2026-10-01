@@ -35,8 +35,9 @@ def _get_pa():
     return _pyautogui
 
 import state
+import utils
 from utils import (create_card, _btn, _darken, apply_theme, _colors,
-                    ThreadSafeLog, set_tlog, log1)
+                    ThreadSafeLog, set_tlog, log1, themed)
 from scriptdata import ScriptData
 from engine import engine
 import recorder
@@ -114,6 +115,15 @@ def _tray_open_scheduler():
         log1("打开定时设置失败: {}".format(e), "error")
 
 
+def open_devlink():
+    """打开「设备互联」窗口（设备互联独立窗口，懒加载避免影响启动）。"""
+    try:
+        import netlink_window
+        netlink_window.open_netlink_window(root)
+    except Exception as e:
+        log1("打开设备互联窗口失败: {}".format(e), "warning")
+
+
 def _restore_from_tray():
     """从托盘恢复主窗口（考虑 Mini Bar 折叠状态）。"""
     global _tray
@@ -166,6 +176,17 @@ def _destroy_tray():
 # ======================================================================
 
 _mini_bar = None  # Mini Bar Toplevel 引用
+# ── Mini Bar 运行时状态 (三形态/动画/位置记忆) ──
+_mb_anim_id = None          # 宽度平滑过渡动画 after id
+_mb_idle_id = None          # 空闲收起计时 after id
+_mb_blink_id = None         # 告警闪烁动画 after id
+_mb_breathe_id = None       # 暂停呼吸动画 after id
+_mb_breathe_phase = 0       # 暂停呼吸相位 (0/1)
+_mb_blink_count = 0         # 闪烁剩余帧数 (3 次 = 6 帧)
+_mb_form = "compact"        # 当前形态: icon / compact / run
+_mb_last_interact = 0.0     # 上次用户交互时间戳 (空闲 30s 收为图标态)
+_mb_prev_failed = False     # 上一周期是否已告警 (失败沿触发闪烁)
+_MB_IDLE_SEC = 30           # 空闲多少秒后收起为图标态
 
 
 def _mb_set_icon(label):
@@ -193,39 +214,301 @@ def _mb_set_icon(label):
             label._photo = photo  # 保存引用防止被 GC
         else:
             # 回退：用文字图标
-            label.configure(text="⚙", font=("Segoe UI Symbol", 11),
+            label.configure(text="⚙", font=FONT_ICON_MD,
                 fg=C["ac"], bg=C["bgc"])
     except Exception:
         # 回退：用文字图标
         try:
-            label.configure(text="⚙", font=("Segoe UI Symbol", 11),
+            label.configure(text="⚙", font=FONT_ICON_MD,
                 fg=C["ac"], bg=C["bgc"])
         except Exception:
             pass
 
 
+def _mb_target_size():
+    """按三形态计算 Mini Bar 目标尺寸 (w, h)，全部来自配置、无硬编码。
+
+    图标态: 边长 = 高度 + 6 的正方形 (只留状态点/展开)
+    紧凑态: 宽 = 宽度, 高 = 高度
+    运行态/录制态: 宽 = 宽度 + 130, 高 = 高度 + 6 (容纳进度条)
+    """
+    w = int(state.MINI_BAR_WIDTH)
+    h = int(state.MINI_BAR_HEIGHT)
+    if state.recording or state.running:
+        return (w + 130, h + 6)
+    if time.time() - _mb_last_interact >= _MB_IDLE_SEC:
+        return (h + 6, h + 6)
+    return (w, h)
+
+
+def _mb_clamp_pos(x, y, w, h):
+    """把坐标夹取到当前屏幕范围内 (换分辨率后 Mini Bar 不跑到屏幕外)。"""
+    try:
+        sw = root.winfo_screenwidth()
+        sh = root.winfo_screenheight()
+    except Exception:
+        return x, y
+    x = max(0, min(int(x), max(0, sw - int(w))))
+    y = max(0, min(int(y), max(0, sh - int(h))))
+    return x, y
+
+
+def _mb_save_pos():
+    """记录 Mini Bar 当前位置到 config (拖动结束/关闭时持久化)。"""
+    if _mini_bar is None:
+        return
+    try:
+        pos = "{}+{}".format(max(0, _mini_bar.winfo_x()),
+                             max(0, _mini_bar.winfo_y()))
+        if getattr(state, "MINI_BAR_POS", "") != pos:
+            state.MINI_BAR_POS = pos
+            state.save_config()
+    except Exception:
+        pass
+
+
+def _mb_set_size(w, h):
+    """只设置尺寸不移动窗口 (wm geometry 仅给 WxH 时保留当前位置)。"""
+    try:
+        if _mini_bar is not None:
+            _mini_bar.geometry("{}x{}".format(int(w), int(h)))
+    except Exception:
+        pass
+
+
+def _mb_animate_width(target, steps=8, delay=12):
+    """宽度平滑过渡: root.after 链逐帧插值, 未到位才继续下一帧。
+
+    差距 < 4px 直接返回, 避免逐帧抖动。动画 id 存于 _mb_anim_id,
+    由 _destroy_mini_bar 统一 after_cancel。
+    """
+    global _mb_anim_id
+    if _mini_bar is None:
+        return
+    if _mb_anim_id is not None:
+        try:
+            root.after_cancel(_mb_anim_id)
+        except Exception:
+            pass
+        _mb_anim_id = None
+    try:
+        cur = int(_mini_bar.winfo_width())
+    except Exception:
+        return
+    if abs(cur - target) < 4:
+        return
+    step = max(1, int(abs(target - cur) / max(1, steps)))
+
+    def _tick(val):
+        global _mb_anim_id
+        if _mini_bar is None:
+            _mb_anim_id = None
+            return
+        nxt = val + step if target > val else val - step
+        if (target > val and nxt >= target) or (target < val and nxt <= target):
+            nxt = target
+        _mb_set_size(nxt, _mini_bar.winfo_height())
+        _mb_anim_id = None if nxt == target else root.after(
+            delay, lambda: _tick(nxt))
+
+    _tick(cur)
+
+
+def _mb_relayout(form):
+    """按形态重新 pack 子控件: 图标态只留状态点与展开按钮。"""
+    if _mini_bar is None:
+        return
+    for _n, wdg, _o, _f in _mini_bar._mb_layout:
+        try:
+            wdg.pack_forget()
+        except Exception:
+            pass
+    for _n, wdg, opts, forms in _mini_bar._mb_layout:
+        if form in forms:
+            try:
+                wdg.pack(**opts)
+            except Exception:
+                pass
+    # 运行信息/进度条不进基础布局, 由 _sync_mini_bar_status 按数据挂载
+    if form != "run":
+        for key in ("info", "prog"):
+            try:
+                _mini_bar._widgets[key].pack_forget()
+            except Exception:
+                pass
+
+
+def _mb_dot_color():
+    """状态点基础颜色 (实时取主题色, 不缓存颜色值)。"""
+    if state.recording:
+        return C["dg"]
+    if state.running:
+        return C["wn"] if not state.pause_event.is_set() else C["sc"]
+    return C["fgm"]
+
+
+def _mb_set_dot(color):
+    """设置 Canvas 状态点填充/描边颜色。"""
+    if _mini_bar is None:
+        return
+    try:
+        dot = _mini_bar._widgets["dot"]
+        dot.itemconfig(_mini_bar._widgets["dot_item"], fill=color, outline=color)
+    except Exception:
+        pass
+
+
+def _mb_breathe_tick():
+    """暂停呼吸动画 (800ms 周期): 每 400ms 翻转一次亮度。"""
+    global _mb_breathe_id, _mb_breathe_phase
+    if _mini_bar is None or not (state.running
+                                 and not state.pause_event.is_set()
+                                 and not state.recording):
+        _mb_breathe_id = None
+        return
+    _mb_breathe_phase ^= 1
+    base = C["wn"]
+    _mb_set_dot(base if _mb_breathe_phase else _darken(base))
+    _mb_breathe_id = root.after(400, _mb_breathe_tick)
+
+
+def _mb_blink_tick():
+    """告警闪烁: 红/基色交替, 共闪 3 次 (6 帧)。"""
+    global _mb_blink_id, _mb_blink_count
+    if _mini_bar is None or _mb_blink_count <= 0:
+        _mb_blink_id = None
+        _mb_set_dot(_mb_dot_color())
+        return
+    _mb_blink_count -= 1
+    _mb_set_dot(C["dg"] if (_mb_blink_count % 2) else _mb_dot_color())
+    _mb_blink_id = root.after(160, _mb_blink_tick)
+
+
+def _mb_flash_alert():
+    """出错/告警 → 状态点闪烁 3 次 (id 可被 _destroy_mini_bar 取消)。"""
+    global _mb_blink_id, _mb_blink_count
+    if _mini_bar is None:
+        return
+    if _mb_blink_id is not None:
+        try:
+            root.after_cancel(_mb_blink_id)
+        except Exception:
+            pass
+    _mb_blink_count = 6
+    _mb_blink_tick()
+
+
+def _mb_start_dot_anim():
+    """按运行状态启停呼吸动画; 非暂停态直接用基础色。"""
+    global _mb_breathe_id, _mb_breathe_phase
+    if _mini_bar is None:
+        return
+    paused = state.running and not state.pause_event.is_set() and not state.recording
+    if paused:
+        if _mb_breathe_id is None:
+            _mb_breathe_phase = 0
+            _mb_breathe_tick()
+    else:
+        if _mb_breathe_id is not None:
+            try:
+                root.after_cancel(_mb_breathe_id)
+            except Exception:
+                pass
+            _mb_breathe_id = None
+        if _mb_blink_id is None:   # 闪烁进行中不覆盖其颜色
+            _mb_set_dot(_mb_dot_color())
+
+
+def _mb_schedule_idle_check():
+    """每秒检查一次空闲时长 (超过 _MB_IDLE_SEC 收起为图标态)。"""
+    global _mb_idle_id
+    if _mb_idle_id is not None or _mini_bar is None:
+        return
+    _mb_idle_id = root.after(1000, _mb_idle_check)
+
+
+def _mb_idle_check():
+    global _mb_idle_id
+    _mb_idle_id = None
+    if _mini_bar is None:
+        return
+    _mb_apply_form()
+
+
+def _mb_apply_form(force=False):
+    """计算并切换到目标形态 (含高度与平滑宽度、状态点动画)。"""
+    global _mb_form
+    if _mini_bar is None:
+        return
+    if state.recording or state.running:
+        form = "run"
+    elif time.time() - _mb_last_interact >= _MB_IDLE_SEC:
+        form = "icon"
+    else:
+        form = "compact"
+    if not force and form == _mb_form:
+        _mb_schedule_idle_check()
+        return
+    _mb_form = form
+    _mb_relayout(form)
+    tw, th = _mb_target_size()
+    try:
+        _mb_set_size(_mini_bar.winfo_width() or tw, th)   # 先定高
+        dot = _mini_bar._widgets["dot"]
+        dot.configure(height=th)
+        dot.coords(_mini_bar._widgets["dot_item"], 2, th // 2 - 5, 12, th // 2 + 5)
+    except Exception:
+        pass
+    _mb_animate_width(tw)
+    _mb_start_dot_anim()
+    _mb_schedule_idle_check()
+
+
+def _mb_touch():
+    """记录用户交互: 重置空闲计时并回到紧凑态/运行态。"""
+    global _mb_last_interact
+    _mb_last_interact = time.time()
+    _mb_apply_form()
+
+
 def _create_mini_bar():
     """创建 Mini Bar 悬浮条（折叠后的微型状态栏）。
 
-    Mini Bar 设计（增强版）：
-    ┌─────────────────────────────────────────────────────────────────────┐
-    │ [🔧] ● 运行中  循环2/5  行12/45  00:03:22 │ ■停止 │ ▶运行 │ ⏸暂停 │ ⏭ │ □展开 │
-    └─────────────────────────────────────────────────────────────────────┘
+    Mini Bar 三形态：
+      图标态: 边长 = 高度 + 6 的正方形 (空闲 30s 自动收起, 只留状态点/展开)
+      紧凑态: 宽 = 宽度, 高 = 高度
+      运行态: 宽 = 宽度 + 130, 高 = 高度 + 6 (含进度条)
+    尺寸全部由 state.MINI_BAR_WIDTH / MINI_BAR_HEIGHT 计算。
     """
-    global _mini_bar
+    global _mini_bar, _mb_form, _mb_last_interact
     if _mini_bar is not None:
         return
+
+    _mb_last_interact = time.time()
+    _mb_form = "compact"
 
     mb = tkinter.Toplevel(root)
     _set_window_icon(mb)
     mb.overrideredirect(True)
     mb.attributes("-topmost", True)
     mb.configure(bg=C["bgc"])
+    # 透明度来自配置 (旧设置项是安慰剂, 现在真正生效)
+    try:
+        mb.attributes("-alpha", max(0.3, min(1.0, int(state.MINI_BAR_OPACITY) / 100.0)))
+    except Exception:
+        pass
 
-    # 尺寸和初始位置（主窗口左上角附近）—— 空闲时紧凑，运行时由 _sync_mini_bar_status 扩展
-    mb_w, mb_h = 430, 30
-    rx, ry = root.winfo_x(), root.winfo_y()
-    mb.geometry("{}x{}+{}+{}".format(mb_w, mb_h, max(0, rx), max(0, ry - mb_h - 4)))
+    # 初始位置: 优先恢复记忆位置, 并按当前屏幕范围夹取 (换分辨率后不越界)
+    mb_w, mb_h = _mb_target_size()
+    px = py = None
+    m = re.match(r"^([+-]?\d+)([+-]\d+)$", str(getattr(state, "MINI_BAR_POS", "") or ""))
+    if m:
+        px, py = int(m.group(1)), int(m.group(2))
+    if px is None:
+        rx, ry = root.winfo_x(), root.winfo_y()
+        px, py = max(0, rx), max(0, ry - mb_h - 4)
+    px, py = _mb_clamp_pos(px, py, mb_w, mb_h)
+    mb.geometry("{}x{}+{}+{}".format(mb_w, mb_h, px, py))
 
     # 外框
     outer = tkinter.Frame(mb, bg=C["ac"], bd=0)
@@ -235,42 +518,43 @@ def _create_mini_bar():
 
     # ── 应用图标 ──
     mb_icon_label = tkinter.Label(inner, text="", bg=C["bgc"], cursor="hand2")
-    mb_icon_label.pack(side="left", padx=(6, 2))
-    # 加载并设置图标
     _mb_set_icon(mb_icon_label)
 
-    # ── 状态指示 + 运行信息 ──
-    mb_status = tkinter.Label(inner, text="● 就绪",
+    # ── 状态圆点 (Canvas 绘制 10px 圆点) ──
+    mb_dot = tkinter.Canvas(inner, width=14, height=mb_h, bg=C["bgc"],
+        highlightthickness=0, bd=0, cursor="hand2")
+    dot_item = mb_dot.create_oval(2, mb_h // 2 - 5, 12, mb_h // 2 + 5,
+        fill=C["fgm"], outline=C["fgm"])
+
+    # ── 状态文字 + 运行信息 ──
+    mb_status = tkinter.Label(inner, text="就绪",
         font=FONT_BUTTON, fg=C["fgm"], bg=C["bgc"])
-    mb_status.pack(side="left", padx=(2, 4))
     mb_info = tkinter.Label(inner, text="",
-        font=("Consolas", 8), fg=C["fgm"], bg=C["bgc"])
-    mb_info.pack(side="left", padx=(0, 4))
+        font=FONT_LOG, fg=C["fgm"], bg=C["bgc"])
+
+    # ── 进度条 (仅运行态显示) ──
+    mb_prog = ttk.Progressbar(inner, length=104, mode="determinate",
+        style="Success.Horizontal.TProgressbar")
 
     # ── 分隔符 ──
     mb_sep1 = tkinter.Frame(inner, bg=C["bd"], width=1)
-    mb_sep1.pack(side="left", fill="y", padx=3, pady=4)
 
     # ── 操作按钮 ──
     def _mb_btn(text, color, cmd):
+        def _invoke():
+            _mb_touch()
+            cmd()
         btn = tkinter.Label(inner, text=text, font=FONT_BUTTON,
             fg="white", bg=color, padx=7, pady=1,
             activebackground=_darken(color), activeforeground="white",
             cursor="hand2", relief="raised", bd=1)
-        btn.bind("<Button-1>", lambda e, c=cmd: c())
+        btn.bind("<Button-1>", lambda e, c=_invoke: c())
         return btn
 
     mb_stop = _mb_btn("■ 停止", C["dg"], stop_execution)
-    mb_stop.pack(side="left", padx=1)
     mb_run = _mb_btn("▶ 运行", C["sc"], main_run)
-    mb_run.pack(side="left", padx=1)
     mb_pause = _mb_btn("⏸ 暂停", C["wn"], toggle_pause)
-    mb_pause.pack(side="left", padx=1)
     mb_step = _mb_btn("⏭", C["ac"], _step_once)
-    mb_step.pack(side="left", padx=1)
-
-    # ── 分隔符 ──
-    tkinter.Frame(inner, bg=C["bd"], width=1).pack(side="left", fill="y", padx=3, pady=4)
 
     # ── 展开按钮 ──
     mb_expand = tkinter.Label(inner, text="□ 展开",
@@ -278,13 +562,30 @@ def _create_mini_bar():
         padx=7, pady=1, cursor="hand2",
         activebackground=C["acl"], activeforeground=C["fgb"],
         relief="raised", bd=1)
-    mb_expand.pack(side="right", padx=(1, 6))
-    mb_expand.bind("<Button-1>", lambda e: _toggle_fold())
+
+    def _expand(event=None):
+        _mb_touch()
+        _toggle_fold()
+    mb_expand.bind("<Button-1>", _expand)
+
+    # ── 布局表: (名字, 控件, pack 选项, 可见形态集合) ──
+    mb._mb_layout = [
+        ("icon",   mb_icon_label, {"side": "left", "padx": (6, 2)}, {"compact", "run"}),
+        ("dot",    mb_dot,        {"side": "left", "padx": (2, 2)}, {"icon", "compact", "run"}),
+        ("status", mb_status,     {"side": "left", "padx": (0, 4)}, {"compact", "run"}),
+        ("sep1",   mb_sep1,       {"side": "left", "fill": "y", "padx": 3, "pady": 4}, {"compact", "run"}),
+        ("stop",   mb_stop,       {"side": "left", "padx": 1}, {"compact", "run"}),
+        ("run",    mb_run,        {"side": "left", "padx": 1}, {"compact", "run"}),
+        ("pause",  mb_pause,      {"side": "left", "padx": 1}, {"compact", "run"}),
+        ("step",   mb_step,       {"side": "left", "padx": 1}, {"compact", "run"}),
+        ("expand", mb_expand,     {"side": "right", "padx": (1, 6)}, {"icon", "compact", "run"}),
+    ]
 
     # ── 拖拽支持 ──
     _drag_data = {"x": 0, "y": 0}
 
     def _drag_start(event):
+        _mb_touch()
         _drag_data["x"] = event.x_root - mb.winfo_x()
         _drag_data["y"] = event.y_root - mb.winfo_y()
 
@@ -293,18 +594,24 @@ def _create_mini_bar():
             event.x_root - _drag_data["x"],
             event.y_root - _drag_data["y"]))
 
-    # 整个 Mini Bar 可拖拽
+    def _drag_end(event):
+        _mb_save_pos()   # 拖动结束记位, 下次打开恢复
+
     mb.bind("<Button-1>", _drag_start)
     mb.bind("<B1-Motion>", _drag_move)
+    mb.bind("<ButtonRelease-1>", _drag_end)
     inner.bind("<Button-1>", _drag_start)
     inner.bind("<B1-Motion>", _drag_move)
-    mb_status.bind("<Button-1>", _drag_start)
-    mb_status.bind("<B1-Motion>", _drag_move)
-    mb_info.bind("<Button-1>", _drag_start)
-    mb_info.bind("<B1-Motion>", _drag_move)
-    mb_icon_label.bind("<Button-1>", _drag_start)
-    mb_icon_label.bind("<B1-Motion>", _drag_move)
-    mb_expand.bind("<B1-Motion>", _drag_move)
+    inner.bind("<ButtonRelease-1>", _drag_end)
+    for wdg in (mb_status, mb_info, mb_icon_label):
+        wdg.bind("<Button-1>", _drag_start)
+        wdg.bind("<B1-Motion>", _drag_move)
+        wdg.bind("<ButtonRelease-1>", _drag_end)
+    mb_dot.bind("<B1-Motion>", _drag_move)
+    mb_dot.bind("<ButtonRelease-1>", _drag_end)
+    # 鼠标进入 → 重置空闲计时并回到紧凑/运行态
+    mb.bind("<Enter>", lambda e: _mb_touch())
+    inner.bind("<Enter>", lambda e: _mb_touch())
 
     # ── 右键菜单 ──
     def _mb_right_menu(event):
@@ -321,19 +628,33 @@ def _create_mini_bar():
 
     # 存储子控件引用以便后续更新
     mb._widgets = {
-        "icon": mb_icon_label, "status": mb_status,
-        "info": mb_info, "sep1": mb_sep1,
-        "stop": mb_stop, "run": mb_run,
+        "icon": mb_icon_label, "dot": mb_dot, "dot_item": dot_item,
+        "status": mb_status, "info": mb_info, "prog": mb_prog,
+        "sep1": mb_sep1, "stop": mb_stop, "run": mb_run,
         "pause": mb_pause, "step": mb_step,
         "expand": mb_expand, "inner": inner,
     }
     _mini_bar = mb
+    _mb_relayout(_mb_form)      # 初始布局; 之后由 _sync / _mb_apply_form 接管
     _sync_mini_bar_status()
+    _mb_schedule_idle_check()
 
 
 def _destroy_mini_bar():
-    """销毁 Mini Bar。"""
-    global _mini_bar
+    """销毁 Mini Bar，并取消全部 after 定时器。
+
+    重要: 必须在这里 after_cancel 掉宽度动画 / 空闲计时 / 呼吸 / 闪烁的
+    after id, 否则反复折叠/展开会残留定时器 (回调触碰已销毁窗口抛异常)。
+    """
+    global _mini_bar, _mb_anim_id, _mb_idle_id, _mb_blink_id, _mb_breathe_id
+    _mb_save_pos()
+    for aid in (_mb_anim_id, _mb_idle_id, _mb_blink_id, _mb_breathe_id):
+        if aid is not None:
+            try:
+                root.after_cancel(aid)
+            except Exception:
+                pass
+    _mb_anim_id = _mb_idle_id = _mb_blink_id = _mb_breathe_id = None
     if _mini_bar is not None:
         try:
             _mini_bar.destroy()
@@ -368,8 +689,10 @@ def _create_recording_bar():
     rb.attributes("-topmost", True)
     rb.configure(bg=C["dg"])  # 红色边框 — 录制状态
 
-    # 尺寸和位置（屏幕顶部居中）
-    rb_w, rb_h = 460, 30
+    # 尺寸和位置（屏幕顶部居中）—— 高度与 Mini Bar 视觉统一, 宽度随配置缩放
+    # (比 Mini Bar 紧凑态略宽 30px, 以容纳录制计数/模式/暂停/停止等更多控件)
+    rb_w = int(state.MINI_BAR_WIDTH) + 30
+    rb_h = int(state.MINI_BAR_HEIGHT)
     screen_w = rb.winfo_screenwidth()
     rb.geometry("{}x{}+{}+{}".format(rb_w, rb_h, (screen_w - rb_w) // 2, 8))
 
@@ -378,7 +701,7 @@ def _create_recording_bar():
     inner.pack(fill="both", expand=True, padx=1, pady=1)
 
     # ── 录制指示灯 ──
-    rb_dot = tkinter.Label(inner, text="●", font=("Segoe UI Symbol", 12),
+    rb_dot = tkinter.Label(inner, text="●", font=FONT_ICON_LG,
         fg=C["dg"], bg=C["bgc"])
     rb_dot.pack(side="left", padx=(8, 2))
 
@@ -546,65 +869,93 @@ def _restore_from_recording():
     except Exception:
         pass
 
-
 def _sync_mini_bar_status():
-    """同步 Mini Bar 上的状态指示、运行信息、按钮颜色到当前主题和运行状态。"""
+    """同步 Mini Bar 状态/信息/主题色；先算签名再比对，无变化直接返回。
+
+    签名必须包含主题色: 主题切换时 utils.C / 本模块 C 被重新绑定, 若签名
+    不含颜色会被误判为「无变化」而跳过刷新, 导致暗黑模式下 Mini Bar 配色
+    不更新。颜色一律实时取 C[...] (绝不缓存 C 或 C[...] 到实例属性)。
+    """
+    global _mb_prev_failed
     if _mini_bar is None:
         return
     w = _mini_bar._widgets
     try:
-        # 更新背景色（主题切换时）
+        rows = int(state.exec_state.get("total_rows", 0) or 0)
+    except Exception:
+        rows = 0
+    el = 0
+    if state.running and rows > 0:
+        try:
+            el = int(time.time() - state.exec_state.get("start_time", time.time()))
+        except Exception:
+            el = 0
+    failed = bool(getattr(engine, "_script_failed", False))
+    theme = (C["bgc"], C["sc"], C["fgm"], C["dg"], C["wn"])
+    # 配置尺寸纳入签名: 设置页改宽/高/透明度后, 打开中的 Mini Bar 也要即时生效
+    cfg = (int(state.MINI_BAR_WIDTH), int(state.MINI_BAR_HEIGHT),
+           int(state.MINI_BAR_OPACITY))
+    sig = (state.running, state.pause_event.is_set(), state.recording,
+           rows, state.exec_state.get("loop"), state.exec_state.get("row"),
+           el, failed, _mb_form, theme, cfg)
+    if getattr(_mini_bar, "_sync_sig", None) == sig:
+        return
+    _mini_bar._sync_sig = sig
+    try:
+        if getattr(_mini_bar, "_cfg", None) != cfg:
+            _mini_bar._cfg = cfg
+            try:
+                _mini_bar.attributes("-alpha", max(0.3, min(1.0, cfg[2] / 100.0)))
+            except Exception:
+                pass
+            _mb_apply_form(force=True)   # 尺寸变了 → 强制重算三形态尺寸
+        # 背景色 (主题切换时)
         w["inner"].configure(bg=C["bgc"])
+        w["dot"].configure(bg=C["bgc"])
         w["expand"].configure(bg=C["bgc"], fg=C["fgb"], activebackground=C["acl"])
         w["status"].configure(bg=C["bgc"])
         w["info"].configure(bg=C["bgc"])
-        if "icon" in w:
-            w["icon"].configure(bg=C["bgc"])
+        w["icon"].configure(bg=C["bgc"])
+        w["sep1"].configure(bg=C["bd"])
 
         # ── 状态文字 ──
         if state.recording:
-            w["status"].configure(text="● 录制中", fg=C["dg"])
+            w["status"].configure(text="录制中", fg=C["dg"])
         elif state.running:
             if not state.pause_event.is_set():
-                w["status"].configure(text="⏸ 已暂停", fg=C["wn"])
+                w["status"].configure(text="已暂停", fg=C["wn"])
             else:
-                w["status"].configure(text="● 运行中", fg=C["sc"])
+                w["status"].configure(text="运行中", fg=C["sc"])
         else:
-            w["status"].configure(text="● 就绪", fg=C["fgm"])
+            w["status"].configure(text="就绪", fg=C["fgm"])
 
-        # ── 运行信息（循环/行数/耗时）：不运行时折叠隐藏，并收缩窗口宽度 ──
-        _idle_w, _run_w = 430, 560
-        if state.running and state.exec_state.get("total_rows", 0) > 0:
+        # ── 运行信息 + 进度条 (仅运行态且有数据时挂载) ──
+        if state.running and rows > 0:
             lp = state.exec_state["loop"]
             tl = state.exec_state["total_loops"]
             rw = state.exec_state["row"]
-            tr = state.exec_state["total_rows"]
-            el = time.time() - state.exec_state["start_time"]
+            tr = rows
+            pct = max(0, min(100, int(rw / max(1, tr) * 100)))
             if el >= 3600:
                 el_str = "{:02d}:{:02d}:{:02d}".format(
                     int(el // 3600), int((el % 3600) // 60), int(el % 60))
             else:
-                el_str = "{:02d}:{:02d}".format(
-                    int(el // 60), int(el % 60))
+                el_str = "{:02d}:{:02d}".format(int(el // 60), int(el % 60))
             w["info"].configure(
                 text="循环{}/{}  行{}/{}  {}".format(
-                    lp, "∞" if tl > 99999 else tl, rw, tr, el_str),
-                fg=C["fgm"])
+                    lp, "∞" if tl > 99999 else tl, rw, tr, el_str), fg=C["fgm"])
             if not w["info"].winfo_ismapped():
                 w["info"].pack(side="left", padx=(0, 4), before=w["sep1"])
-            # 扩展窗口宽度以容纳运行信息
-            if _mini_bar.winfo_width() < _run_w - 10:
-                _mini_bar.geometry("{}x{}".format(_run_w, _mini_bar.winfo_height()))
+            if not w["prog"].winfo_ismapped():
+                w["prog"].pack(side="left", padx=(0, 4), before=w["sep1"])
+            w["prog"].configure(value=pct)
         else:
-            if w["info"].winfo_ismapped():
-                w["info"].pack_forget()
-            # 收缩窗口宽度到紧凑模式
-            if _mini_bar.winfo_width() > _idle_w + 10:
-                _mini_bar.geometry("{}x{}".format(_idle_w, _mini_bar.winfo_height()))
+            for key in ("info", "prog"):
+                if w[key].winfo_ismapped():
+                    w[key].pack_forget()
 
         # ── 暂停按钮动态文本 ──
         if state.running and not state.pause_event.is_set():
-            # 已暂停 → 显示"继续"
             w["pause"].configure(text="▶ 继续", bg=C["ac"],
                 activebackground=_darken(C["ac"]))
         else:
@@ -615,8 +966,15 @@ def _sync_mini_bar_status():
         w["stop"].configure(bg=C["dg"], activebackground=_darken(C["dg"]))
         w["run"].configure(bg=C["sc"], activebackground=_darken(C["sc"]))
         w["step"].configure(bg=C["ac"], activebackground=_darken(C["ac"]))
+
+        # ── 失败沿 → 闪烁告警; 形态切换(运行态自动展开); 状态点动画 ──
+        if failed and not _mb_prev_failed:
+            _mb_flash_alert()
+        _mb_apply_form()
+        _mb_start_dot_anim()
     except Exception:
         pass  # Mini Bar 可能已被销毁
+    _mb_prev_failed = failed
 
 
 def _toggle_fold():
@@ -799,14 +1157,30 @@ def autorun(tn):
 # ======================================================================
 
 C = _colors()  # uses utils._colors (imported above)
-FONT_TITLE = ("Microsoft YaHei UI",10,"bold"); FONT_BODY = ("Microsoft YaHei UI",9)
-FONT_LOG = ("Consolas",9); FONT_SMALL = ("Microsoft YaHei UI",8); FONT_BUTTON = ("Microsoft YaHei UI",9,"bold")
+# 字体统一取 utils 的命名字体角色 (字符串), 本文件不再自建元组副本
+FONT_TITLE = utils.FONT_TITLE; FONT_BODY = utils.FONT_BODY; FONT_LOG = utils.FONT_LOG
+FONT_SMALL = utils.FONT_SMALL; FONT_BUTTON = utils.FONT_BUTTON
+FONT_SMALL_BOLD = utils.FONT_SMALL_BOLD; FONT_TINY = utils.FONT_TINY
+FONT_ICON = utils.FONT_ICON; FONT_ICON_MD = utils.FONT_ICON_MD
+FONT_ICON_LG = utils.FONT_ICON_LG
 
 # ── Windows 任务栏图标：必须在创建任何窗口之前设置 AppUserModelID ──
 try:
     import ctypes
     from version_info import VERSION
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("ACRPA.RPA.v{}".format(VERSION))
+except Exception:
+    pass
+
+# ── DPI 感知：必须早于 Tk()，否则 100%/150%/200% 系统缩放下界面会被系统位图拉伸模糊 ──
+try:
+    import ctypes
+    try:
+        # PROCESS_PER_MONITOR_DPI_AWARE = 2 (Win8.1+)
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    except Exception:
+        # 回退: Win7/8 的 system-DPI-aware
+        ctypes.windll.user32.SetProcessDPIAware()
 except Exception:
     pass
 
@@ -851,8 +1225,21 @@ def _set_window_icon(window):
         pass
 
 root = tkinter.Tk()
+# 命名字体必须在创建任何 widget 之前建立; tk scaling 改变 pt->px 换算后再刷一次
+utils.init_fonts(root)
+try:
+    root.tk.call("tk", "scaling", root.winfo_fpixels("1i") / 72.0)
+except Exception:
+    pass
+utils.init_fonts(root)
 root.title("A/C RPA")
-root.geometry("500x625+400+80"); root.minsize(450,550)
+# 主窗口几何随「界面缩放」档位缩放: 默认档位(1.0)保持既有硬编码值不变,
+# 避免无谓改动既有布局; 档位 != 1.0 时才按 utils.scaled() 放大 (含 DPI 因子)。
+if abs(utils.current_ui_scale() - 1.0) > 1e-6:
+    root.geometry("{}x{}+400+80".format(utils.scaled(500), utils.scaled(625)))
+    root.minsize(utils.scaled(450), utils.scaled(550))
+else:
+    root.geometry("500x625+400+80"); root.minsize(450,550)
 root.configure(bg=C["bg"]); root.resizable(width=True,height=True)
 
 # ── 全局禁止 Combobox / Spinbox 滚轮修改数值 ──
@@ -997,6 +1384,14 @@ def _do_close():
     """Perform the actual close sequence."""
     state._closing = True
     state.save_config()
+
+    # NetLink 多设备互联: 退出清理 (失败不影响主程序)
+    try:
+        import netlink_window; netlink_window.close_window()
+    except Exception: pass
+    try:
+        import netlink; netlink.stop_netlink()
+    except Exception: pass
     
     # Clean up tray icon, Mini Bar, and Recording Bar
     _destroy_tray()
@@ -1035,6 +1430,12 @@ def _exit_for_update():
     state.quit2 = True
     state._closing = True
     try:
+        import netlink_window; netlink_window.close_window()
+    except Exception: pass
+    try:
+        import netlink; netlink.stop_netlink()
+    except Exception: pass
+    try:
         _do_close()
     except Exception:
         try:
@@ -1061,7 +1462,7 @@ dark_frame = tkinter.Frame(title_bar,bg=C["bg"])
 dark_frame.grid(row=0,column=1,sticky="e")
 status_dot = tkinter.Label(dark_frame,text="● 就绪",font=FONT_SMALL,fg=C["fgm"],bg=C["bg"])
 status_dot.pack(side="left",padx=(0,6))
-pin_btn = tkinter.Label(dark_frame,text="△",font=("Segoe UI Symbol",9),
+pin_btn = tkinter.Label(dark_frame,text="△",font=FONT_ICON,
     fg=C["fgm"],bg=C["bg"],cursor="hand2",padx=2)
 pin_btn.pack(side="left",padx=(0,2))
 pin_pinned = False
@@ -1085,7 +1486,7 @@ def _show_pin_tip(event):
 pin_btn.bind("<Enter>", _show_pin_tip)
 
 # 折叠按钮 — 将主窗口折叠为 Mini Bar
-fold_btn = tkinter.Label(dark_frame,text="⊟",font=("Segoe UI Symbol",9),
+fold_btn = tkinter.Label(dark_frame,text="⊟",font=FONT_ICON,
     fg=C["fgm"],bg=C["bg"],cursor="hand2",padx=2)
 fold_btn.pack(side="left",padx=(0,2))
 fold_btn.bind("<Button-1>", lambda e: _toggle_fold())
@@ -1101,7 +1502,7 @@ def _show_fold_tip(event):
 fold_btn.bind("<Enter>", _show_fold_tip)
 
 dark_btn = tkinter.Label(dark_frame,text="◑" if state.DARK_MODE else "◐",
-    font=("Segoe UI Symbol",12),fg=C["fgm"],bg=C["bg"],cursor="hand2")
+    font=FONT_ICON_LG,fg=C["fgm"],bg=C["bg"],cursor="hand2")
 dark_btn.pack(side="left")
 
 # Accent separator below title bar
@@ -1126,7 +1527,7 @@ fold_btn.bind("<Leave>", _hide_tip)
 pin_btn.bind("<Leave>", _hide_tip)
 
 # 设置按钮 — 打开独立设置窗口 (原设置 Tab 已分离，主界面入口)
-settings_btn = tkinter.Label(dark_frame, text="⚙", font=("Segoe UI Symbol", 11),
+settings_btn = tkinter.Label(dark_frame, text="⚙", font=FONT_ICON_MD,
     fg=C["fgm"], bg=C["bg"], cursor="hand2", padx=2)
 settings_btn.pack(side="left", padx=(0, 2))
 settings_btn.bind("<Button-1>", lambda e: settings_window.open_settings_window())
@@ -1140,6 +1541,22 @@ def _show_settings_tip(event):
         font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"], relief="solid", bd=1, padx=6, pady=2).pack()
 settings_btn.bind("<Enter>", _show_settings_tip)
 settings_btn.bind("<Leave>", _hide_tip)
+
+# 互联按钮 — 打开「设备互联」独立窗口 (与设置按钮同级样式)
+devlink_btn = tkinter.Label(dark_frame, text="🌐", font=("Segoe UI Symbol", 11),
+    fg=C["fgm"], bg=C["bg"], cursor="hand2", padx=2)
+devlink_btn.pack(side="left", padx=(0, 2))
+devlink_btn.bind("<Button-1>", lambda e: open_devlink())
+def _show_devlink_tip(event):
+    global _tip_win
+    if _tip_win: _tip_win.destroy()
+    _tip_win = tkinter.Toplevel(root)
+    _tip_win.wm_overrideredirect(True)
+    _tip_win.wm_geometry("+{}+{}".format(event.x_root + 12, event.y_root - 8))
+    tkinter.Label(_tip_win, text="设备互联",
+        font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"], relief="solid", bd=1, padx=6, pady=2).pack()
+devlink_btn.bind("<Enter>", _show_devlink_tip)
+devlink_btn.bind("<Leave>", _hide_tip)
 
 def _refresh_theme():
     global C
@@ -1393,15 +1810,15 @@ _LEGEND_ITEMS = [
 for label, color in _LEGEND_ITEMS:
     f = tkinter.Frame(legend_inner, bg=C["bg"])
     f.pack(side="left", padx=(2, 0))
-    tkinter.Label(f, text="●", font=("Segoe UI Symbol", 7),
+    tkinter.Label(f, text="●", font=FONT_ICON,
         fg=color, bg=C["bg"]).pack(side="left")
-    tkinter.Label(f, text=label, font=("Microsoft YaHei UI", 7),
+    tkinter.Label(f, text=label, font=FONT_TINY,
         fg=C["fgm"], bg=C["bg"]).pack(side="left")
 
 # tree double-click binding is set after _edit_cell is defined below
 tree.tag_configure("even", background=C["acl"])
 tree.tag_configure("running", background="#FEF3C7")
-tree.tag_configure("breakpoint", foreground="#EF4444")
+tree.tag_configure("breakpoint", foreground=themed("dg"))
 
 # Breakpoint toggle on #0 column click
 def _toggle_breakpoint(event):
@@ -1454,10 +1871,10 @@ def _show_conditional_breakpoint_menu(event):
         tkinter.Label(example_frame, text="示例:", font=FONT_SMALL, 
             fg=C["fgm"], bg=C["bgc"]).pack(anchor="w")
         for ex in examples:
-            tkinter.Label(example_frame, text="• " + ex, font=("Consolas", 8), 
+            tkinter.Label(example_frame, text="• " + ex, font=FONT_LOG,
                 fg=C["ac"], bg=C["bgc"]).pack(anchor="w")
         
-        cond_entry = tkinter.Entry(cond_win, font=("Consolas", 10), width=50)
+        cond_entry = tkinter.Entry(cond_win, font=FONT_LOG, width=50)
         cond_entry.pack(pady=10, padx=10, fill="x")
         
         # Check if there's already a conditional breakpoint
@@ -1962,7 +2379,7 @@ def _cmd_template():
     bottom_frame.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 4))
     bottom_frame.columnconfigure(0, weight=1); bottom_frame.rowconfigure(0, weight=1)
 
-    preview_txt = tkinter.Text(bottom_frame, font=("Consolas", 9), bg=C["logbg"], fg=C["logfg"],
+    preview_txt = tkinter.Text(bottom_frame, font=FONT_LOG, bg=C["logbg"], fg=C["logfg"],
         wrap="word", relief="flat", bd=0, padx=8, pady=6, state="disabled")
     preview_txt.grid(row=0, column=0, sticky="nsew")
     preview_scroll = tkinter.Scrollbar(bottom_frame, orient="vertical", command=preview_txt.yview, width=8,
@@ -2314,7 +2731,7 @@ def _show_variables_window():
     notebook.add(stack_frame, text="调用栈")
     
     # Call stack display
-    stack_text = tkinter.Text(stack_frame, font=("Consolas", 10), 
+    stack_text = tkinter.Text(stack_frame, font=FONT_LOG,
         bg=C["logbg"], fg=C["logfg"], wrap="word", relief="solid", bd=1,
         padx=10, pady=10, state="disabled")
     stack_text.pack(fill="both", expand=True, padx=5, pady=5)
@@ -2341,7 +2758,7 @@ def _show_variables_window():
                 stack_text.insert("end", "嵌套深度: {}\n\n".format(depth), "info")
                 stack_text.insert("end", stack_info + "\n")
             
-            stack_text.tag_configure("info", foreground="#3B82F6")
+            stack_text.tag_configure("info", foreground=themed("ac"))
             stack_text.tag_configure("heading", foreground=C["ok"], font=FONT_TITLE)
             stack_text.config(state="disabled")
         
@@ -2389,8 +2806,8 @@ def _show_variables_window():
                     row_num, tdata["cmd"][:12],
                     "{:.3f}s".format(tdata["elapsed"]),
                     status_text), tags=(tag,))
-            timing_tree.tag_configure("ok", foreground="#10B981")
-            timing_tree.tag_configure("fail", foreground="#EF4444")
+            timing_tree.tag_configure("ok", foreground=themed("sc"))
+            timing_tree.tag_configure("fail", foreground=themed("dg"))
             # Auto-scroll to latest
             children = timing_tree.get_children()
             if children:
@@ -2421,8 +2838,9 @@ def _show_variables_window():
 
         tkinter.Label(edit_win, text="编辑变量: {}".format(var_name),
             font=FONT_TITLE, bg=C["bgc"], fg=C["fgt"]).pack(pady=(10, 6))
-        edit_entry = tkinter.Entry(edit_win, font=("Consolas", 11), width=35,
-            relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"])
+        edit_entry = tkinter.Entry(edit_win, font=FONT_LOG, width=35,
+            relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"],
+            insertbackground=C["fgt"])
         edit_entry.insert(0, var_value)
         edit_entry.pack(pady=(0, 8), padx=10)
         edit_entry.select_range(0, "end")
@@ -2484,7 +2902,8 @@ def _open_marketplace():
     search_frame.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 6))
     search_var = tkinter.StringVar()
     search_entry = tkinter.Entry(search_frame, textvariable=search_var,
-        font=FONT_BODY, width=30, relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"])
+        font=FONT_BODY, width=30, relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"],
+        insertbackground=C["fgt"])
     search_entry.pack(side="left", fill="x", expand=True, padx=(0, 4))
 
     # Category filter
@@ -2584,14 +3003,14 @@ def _open_marketplace():
                 anchor="w")
             tag_row = tkinter.Frame(body, bg=C["bgc"])
             tag_row.pack(fill="x", pady=(3, 0))
-            tkinter.Label(tag_row, text="[{}]".format(s.category), font=("Microsoft YaHei UI", 7),
+            tkinter.Label(tag_row, text="[{}]".format(s.category), font=FONT_TINY,
                 fg=C["ac"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
             for t in s.tags[:4]:
-                tkinter.Label(tag_row, text=t, font=("Microsoft YaHei UI", 7),
+                tkinter.Label(tag_row, text=t, font=FONT_TINY,
                     fg=C["fgm"], bg=C["acl"], padx=4, pady=1).pack(side="left", padx=1)
             if s.requires:
                 tkinter.Label(tag_row, text="需要: {}".format(",".join(s.requires)),
-                    font=("Microsoft YaHei UI", 7), fg=C["wn"], bg=C["bgc"]).pack(
+                    font=FONT_TINY, fg=C["wn"], bg=C["bgc"]).pack(
                     side="right")
 
             # Button row
@@ -2975,8 +3394,8 @@ log_frame = tkinter.Frame(card_log,bg=C["logbg"])
 log_frame.grid(row=1,column=0,sticky="nsew",padx=6,pady=(0,4))
 log_frame.columnconfigure(0,weight=1); log_frame.rowconfigure(0,weight=1)
 
-rz=tkinter.Text(log_frame,font=("Consolas",9),fg=C["logfg"],bg=C["logbg"],
-    wrap="word",relief="flat",bd=0,padx=6,pady=4,
+rz=tkinter.Text(log_frame,font=FONT_LOG,fg=C["logfg"],bg=C["logbg"],
+    wrap="word",relief="flat",bd=0,padx=6,pady=4,insertbackground=C["fgt"],
     selectbackground=C["acl"],selectforeground=C["fgt"],undo=True,maxundo=50)
 rz.grid(row=0,column=0,sticky="nsew")
 scroll=tkinter.Scrollbar(log_frame,width=6,relief="flat",elementborderwidth=0,
@@ -3218,7 +3637,7 @@ def _wf_scheduler_callback():
 wf_name_var = tkinter.StringVar(value="未命名工作流")
 wf_name_entry = tkinter.Entry(wf_toolbar, textvariable=wf_name_var,
     font=FONT_BODY, width=20, relief="solid", bd=1,
-    bg=C["ebg"], fg=C["fgb"])
+    bg=C["ebg"], fg=C["fgb"], insertbackground=C["fgt"])
 wf_name_entry.pack(side="left", padx=(8, 4))
 
 # ── 主内容区: [操作库 | PanedWindow(列表 + 流程图)] ──
@@ -3241,7 +3660,7 @@ tkinter.Label(wf_lib_frame, text="📚 操作库", font=FONT_TITLE,
 
 # 搜索框
 wf_lib_search = tkinter.Entry(wf_lib_frame, font=FONT_SMALL,
-    relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"])
+    relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"], insertbackground=C["fgt"])
 wf_lib_search.grid(row=1, column=0, sticky="ew", padx=6, pady=(0, 4))
 wf_lib_search.insert(0, "")
 wf_lib_search.bind("<KeyRelease>", lambda e: _wf_filter_library())
@@ -3555,7 +3974,7 @@ def _wf_render_flowchart(*args):
     steps = _wf_data.get("steps", [])
     if not steps:
         wf_flow_canvas.create_text(200, 60, text="暂无步骤\n点击 [+ 脚本] 等按钮添加",
-            font=("Microsoft YaHei UI", 10), fill=C["fgm"], anchor="center")
+            font=FONT_BODY, fill=C["fgm"], anchor="center")
         wf_flow_canvas.configure(scrollregion=(0, 0, 400, 150))
         return
 
@@ -3625,7 +4044,7 @@ def _wf_render_flowchart(*args):
         text_id = wf_flow_canvas.create_text(
             x + 8, y + _NODE_H // 2,
             text=display, anchor="w",
-            font=(*FONT_SMALL, "bold"),
+            font=FONT_SMALL_BOLD,
             fill="white", tags=("node", "node_{}".format(i)))
 
         # 节点阴影效果 (深色半透明 — 根据主题切换颜色)
@@ -3875,7 +4294,8 @@ def _wf_edit_step(event=None):
         pf = tkinter.Frame(dlg, bg=C["bgc"])
         pf.pack(pady=4)
         tkinter.Entry(pf, textvariable=path_var, width=40,
-            font=FONT_BODY, bg=C["ebg"], fg=C["fgb"]).pack(side="left", padx=(0, 4))
+            font=FONT_BODY, bg=C["ebg"], fg=C["fgb"],
+            insertbackground=C["fgt"]).pack(side="left", padx=(0, 4))
         def _browse():
             fp = filedialog.askopenfilename(filetypes=[('Excel', '*.xls')])
             if fp:
@@ -3932,17 +4352,20 @@ def _wf_edit_step(event=None):
         tkinter.Label(dlg, text="条件表达式:", bg=C["bgc"], fg=C["fgb"]).pack(pady=(10, 2))
         cond_var = tkinter.StringVar(value=step.get("if", ""))
         tkinter.Entry(dlg, textvariable=cond_var, width=40,
-            font=("Consolas", 10), bg=C["ebg"], fg=C["fgb"]).pack(pady=4)
+            font=FONT_LOG, bg=C["ebg"], fg=C["fgb"],
+            insertbackground=C["fgt"]).pack(pady=4)
         tkinter.Label(dlg, text="(使用 ${var} 引用变量)", font=FONT_SMALL,
             bg=C["bgc"], fg=C["fgm"]).pack()
         tkinter.Label(dlg, text="成立时执行:", bg=C["bgc"], fg=C["fgb"]).pack(pady=(8, 2))
         then_var = tkinter.StringVar(value=step.get("then", ""))
         tkinter.Entry(dlg, textvariable=then_var, width=40,
-            font=FONT_BODY, bg=C["ebg"], fg=C["fgb"]).pack(pady=2)
+            font=FONT_BODY, bg=C["ebg"], fg=C["fgb"],
+            insertbackground=C["fgt"]).pack(pady=2)
         tkinter.Label(dlg, text="不成立时执行:", bg=C["bgc"], fg=C["fgb"]).pack(pady=(4, 2))
         else_var = tkinter.StringVar(value=step.get("else", ""))
         tkinter.Entry(dlg, textvariable=else_var, width=40,
-            font=FONT_BODY, bg=C["ebg"], fg=C["fgb"]).pack(pady=2)
+            font=FONT_BODY, bg=C["ebg"], fg=C["fgb"],
+            insertbackground=C["fgt"]).pack(pady=2)
         def _save_cond():
             step["if"] = cond_var.get()
             step["then"] = then_var.get() if then_var.get() else ""
@@ -3956,7 +4379,8 @@ def _wf_edit_step(event=None):
         tkinter.Label(dlg, text="等待秒数:", bg=C["bgc"], fg=C["fgb"]).pack(pady=(10, 4))
         sec_var = tkinter.StringVar(value=str(step.get("seconds", 1)))
         tkinter.Entry(dlg, textvariable=sec_var, width=10,
-            font=FONT_BODY, bg=C["ebg"], fg=C["fgb"]).pack(pady=4)
+            font=FONT_BODY, bg=C["ebg"], fg=C["fgb"],
+            insertbackground=C["fgt"]).pack(pady=4)
         def _save_wait():
             try:
                 step["seconds"] = float(sec_var.get())
@@ -3987,8 +4411,9 @@ def _wf_edit_step(event=None):
         for i in range(9):
             pv = tkinter.StringVar(value=str(params[i]) if i < len(params) else "")
             param_vars.append(pv)
-            tkinter.Entry(pf, textvariable=pv, width=5, font=("Consolas", 8),
-                bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1).grid(
+            tkinter.Entry(pf, textvariable=pv, width=5, font=FONT_LOG,
+                bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1,
+                insertbackground=C["fgt"]).grid(
                 row=i // 3, column=i % 3, padx=2, pady=2)
         def _save_command():
             step["cmd"] = cmd_var.get()
@@ -4003,7 +4428,8 @@ def _wf_edit_step(event=None):
         tkinter.Label(dlg, text="循环次数/条件:", bg=C["bgc"], fg=C["fgb"]).pack(pady=(10, 2))
         loop_var = tkinter.StringVar(value=str(step.get("times", "1")))
         tkinter.Entry(dlg, textvariable=loop_var, width=30,
-            font=("Consolas", 10), bg=C["ebg"], fg=C["fgb"]).pack(pady=2)
+            font=FONT_LOG, bg=C["ebg"], fg=C["fgb"],
+            insertbackground=C["fgt"]).pack(pady=2)
         tkinter.Label(dlg, text="(数字=固定次数, 或 ${x} < 5 条件循环)", font=FONT_SMALL,
             bg=C["bgc"], fg=C["fgm"]).pack()
         # 子步骤管理
@@ -4052,11 +4478,13 @@ def _wf_edit_step(event=None):
         tkinter.Label(dlg, text="变量名:", bg=C["bgc"], fg=C["fgb"]).pack(pady=(10, 2))
         vn_var = tkinter.StringVar(value=step.get("var_name", ""))
         tkinter.Entry(dlg, textvariable=vn_var, width=30,
-            font=("Consolas", 10), bg=C["ebg"], fg=C["fgb"]).pack(pady=2)
+            font=FONT_LOG, bg=C["ebg"], fg=C["fgb"],
+            insertbackground=C["fgt"]).pack(pady=2)
         tkinter.Label(dlg, text="变量值:", bg=C["bgc"], fg=C["fgb"]).pack(pady=(8, 2))
         vv_var = tkinter.StringVar(value=step.get("var_value", ""))
         tkinter.Entry(dlg, textvariable=vv_var, width=30,
-            font=("Consolas", 10), bg=C["ebg"], fg=C["fgb"]).pack(pady=2)
+            font=FONT_LOG, bg=C["ebg"], fg=C["fgb"],
+            insertbackground=C["fgt"]).pack(pady=2)
         def _save_var():
             step["var_name"] = vn_var.get().strip()
             step["var_value"] = vv_var.get()
@@ -4070,7 +4498,8 @@ def _wf_edit_step(event=None):
         tkinter.Label(dlg, text="日志内容:", bg=C["bgc"], fg=C["fgb"]).pack(pady=(10, 2))
         lg_var = tkinter.StringVar(value=step.get("text", ""))
         tkinter.Entry(dlg, textvariable=lg_var, width=40,
-            font=FONT_BODY, bg=C["ebg"], fg=C["fgb"]).pack(pady=4)
+            font=FONT_BODY, bg=C["ebg"], fg=C["fgb"],
+            insertbackground=C["fgt"]).pack(pady=4)
         tkinter.Label(dlg, text="(支持 ${var} 变量引用)", font=FONT_SMALL,
             bg=C["bgc"], fg=C["fgm"]).pack()
         def _save_log():
@@ -4090,7 +4519,8 @@ def _wf_edit_step(event=None):
     tkinter.Label(common_frame, text="备注:", font=FONT_SMALL,
         bg=C["bgc"], fg=C["fgm"]).pack(side="left", padx=(8, 2))
     tkinter.Entry(common_frame, textvariable=cmt_var, width=18,
-        font=FONT_SMALL, bg=C["ebg"], fg=C["fgb"]).pack(side="left")
+        font=FONT_SMALL, bg=C["ebg"], fg=C["fgb"],
+        insertbackground=C["fgt"]).pack(side="left")
 
     # 统一保存通用字段 (enabled/comment) — 无论点击哪个类型的"确定"或关闭窗口都会生效
     def _apply_common():
@@ -4240,7 +4670,7 @@ def _wf_toggle_comment():
             tkinter.Label(dlg, text="注释内容:", font=FONT_BODY,
                 bg=C["bgc"], fg=C["fgb"]).pack(pady=(10, 4))
             entry = tkinter.Entry(dlg, font=FONT_BODY, width=40,
-                bg=C["ebg"], fg=C["fgb"])
+                bg=C["ebg"], fg=C["fgb"], insertbackground=C["fgt"])
             entry.pack(pady=4, padx=10)
             entry.focus_set()
             def _save():
@@ -4394,12 +4824,12 @@ def _wf_open_variable_manager():
     tkinter.Label(entry_frame, text="变量名:", font=FONT_SMALL,
         bg=C["bgc"], fg=C["fgm"]).pack(side="left")
     vn_entry = tkinter.Entry(entry_frame, width=12, font=FONT_SMALL,
-        bg=C["ebg"], fg=C["fgb"])
+        bg=C["ebg"], fg=C["fgb"], insertbackground=C["fgt"])
     vn_entry.pack(side="left", padx=2)
     tkinter.Label(entry_frame, text="值:", font=FONT_SMALL,
         bg=C["bgc"], fg=C["fgm"]).pack(side="left", padx=(6, 2))
     vv_entry = tkinter.Entry(entry_frame, width=16, font=FONT_SMALL,
-        bg=C["ebg"], fg=C["fgb"])
+        bg=C["ebg"], fg=C["fgb"], insertbackground=C["fgt"])
     vv_entry.pack(side="left", padx=2)
 
     def _add_var():
@@ -4750,6 +5180,30 @@ def _setup_scroll_bindings():
     except Exception: pass
 
 root.after(10, _setup_scroll_bindings)
+
+# ── NetLink 多设备互联: 按配置自动启动 (失败不影响主程序) ──
+try:
+    if getattr(state, "NETLINK_ENABLED", False):
+        import netlink
+        netlink.start_netlink(root)
+except Exception as _e:
+    log1("NetLink 启动失败: {}".format(_e), "warning")
+
+# ── NetLink 远程操控钩子 (Phase 2-2): 供被控端回主线程执行 运行/停止 ──
+try:
+    import netlink as _netlink_mod
+
+    def _nl_hook_run(loops=None):
+        try:
+            if loops:
+                loop_count_var.set(str(loops))
+        except Exception:
+            pass
+        main_run()
+
+    _netlink_mod.set_control_hooks(run=_nl_hook_run, stop=stop_execution)
+except Exception as _e:
+    log1("NetLink 控制钩子注册失败: {}".format(_e), "warning")
 
 # 注意: mainloop() 调用已移至 run.py,避免重复调用
 # root.mainloop()

@@ -261,13 +261,20 @@ python tools/bump_version.py --verify       # 扫描 src/ 确认无旧版本号�
 
 ### 变量引用
 
-使用 `${variable_name}` 引用变量，例如：
+使用 `${variable_name}` 引用变量。**注意：替换只在以下三处生效**（见 `src/engine.py`）：
 
+1. `如果` / `循环开始` 的**条件表达式**
+2. `数学运算` 的**表达式**
+3. `浏览器输入` 的**文本**
+
+```text
+如果        ${count} > 10            # ✅ 条件表达式
+数学运算     ${index} + 1, index      # ✅ 表达式
+浏览器输入   #keyword, ${kw}          # ✅ 浏览器输入
+输入        ${username}              # ❌ 不会替换，会原样粘贴出 "${username}"
 ```
-输入    ${username}
-写入    ${clip_text}, 0.05, auto
-等待    ${delay}
-```
+
+也就是说，桌面端 `输入` / `写入` 命令**无法**直接输出变量内容；需要把变量值发到桌面应用时，请改用 `浏览器输入`，或设计成不含变量的步骤。
 
 ---
 
@@ -527,6 +534,12 @@ ACRPA 自 v0.1.22 起支持 **DD 驱动**作为高性能输入后端：
 
 - [Python 代码扩展使用说明](docs/python扩展使用说明.md)
 - [版本发布说明](docs/releases/v0.1.28-beta.md)
+
+**脚本市场**
+
+- 市场仓库（Gitee，客户端后端）：<https://gitee.com/yohoten/acrpa-marketplace> —— 索引 `index.json` + `scripts/*.xls`
+- 投稿手册（仓库位置与分支、index.json 字段、xls 格式、上传流程、自检清单）：见该仓库 `README.md`
+- 客户端代码：`src/marketplace.py`（`MARKETPLACE_REPO` / `MARKETPLACE_INDEX`，固定读取 **master** 分支的 raw 文件）
 
 ---
 

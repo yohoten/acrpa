@@ -28,7 +28,7 @@
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"SoftwareApplication","name":"ACRPA","alternateName":"A/C RPA 自动化工作流工具","applicationCategory":"UtilitiesApplication","applicationSubCategory":"RPA 桌面自动化","operatingSystem":"Windows","softwareVersion":"0.1.27","datePublished":"2026-09-17","description":"轻量级 Windows 桌面自动化工具：Excel 表格即脚本，支持图像识别定位、窗口管理、OCR、浏览器自动化、工作流编排、定时任务与 AI 增强。","url":"https://yohoten.github.io/acrpa/","downloadUrl":"https://github.com/yohoten/acrpa/releases/download/v0.1.27.0/ACRPA.zip","author":{"@type":"Person","name":"yohoten"},"offers":{"@type":"Offer","price":"0","priceCurrency":"CNY"}}
 </script>
-<noscript><style>.reveal{opacity:1 !important;transform:none !important}</style></noscript>
+<noscript><style>.reveal{opacity:1 !important;transform:none !important}.timeline .tl-item{display:block !important}</style></noscript>
 <style>
   :root{
     --bg:#070b15;
@@ -739,19 +739,58 @@
   .nl-shot-wrap img{opacity:1}
 
   /* ==========================================================
-     六项体验优化 · 本次更新要点（追加样式，不改动既有规则）
+     更新日志折叠（默认收起，仅显示最新 3 条；按钮由 JS 启用）
      ========================================================== */
-  .opt-list{list-style:none;display:flex;flex-direction:column;gap:10px;margin-top:24px}
-  .opt-list li{
-    display:flex;gap:12px;align-items:flex-start;
-    font-size:13.5px;color:var(--muted);line-height:1.7;
-    border:1px solid var(--border);border-radius:12px;padding:14px 18px;background:var(--card);
-    transition:border-color .22s,background .22s;
+  .timeline.is-collapsed .tl-item:nth-child(n+4){display:none}
+  .tl-toggle{
+    display:none;                              /* JS 就绪后置为 block，无 JS 时条目全展开且无按钮 */
+    margin:16px auto 0;cursor:pointer;
+    font-family:var(--mono);font-size:12.5px;color:var(--muted);
+    background:var(--card);border:1px solid var(--border);border-radius:999px;
+    padding:8px 20px;transition:border-color .2s,color .2s;
   }
-  .opt-list li:hover{border-color:var(--border-strong);background:var(--card-hover)}
-  .opt-list li b{color:var(--text)}
-  .opt-list .oi{flex:none;color:var(--ok);line-height:1.7}
-  .opt-note{margin-top:18px;font-size:12.5px;color:var(--dim)}
+  .tl-toggle:hover{border-color:var(--border-strong);color:var(--text)}
+  .tl-toggle:focus-visible{outline:2px solid var(--c1);outline-offset:2px}
+  .tl-toggle .tl-caret{display:inline-block;margin-left:8px;transition:transform .25s}
+  .tl-toggle[aria-expanded="true"] .tl-caret{transform:rotate(180deg)}
+
+  /* ==========================================================
+     核心特性 · 扑克牌堆（手持扇形：绕底部支点旋转铺成扇面，
+     悬停 / 聚焦的那张抬起转正、放大浮到最前看详情）
+     仅在脚本给 #featureGrid 加上 .js-fan 后生效；无 JS / 减弱动效 / 窄屏
+     均回退为普通网格，保证内容始终可读。
+     ========================================================== */
+  #featureGrid.js-fan{
+    display:block;position:relative;
+    height:308px;margin:12px auto 0;max-width:980px;padding-top:74px;
+  }
+  #featureGrid.js-fan .card{
+    position:absolute;left:50%;bottom:22px;
+    width:178px;min-height:240px;text-align:left;
+    transform-origin:50% 255%;
+    transform:translate(-50%,0) rotate(var(--rot,0deg));
+    z-index:var(--z,1);
+    transition:transform .4s cubic-bezier(.2,.75,.25,1),box-shadow .4s,border-color .4s;
+    box-shadow:0 12px 26px rgba(0,0,0,.34);cursor:pointer;
+  }
+  #featureGrid.js-fan .card:hover,
+  #featureGrid.js-fan .card:focus-visible{
+    transform:translate(-50%,-90px) rotate(0deg) scale(1.16);
+    z-index:999;border-color:var(--c1);
+    box-shadow:0 28px 64px rgba(0,0,0,.55);
+  }
+  #featureGrid.js-fan .card:focus{outline:none}
+  #featureGrid.js-fan .card:focus-visible{outline:2px solid var(--c1);outline-offset:4px}
+  .feat-hint{display:none;text-align:center;font-size:12.5px;color:var(--dim);margin:24px auto 0}
+  #featureGrid.js-fan + .feat-hint{display:block}
+  @media (max-width:720px){
+    /* 窄屏不做牌堆，回退成单列网格，卡片完整可读 */
+    #featureGrid.js-fan{display:grid;grid-template-columns:1fr;height:auto;max-width:none;padding-top:0;margin-top:18px}
+    #featureGrid.js-fan .card{position:static;left:auto;bottom:auto;width:auto;min-height:0;transform:none;box-shadow:none}
+    #featureGrid.js-fan .card:hover,
+    #featureGrid.js-fan .card:focus-visible{transform:none;border-color:var(--border);box-shadow:none;outline:none}
+    #featureGrid.js-fan + .feat-hint{display:none}
+  }
 </style>
 </head>
 <body>
@@ -773,7 +812,6 @@
       <a href="#screenshots">界面预览</a>
       <a href="#features">核心特性</a>
       <a href="#netlink">多设备互联</a>
-      <a href="#optimization">体验优化</a>
       <a href="#commands">命令系统</a>
       <a href="#workflow">工作流</a>
       <a href="#ai">AI 增强</a>
@@ -782,13 +820,13 @@
       <a href="#contact">联系</a>
     </div>
     <button class="menu-toggle" id="menuToggle" aria-label="菜单" aria-expanded="false">☰</button>
-    <span class="ver-pill">v0.1.27</span>
+    <span class="ver-pill" data-ver></span>
+    <span class="ver-pill" style="color:var(--warn);border-color:rgba(251,191,36,.45);background:rgba(251,191,36,.08)">Pre-release</span>
   </div>
   <div class="mobile-nav" id="mobileNav">
     <a href="#screenshots">界面预览</a>
     <a href="#features">核心特性</a>
     <a href="#netlink">多设备互联</a>
-    <a href="#optimization">体验优化</a>
     <a href="#commands">命令系统</a>
     <a href="#workflow">工作流</a>
     <a href="#ai">AI 增强</a>
@@ -813,23 +851,21 @@
         <a class="btn btn-primary" href="#features">✨ 开始使用</a>
         <a class="btn btn-ghost" href="#commands">📋 命令速查</a>
         <div class="dl-drop" id="dlDrop">
-          <button class="btn-download" id="dlToggle" aria-haspopup="true" aria-expanded="false">⬇ 下载 ACRPA <span class="caret">▾</span></button>
+          <button class="btn-download" id="dlToggle" aria-haspopup="true" aria-expanded="false">⬇ 从 GitHub 下载 <span class="caret">▾</span></button>
           <div class="dl-menu" id="dlMenu">
-            <a href="https://github.com/yohoten/acrpa/releases/download/v0.1.27.0/ACRPA.zip" target="_blank" rel="noopener noreferrer">
-              <span class="row"><span class="gi">⬇</span> 直接下载 v0.1.27</span>
-              <small>ACRPA.zip · 便携版（内含 ACRPA v0.1.27.exe）· 12.8 MB</small>
+            <a href="https://github.com/yohoten/acrpa/releases/download/v0.1.28-beta/ACRPA-v0.1.28-beta.exe" data-download target="_blank" rel="noopener noreferrer">
+              <span class="row"><span class="gi">⬇</span> 直接下载 <span data-ver></span></span>
+              <small>ACRPA-v0.1.28-beta.exe · 便携版 · 13.4 MiB · 预发布</small>
             </a>
-            <a href="https://github.com/yohoten/acrpa/releases" target="_blank" rel="noopener noreferrer">
-              <span class="row"><span class="gi">⌥</span> GitHub Releases</span>
-              <small>github.com/yohoten/acrpa</small>
-            </a>
-            <a href="https://gitee.com/yohoten/acrpa/releases" target="_blank" rel="noopener noreferrer">
-              <span class="row"><span class="gi">◆</span> Gitee Releases</span>
-              <small>gitee.com/yohoten/acrpa</small>
+            <a href="https://github.com/yohoten/acrpa/releases/tag/v0.1.28-beta" target="_blank" rel="noopener noreferrer">
+              <span class="row"><span class="gi">⌥</span> GitHub Release 页面</span>
+              <small>github.com/yohoten/acrpa/releases/tag/v0.1.28-beta</small>
             </a>
           </div>
         </div>
+        <a class="btn btn-ghost" href="https://gitee.com/yohoten/ACRPA/releases" target="_blank" rel="noopener noreferrer">◆ Gitee 发行版</a>
       </div>
+      <p style="font-size:12.5px;color:var(--dim);margin:-10px 0 22px">v0.1.28-beta（预发布）· ACRPA-v0.1.28-beta.exe · 13.4 MiB · SHA-256 473f1db3…06d54 —— Gitee 发行版附件正在补充，可先使用 GitHub 下载</p>
       <div class="hero-tags">
         <span class="tag">📦 Excel 脚本驱动</span>
         <span class="tag">🖱 图像识别定位</span>
@@ -844,7 +880,7 @@
       <div class="mock">
         <div class="mock-bar">
           <span class="mock-dot r"></span><span class="mock-dot y"></span><span class="mock-dot g"></span>
-          <span class="mock-title">ACRPA v0.1.27</span>
+          <span class="mock-title">ACRPA <span data-ver></span></span>
         </div>
         <div class="mock-body">
           <div class="mock-tabs">
@@ -884,7 +920,7 @@
     <div class="stat"><div class="num"><span class="grad count" data-target="50">0</span></div><div class="lab">内置自动化命令</div></div>
     <div class="stat"><div class="num"><span class="grad count" data-target="10">0</span></div><div class="lab">即用型脚本模板</div></div>
     <div class="stat"><div class="num"><span class="grad count" data-target="4">0</span></div><div class="lab">步骤类型 · 工作流编排</div></div>
-    <div class="stat"><div class="num"><span class="grad">v0.1.27</span></div><div class="lab">2026-09-17 最新版本</div></div>
+    <div class="stat"><div class="num"><span class="grad" data-ver></span></div><div class="lab"><span data-date></span> 最新版本</div></div>
   </div>
 </div>
 
@@ -954,7 +990,7 @@
       <h2>核心特性</h2>
       <p class="sec-desc">从基础自动化到智能工作流，ACRPA 覆盖桌面自动化的完整链路。</p>
     </div>
-    <div class="cards">
+    <div class="cards" id="featureGrid">
       <div class="card reveal"><div class="ico">📦</div><h3>Excel 脚本驱动</h3><p>以 <b>.xls</b> 表格作为脚本文件，A 列命令、B–J 列参数，无需编程即可编排自动化流程，学习成本极低。</p></div>
       <div class="card reveal"><div class="ico">🖱</div><h3>图像识别定位</h3><p>基于 OpenCV / Pillow 的图像识别，支持全屏与区域找图、灰度加速匹配，精准定位并点击任意界面元素。</p></div>
       <div class="card reveal"><div class="ico">🪟</div><h3>窗口管理</h3><p>直接操作 Windows 窗口：激活、关闭、最小化、等待窗口出现/消失，支持窗口相对坐标，比图像识别快 10–100 倍。</p></div>
@@ -967,10 +1003,11 @@
       <div class="card reveal"><div class="ico">🐞</div><h3>专业调试器</h3><p>断点 / 条件断点、单步执行、变量监视器、调用栈、执行耗时统计、运行到光标、跳过行，问题一目了然。</p></div>
       <div class="card reveal"><div class="ico">🌓</div><h3>深色模式</h3><p>亮 / 暗主题一键切换；系统托盘、Mini Bar 悬浮状态条，让自动化任务在后台安静地跑。</p></div>
       <div class="card reveal"><div class="ico">📜</div><h3>日志与市场</h3><p>结构化分级日志、按日轮转、自动清理、一键导出；内置脚本市场（离线模式可用），持续扩展脚本生态。</p></div>
-      <div class="card reveal"><div class="ico">🔄</div><h3>自动更新</h3><p>启动自检新版本，多源降级获取清单（GitHub Releases → 原始清单 → CDN 镜像）；下载带进度与 sha256 校验，镜像返回旧包自动换源，一键重启完成替换，不动配置与脚本。<span class="tag-new">v0.1.27</span></p></div>
+      <div class="card reveal"><div class="ico">🔄</div><h3>自动更新</h3><p>启动自检新版本，多源降级获取清单（GitHub Releases → 原始清单 → CDN 镜像）；下载带进度与 sha256 校验，镜像返回旧包自动换源，一键重启完成替换，不动配置与脚本。<span class="tag-new" data-ver></span></p></div>
       <div class="card reveal"><div class="ico">🌐</div><h3>浏览器自动化</h3><p>内置 Playwright 网页操作：打开网页、点击、输入、等待元素、整页 / 元素截图，桌面流程与网页流程可串在同一条脚本里。</p></div>
       <div class="card reveal"><div class="ico">🛡️</div><h3>安全守护</h3><p>失控保护（鼠标徒手甩动即中止）、最长执行时间限制、出错即停与失败重试策略，无人值守也能安全收尾。</p></div>
     </div>
+    <div class="feat-hint" id="featHint"></div>
   </div>
 </section>
 
@@ -1027,35 +1064,6 @@
         </div>
       </div>
     </div>
-  </div>
-</section>
-
-<!-- ================= Optimization · 六项体验优化 ================= -->
-<section id="optimization" style="background:linear-gradient(180deg,transparent,rgba(52,211,153,.045) 30%,rgba(52,211,153,.045) 70%,transparent)">
-  <div class="wrap">
-    <div class="sec-head reveal">
-      <span class="sec-tag">EXPERIENCE · OPTIMIZATION</span>
-      <h2>六项体验优化</h2>
-      <p class="sec-desc">更顺手的小窗、更清晰的暗色、可换的 AI、可写的 Python、可缩放的字体 —— 六项集中优化让日常使用更省心。</p>
-    </div>
-    <div class="cards">
-      <div class="card reveal"><div class="ico">🪟</div><h3>Mini Bar 重做</h3><p>图标态 / 紧凑态 / 运行态三形态自动切换，高度 24–48、宽度 380–900、透明度 30–100 可配；宽度平滑过渡 + 差分缓存，位置记忆并做屏幕范围夹取；Canvas 状态点随空闲 / 运行 / 暂停 / 失败 / 录制变色。</p></div>
-      <div class="card reveal"><div class="ico">🌚</div><h3>暗黑模式修复</h3><p>新增主题安全取值护栏 <b>utils.themed(key, fallback)</b>，杜绝主题色被硬编码绕过；Toast 四类通知全部跟随主题，清理硬编码占位符色，19 处输入框 / 文本域补齐 insertbackground，深色冷启动光标不再消失。</p></div>
-      <div class="card reveal"><div class="ico">🔌</div><h3>自定义 AI 提供商</h3><p>内置 DeepSeek / 通义千问 / OpenAI / Ollama / 自定义 / Anthropic 六个预设，可自定义 BaseURL 与模型、增删提供商；密钥存入 <b>Windows 凭据库</b>，绝不写入 config.json；测试连接为两段式探测并自动回退。</p></div>
-      <div class="card reveal"><div class="ico">🐍</div><h3>Python 代码扩展</h3><p>新增 <b>Python</b> 命令：sandbox / trusted / full 三级权限（full 默认关闭），AST 静态预检 + 行级 trace 中断 / 独立子进程强杀的三层超时；审计日志只记 sha1 与摘要，不写代码全文；插件 handler 签名自适应，旧插件零改动可用。</p></div>
-      <div class="card reveal"><div class="ico">🔍</div><h3>字体与显示缩放</h3><p>10 个命名字体角色 + 全局 <b>ui_scale</b> 七档（0.8–1.5），60 处硬编码字体统一改为命名字体，切换档位即时生效；DPI 感知（Per-Monitor v2），150% / 200% 缩放下不再模糊。</p></div>
-      <div class="card reveal"><div class="ico">🧷</div><h3>互联按钮瘦身</h3><p>主界面标题栏「🌐 互联」精简为「🌐」，字号 11，与设置按钮视觉对齐；hover 提示与点击行为完整保留，工具栏更清爽。</p></div>
-    </div>
-    <ul class="opt-list reveal">
-      <li><span class="oi">✔</span><span><b>Mini Bar</b>：三形态自动切换 + 高度 / 宽度 / 透明度可配 + 宽度平滑动画 + 位置记忆 + Canvas 状态点。</span></li>
-      <li><span class="oi">✔</span><span><b>修复</b>：「设置 → 系统」卡的 Mini Bar 宽度 / 高度 / 透明度此前从未真正生效，现已统一收口到 <b>_apply_system_settings()</b>（一处修复同时解决宽度 / 高度 / 透明度与开机自启 / 托盘等整卡设置）。</span></li>
-      <li><span class="oi">✔</span><span><b>暗黑模式</b>：themed() 取值护栏 + Toast 主题化 + 19 处 insertbackground 补齐；<b>修复</b>深色冷启动光标不可见。</span></li>
-      <li><span class="oi">✔</span><span><b>AI 自定义</b>：6 个预设 + 自定义 BaseURL / 模型，密钥入 Windows 凭据库；<b>修复</b>AI 密钥明文写入 config.json 的风险。</span></li>
-      <li><span class="oi">✔</span><span><b>Python 扩展</b>：三级权限 + AST 预检 + 三层超时 + 审计日志 + AcrpaAPI；如实说明脚本级钩子仅在单脚本场景生效（工作流不经 execute_script）。</span></li>
-      <li><span class="oi">✔</span><span><b>字体缩放</b>：命名字体 + ui_scale 七档即时生效 + DPI 感知，入口在「设置 → 系统 → 界面缩放」。</span></li>
-      <li><span class="oi">✔</span><span><b>互联按钮瘦身</b>：标题栏「🌐 互联」→「🌐」，hover 与点击行为不变。</span></li>
-    </ul>
-    <p class="opt-note reveal">本轮无新增 pip 依赖；新增 5 个优化自测脚本，与 16 个 NetLink 测试脚本一并随源码提供。</p>
   </div>
 </section>
 
@@ -1315,8 +1323,8 @@
       <h2>更新历程</h2>
       <p class="sec-desc">持续迭代，近期聚焦更新机制、工作流编排、AI 增强与稳定性。</p>
     </div>
-    <div class="timeline">
-      <div class="tl-item reveal"><div class="tl-ver">v0.1.27</div><div class="tl-date">2026-09-17</div><p>以 v0.1.25 为基线重建，修复 v0.1.26 的不稳定接线：<code>_update_pending</code> 未定义导致 <code>_periodic</code> 每 100ms 抛 <code>NameError</code>、状态栏与执行进度刷新链路中断且更新提示置位失败；<code>show_update_dialog</code> 未导入导致点击状态栏更新入口失效。完整保留 v0.1.26 的优点：更新机制重构（多源降级 / 语义化版本比较 / sha256 校验 / 便携版一键重启自更新 / 打包版版本号来源修复）、engine 命令失败语义与工作流错误传播、发布工具链与构建资源纳管。</p></div>
+    <div class="timeline is-collapsed" id="timeline">
+      <div class="tl-item reveal"><div class="tl-ver" data-ver></div><div class="tl-date" data-date></div><p>以 v0.1.25 为基线重建，修复 v0.1.26 的不稳定接线：<code>_update_pending</code> 未定义导致 <code>_periodic</code> 每 100ms 抛 <code>NameError</code>、状态栏与执行进度刷新链路中断且更新提示置位失败；<code>show_update_dialog</code> 未导入导致点击状态栏更新入口失效。完整保留 v0.1.26 的优点：更新机制重构（多源降级 / 语义化版本比较 / sha256 校验 / 便携版一键重启自更新 / 打包版版本号来源修复）、engine 命令失败语义与工作流错误传播、发布工具链与构建资源纳管。</p></div>
       <div class="tl-item reveal"><div class="tl-ver">v0.1.26</div><div class="tl-date">2026-09-13</div><p>更新机制重构：修复打包后版本号失真（EXE 永远自报旧版本，导致更新判断与「关于」页全部失效）；检查更新改为多源降级（GitHub Releases → 原始清单 → CDN 镜像），任一可用即返回，某个来源报出的版本不够新时继续探测其余来源取最高者，不再因镜像缓存落后或网络异常而误报「已是最新」；版本比较支持 v 前缀、位数不齐与预发布后缀；网络传输双栈（requests → 系统证书库），修复企业 TLS 拦截环境下的静默失效；下载支持多候选直链逐个重试、流式进度、sha256 与体积校验，并复核包内 VERSION，镜像返回旧包时自动换源；新增应用内更新窗口与便携版一键重启自更新，只替换主程序与 VERSION，配置、脚本、模板、日志一律不动。另修复「命令失败静默成功」与 <code>stop_on_error</code> / 重试失效问题。</p></div>
       <div class="tl-item reveal"><div class="tl-ver">v0.1.25</div><div class="tl-date">2026-08-10</div><p>工作流 Tab 深度定制：操作库分类树 + 搜索 + 最近使用；新增 command / variable / loop / log 节点，统一配置表单，右键复制 / 粘贴 / 禁用 / 注释；外层循环次数与最长执行时间控制；执行高亮与变量管理；版本号全局统一管理。</p></div>
       <div class="tl-item reveal"><div class="tl-ver">v0.1.24</div><div class="tl-date">2026-08-09</div><p>设置页新增高级设置（最大执行时间 / 全局绑定窗口 / 录制模式 / OCR 后端 / 浏览器无头模式等）；每张设置卡独立「应用 ✓」；模型下拉框统一注册表（DeepSeek / Qwen / GPT / Claude）；修复 DD DLL 路径不生效、Claude 端点映射错误。</p></div>
@@ -1328,6 +1336,7 @@
       <div class="tl-item reveal"><div class="tl-ver">v0.1.18</div><div class="tl-date">2026-07-06</div><p>OCR 文字识别命令、脚本市场面板、调试器增强（执行计时 / 跳过行 / 运行到光标 / 变量就地编辑）、打包体积优化。</p></div>
       <div class="tl-item reveal"><div class="tl-ver">v0.1.17 → v0.1.13</div><div class="tl-date">2026-06 — 2026-07</div><p>集成 DD 驱动高性能输入后端；统一退出清理机制；AI 生成器与模板优化；图色识别与 OCR 功能说明完善。</p></div>
     </div>
+    <button type="button" class="tl-toggle" id="tlToggle" aria-expanded="false" aria-controls="timeline"><span class="tl-toggle-label">展开更多更新日志</span><span class="tl-caret">▾</span></button>
   </div>
 </section>
 
@@ -1351,7 +1360,7 @@
 
 <footer>
   <div class="wrap">
-    ACRPA · A/C RPA 自动化工作流工具 &nbsp;|&nbsp; v0.1.27（2026-09-17）&nbsp;|&nbsp; 基于 Python + tkinter + PyAutoGUI 构建
+    ACRPA · A/C RPA 自动化工作流工具 &nbsp;|&nbsp; <span data-ver></span>（<span data-date></span>）&nbsp;|&nbsp; 基于 Python + tkinter + PyAutoGUI 构建
   </div>
 </footer>
 
@@ -1628,6 +1637,101 @@
       var i = sibs.indexOf(el);
       if(i > 0) el.style.transitionDelay = Math.min(i, 6) * 70 + 'ms';
     });
+  })();
+</script>
+
+<script>
+  /* ================= 单一版本来源 · 更新日志折叠 =================
+     发版只需修改下面 ACRPA_RELEASE 一处：页面所有版本号、发布日期、
+     下载直链以及更新日志最新条目都会据此渲染，避免十余处手改漏改、
+     下载 URL 写错导致 404。
+     注：<head> 里的 <title> / og:title / twitter:title / JSON-LD 仍保留
+     静态文案，供搜索引擎与无 JS 环境兜底；下方脚本运行时会同步它们。
+     如需 SEO 完全精确，请连同这几处静态文案一起更新。 */
+  var ACRPA_RELEASE = {
+    version: "0.1.28-beta",      // 展示用版本号（可含预发布后缀）
+    tag: "v0.1.28-beta",         // GitHub Release tag（下载直链用，本版为预发布 tag）
+    date: "2026-10-01",          // 发布日期
+    ghUser: "yohoten",
+    ghRepo: "acrpa",
+    asset: "ACRPA-v0.1.28-beta.exe"  // Release 附件名
+  };
+
+  // —— 渲染版本号 / 日期 / 下载直链 ——
+  (function(){
+    var R = ACRPA_RELEASE, shown = "v" + R.version;
+    function fill(attr, val){
+      var n = document.querySelectorAll('[' + attr + ']');
+      for(var i = 0; i < n.length; i++){ n[i].textContent = val; }
+    }
+    fill('data-ver', shown);
+    fill('data-date', R.date);
+    var url = "https://github.com/" + R.ghUser + "/" + R.ghRepo +
+              "/releases/download/" + R.tag + "/" + R.asset;
+    var dls = document.querySelectorAll('[data-download]');
+    for(var i = 0; i < dls.length; i++){ dls[i].setAttribute('href', url); }
+    try{
+      var title = "ACRPA · A/C RPA 自动化工作流工具 · " + shown;
+      document.title = title;
+      var metas = document.querySelectorAll(
+        'meta[property="og:title"], meta[name="twitter:title"]');
+      for(var j = 0; j < metas.length; j++){ metas[j].setAttribute('content', title); }
+    }catch(e){}
+  })();
+
+  // —— 通用折叠：更新日志 / 核心特性 ——
+  function makeFold(cfg){
+    var grid = document.getElementById(cfg.grid);
+    var btn = document.getElementById(cfg.btn);
+    if(!grid || !btn) return;
+    var items = grid.querySelectorAll(cfg.item);
+    var total = items.length;
+    var label = btn.querySelector('.tl-toggle-label');
+    function render(open){
+      if(open){
+        grid.classList.remove('is-collapsed');
+        btn.setAttribute('aria-expanded', 'true');
+        if(label) label.textContent = cfg.collapse;
+        for(var i = 0; i < items.length; i++){ items[i].classList.add('in'); }
+      }else{
+        grid.classList.add('is-collapsed');
+        btn.setAttribute('aria-expanded', 'false');
+        if(label) label.textContent = cfg.expand.replace('{n}', total);
+      }
+    }
+    btn.style.display = 'block';
+    render(false);
+    btn.addEventListener('click', function(){
+      render(grid.classList.contains('is-collapsed'));
+    });
+  }
+  makeFold({
+    grid: 'timeline', btn: 'tlToggle', item: '.tl-item',
+    expand: '展开更多更新日志（共 {n} 条 · 显示最新 3 条）',
+    collapse: '收起更新日志'
+  });
+
+  // —— 核心特性 · 扑克牌堆（手持扇形） ——
+  (function(){
+    var grid = document.getElementById('featureGrid');
+    if(!grid) return;
+    // 尊重「减弱动效」偏好：不铺牌堆，保留普通网格
+    if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var cards = Array.prototype.slice.call(grid.querySelectorAll(':scope > .card'));
+    var n = cards.length;
+    if(!n) return;
+    var center = (n - 1) / 2;
+    var step = 4.2;   // 每张旋转步进（度），决定扇面张开幅度
+    cards.forEach(function(card, i){
+      card.style.setProperty('--rot', ((i - center) * step).toFixed(2) + 'deg');
+      card.style.setProperty('--z', i + 1);
+      card.setAttribute('tabindex', '0');
+      var h3 = card.querySelector('h3');
+      card.setAttribute('aria-label', '核心特性：' + (h3 ? h3.textContent.trim() : ''));
+    });
+    grid.classList.add('js-fan');       // 加上后折叠样式生效；无 JS / 窄屏 / 减弱动效自动回退网格
+    var hint = document.getElementById('featHint');
+    if(hint) hint.textContent = '将鼠标移到卡片上（或点击 / Tab 聚焦）查看该项 · 共 ' + n + ' 项';
   })();
 </script>
 </body>

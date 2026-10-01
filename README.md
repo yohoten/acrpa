@@ -1,10 +1,10 @@
 # A/C RPA - 自动化工作流工具
 
-version：v0.1.27
+version：v0.1.28-beta（预发布 / Pre-release）
 
 轻量级桌面自动化工具，基于 Python + tkinter + pyautogui，通过 Excel 脚本实现图像识别定位、鼠标键盘自动化操作。
 
-**下载最新版**：[GitHub Releases](https://github.com/yohoten/acrpa/releases/latest) · [Gitee 镜像](https://gitee.com/yohoten/acrpa)
+**下载 v0.1.28-beta（预发布）**：[GitHub Release 页面](https://github.com/yohoten/acrpa/releases/tag/v0.1.28-beta) · [资产直链](https://github.com/yohoten/acrpa/releases/download/v0.1.28-beta/ACRPA-v0.1.28-beta.exe) · [Gitee 发行版列表](https://gitee.com/yohoten/ACRPA/releases)
 
 ![](https://i.imgs.ovh/2026/09/13/7ada54bcbc739d30045ccc36922bac5f.png)
 
@@ -23,6 +23,49 @@ version：v0.1.27
 - **六项体验优化**：Mini Bar 三形态重做、暗黑模式显示修复、自定义 AI 提供商、Python 代码扩展、界面缩放（`ui_scale`）、互联按钮瘦身
 
 ![](https://i.imgs.ovh/2026/09/13/873139bf6c702c6d85d59f9a359136a6.png)
+
+## ⬇️ 下载 v0.1.28-beta
+
+> ⚠️ **Beta 预发布（Pre-release）**：本版可能存在问题，建议先在同版本测试机上验证后再投入使用。`python_full_enabled`（Python full 权限）与 `netlink_tls`（TLS 加密）**默认关闭**。
+
+- **GitHub（推荐）**：[Release 页面](https://github.com/yohoten/acrpa/releases/tag/v0.1.28-beta) · 资产直链 [ACRPA-v0.1.28-beta.exe](https://github.com/yohoten/acrpa/releases/download/v0.1.28-beta/ACRPA-v0.1.28-beta.exe)
+- **Gitee**：[发行版列表页](https://gitee.com/yohoten/ACRPA/releases)（Gitee 发行版的附件正在补充，可先使用 GitHub 下载）
+
+**文件名与大小**：`ACRPA-v0.1.28-beta.exe`（14047384 字节 / 约 13.4 MiB，便携版，双击即用，无需安装）
+
+**SHA-256**：`473f1db3da347a1310213e4fd70955f111f0fc397eb9e1ee7f5913d2b2606d54`
+
+校验命令（Windows）：
+
+```bat
+certutil -hashfile "ACRPA-v0.1.28-beta.exe" SHA256
+```
+
+```powershell
+Get-FileHash .\ACRPA-v0.1.28-beta.exe -Algorithm SHA256
+```
+
+### 本版更新摘要（v0.1.28-beta）
+
+完整说明见 [`docs/releases/v0.1.28-beta.md`](docs/releases/v0.1.28-beta.md)。
+
+**NetLink 多设备互联（新增，纯标准库零新增依赖）**
+
+1. **实时多机监控**：设备列表 + 运行状态 + 当前脚本 + 进度（第几行 / 第几循环 / 已运行时长）+ 实时日志流 + 定时任务状态。
+2. **零配置发现**：UDP 广播自动发现同网段设备；VLAN / 多网卡环境可退回「手动填 IP:端口」静态对端。
+3. **配对认证与三档权限**：6 位配对码（默认 600s）+ `PBKDF2-HMAC-SHA256` 派生密钥 + `nonce/HMAC` 挑战应答，密钥存 Windows 凭据库、配对后免 PIN 重连；权限分「仅观察 / 允许操控 / 允许接收脚本」。
+4. **远程操控**：运行 / 暂停 / 恢复 / 停止，脚本与工作流自动分叉；被控端首次操控弹确认框，指令串行化 + 全控制端广播回执。
+5. **脚本分发与远端脚本管理**：64 KB 分块 + 结束帧 sha256 与大小双重校验，失败不留残留；支持多设备批量下发与「推完即运行」。
+6. **远程截图 / 浏览器只读面板 / TLS / 审计日志**：截图 1 秒节流且不落盘；面板令牌鉴权、零写操作；TLS 自签 + TOFU 指纹固定；所有远程指令与截图请求写入审计日志。
+
+**六项体验优化**
+
+7. **Mini Bar 全面重做**：图标态 / 紧凑态 / 运行态三形态，尺寸可配、位置记忆、平滑动画；并修复「设置 → 系统」卡设置此前不生效的问题。
+8. **暗黑模式显示修复**：新增主题安全取值护栏 `themed()`，Toast 四类跟随主题，19 处输入框 / 文本域补齐 `insertbackground`。
+9. **主界面互联按钮瘦身**：标题栏 `🌐 互联` → `🌐`。
+10. **自定义 AI 提供商 / Python 代码扩展 / 字体缩放**：自定义 AI 提供商与 BaseURL（密钥入 Windows 凭据库）、新增 `Python` 命令（沙箱 + AST 预检 + 三层超时 + 审计）、命名字体 + `ui_scale` 7 档 + DPI 感知。
+
+> 本版为 **Beta 预发布（Pre-release）**，可能存在问题，建议先在测试机验证。
 
 ## 📚 示例脚本库
 
@@ -214,7 +257,7 @@ ACRPA v0.1.22 支持 **DD 驱动**（可选）作为高性能输入后端：
 
 ## 🌐 多设备局域网互联（NetLink）
 
-> **已开发完成（随源码提供，尚未单独发布安装包）**。定位：内网多机协同 —— 一台机器即可监控多台机器的运行状态，远程运行/暂停/停止，批量下发脚本，手机浏览器也能查看进度。
+> **已随 v0.1.28-beta 预发布提供独立 EXE 下载**（见上方「下载 v0.1.28-beta」小节；预发布，建议先在测试机验证）。定位：内网多机协同 —— 一台机器即可监控多台机器的运行状态，远程运行/暂停/停止，批量下发脚本，手机浏览器也能查看进度。
 
 完全基于 Python 标准库实现，**零新增依赖**，PyInstaller 打包体积几乎不变。
 
@@ -482,6 +525,8 @@ python tools/make_release.py --no-zip --purge-cdn main   # 5. 清 CDN 缓存 (�
 
 **联系**：yoho12138@aliyun.com
 **更新日志**：
+
+- v0.1.28-beta (2026-10-01): **Beta 预发布（Pre-release）** —— 新增 **NetLink 多设备互联**（内网多机实时监控 + 零配置 UDP 发现 + 6 位配对码与 `PBKDF2-HMAC-SHA256` 挑战应答 + 三档权限 + 远程运行/暂停/恢复/停止 + 脚本分发与远端脚本管理 + 远程截图 + 浏览器只读面板 + TLS 可选加密 + 审计日志，纯标准库零新增依赖），并落地 **六项体验优化**（Mini Bar 三形态重做、暗黑模式显示修复、互联按钮瘦身、自定义 AI 提供商 / 模型 / BaseURL、Python 代码扩展、字体与显示缩放）。本版为预发布，可能存在问题，建议先在同版本测试机验证；`python_full_enabled` 与 `netlink_tls` 默认关闭。独立 EXE 已在 GitHub Release 提供下载（`ACRPA-v0.1.28-beta.exe`，14,047,384 字节）。完整说明见 [`docs/releases/v0.1.28-beta.md`](docs/releases/v0.1.28-beta.md)。
 
 - v0.1.27 (2026-09-13): **以 v0.1.25 为基线重建，修复 v0.1.26 的不稳定接线** —— 在 v0.1.25 稳定基线上分组重放 v0.1.26 的改进并逐个验证，同时修正 v0.1.26 的两处接线缺陷：`_update_pending` 全局缺失，导致 `_periodic` 每 100ms 抛 `NameError`、状态栏与执行进度刷新链路中断；`show_update_dialog` 未导入，导致点击状态栏触发 `NameError`、更新入口失效。保留 v0.1.26 的全部优点：更新机制重构（GitHub Releases API 多源降级、完整语义化版本比较、sha256 与体积/容器校验、便携版一键重启自更新、打包版版本号来源修复）、engine 命令失败语义与工作流错误传播（stop_on_error/重试/并行失败）、发布工具链（`tools/make_release.py`、`tools/publish_release.py`、`bump_version.py`）、`res/` 等构建资源纳管与文档。另将运行时产物 `recent.json`/`recent_workflow.json` 加入忽略。
 

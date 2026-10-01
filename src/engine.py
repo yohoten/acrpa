@@ -18,6 +18,76 @@ import commands
 from safe_eval import safe_eval_condition, safe_eval_math, EvalError
 
 
+# ── Python 扩展: handler 签名自适应 + Tier3 脚本钩子注册表 ──
+# handler 调用约定: 旧插件为 h(row, script_dir)；支持 acrpa API 的新 handler 可为
+# h(row, script_dir, api)。此处用 inspect 判定参数个数，而非 try/except 回退，
+# 以避免把 handler 内部抛出的 TypeError 误判为「签名不匹配」。
+_SCRIPT_HOOKS = {"before": [], "after": []}
+
+
+def register_script_hook(kind, fn):
+    """注册脚本级钩子（kind: "before"/"after"）。缺省为空 → 零开销。"""
+    try:
+        if kind in _SCRIPT_HOOKS and callable(fn) and fn not in _SCRIPT_HOOKS[kind]:
+            _SCRIPT_HOOKS[kind].append(fn)
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _run_script_hooks(kind, rows=None, script_dir=""):
+    """调用已注册的脚本级钩子；缺省为空 → 直接返回，无开销。"""
+    fns = _SCRIPT_HOOKS.get(kind)
+    if not fns:
+        return
+    for fn in list(fns):
+        try:
+            fn(rows, script_dir)
+        except Exception as e:
+            log1("脚本钩子 {} 执行失败: {}".format(kind, e), "warning")
+
+
+def _handler_arity(h):
+    """返回 handler 期望的位置参数个数；无法判定返回 None。"""
+    try:
+        code = getattr(h, "__code__", None)
+        if code is not None:
+            import inspect as _inspect
+            n = code.co_argcount
+            if _inspect.ismethod(h):
+                n -= 1  # 扣除绑定方法的 self
+            if code.co_flags & 0x04:  # CO_VARARGS: (*args) → 交给旧两参调用
+                return None
+            return n
+    except Exception:
+        pass
+    return None
+
+
+def _make_api(script_dir=""):
+    """构造注入给 handler 的 AcrpaAPI（不可用时返回 None）。"""
+    try:
+        import acrpa_api
+        cur_row = 0
+        try:
+            if isinstance(getattr(state, "exec_state", None), dict):
+                cur_row = state.exec_state.get("row", 0)
+        except Exception:
+            cur_row = 0
+        return acrpa_api.AcrpaAPI(engine, {"script_dir": script_dir or "", "row": cur_row})
+    except Exception:
+        return None
+
+
+def _invoke_handler(h, adapted_row, script_dir):
+    """按 handler 参数个数自适应调用: 3 参 → 追加 api；否则旧两参。"""
+    arity = _handler_arity(h)
+    if arity is not None and arity >= 3:
+        return h(adapted_row, script_dir, _make_api(script_dir))
+    return h(adapted_row, script_dir)
+
+
 class ExecutionResult:
     """单条命令的稳定执行结果，兼容 Python 3.7。"""
     __slots__ = ("ok", "code", "message", "attempts", "artifacts")
@@ -256,6 +326,10 @@ class ExecutionEngine:
             # Clear variables from previous run to prevent cross-run pollution
             self.variables.clear()
             self._script_failed = False
+            # Tier3 脚本级钩子（脚本开始）。
+            # 注意：工作流经 workflow.py 的 eng.execute 直接调用 handler，不经过
+            # execute_script，故钩子在工作流场景不会触发（本期设计如此）。
+            _run_script_hooks("before", rows, script_dir)
         i = 0
         total_rows = len(rows)
         
@@ -393,6 +467,10 @@ class ExecutionEngine:
                         time.sleep(0.1)
                     if state.quit2:
                         break
+
+        if not _nested:
+            # Tier3 脚本级钩子（脚本结束）。同上：仅单脚本场景触发，工作流不触发。
+            _run_script_hooks("after", rows, script_dir)
 
     def _evaluate_condition(self, condition_str):
         """
@@ -639,7 +717,7 @@ class ExecutionEngine:
         for attempt in range(self.retry + 1):
             attempts = attempt + 1
             try:
-                handler_result = h(adapted_row, script_dir)
+                handler_result = _invoke_handler(h, adapted_row, script_dir)
                 # 旧 handler 没有返回值时，未抛异常即视为成功；新 handler 可显式返回 False。
                 success = handler_result is not False
                 if not success:
@@ -682,7 +760,7 @@ class ExecutionEngine:
                         time.sleep(wait_s)
                         attempts += 1
                         try:
-                            success = h(adapted_row, script_dir) is not False
+                            success = _invoke_handler(h, adapted_row, script_dir) is not False
                             if success:
                                 log1("AI 智能重试成功!")
                         except Exception as e:
@@ -1092,6 +1170,92 @@ class ExecutionEngine:
         except Exception as e:
             log1("❌ 代码执行失败 {}: {}".format(cp, e), "error")
             raise
+
+    def _current_row(self):
+        """当前执行行号（1-based），用于审计。"""
+        try:
+            if isinstance(getattr(state, "exec_state", None), dict):
+                return state.exec_state.get("row", 0)
+        except Exception:
+            pass
+        return 0
+
+    def _python(self, row, script_dir=""):
+        """Python — 执行内联 Python 代码（沙箱 + AST 预检 + 超时 + 审计）。
+
+        Excel 命令行: Python, 代码, 权限(sandbox/trusted/full，可空)
+        权限缺省取 state.PYTHON_DEFAULT_PERM；请求 full 但 state.PYTHON_FULL_ENABLED
+        为假时拒绝执行（原因 "full disabled"）。
+        失败返回 False（与其它命令的失败语义一致），成功返回 None。
+
+        注：本命令的 AcrpaAPI 有意直调 engine 的私有方法（_coord/_write/...），
+            属有意引入的耦合（见 acrpa_api 模块 docstring）。
+        """
+        try:
+            import py_sandbox
+        except Exception as e:
+            log1("Python 沙箱不可用: {}".format(e), "error")
+            return False
+
+        # 取参数（兼容 RowAdapter: row[i].value）
+        try:
+            code = row[1].value
+        except Exception:
+            code = None
+        if code is None or (isinstance(code, str) and not code.strip()):
+            log1("错误: Python 代码为空", "error")
+            return False
+        if not isinstance(code, str):
+            code = str(code)
+
+        try:
+            raw_perm = row[2].value
+        except Exception:
+            raw_perm = None
+        perm = str(raw_perm).strip().lower() if raw_perm else ""
+        if perm not in py_sandbox.VALID_PERMS:
+            perm = str(getattr(state, "PYTHON_DEFAULT_PERM", "sandbox")).strip().lower()
+            if perm not in py_sandbox.VALID_PERMS:
+                perm = py_sandbox.PERM_SANDBOX
+
+        # full 权限需上层显式开启（本命令不做 state 之外的额外判定）
+        if perm == py_sandbox.PERM_FULL and not getattr(state, "PYTHON_FULL_ENABLED", False):
+            py_sandbox.audit_write(py_sandbox.make_record(
+                code, perm, self._current_row(), 0.0, False, "full disabled",
+                False, "excel"))
+            log1("Python 执行被拒绝: full disabled（完全权限默认关闭）", "warning")
+            return False
+
+        # AST 预检（失败即审计 + 不执行）
+        ok_pre, reason = py_sandbox.precheck(code, perm)
+        if not ok_pre:
+            py_sandbox.audit_write(py_sandbox.make_record(
+                code, perm, self._current_row(), 0.0, False, reason, False, "excel"))
+            log1("Python 预检失败: {}".format(reason), "error")
+            return False
+
+        # 执行（run() 内部会再次 precheck 并自行写审计）
+        try:
+            timeout = float(getattr(state, "PYTHON_TIMEOUT", 30))
+        except (TypeError, ValueError):
+            timeout = 30.0
+        try:
+            from acrpa_api import AcrpaAPI
+            api = AcrpaAPI(self, {"script_dir": script_dir or "",
+                                  "row": self._current_row()})
+        except Exception:
+            api = None
+
+        res = py_sandbox.run(code, perm, timeout=timeout, api=api,
+                             audit="excel", row=self._current_row())
+        if res.get("ok"):
+            log1("Python 执行成功 [{}] {:.3f}s result={}".format(
+                perm, res.get("elapsed", 0.0), res.get("result")))
+            return None
+        log1("Python 执行失败 [{}] {}: {}".format(
+            perm, "超时" if res.get("timed_out") else "错误", res.get("error")),
+            "error")
+        return False
 
     # ======================================================================
     # SECTION: Window Management Methods (新增窗口管理方法)
@@ -1671,6 +1835,7 @@ commands._set_handler("按下", engine._kdown)
 commands._set_handler("释放", engine._kup)
 commands._set_handler("相移", engine._mrel)
 commands._set_handler("代码", engine._exec)
+commands._set_handler("Python", engine._python)
 
 # Window Management Commands (新增窗口管理命令注册)
 commands._set_handler("激活窗口", engine._activate_window)

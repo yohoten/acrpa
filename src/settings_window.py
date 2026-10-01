@@ -18,8 +18,10 @@ import tkinter
 from tkinter import ttk, messagebox, filedialog
 
 import state
+import utils
 import scheduler as sched
-from utils import _btn, _darken, create_card, log1, show_toast, attach_tooltip
+from utils import (_btn, _darken, create_card, log1, show_toast, attach_tooltip,
+                   FONT_SMALL_BOLD, FONT_TINY, FONT_ICON)
 
 # ── 依赖注入 (由 ACRPA.py 在启动时调用 init_ctx 填充) ──
 root = None              # 主窗口
@@ -213,7 +215,7 @@ def _flash_saved(card_key):
         return
     try:
         badge.configure(text="✓ 已保存", fg=C["sc"],
-            font=(*FONT_SMALL, "bold"))
+            font=FONT_SMALL_BOLD)
         _win.after(1200, lambda: _reset_badge(badge))
     except Exception:
         pass
@@ -298,7 +300,7 @@ def _make_collapsible_card(parent, title, icon):
         font=FONT_TITLE,
         bg=C["bgc"], fg=C["fgt"]).grid(row=0, column=0, sticky="w")
 
-    arrow = tkinter.Label(title_frame, text="▼", font=("Segoe UI Symbol", 8),
+    arrow = tkinter.Label(title_frame, text="▼", font=FONT_ICON,
         bg=C["bgc"], fg=C["fgm"], cursor="hand2")
     arrow.grid(row=0, column=2, sticky="e", padx=(4, 0))
 
@@ -330,6 +332,8 @@ _NAV_ITEMS = [
     ("system",   "💻", "系统"),
     ("quick",    "⚡", "快速操作"),
     ("advanced", "🔧", "高级设置"),
+    ("netlink",  "🌐", "网络互联"),
+    ("python",   "🐍", "Python 扩展"),
 ]
 
 
@@ -351,7 +355,7 @@ def _on_nav_click(key):
         try:
             if k == key:
                 lbl.configure(bg=C["ac"], fg="white",
-                    font=(FONT_BUTTON[0], FONT_BUTTON[1], "bold"))
+                    font=FONT_BUTTON)
             else:
                 lbl.configure(bg=C["bg"], fg=C["fgm"],
                     font=FONT_BODY)
@@ -494,12 +498,40 @@ def open_settings_window():
         # 注: engine.retry / retry_interval 由配置变更监听器自动同步 (见 ACRPA._on_config_changed)
 
     def _apply_ai_settings():
-        """保存「AI 增强」卡配置，并按需启停异常检测器。"""
-        state.API_KEY = api_key_var.get()
-        state.API_MODEL = api_model_var.get()
+        """保存「AI 增强」卡配置，并按需启停异常检测器。
+
+        提供商/模型/BaseURL 写入 state.AI_*；密钥走 Windows 凭据库
+        ACRPA/ai_key/<pid>（绝不落 config.json）并清空 Entry 显示值。
+        """
+        pid = _label_to_id.get(_prov_var.get(), "") or (getattr(state, "AI_PROVIDER", "") or "")
+        state.AI_PROVIDER = pid
+        state.AI_MODEL = api_model_var.get().strip()
+        state.AI_BASE_URL = api_base_var.get().strip()
+        key = api_key_var.get().strip()
+        if key:
+            if pid:
+                if _aic is not None:
+                    try:
+                        _aic.set_provider_key(pid, key)
+                    except Exception:
+                        pass
+            else:
+                # provider 为空 → 回退旧路径（save_config 会写入凭据库 ACRPA/api_key）
+                state.API_KEY = key
+            # 清空 Entry 显示值，避免明文常驻 UI／被误存（仅在有输入时清一次，防止反复触发）
+            try:
+                api_key_var.set("")
+            except Exception:
+                pass
+        # api_model 同步策略：仅当选自预设（非 custom）、且 api_model 仍是旧默认值
+        # "deepseek-v4-flash" 时，才把新模型名同步进 api_model（详见汇报说明）。
+        if (state.AI_MODEL and state.AI_MODEL != state.API_MODEL
+                and state.API_MODEL == "deepseek-v4-flash"
+                and pid and pid != "custom"):
+            state.API_MODEL = state.AI_MODEL
         state.AI_SMART_RETRY = ai_smart_retry_var.get()
         state.AI_ANOMALY_DETECT = ai_anomaly_var.get()
-        if state.AI_ANOMALY_DETECT and state.API_KEY:
+        if state.AI_ANOMALY_DETECT and (state.API_KEY or pid):
             try:
                 from ai_enhance import anomaly_detector
                 anomaly_detector.enable()
@@ -624,7 +656,7 @@ def open_settings_window():
     timeout_entry.pack(side="left")
 
     # 识图超时说明
-    tkinter.Label(retry_frame, text="图片识别等待时间，超时自动跳过", font=("Microsoft YaHei UI", 7),
+    tkinter.Label(retry_frame, text="图片识别等待时间，超时自动跳过", font=FONT_TINY,
         fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(4, 0))
 
     # === 执行模式选择 (P1-6: Radiobutton 替代 DD 复选框) ──
@@ -648,7 +680,7 @@ def open_settings_window():
         _mode_row += 1
 
     # DD 驱动信息按钮
-    dd_info_btn = tkinter.Label(mode_frame, text="  ℹ️ DD 驱动详情", font=("Microsoft YaHei UI", 7),
+    dd_info_btn = tkinter.Label(mode_frame, text="  ℹ️ DD 驱动详情", font=FONT_TINY,
         fg=C["ac"], bg=C["bgc"], cursor="hand2")
     dd_info_btn.grid(row=_mode_row, column=0, sticky="w", pady=(2, 4))
 
@@ -702,7 +734,7 @@ def open_settings_window():
         )
         messagebox.showinfo("故障保护说明", info)
 
-    failsafe_info_btn = tkinter.Label(failsafe_frame, text="ℹ️", font=("Segoe UI Symbol", 10),
+    failsafe_info_btn = tkinter.Label(failsafe_frame, text="ℹ️", font=FONT_ICON,
         fg=C["ac"], bg=C["bgc"], cursor="hand2")
     failsafe_info_btn.pack(side="left")
     failsafe_info_btn.bind("<Button-1>", _show_failsafe_info)
@@ -733,7 +765,7 @@ def open_settings_window():
     # AI 智能重试说明
     ai_desc_frame = tkinter.Frame(ai_content, bg=C["bgc"])
     ai_desc_frame.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 2))
-    tkinter.Label(ai_desc_frame, text="失败时 AI 分析截图并给出修正建议（需配置 API Key）", font=("Microsoft YaHei UI", 7),
+    tkinter.Label(ai_desc_frame, text="失败时 AI 分析截图并给出修正建议（需配置 API Key）", font=FONT_TINY,
         fg=C["fgm"], bg=C["bgc"]).pack(anchor="w")
 
     ai_anomaly_var = tkinter.BooleanVar(value=state.AI_ANOMALY_DETECT)
@@ -754,23 +786,81 @@ def open_settings_window():
         )
         messagebox.showinfo("AI 增强功能", info)
 
-    ai_info_btn = tkinter.Label(ai_frame, text="ℹ️", font=("Segoe UI Symbol", 10),
+    ai_info_btn = tkinter.Label(ai_frame, text="ℹ️", font=FONT_ICON,
         fg=C["ac"], bg=C["bgc"], cursor="hand2")
     ai_info_btn.pack(side="left")
     ai_info_btn.bind("<Button-1>", _show_ai_info)
 
-    # === API config row ──
+    # === API config row (自定义 AI 提供商 / 模型 / BaseURL / Key  PR-4) ──
     api_frame = tkinter.Frame(ai_content, bg=C["bgc"])
     api_frame.grid(row=1, column=0, sticky="ew", padx=8, pady=(2,6))
     api_frame.columnconfigure(0, weight=0); api_frame.columnconfigure(1, weight=1)
 
-    tkinter.Label(api_frame, text="API Key", font=FONT_BODY,
+    try:
+        import ai_client as _aic
+    except Exception:
+        _aic = None
+
+    _prov_by_id = {}
+    _label_to_id = {}
+    _prov_labels = []
+    for _p in (_aic.list_providers() if _aic is not None else []):
+        _prov_by_id[_p["id"]] = _p
+        _label_to_id[_p["label"]] = _p["id"]
+        _prov_labels.append(_p["label"])
+
+    _init_pid = (getattr(state, "AI_PROVIDER", "") or "").strip()
+    if _init_pid not in _prov_by_id and _aic is not None:
+        try:
+            _init_pid = _aic.resolve_provider()
+        except Exception:
+            _init_pid = ""
+    if _init_pid not in _prov_by_id and _prov_labels:
+        _init_pid = _label_to_id[_prov_labels[0]]
+    _init_p = _prov_by_id.get(_init_pid, {})
+
+    # 提供商
+    tkinter.Label(api_frame, text="提供商", font=FONT_BODY,
         fg=C["fgb"], bg=C["bgc"]).grid(row=0, column=0, sticky="w", padx=(0,6), pady=2)
-    api_key_var = tkinter.StringVar(value=state.API_KEY)
-    api_key_entry = tkinter.Entry(api_frame, textvariable=api_key_var, width=28,
-        font=FONT_SMALL, show="*", relief="solid", bd=1,
-        bg=C["ebg"], fg=C["fgb"])
-    api_key_entry.grid(row=0, column=1, sticky="ew", pady=2)
+    _prov_var = tkinter.StringVar(
+        value=_init_p.get("label", _prov_labels[0] if _prov_labels else ""))
+    _prov_combo = ttk.Combobox(api_frame, textvariable=_prov_var, width=26,
+        values=_prov_labels, state="readonly")
+    _prov_combo.grid(row=0, column=1, sticky="ew", pady=2)
+
+    # 模型（可编辑）
+    tkinter.Label(api_frame, text="模型", font=FONT_BODY,
+        fg=C["fgb"], bg=C["bgc"]).grid(row=1, column=0, sticky="w", padx=(0,6), pady=2)
+    try:
+        _init_model = _aic.resolve_model() if _aic is not None else state.API_MODEL
+    except Exception:
+        _init_model = state.API_MODEL
+    api_model_var = tkinter.StringVar(value=_init_model)
+    api_model_entry = tkinter.Entry(api_frame, textvariable=api_model_var, width=28,
+        font=FONT_SMALL, relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"])
+    api_model_entry.grid(row=1, column=1, sticky="ew", pady=2)
+
+    # BaseURL
+    tkinter.Label(api_frame, text="BaseURL", font=FONT_BODY,
+        fg=C["fgb"], bg=C["bgc"]).grid(row=2, column=0, sticky="w", padx=(0,6), pady=2)
+    _init_base = (getattr(state, "AI_BASE_URL", "") or "").strip() or _init_p.get("base_url", "")
+    api_base_var = tkinter.StringVar(value=_init_base)
+    api_base_entry = tkinter.Entry(api_frame, textvariable=api_base_var, width=28,
+        font=FONT_SMALL, relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"])
+    api_base_entry.grid(row=2, column=1, sticky="ew", pady=2)
+
+    # API Key（掩码显示）
+    tkinter.Label(api_frame, text="API Key", font=FONT_BODY,
+        fg=C["fgb"], bg=C["bgc"]).grid(row=3, column=0, sticky="w", padx=(0,6), pady=2)
+    try:
+        _init_key = (_aic.get_provider_key(_init_pid) if _aic is not None else None) \
+            or getattr(state, "API_KEY", "")
+    except Exception:
+        _init_key = getattr(state, "API_KEY", "")
+    api_key_var = tkinter.StringVar(value=_init_key)
+    api_key_entry = tkinter.Entry(api_frame, textvariable=api_key_var, width=22,
+        font=FONT_SMALL, show="*", relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"])
+    api_key_entry.grid(row=3, column=1, sticky="ew", pady=2)
 
     # 显示/隐藏切换 (眼睛图标)
     def _toggle_api_key_visibility():
@@ -780,26 +870,219 @@ def open_settings_window():
         else:
             api_key_entry.config(show="*")
             api_eye_btn.config(text="○")
-    api_eye_btn = tkinter.Label(api_frame, text="○", font=("Segoe UI Symbol", 9),
+    api_eye_btn = tkinter.Label(api_frame, text="○", font=FONT_ICON,
         bg=C["bgc"], fg=C["fgm"], cursor="hand2")
-    api_eye_btn.grid(row=0, column=2, padx=(4, 0))
+    api_eye_btn.grid(row=3, column=2, padx=(4, 0))
     api_eye_btn.bind("<Button-1>", lambda e: _toggle_api_key_visibility())
     attach_tooltip(api_eye_btn, "显示/隐藏 API Key")
 
-    tkinter.Label(api_frame, text="模型", font=FONT_BODY,
-        fg=C["fgb"], bg=C["bgc"]).grid(row=1, column=0, sticky="w", padx=(0,6), pady=2)
-    api_model_var = tkinter.StringVar(value=state.API_MODEL)
-    try:
-        from ai_client import list_models
-        _model_values = list_models()
-    except Exception:
-        _model_values = ("deepseek-v4-flash", "deepseek-chat", "qwen-plus", "qwen-max", "gpt-3.5-turbo", "gpt-4")
-    api_model_combo = ttk.Combobox(api_frame, textvariable=api_model_var, width=22,
-        values=_model_values, state="readonly")
-    api_model_combo.grid(row=1, column=1, sticky="ew", pady=2)
+    # 测试连接 + 结果标签
+    ai_test_result = tkinter.Label(api_frame, text="", font=FONT_SMALL,
+        fg=C["fgm"], bg=C["bgc"], anchor="w")
+
+    def _on_test_connection():
+        try:
+            from utils import themed
+            ok_color, bad_color = themed("sc"), themed("dg")
+        except Exception:
+            ok_color, bad_color = C["sc"], C["dg"]
+        pid = _label_to_id.get(_prov_var.get(), "")
+        ai_test_result.config(text="测试中…（最长 8 秒）", fg=C["fgm"])
+        try:
+            ai_test_result.update_idletasks()
+        except Exception:
+            pass
+        if _aic is None:
+            ai_test_result.config(text="AI 客户端不可用", fg=bad_color)
+            return
+        try:
+            ok, msg = _aic.test_connection(
+                provider=pid,
+                base_url=api_base_var.get().strip(),
+                model=api_model_var.get().strip(),
+                api_key=api_key_var.get().strip(),
+                timeout=8)
+        except Exception as e:
+            ok, msg = False, "测试失败：{}".format(e)
+        ai_test_result.config(text=msg, fg=(ok_color if ok else bad_color))
+        try:
+            log1("[AI 测试连接] {}: {}".format("成功" if ok else "失败", msg))
+        except Exception:
+            pass
+
+    ai_test_btn = tkinter.Button(api_frame, text="测试连接", font=FONT_SMALL,
+        bg=C["bgc"], fg=C["fgb"], relief="raised", bd=1, padx=8, pady=1,
+        cursor="hand2", activebackground=_darken(C["bgc"]), activeforeground=C["fgb"],
+        highlightbackground=C["bd"], highlightthickness=1, command=_on_test_connection)
+    ai_test_btn.grid(row=4, column=0, sticky="w", pady=(2, 0))
+    ai_test_result.grid(row=4, column=1, columnspan=2, sticky="ew", pady=(2, 0))
+
+    # 添加自定义提供商（自绘 Toplevel）
+    def _open_custom_provider_dialog():
+        dlg = tkinter.Toplevel(_win)
+        dlg.title("自定义 AI 提供商")
+        dlg.configure(bg=C["bgc"])
+        try:
+            dlg.transient(_win)
+            dlg.grab_set()
+        except Exception:
+            pass
+        _set_window_icon(dlg)
+
+        frm = tkinter.Frame(dlg, bg=C["bgc"])
+        frm.pack(fill="both", expand=True, padx=12, pady=10)
+        frm.columnconfigure(1, weight=1)
+
+        v_id = tkinter.StringVar()
+        v_name = tkinter.StringVar()
+        v_url = tkinter.StringVar()
+        v_models = tkinter.StringVar()
+        for _i, (_lbl, _var) in enumerate((
+                ("提供商 ID", v_id), ("显示名", v_name),
+                ("BaseURL", v_url), ("模型列表(逗号分隔)", v_models))):
+            tkinter.Label(frm, text=_lbl, font=FONT_BODY, fg=C["fgb"],
+                bg=C["bgc"]).grid(row=_i, column=0, sticky="w", padx=(0, 6), pady=3)
+            tkinter.Entry(frm, textvariable=_var, font=FONT_SMALL, width=34,
+                relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"]).grid(
+                row=_i, column=1, sticky="ew", pady=3)
+
+        tkinter.Label(frm, text="已添加的自定义提供商：", font=FONT_BODY,
+            fg=C["fgb"], bg=C["bgc"]).grid(row=4, column=0, columnspan=2,
+            sticky="w", pady=(8, 2))
+        list_frame = tkinter.Frame(frm, bg=C["bgc"])
+        list_frame.grid(row=5, column=0, columnspan=2, sticky="ew")
+        list_frame.columnconfigure(0, weight=1)
+
+        def _refresh_options():
+            """重建主窗口提供商下拉选项（含删/加自定义后同步）。"""
+            del _prov_labels[:]
+            _prov_by_id.clear()
+            _label_to_id.clear()
+            for _p in (_aic.list_providers() if _aic is not None else []):
+                _prov_by_id[_p["id"]] = _p
+                _label_to_id[_p["label"]] = _p["id"]
+                _prov_labels.append(_p["label"])
+            try:
+                _prov_combo.config(values=_prov_labels)
+            except Exception:
+                pass
+
+        def _select_provider(pid):
+            p = _prov_by_id.get(pid)
+            if not p:
+                return
+            _prov_var.set(p["label"])
+            try:
+                _on_provider_change()
+            except Exception:
+                pass
+
+        def _refresh_list():
+            for w in list_frame.winfo_children():
+                w.destroy()
+            rows = [c for c in _prov_by_id.values() if c.get("custom")]
+            if not rows:
+                tkinter.Label(list_frame, text="（暂无）", font=FONT_SMALL,
+                    fg=C["fgm"], bg=C["bgc"]).grid(row=0, column=0, sticky="w")
+                return
+            for _i, c in enumerate(rows):
+                tkinter.Label(list_frame, text="{}（{}）".format(c["id"], c["label"]),
+                    font=FONT_SMALL, fg=C["fgb"], bg=C["bgc"]).grid(
+                    row=_i, column=0, sticky="w", pady=1)
+                tkinter.Button(list_frame, text="删除", font=FONT_SMALL,
+                    bg=C["bgc"], fg=C["fgb"], relief="raised", bd=1, padx=6, pady=0,
+                    cursor="hand2", command=lambda _pid=c["id"]: _remove(_pid)).grid(
+                    row=_i, column=1, sticky="e", padx=(6, 0), pady=1)
+
+        def _remove(pid):
+            try:
+                state.AI_CUSTOM_PROVIDERS = [
+                    c for c in (getattr(state, "AI_CUSTOM_PROVIDERS", None) or [])
+                    if c.get("id") != pid]
+                state.save_config()
+            except Exception as e:
+                log1("删除自定义提供商失败: {}".format(e), "error")
+            _refresh_options()
+            _refresh_list()
+
+        def _do_add():
+            cid = v_id.get().strip()
+            name = v_name.get().strip() or cid
+            url = v_url.get().strip()
+            models = [m.strip() for m in v_models.get().split(",") if m.strip()]
+            if not cid or not url:
+                messagebox.showwarning("提示", "提供商 ID 与 BaseURL 为必填", parent=dlg)
+                return
+            try:
+                lst = [c for c in (getattr(state, "AI_CUSTOM_PROVIDERS", None) or [])
+                       if c.get("id") != cid]
+                lst.append({"id": cid, "name": name, "base_url": url, "models": models})
+                state.AI_CUSTOM_PROVIDERS = lst
+                state.save_config()
+            except Exception as e:
+                log1("添加自定义提供商失败: {}".format(e), "error")
+                return
+            _refresh_options()
+            _refresh_list()
+            _select_provider(cid)
+
+        btn_row = tkinter.Frame(frm, bg=C["bgc"])
+        btn_row.grid(row=6, column=0, columnspan=2, sticky="e", pady=(10, 0))
+        tkinter.Button(btn_row, text="添加/更新", font=FONT_SMALL, bg=C["sc"],
+            fg="white", relief="raised", bd=1, padx=12, pady=3, cursor="hand2",
+            activebackground=_darken(C["sc"]), activeforeground="white",
+            command=_do_add).pack(side="left", padx=(0, 6))
+        tkinter.Button(btn_row, text="关闭", font=FONT_SMALL, bg=C["bgc"],
+            fg=C["fgb"], relief="raised", bd=1, padx=12, pady=3, cursor="hand2",
+            activebackground=_darken(C["bgc"]), activeforeground=C["fgb"],
+            highlightbackground=C["bd"], highlightthickness=1,
+            command=dlg.destroy).pack(side="left")
+
+        _refresh_options()
+        _refresh_list()
+
+    ai_custom_btn = tkinter.Button(api_frame, text="添加自定义提供商", font=FONT_SMALL,
+        bg=C["bgc"], fg=C["fgb"], relief="raised", bd=1, padx=8, pady=1,
+        cursor="hand2", activebackground=_darken(C["bgc"]), activeforeground=C["fgb"],
+        highlightbackground=C["bd"], highlightthickness=1,
+        command=_open_custom_provider_dialog)
+    ai_custom_btn.grid(row=5, column=0, columnspan=3, sticky="w", pady=(4, 0))
+
+    # 切换提供商：自动带出 BaseURL/模型（不覆盖用户手填）+ 载入已存密钥
+    def _on_provider_change(event=None):
+        pid = _label_to_id.get(_prov_var.get(), "")
+        prev_pid = getattr(_on_provider_change, "_prev", None)
+        new_p = _prov_by_id.get(pid, {})
+        prev_p = _prov_by_id.get(prev_pid, {}) if prev_pid else {}
+        cur_base = api_base_var.get().strip()
+        prev_base = (prev_p.get("base_url") or "").strip()
+        new_base = (new_p.get("base_url") or "").strip()
+        if (not cur_base) or (prev_base and cur_base == prev_base):
+            api_base_var.set(new_base)
+        prev_models = prev_p.get("models") or []
+        prev_first = prev_models[0] if prev_models else ""
+        new_models = new_p.get("models") or []
+        new_first = new_models[0] if new_models else ""
+        cur_model = api_model_var.get().strip()
+        if (not cur_model) or (prev_first and cur_model == prev_first):
+            if new_first:
+                api_model_var.set(new_first)
+        try:
+            api_key_var.set((_aic.get_provider_key(pid) if _aic is not None else None) or "")
+        except Exception:
+            pass
+        try:
+            ai_test_result.config(text="", fg=C["fgm"])
+        except Exception:
+            pass
+        _on_provider_change._prev = pid
+
+    _on_provider_change._prev = _init_pid
+    _prov_combo.bind("<<ComboboxSelected>>", _on_provider_change)
 
     # 绑定防抖保存 (AI 增强卡)
-    _track_card_vars("ai", (api_key_var, api_model_var, ai_smart_retry_var, ai_anomaly_var))
+    _track_card_vars("ai", (api_key_var, api_model_var, api_base_var, _prov_var,
+        ai_smart_retry_var, ai_anomaly_var))
 
     # ======================================================================
     # ⏰ 定时调度 card
@@ -829,7 +1112,7 @@ def open_settings_window():
     # 定时调度说明
     sched_desc_frame = tkinter.Frame(sched_content, bg=C["bgc"])
     sched_desc_frame.grid(row=4, column=0, sticky="ew", padx=8, pady=(0, 2))
-    tkinter.Label(sched_desc_frame, text="启用后按设定时间自动执行当前脚本", font=("Microsoft YaHei UI", 7),
+    tkinter.Label(sched_desc_frame, text="启用后按设定时间自动执行当前脚本", font=FONT_TINY,
         fg=C["fgm"], bg=C["bgc"]).pack(anchor="w")
 
     tkinter.Label(enable_frame, text="时刻:", font=FONT_BODY,
@@ -916,9 +1199,9 @@ def open_settings_window():
     rec_mode_desc = tkinter.Frame(rec_content, bg=C["bgc"])
     rec_mode_desc.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 4))
     tkinter.Label(rec_mode_desc, text="绝对坐标：以屏幕左上角为原点，不同分辨率下可能偏移",
-        font=("Microsoft YaHei UI", 7), fg=C["fgm"], bg=C["bgc"]).pack(anchor="w")
+        font=FONT_TINY, fg=C["fgm"], bg=C["bgc"]).pack(anchor="w")
     tkinter.Label(rec_mode_desc, text="相对窗口：以激活窗口左上角为原点，窗口移动/缩放后仍准确",
-        font=("Microsoft YaHei UI", 7), fg=C["fgm"], bg=C["bgc"]).pack(anchor="w")
+        font=FONT_TINY, fg=C["fgm"], bg=C["bgc"]).pack(anchor="w")
 
     # 停止录制快捷键行
     rec_hotkey_frame = tkinter.Frame(rec_content, bg=C["bgc"])
@@ -1011,14 +1294,14 @@ def open_settings_window():
         bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1), log_retention_var,
         "日志保留天数", 7, int, 0, 90, card_key="log")
     log_retention_spin.pack(side="left")
-    tkinter.Label(log_retention_frame, text="天 (0=永久保留)", font=("Microsoft YaHei UI", 7),
+    tkinter.Label(log_retention_frame, text="天 (0=永久保留)", font=FONT_TINY,
         fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(4,0))
 
     # 日志保存路径提示
     _log_dir_display = os.path.join(APP_ROOT, "logs")
     _log_path_label = tkinter.Label(log_content,
         text="保存位置: {}".format(_log_dir_display),
-        font=("Microsoft YaHei UI", 7), fg=C["fgm"], bg=C["bgc"])
+        font=FONT_TINY, fg=C["fgm"], bg=C["bgc"])
     _log_path_label.grid(row=3, column=0, sticky="w", padx=8, pady=(0,6))
 
     # 绑定防抖保存 (日志卡)
@@ -1113,36 +1396,105 @@ def open_settings_window():
     ttk.Checkbutton(mini_bar_frame, text="启用 Mini Bar 折叠（标题栏 ⊟ 按钮）",
         variable=mini_bar_var, command=_toggle_mini_bar).pack(side="left")
 
-    # Mini Bar 定制 (P2-8): 宽度 + 透明度
+    # Mini Bar 定制 (P2-8): 宽度 + 高度 + 透明度
     mb_custom_frame = tkinter.Frame(sys_content, bg=C["bgc"])
     mb_custom_frame.grid(row=2, column=0, sticky="ew", padx=8, pady=(2, 4))
     tkinter.Label(mb_custom_frame, text="面板宽度:", font=FONT_SMALL,
         fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
-    mb_width_var = tkinter.StringVar(value=str(getattr(state, 'MINI_BAR_WIDTH', 430)))
+    mb_width_var = tkinter.StringVar(value=str(state.MINI_BAR_WIDTH))
     mb_width_spin = _validate_number(tkinter.Spinbox(mb_custom_frame, textvariable=mb_width_var,
-        from_=300, to=800, increment=10, width=5, font=FONT_SMALL,
+        from_=380, to=900, increment=10, width=5, font=FONT_SMALL,
         bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1), mb_width_var,
-        "Mini Bar 宽度", 430, int, 300, 800, card_key="system")
-    mb_width_spin.pack(side="left", padx=(0, 8))
-    tkinter.Label(mb_custom_frame, text="px", font=FONT_SMALL,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 12))
+        "Mini Bar 宽度", 430, int, 380, 900, card_key="system")
+    mb_width_spin.pack(side="left", padx=(0, 4))
+    tkinter.Label(mb_custom_frame, text="px (380-900)", font=FONT_SMALL,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 10))
+    tkinter.Label(mb_custom_frame, text="高度:", font=FONT_SMALL,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
+    mb_height_var = tkinter.StringVar(value=str(state.MINI_BAR_HEIGHT))
+    mb_height_combo = ttk.Combobox(mb_custom_frame, textvariable=mb_height_var,
+        values=(24, 28, 30, 34, 38, 42, 48), state="readonly", width=4)
+    mb_height_combo.pack(side="left", padx=(0, 4))
+    tkinter.Label(mb_custom_frame, text="px 高度（24–48，步进 4）", font=FONT_SMALL,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 10))
     tkinter.Label(mb_custom_frame, text="透明度:", font=FONT_SMALL,
         fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
-    mb_opacity_var = tkinter.StringVar(value=str(getattr(state, 'MINI_BAR_OPACITY', 80)))
+    mb_opacity_var = tkinter.StringVar(value=str(state.MINI_BAR_OPACITY))
     mb_opacity_spin = _validate_number(tkinter.Spinbox(mb_custom_frame, textvariable=mb_opacity_var,
         from_=30, to=100, increment=5, width=4, font=FONT_SMALL,
         bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1), mb_opacity_var,
         "Mini Bar 透明度", 80, int, 30, 100, card_key="system")
     mb_opacity_spin.pack(side="left", padx=(0, 4))
-    tkinter.Label(mb_custom_frame, text="%", font=FONT_SMALL,
+    tkinter.Label(mb_custom_frame, text="% (30-100)", font=FONT_SMALL,
         fg=C["fgm"], bg=C["bgc"]).pack(side="left")
 
-    # Mini Bar 定制 apply
-    def _apply_mb_settings():
-        try: state.MINI_BAR_WIDTH = int(mb_width_var.get())
-        except ValueError: state.MINI_BAR_WIDTH = 430
-        try: state.MINI_BAR_OPACITY = int(mb_opacity_var.get())
-        except ValueError: state.MINI_BAR_OPACITY = 80
+    # ── 界面缩放 (pt 制) ── 并入本卡: 走 _apply_system_settings + _track_card_vars
+    ui_scale_frame = tkinter.Frame(sys_content, bg=C["bgc"])
+    ui_scale_frame.grid(row=6, column=0, sticky="ew", padx=8, pady=(2, 6))
+    tkinter.Label(ui_scale_frame, text="界面缩放", font=FONT_SMALL,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
+    _UI_SCALE_STEPS = ("0.8", "0.9", "1.0", "1.1", "1.2", "1.3", "1.5")
+    ui_scale_var = tkinter.StringVar(value=str(float(getattr(state, "UI_SCALE", 1.0))))
+    ui_scale_combo = ttk.Combobox(ui_scale_frame, textvariable=ui_scale_var,
+        values=_UI_SCALE_STEPS, state="readonly", width=5)
+    ui_scale_combo.pack(side="left", padx=(0, 8))
+
+    def _on_ui_scale_selected(event=None):
+        """切换档位: 立即 set_ui_scale (刷新全部命名字体) + 提示需重启才完全生效。"""
+        try:
+            eff = utils.set_ui_scale(float(ui_scale_var.get()))
+        except (TypeError, ValueError):
+            eff = utils.current_ui_scale()
+        ui_scale_var.set(str(eff))
+        log1("界面缩放已切换到 {} 档（部分界面需重启生效）".format(eff))
+        try:
+            messagebox.showinfo("界面缩放",
+                "已切换到 {} 档。\n\n缩放仅影响字体与关键尺寸；\n"
+                "主窗口几何与已创建控件的尺寸不会自动重排，建议重启程序后完全生效。".format(eff))
+        except Exception:
+            pass
+
+    ui_scale_combo.bind("<<ComboboxSelected>>", _on_ui_scale_selected)
+    tkinter.Label(ui_scale_frame, text="缩放仅影响字体与关键尺寸；调整后建议重启程序。",
+        font=FONT_TINY, fg=C["fgm"], bg=C["bgc"]).pack(side="left")
+
+    # 「系统」整卡统一收口: 一次写回本卡全部 state 键并做数值夹取/吸附。
+    # 修复 D-1/D-2 —— 旧 _apply_mb_settings 从未被调用, 导致 Mini Bar
+    # 宽度/高度/透明度只是安慰剂 (改了不生效)。
+    def _apply_system_settings():
+        state.AUTO_START = auto_start_var.get()
+        state.MINIMIZE_TO_TRAY = tray_var.get()
+        state.MINI_BAR_ENABLED = mini_bar_var.get()
+        try:
+            w = int(mb_width_var.get())
+        except (TypeError, ValueError):
+            w = state.MINI_BAR_WIDTH
+        state.MINI_BAR_WIDTH = max(380, min(900, w))
+        try:
+            h = int(mb_height_var.get())
+        except (TypeError, ValueError):
+            h = state.MINI_BAR_HEIGHT
+        # 夹取到 [24,48] 并吸附到 4 的倍数
+        state.MINI_BAR_HEIGHT = int(round(max(24, min(48, h)) / 4.0) * 4)
+        try:
+            op = int(mb_opacity_var.get())
+        except (TypeError, ValueError):
+            op = state.MINI_BAR_OPACITY
+        state.MINI_BAR_OPACITY = max(30, min(100, op))
+        # 界面缩放档位持久化 (字体已在切换回调里 fontconfigure 过, 此处仅落盘)
+        try:
+            state.UI_SCALE = max(0.8, min(1.5, float(ui_scale_var.get())))
+        except (TypeError, ValueError):
+            state.UI_SCALE = 1.0
+        # 本卡内由独立控件写入的快捷键键 (hotkey_vars 稍后构建, 调用时才求值)
+        try:
+            for _name, (_v, _sk) in hotkey_vars.items():
+                if _sk:
+                    setattr(state, _sk.upper(), _v.get())
+        except Exception:
+            pass
+
+    _apply_map["system"] = _apply_system_settings
 
     # 快捷键列表视图 (P0-3)
     hotkey_title_frame = tkinter.Frame(sys_content, bg=C["bgc"])
@@ -1229,13 +1581,13 @@ def open_settings_window():
 
         btn_frame = tkinter.Frame(hotkey_table, bg=C["bgc"])
         btn_frame.grid(row=r, column=2, sticky="w")
-        rec_btn = tkinter.Label(btn_frame, text="录制", font=("Microsoft YaHei UI", 7),
+        rec_btn = tkinter.Label(btn_frame, text="录制", font=FONT_TINY,
             bg=C["sc"], fg="white", padx=4, pady=1, cursor="hand2",
             relief="raised", bd=1)
         rec_btn.pack(side="left", padx=1)
         rec_btn.bind("<Button-1>", lambda e, v=var, k=state_key:
             _record_hotkey(v, k or func_name))
-        clr_btn = tkinter.Label(btn_frame, text="清除", font=("Microsoft YaHei UI", 7),
+        clr_btn = tkinter.Label(btn_frame, text="清除", font=FONT_TINY,
             bg=C["dg"], fg="white", padx=4, pady=1, cursor="hand2",
             relief="raised", bd=1)
         clr_btn.pack(side="left", padx=1)
@@ -1246,8 +1598,13 @@ def open_settings_window():
     # 底部提示
     tkinter.Label(sys_content,
         text="提示：支持 Ctrl/Alt/Shift/Win + 字母/数字/F1-F12；录制的快捷键在所有应用中全局生效",
-        font=("Microsoft YaHei UI", 7), fg=C["fgm"], bg=C["bgc"]).grid(
+        font=FONT_TINY, fg=C["fgm"], bg=C["bgc"]).grid(
         row=5, column=0, sticky="w", padx=8, pady=(0, 6))
+
+    # 系统卡: 任一控件改动 → 600ms 防抖后走 _apply_system_settings 即时落盘
+    _track_card_vars("system", (auto_start_var, tray_var, mini_bar_var,
+                                mb_width_var, mb_height_var, mb_opacity_var,
+                                ui_scale_var))
 
     # ======================================================================
     # ⚡ 快速操作 card (P2-7/P2-9)
@@ -1279,12 +1636,12 @@ def open_settings_window():
          ).pack(side="right")
 
     tkinter.Label(about_frame, text="自动化工作流工具 — 脚本编辑 | 执行控制 | 动作录制 | 模板共创",
-        font=("Microsoft YaHei UI", 7), fg=C["fgm"], bg=C["bgc"]).pack(anchor="w")
+        font=FONT_TINY, fg=C["fgm"], bg=C["bgc"]).pack(anchor="w")
     tkinter.Label(about_frame, text="仅供学习研究使用，使用者自行承担风险",
-        font=("Microsoft YaHei UI", 7), fg=C["dg"], bg=C["bgc"]).pack(anchor="w")
+        font=FONT_TINY, fg=C["dg"], bg=C["bgc"]).pack(anchor="w")
     # 版本来源路径: 打包版与源码版的 VERSION 位置不同, 排查"版本号不对"时先看这里
     tkinter.Label(about_frame, text="版本来源: {}".format(get_manifest_path() or "(内置回退值)"),
-        font=("Microsoft YaHei UI", 7), fg=C["fgm"], bg=C["bgc"],
+        font=FONT_TINY, fg=C["fgm"], bg=C["bgc"],
         wraplength=520, justify="left").pack(anchor="w")
 
     # ── 分级重置 (P2-9) ──
@@ -1328,7 +1685,7 @@ def open_settings_window():
     max_minutes_spin.pack(side="left", padx=(0,4))
     tkinter.Label(adv_exec_frame, text="分钟 (0=不限)", font=FONT_SMALL,
         fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0,12))
-    tkinter.Label(adv_exec_frame, text="到达时限后自动停止", font=("Microsoft YaHei UI", 7),
+    tkinter.Label(adv_exec_frame, text="到达时限后自动停止", font=FONT_TINY,
         fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 12))
     bound_window_var = tkinter.StringVar(value=state.BOUND_WINDOW_TITLE)
     tkinter.Label(adv_exec_frame, text="绑定窗口:", font=FONT_BODY,
@@ -1465,6 +1822,415 @@ def open_settings_window():
     _track_card_vars("advanced", (max_minutes_var, bound_window_var, stop_on_error_var,
         ocr_backend_var, ocr_paddle_var, ocr_preload_var, ocr_threads_var,
         browser_headless_var, browser_slowmo_var, sched_poll_var, dd_dll_path_var))
+
+    # ======================================================================
+    # 🌐 网络互联 card (NetLink 多设备互联)
+    # ======================================================================
+    card_netlink, nl_content, nl_title, _ = _make_collapsible_card(_inner, "网络互联", "🌐")
+    card_netlink.grid(row=8, column=0, sticky="ew", **PAD)
+    _make_badge("netlink", nl_title)
+    _register_nav_card("netlink", card_netlink)
+
+    # 启用开关 + 自动发现
+    nl_switch_frame = tkinter.Frame(nl_content, bg=C["bgc"])
+    nl_switch_frame.grid(row=0, column=0, sticky="ew", padx=8, pady=(2, 1))
+    nl_enabled_var = tkinter.BooleanVar(value=getattr(state, "NETLINK_ENABLED", False))
+    ttk.Checkbutton(nl_switch_frame, text="启用设备互联",
+        variable=nl_enabled_var).pack(side="left", padx=(0, 16))
+    nl_auto_var = tkinter.BooleanVar(value=getattr(state, "NETLINK_AUTODISCOVER", True))
+    ttk.Checkbutton(nl_switch_frame, text="UDP 自动发现",
+        variable=nl_auto_var).pack(side="left")
+
+    # TCP 端口 / 发现端口 / 设备名
+    nl_addr_frame = tkinter.Frame(nl_content, bg=C["bgc"])
+    nl_addr_frame.grid(row=1, column=0, sticky="ew", padx=8, pady=1)
+    tkinter.Label(nl_addr_frame, text="TCP端口", font=FONT_SMALL,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
+    nl_port_var = tkinter.StringVar(value=str(getattr(state, "NETLINK_PORT", 19710)))
+    _validate_number(tkinter.Entry(nl_addr_frame, textvariable=nl_port_var, width=7,
+        font=FONT_BODY, relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"]),
+        nl_port_var, "互联 TCP 端口", 19710, int, 1, 65535, card_key="netlink").pack(
+        side="left", padx=(0, 10))
+    tkinter.Label(nl_addr_frame, text="发现端口", font=FONT_SMALL,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
+    nl_dport_var = tkinter.StringVar(value=str(getattr(state, "NETLINK_DISCOVERY_PORT", 19711)))
+    _validate_number(tkinter.Entry(nl_addr_frame, textvariable=nl_dport_var, width=7,
+        font=FONT_BODY, relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"]),
+        nl_dport_var, "互联发现端口", 19711, int, 1, 65535, card_key="netlink").pack(
+        side="left", padx=(0, 10))
+    tkinter.Label(nl_addr_frame, text="设备名", font=FONT_SMALL,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
+    nl_name_var = tkinter.StringVar(value=getattr(state, "NETLINK_DEVICE_NAME", "") or "")
+    tkinter.Entry(nl_addr_frame, textvariable=nl_name_var, width=16,
+        font=FONT_BODY, relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"]).pack(side="left")
+
+    # 权限级别
+    nl_perm_frame = tkinter.Frame(nl_content, bg=C["bgc"])
+    nl_perm_frame.grid(row=2, column=0, sticky="ew", padx=8, pady=1)
+    tkinter.Label(nl_perm_frame, text="权限级别", font=FONT_SMALL,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
+    _NL_PERM_MAP = {"仅观察": "observe", "允许操控": "control", "允许接收脚本": "script"}
+    _nl_perm_label = {v: k for k, v in _NL_PERM_MAP.items()}
+    nl_perm_var = tkinter.StringVar(
+        value=_nl_perm_label.get(getattr(state, "NETLINK_PERM_LEVEL", "observe"), "仅观察"))
+    ttk.Combobox(nl_perm_frame, textvariable=nl_perm_var,
+        values=("仅观察", "允许操控", "允许接收脚本"),
+        state="readonly", width=14).pack(side="left", padx=(0, 12))
+
+    # 静态对端 (只读显示 + 清空; 明细在「设备互联」窗口维护)
+    nl_peers_frame = tkinter.Frame(nl_content, bg=C["bgc"])
+    nl_peers_frame.grid(row=3, column=0, sticky="ew", padx=8, pady=(1, 6))
+    _nl_peers_count = len(getattr(state, "NETLINK_STATIC_PEERS", []) or [])
+    tkinter.Label(nl_peers_frame,
+        text="静态对端: {} 个 (在「设备互联」窗口维护)".format(_nl_peers_count),
+        font=FONT_SMALL, fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 8))
+
+    def _clear_static_peers():
+        try:
+            state.NETLINK_STATIC_PEERS = []
+            state.save_config()
+            _flash_saved("netlink")
+            show_toast(root, "已清空静态对端", "info", 1500)
+        except Exception as e:
+            log1("清空静态对端失败: {}".format(e), "warning")
+
+    _btn(nl_peers_frame, "清空", _clear_static_peers, C["dg"], "white",
+        tip="清空手动添加的静态对端列表 (不影响自动发现)").pack(side="left")
+
+    # 配对认证开关 + 关闭风险红字提示 (仅关闭时显示)
+    nl_auth_frame = tkinter.Frame(nl_content, bg=C["bgc"])
+    nl_auth_frame.grid(row=4, column=0, sticky="ew", padx=8, pady=(1, 1))
+    nl_require_auth_var = tkinter.BooleanVar(
+        value=bool(getattr(state, "NETLINK_REQUIRE_AUTH", True)))
+    ttk.Checkbutton(nl_auth_frame,
+        text="启用配对认证（关闭后同网段任意设备可只读查看）",
+        variable=nl_require_auth_var).pack(side="left")
+    nl_auth_warn = tkinter.Label(nl_content,
+        text="⚠ 关闭认证后，同网段任何设备都可读取本机运行状态与日志",
+        font=FONT_SMALL, fg=C["err"], bg=C["bgc"])
+    nl_auth_warn.grid(row=5, column=0, sticky="w", padx=24, pady=(0, 2))
+
+    def _toggle_auth_warn():
+        try:
+            if nl_require_auth_var.get():
+                nl_auth_warn.grid_remove()
+            else:
+                nl_auth_warn.grid()
+        except Exception:
+            pass
+
+    try:
+        nl_require_auth_var.trace_add("write", lambda *_: _toggle_auth_warn())
+    except Exception:
+        pass
+    _toggle_auth_warn()
+
+    # 配对码有效期 (秒)
+    nl_ttl_frame = tkinter.Frame(nl_content, bg=C["bgc"])
+    nl_ttl_frame.grid(row=6, column=0, sticky="ew", padx=8, pady=(1, 6))
+    tkinter.Label(nl_ttl_frame, text="配对码有效期(秒)", font=FONT_SMALL,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
+    nl_ttl_var = tkinter.StringVar(value=str(getattr(state, "NETLINK_PIN_TTL", 600)))
+    _validate_number(tkinter.Entry(nl_ttl_frame, textvariable=nl_ttl_var, width=7,
+        font=FONT_BODY, relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"]),
+        nl_ttl_var, "配对码有效期", 600, int, 10, 86400, card_key="netlink").pack(
+        side="left")
+
+    # 浏览器只读监控面板 (Phase4-2: 默认关闭, 启用即要求令牌)
+    nl_web_frame = tkinter.Frame(nl_content, bg=C["bgc"])
+    nl_web_frame.grid(row=7, column=0, sticky="ew", padx=8, pady=(1, 1))
+    nl_web_enabled_var = tkinter.BooleanVar(
+        value=bool(getattr(state, "NETLINK_WEB_ENABLED", False)))
+    ttk.Checkbutton(nl_web_frame, text="启用浏览器只读监控面板",
+        variable=nl_web_enabled_var).pack(side="left", padx=(0, 12))
+    tkinter.Label(nl_web_frame, text="端口", font=FONT_SMALL,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
+    nl_web_port_var = tkinter.StringVar(
+        value=str(getattr(state, "NETLINK_WEB_PORT", 19712)))
+    _validate_number(tkinter.Entry(nl_web_frame, textvariable=nl_web_port_var, width=7,
+        font=FONT_BODY, relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"]),
+        nl_web_port_var, "面板端口", 19712, int, 1, 65535, card_key="netlink").pack(
+        side="left", padx=(0, 10))
+    tkinter.Label(nl_web_frame, text="监听范围", font=FONT_SMALL,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
+    _NL_WEB_BIND_MAP = {"所有网卡（同网段可访问）": "0.0.0.0", "仅本机": "127.0.0.1"}
+    _nl_web_bind_label = {v: k for k, v in _NL_WEB_BIND_MAP.items()}
+    nl_web_bind_var = tkinter.StringVar(
+        value=_nl_web_bind_label.get(
+            str(getattr(state, "NETLINK_WEB_BIND", "0.0.0.0")),
+            "所有网卡（同网段可访问）"))
+    ttk.Combobox(nl_web_frame, textvariable=nl_web_bind_var,
+        values=("所有网卡（同网段可访问）", "仅本机"),
+        state="readonly", width=18).pack(side="left")
+
+    nl_web_warn = tkinter.Label(nl_content,
+        text="⚠ 面板会暴露本机运行状态与操作日志，请仅在可信内网使用",
+        font=FONT_SMALL, fg=C["wn"], bg=C["bgc"])
+    nl_web_warn.grid(row=8, column=0, sticky="w", padx=24, pady=(0, 2))
+
+    def _toggle_web_warn():
+        try:
+            if nl_web_enabled_var.get():
+                nl_web_warn.grid()
+            else:
+                nl_web_warn.grid_remove()
+        except Exception:
+            pass
+
+    try:
+        nl_web_enabled_var.trace_add("write", lambda *_: _toggle_web_warn())
+    except Exception:
+        pass
+    _toggle_web_warn()
+
+    # ── TLS 可选档 (Phase4-3: 自签证书 + 指纹固定) ──
+    nl_tls_frame = tkinter.Frame(nl_content, bg=C["bgc"])
+    nl_tls_frame.grid(row=9, column=0, sticky="ew", padx=8, pady=(1, 1))
+    nl_tls_var = tkinter.BooleanVar(value=bool(getattr(state, "NETLINK_TLS", False)))
+    ttk.Checkbutton(nl_tls_frame, text="启用 TLS 加密（需提供自签证书 PEM）",
+        variable=nl_tls_var).pack(side="left")
+
+    nl_tls_cert_frame = tkinter.Frame(nl_content, bg=C["bgc"])
+    nl_tls_cert_frame.grid(row=10, column=0, sticky="ew", padx=8, pady=1)
+    tkinter.Label(nl_tls_cert_frame, text="证书PEM", font=FONT_SMALL,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
+    nl_tls_cert_var = tkinter.StringVar(
+        value=str(getattr(state, "NETLINK_TLS_CERT", "") or ""))
+    tkinter.Entry(nl_tls_cert_frame, textvariable=nl_tls_cert_var, width=22,
+        font=FONT_SMALL, bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1).pack(
+        side="left", padx=(0, 4))
+
+    def _browse_tls_cert():
+        try:
+            p = filedialog.askopenfilename(
+                title="选择服务端证书 PEM",
+                filetypes=[("证书 PEM", "*.pem *.crt *.key"), ("All", "*.*")])
+            if p:
+                nl_tls_cert_var.set(p)
+        except Exception:
+            pass
+
+    _btn(nl_tls_cert_frame, "浏览…", _browse_tls_cert, C["ac"], "white",
+         tip="选择服务端证书 PEM").pack(side="left", padx=(0, 8))
+    tkinter.Label(nl_tls_cert_frame, text="私钥PEM", font=FONT_SMALL,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
+    nl_tls_key_var = tkinter.StringVar(
+        value=str(getattr(state, "NETLINK_TLS_KEY", "") or ""))
+    tkinter.Entry(nl_tls_cert_frame, textvariable=nl_tls_key_var, width=22,
+        font=FONT_SMALL, bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1).pack(
+        side="left", padx=(0, 4))
+
+    def _browse_tls_key():
+        try:
+            p = filedialog.askopenfilename(
+                title="选择服务端私钥 PEM",
+                filetypes=[("私钥 PEM", "*.pem *.crt *.key"), ("All", "*.*")])
+            if p:
+                nl_tls_key_var.set(p)
+        except Exception:
+            pass
+
+    _btn(nl_tls_cert_frame, "浏览…", _browse_tls_key, C["ac"], "white",
+         tip="选择服务端私钥 PEM").pack(side="left")
+
+    nl_tls_warn = tkinter.Label(nl_content,
+        text="⚠ 启用 TLS 后必须同时配置证书与私钥，否则设备互联将拒绝启动",
+        font=FONT_SMALL, fg=C["wn"], bg=C["bgc"])
+    nl_tls_warn.grid(row=11, column=0, sticky="w", padx=24, pady=(0, 2))
+
+    def _toggle_tls_warn():
+        try:
+            if nl_tls_var.get():
+                nl_tls_warn.grid()
+            else:
+                nl_tls_warn.grid_remove()
+        except Exception:
+            pass
+
+    try:
+        nl_tls_var.trace_add("write", lambda *_: _toggle_tls_warn())
+    except Exception:
+        pass
+    _toggle_tls_warn()
+
+    # 已固定指纹 (只读展示 + 清空; TOFU 首次信任记录)
+    nl_pins_frame = tkinter.Frame(nl_content, bg=C["bgc"])
+    nl_pins_frame.grid(row=12, column=0, sticky="ew", padx=8, pady=(1, 6))
+    _nl_pins_count = len(getattr(state, "NETLINK_TLS_PINS", []) or [])
+    tkinter.Label(nl_pins_frame,
+        text="已固定证书指纹: {} 个".format(_nl_pins_count),
+        font=FONT_SMALL, fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 8))
+
+    def _clear_tls_pins():
+        try:
+            state.NETLINK_TLS_PINS = []
+            state.save_config()
+            _flash_saved("netlink")
+            show_toast(root, "已清空已固定指纹", "info", 1500)
+        except Exception as e:
+            log1("清空已固定指纹失败: {}".format(e), "warning")
+
+    _btn(nl_pins_frame, "清空指纹", _clear_tls_pins, C["dg"], "white",
+         tip="清空已固定的对端证书指纹（下次连接将重新 TOFU 首次信任）").pack(side="left")
+
+    # ── 网络互联 apply (走既有保存路径: _apply_map → _do_save → state.save_config) ──
+    def _apply_netlink_settings():
+        state.NETLINK_ENABLED = nl_enabled_var.get()
+        try:
+            state.NETLINK_PORT = int(nl_port_var.get())
+        except (ValueError, TypeError):
+            state.NETLINK_PORT = 19710; nl_port_var.set("19710")
+        state.NETLINK_DEVICE_NAME = nl_name_var.get().strip()
+        state.NETLINK_AUTODISCOVER = nl_auto_var.get()
+        try:
+            state.NETLINK_DISCOVERY_PORT = int(nl_dport_var.get())
+        except (ValueError, TypeError):
+            state.NETLINK_DISCOVERY_PORT = 19711; nl_dport_var.set("19711")
+        state.NETLINK_PERM_LEVEL = _NL_PERM_MAP.get(nl_perm_var.get(), "observe")
+        state.NETLINK_REQUIRE_AUTH = bool(nl_require_auth_var.get())
+        try:
+            state.NETLINK_PIN_TTL = int(nl_ttl_var.get())
+        except (ValueError, TypeError):
+            state.NETLINK_PIN_TTL = 600; nl_ttl_var.set("600")
+        # Phase4-2 浏览器只读监控面板
+        state.NETLINK_WEB_ENABLED = bool(nl_web_enabled_var.get())
+        try:
+            state.NETLINK_WEB_PORT = int(nl_web_port_var.get())
+        except (ValueError, TypeError):
+            state.NETLINK_WEB_PORT = 19712; nl_web_port_var.set("19712")
+        state.NETLINK_WEB_BIND = _NL_WEB_BIND_MAP.get(nl_web_bind_var.get(), "0.0.0.0")
+        # Phase4-3 TLS 可选档
+        state.NETLINK_TLS = bool(nl_tls_var.get())
+        state.NETLINK_TLS_CERT = nl_tls_cert_var.get().strip()
+        state.NETLINK_TLS_KEY = nl_tls_key_var.get().strip()
+        # 开关变更即时生效 (节点重启; 全部 try/except, 失败不影响设置保存)
+        try:
+            import netlink
+            if state.NETLINK_ENABLED:
+                netlink.start_netlink(root)
+                if state.NETLINK_WEB_ENABLED:
+                    netlink.start_webui()
+                else:
+                    netlink.stop_webui()
+            else:
+                netlink.stop_netlink()
+        except Exception as e:
+            log1("NetLink 开关同步失败: {}".format(e), "warning")
+    _apply_map["netlink"] = _apply_netlink_settings
+
+    # 绑定防抖保存 (网络互联卡)
+    _track_card_vars("netlink", (nl_enabled_var, nl_port_var, nl_name_var,
+        nl_auto_var, nl_dport_var, nl_perm_var, nl_require_auth_var, nl_ttl_var,
+        nl_web_enabled_var, nl_web_port_var, nl_web_bind_var,
+        nl_tls_var, nl_tls_cert_var, nl_tls_key_var))
+
+    # ======================================================================
+    # 🐍 Python 扩展 card
+    # ======================================================================
+    card_python, py_content, py_title, _ = _make_collapsible_card(_inner, "Python 扩展", "🐍")
+    card_python.grid(row=9, column=0, sticky="ew", **PAD)
+    _make_badge("python", py_title)
+    _register_nav_card("python", card_python)
+
+    # 权限下拉：UI 标签 ↔ state 存储值映射（单一来源）
+    _PY_PERM_LABEL = {
+        "sandbox": "沙箱（受限，推荐）",
+        "trusted": "受信（可用完整内建与 import）",
+        "full":    "完全权限（独立进程，默认禁用）",
+    }
+    _PY_LABEL_PERM = {v: k for k, v in _PY_PERM_LABEL.items()}
+
+    py_perm_frame = tkinter.Frame(py_content, bg=C["bgc"])
+    py_perm_frame.grid(row=0, column=0, sticky="ew", padx=8, pady=(2, 1))
+    tkinter.Label(py_perm_frame, text="默认权限", font=FONT_SMALL,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 6))
+    _py_init_perm = str(getattr(state, "PYTHON_DEFAULT_PERM", "sandbox"))
+    if _py_init_perm not in _PY_PERM_LABEL:
+        _py_init_perm = "sandbox"
+    py_perm_var = tkinter.StringVar(value=_PY_PERM_LABEL[_py_init_perm])
+    _py_perm_combo = ttk.Combobox(py_perm_frame, textvariable=py_perm_var,
+        values=tuple(_PY_PERM_LABEL[k] for k in ("sandbox", "trusted", "full")),
+        state="readonly", width=32)
+    _py_perm_combo.pack(side="left")
+
+    # 允许 full 权限 + 风险红字（随勾选显隐）
+    py_full_frame = tkinter.Frame(py_content, bg=C["bgc"])
+    py_full_frame.grid(row=1, column=0, sticky="ew", padx=8, pady=(1, 0))
+    py_full_var = tkinter.BooleanVar(value=bool(getattr(state, "PYTHON_FULL_ENABLED", False)))
+    ttk.Checkbutton(py_full_frame, text="允许 full 权限（独立进程执行任意代码）",
+        variable=py_full_var).pack(side="left")
+
+    py_full_warn = tkinter.Label(py_content,
+        text="⚠ 完全权限可绕过沙箱执行任意代码与命令，仅在完全信任的脚本上启用",
+        font=FONT_TINY, fg=C["err"], bg=C["bgc"])
+
+    def _py_toggle_full_warn(*_):
+        try:
+            if py_full_var.get():
+                py_full_warn.grid(row=2, column=0, sticky="w", padx=10, pady=(0, 1))
+            else:
+                py_full_warn.grid_remove()
+        except Exception:
+            pass
+
+    py_full_var.trace_add("write", _py_toggle_full_warn)
+    _py_toggle_full_warn()
+
+    # 超时(秒)
+    py_to_frame = tkinter.Frame(py_content, bg=C["bgc"])
+    py_to_frame.grid(row=3, column=0, sticky="ew", padx=8, pady=1)
+    tkinter.Label(py_to_frame, text="超时(秒)", font=FONT_SMALL,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 6))
+    py_timeout_var = tkinter.StringVar(value=str(getattr(state, "PYTHON_TIMEOUT", 30)))
+    _validate_number(tkinter.Entry(py_to_frame, textvariable=py_timeout_var, width=6,
+        font=FONT_SMALL, relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"]),
+        py_timeout_var, "Python 超时", 30, int, 1, 600, card_key="python").pack(side="left")
+    tkinter.Label(py_to_frame, text="秒 (1-600)", font=FONT_TINY,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(4, 0))
+
+    # 审计日志路径 (只读) + 打开日志目录
+    try:
+        import py_sandbox as _py_sandbox
+        _py_audit_path = _py_sandbox.audit_path()
+    except Exception:
+        _py_audit_path = os.path.join(APP_ROOT, "logs", "acrpa_py_YYYYMMDD.log")
+    py_audit_frame = tkinter.Frame(py_content, bg=C["bgc"])
+    py_audit_frame.grid(row=4, column=0, sticky="ew", padx=8, pady=(1, 6))
+    tkinter.Label(py_audit_frame, text="审计日志: {}".format(_py_audit_path),
+        font=FONT_TINY, fg=C["fgm"], bg=C["bgc"]).pack(side="left")
+
+    def _py_open_log_dir():
+        try:
+            os.startfile(os.path.dirname(_py_audit_path))
+        except Exception:
+            pass
+
+    _btn(py_audit_frame, "打开日志目录", _py_open_log_dir, C["ac"], "white",
+         tip="在文件管理器中打开 Python 审计日志目录").pack(side="right")
+
+    tkinter.Label(py_content,
+        text="提示：Python 命令受 AST 预检与超时约束；full 权限默认关闭（详见 docs/python扩展使用说明.md）",
+        font=FONT_TINY, fg=C["fgm"], bg=C["bgc"]).grid(
+        row=5, column=0, sticky="w", padx=10, pady=(0, 6))
+
+    def _apply_python_settings():
+        """保存「Python 扩展」卡配置。"""
+        state.PYTHON_DEFAULT_PERM = _PY_LABEL_PERM.get(py_perm_var.get(), "sandbox")
+        state.PYTHON_FULL_ENABLED = bool(py_full_var.get())
+        try:
+            v = int(py_timeout_var.get())
+            if v < 1:
+                v = 1
+            if v > 600:
+                v = 600
+            state.PYTHON_TIMEOUT = v
+        except (ValueError, TypeError):
+            state.PYTHON_TIMEOUT = 30
+            py_timeout_var.set("30")
+    _apply_map["python"] = _apply_python_settings
+
+    # 绑定防抖保存 (Python 扩展卡)
+    _track_card_vars("python", (py_perm_var, py_full_var, py_timeout_var))
 
     # 窗口级滚轮绑定 + 关闭快捷键
     _win.bind("<Escape>", lambda e: _close())

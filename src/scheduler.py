@@ -2,7 +2,7 @@
    v2:  计划任务模块，支持多任务管理与轮询间隔。"""
 import time, threading, datetime, os, json
 import state
-from utils import log1
+from utils import log1, themed
 
 
 # GUI references injected by ACRPA.py
@@ -431,8 +431,8 @@ def _refresh_task_tree():
             )
             tag = "enabled" if task.get("enabled", True) else "disabled"
             _sched_task_tree.insert("", "end", values=values, iid=tid, tags=(tag,))
-            _sched_task_tree.tag_configure("enabled", foreground="#10B981")
-            _sched_task_tree.tag_configure("disabled", foreground="#9CA3AF")
+            _sched_task_tree.tag_configure("enabled", foreground=themed("sc"))
+            _sched_task_tree.tag_configure("disabled", foreground=themed("fgm"))
     except Exception:
         pass
 

@@ -71,6 +71,41 @@ _config_schema = [
     # Mini Bar 定制
     ("mini_bar_width",        430,       int),   # Mini Bar 宽度 (px)
     ("mini_bar_opacity",      80,        int),   # Mini Bar 透明度 (%)
+    # ── NetLink 多设备互联 ──
+    ("netlink_enabled",     False,          bool),   # 启用设备互联
+    ("netlink_port",        19710,          int),    # TCP 监听端口
+    ("netlink_device_name", "",             str),    # 本机显示名(空=自动取主机名)
+    ("netlink_perm_level",  "observe",      str),    # 权限: observe/control/script
+    ("netlink_peers",       [],             list),   # 已配对设备白名单
+    ("netlink_static_peers",[],             list),   # 手动填写的 IP:PORT(发现失败时兜底)
+    ("netlink_autodiscover",True,           bool),   # UDP 自动发现开关
+    ("netlink_discovery_port",19711,        int),    # UDP 发现端口
+    ("netlink_tls",         False,          bool),   # TLS 可选档(Phase4)
+    ("netlink_ui_window",   "",             str),    # 设备互联窗口几何记忆
+    ("netlink_require_auth", True,          bool),   # 是否启用配对认证(默认开启)
+    ("netlink_pin_ttl",      600,           int),    # 配对码有效期(秒)
+    ("netlink_confirm_control", True,       bool),   # 首次远程操控需被控端弹窗确认
+    ("netlink_confirmed_peers", [],         list),   # 已确认过操控的设备指纹(记住此设备)
+    ("netlink_script_dir",      "",         str),    # 允许远程运行的脚本目录(空=程序目录/scripts)
+    ("netlink_audit_days",      0,          int),    # 审计日志保留天数(0=跟随 LOG_RETENTION_DAYS)
+    ("netlink_web_enabled", False,        bool),   # 启用浏览器只读监控面板
+    ("netlink_web_port",    19712,        int),    # 面板监听端口
+    ("netlink_web_bind",    "0.0.0.0",    str),    # 监听地址(0.0.0.0=允许同网段访问)
+    ("netlink_tls_cert",  "",  str),   # TLS 服务端证书 PEM 路径(启用 TLS 时必填)
+    ("netlink_tls_key",   "",  str),   # TLS 服务端私钥 PEM 路径(启用 TLS 时必填)
+    ("netlink_tls_pins",  [],  list),  # 已固定的对端证书指纹(sha256 hex，TOFU)
+    ("mini_bar_height", 30,  int),   # Mini Bar 高度 24-48（步进 4）
+    ("mini_bar_pos",    "",  str),   # Mini Bar 最近位置 "x+y"
+    # ── AI 提供商/模型自定义 ──
+    ("ai_provider",         "",  str),   # 提供商 id（空=按模型/URL 自动推断）
+    ("ai_base_url",         "",  str),   # 自定义 BaseURL（空=用预设）
+    ("ai_model",            "",  str),   # 覆盖模型名（空=用 api_model）
+    ("ai_custom_providers", [],  list),  # 自定义提供商 [{id,name,base_url,models:[...]}]
+    # ── Python 扩展 ──
+    ("python_default_perm", "sandbox", str),   # 默认权限 sandbox/trusted/full
+    ("python_full_enabled", False,     bool),  # 是否允许 full 权限（默认关闭）
+    ("python_timeout",      30,        int),   # 单段代码超时(秒)
+    ("ui_scale", 1.0, float),   # 界面缩放 0.8-1.5
 ]
 
 # ── Config globals (initialised from schema defaults) ──
@@ -195,17 +230,22 @@ _advapi32.CredReadW.argtypes = [ctypes.c_wchar_p, ctypes.c_ulong, ctypes.c_ulong
                                 ctypes.POINTER(ctypes.c_void_p)]
 _advapi32.CredReadW.restype = ctypes.c_int
 _advapi32.CredFree.argtypes = [ctypes.c_void_p]
+_advapi32.CredDeleteW.argtypes = [ctypes.c_wchar_p, ctypes.c_ulong, ctypes.c_ulong]
+_advapi32.CredDeleteW.restype = ctypes.c_int
 
 
-def _cred_write(secret):
-    """写入 Windows 凭据库；失败返回 False。"""
+def cred_write(target, secret):
+    """写入 Windows 凭据库（指定 target）；失败返回 False，不抛。
+
+    NetLink 配对 token 等敏感数据一律走此函数（绝不落 config.json）。
+    """
     try:
-        if not secret:
+        if not secret or not target:
             return False
         blob = ctypes.create_unicode_buffer(secret)
         cred = _CREDENTIALW()
         cred.Type = _CRED_TYPE_GENERIC
-        cred.TargetName = _CRED_TARGET
+        cred.TargetName = target
         cred.UserName = "ACRPA"
         cred.CredentialBlobSize = len(secret) * 2  # UTF-16 字节数
         cred.CredentialBlob = ctypes.cast(blob, ctypes.c_void_p)
@@ -215,11 +255,11 @@ def _cred_write(secret):
         return False
 
 
-def _cred_read():
-    """从 Windows 凭据库读取密钥；不存在或失败返回 None。"""
+def cred_read(target):
+    """从 Windows 凭据库读取（指定 target）；不存在或失败返回 None，不抛。"""
     try:
         pcred = ctypes.c_void_p()
-        ok = _advapi32.CredReadW(_CRED_TARGET, _CRED_TYPE_GENERIC, 0,
+        ok = _advapi32.CredReadW(target, _CRED_TYPE_GENERIC, 0,
                                  ctypes.byref(pcred))
         if not ok or not pcred.value:
             return None
@@ -235,12 +275,28 @@ def _cred_read():
         return None
 
 
-def _cred_delete():
-    """从 Windows 凭据库删除密钥。"""
+def cred_delete(target):
+    """从 Windows 凭据库删除（指定 target）；不抛。"""
     try:
-        _advapi32.CredDeleteW(_CRED_TARGET, _CRED_TYPE_GENERIC, 0)
+        _advapi32.CredDeleteW(target, _CRED_TYPE_GENERIC, 0)
     except Exception:
         pass
+
+
+# ── 原 API Key 专用薄封装（行为与输出保持不变）──
+def _cred_write(secret):
+    """写入 API Key 到 Windows 凭据库；失败返回 False。"""
+    return cred_write(_CRED_TARGET, secret)
+
+
+def _cred_read():
+    """从 Windows 凭据库读取 API Key；不存在或失败返回 None。"""
+    return cred_read(_CRED_TARGET)
+
+
+def _cred_delete():
+    """从 Windows 凭据库删除 API Key。"""
+    cred_delete(_CRED_TARGET)
 
 
 def load_config():

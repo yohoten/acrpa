@@ -19,6 +19,7 @@ import ctypes
 import ctypes.wintypes
 import os
 import tkinter
+import utils
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -378,7 +379,7 @@ class SystemTray:
     def _show_popup_menu(self):
         """弹出右键菜单 — 含运行/停止/设置/定时/自启动等全功能。"""
         menu = tkinter.Menu(self.root, tearoff=0,
-                            font=("Microsoft YaHei UI", 9))
+                            font=utils.FONT_BODY)
 
         import state
 
@@ -407,6 +408,22 @@ class SystemTray:
 
         # ── 设置 ──
         menu.add_command(label=u"设置", command=self._on_open_settings)
+
+        # ── 设备互联: 允许远程连接 (Phase 2 前对端仅观察; 失败静默不影响其它项) ──
+        def _toggle_netlink():
+            try:
+                import netlink
+                state.NETLINK_ENABLED = not getattr(state, "NETLINK_ENABLED", False)
+                state.save_config()
+                if state.NETLINK_ENABLED:
+                    netlink.start_netlink(self.root)
+                else:
+                    netlink.stop_netlink()
+            except Exception:
+                pass
+        menu.add_checkbutton(label=u"允许远程连接",
+            variable=tkinter.BooleanVar(value=getattr(state, 'NETLINK_ENABLED', False)),
+            command=_toggle_netlink)
         menu.add_separator()
 
         # ── 定时执行 ──

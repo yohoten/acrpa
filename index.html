@@ -791,6 +791,30 @@
     #featureGrid.js-fan .card:focus-visible{transform:none;border-color:var(--border);box-shadow:none;outline:none}
     #featureGrid.js-fan + .feat-hint{display:none}
   }
+
+  /* ==========================================================
+     使用场景 / 安全信任 / 常见问题（采纳自 index.new.html）
+     ========================================================== */
+  .scene-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .scene{border:1px solid var(--border);background:var(--card);border-radius:16px;padding:22px 24px}
+  .scene h3{font-size:16.5px;margin-bottom:14px}
+  .scene .ba{display:flex;flex-direction:column;gap:9px;font-size:13.5px;line-height:1.7}
+  .scene .before{color:var(--warn)}
+  .scene .arrowline{color:var(--dim);font-size:12px;font-family:var(--mono);text-align:center}
+  .scene .after{color:var(--ok)}
+  .sec-list{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .sec-item{border:1px solid var(--border);background:var(--card);border-radius:12px;padding:16px 18px;font-size:13.5px;color:var(--muted);line-height:1.7}
+  .sec-item b{color:var(--text)}
+  .sec-caution{margin-top:18px;font-size:12.5px;color:var(--dim);line-height:1.75;border:1px dashed rgba(251,191,36,.4);background:rgba(251,191,36,.05);border-radius:12px;padding:14px 18px}
+  .faq{max-width:840px;margin:0 auto}
+  .faq details{border:1px solid var(--border);background:var(--card);border-radius:12px;margin-bottom:12px;transition:border-color .2s}
+  .faq details[open]{border-color:var(--border-strong)}
+  .faq summary{cursor:pointer;list-style:none;font-weight:600;font-size:15px;color:var(--text);display:flex;justify-content:space-between;gap:12px;align-items:center;padding:15px 18px}
+  .faq summary::-webkit-details-marker{display:none}
+  .faq summary::after{content:'+';color:var(--c1);font-size:20px;font-family:var(--mono);flex:none}
+  .faq details[open] summary::after{content:'\2212'}
+  .faq .faq-body{padding:0 18px 16px;font-size:13.5px;color:var(--muted);line-height:1.8}
+  @media (max-width:720px){.scene-grid,.sec-list{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -850,19 +874,20 @@
       <div class="hero-cta">
         <a class="btn btn-primary" href="#features">✨ 开始使用</a>
         <a class="btn btn-ghost" href="#commands">📋 命令速查</a>
-        <div class="dl-drop" id="dlDrop">
-          <button class="btn-download" id="dlToggle" aria-haspopup="true" aria-expanded="false">⬇ 从 GitHub 下载 <span class="caret">▾</span></button>
+                <div class="dl-drop" id="dlDrop">
+          <button class="btn-download" id="dlToggle" aria-haspopup="true" aria-expanded="false">⬇ 下载安装包 <span class="caret">▾</span></button>
           <div class="dl-menu" id="dlMenu">
-            <a href="https://github.com/yohoten/acrpa/releases/download/v0.1.28-beta/ACRPA-v0.1.28-beta.exe" data-download target="_blank" rel="noopener noreferrer">
-              <span class="row"><span class="gi">⬇</span> 直接下载 <span data-ver></span></span>
-              <small>ACRPA-v0.1.28-beta.exe · 便携版 · 13.4 MiB · 预发布</small>
+            <a href="https://github.com/yohoten/acrpa/releases" target="_blank" rel="noopener noreferrer">
+              <span class="row"><span class="gi">⌥</span> GitHub 仓库</span>
+              <small>github.com/yohoten/acrpa</small>
             </a>
-            <a href="https://github.com/yohoten/acrpa/releases/tag/v0.1.28-beta" target="_blank" rel="noopener noreferrer">
-              <span class="row"><span class="gi">⌥</span> GitHub Release 页面</span>
-              <small>github.com/yohoten/acrpa/releases/tag/v0.1.28-beta</small>
+            <a href="https://gitee.com/yohoten/ACRPA/releases" target="_blank" rel="noopener noreferrer">
+              <span class="row"><span class="gi">◆</span> Gitee 仓库</span>
+              <small>gitee.com/yohoten/ACRPA</small>
             </a>
           </div>
         </div>
+        <a class="btn-download" data-download href="https://github.com/yohoten/acrpa/releases/download/v0.1.28-beta/ACRPA-v0.1.28-beta.exe" target="_blank" rel="noopener noreferrer">⬇ 从 GitHub 下载</a>
         <a class="btn btn-ghost" href="https://gitee.com/yohoten/ACRPA/releases" target="_blank" rel="noopener noreferrer">◆ Gitee 发行版</a>
       </div>
       <p style="font-size:12.5px;color:var(--dim);margin:-10px 0 22px">v0.1.28-beta（预发布）· ACRPA-v0.1.28-beta.exe · 13.4 MiB · SHA-256 473f1db3…06d54 —— Gitee 发行版附件正在补充，可先使用 GitHub 下载</p>
@@ -923,6 +948,35 @@
     <div class="stat"><div class="num"><span class="grad" data-ver></span></div><div class="lab"><span data-date></span> 最新版本</div></div>
   </div>
 </div>
+
+<!-- ================= Scenarios ================= -->
+<section id="scenarios" style="background:linear-gradient(180deg,transparent,rgba(34,211,238,.05) 40%,rgba(34,211,238,.05) 60%,transparent)">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">USE CASES</span>
+      <h2>这些重复劳动，本该自动完成</h2>
+      <p class="sec-desc">不用会编程。把「每天在电脑前做的机械操作」交给 ACRPA。</p>
+    </div>
+    <div class="scene-grid">
+      <div class="scene reveal">
+        <h3>📊 每日对账 / 数据搬运</h3>
+        <div class="ba">
+          <div class="before">😮‍💨 之前：每天在网银、ERP、Excel 之间来回复制粘贴 1–2 小时，看花眼还容易填错行。</div>
+          <div class="arrowline">↓ 用 ACRPA</div>
+          <div class="after">✅ 之后：步骤写进一张 Excel（或直接「录制」跑一遍），定时自动开窗口、找按钮、填表、截图归档，人不用在场。</div>
+        </div>
+      </div>
+      <div class="scene reveal">
+        <h3>🤖 不写代码也能「智能」自动化</h3>
+        <div class="ba">
+          <div class="before">😮‍💨 之前：传统脚本靠固定坐标，界面一改版就点错，每次都要回去找程序员改。</div>
+          <div class="arrowline">↓ 用 ACRPA</div>
+          <div class="after">✅ 之后：「AI 找图」用大白话描述元素、OCR「点击文字」按文字定位，界面小改也能自适应，失败还能 AI 分析重试。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
 
 <!-- ================= Screenshots ================= -->
 <section id="screenshots">
@@ -1337,6 +1391,44 @@
       <div class="tl-item reveal"><div class="tl-ver">v0.1.17 → v0.1.13</div><div class="tl-date">2026-06 — 2026-07</div><p>集成 DD 驱动高性能输入后端；统一退出清理机制；AI 生成器与模板优化；图色识别与 OCR 功能说明完善。</p></div>
     </div>
     <button type="button" class="tl-toggle" id="tlToggle" aria-expanded="false" aria-controls="timeline"><span class="tl-toggle-label">展开更多更新日志</span><span class="tl-caret">▾</span></button>
+  </div>
+</section>
+
+<!-- ================= Trust ================= -->
+<section id="trust">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">SECURITY · TRUST</span>
+      <h2>敢让你双击运行，也经得起你读源码</h2>
+      <p class="sec-desc">桌面自动化工具最怕「敢不敢装」。ACRPA 的答案是：开源、本地、免安装。</p>
+    </div>
+    <div class="sec-list">
+      <div class="sec-item reveal"><b>🔓 开源可审计</b>｜MIT 协议，源码全公开、GitHub 与 Gitee 同步，任何人可审阅并自行构建。</div>
+      <div class="sec-item reveal"><b>🔑 密钥本机保管</b>｜AI API Key 存进 Windows 凭据库，绝不写进 config.json，也不上传你的操作内容。</div>
+      <div class="sec-item reveal"><b>💻 本地优先运行</b>｜核心自动化在本机执行，不依赖服务器；不开 AI 则完全离线。</div>
+      <div class="sec-item reveal"><b>📦 免安装便携</b>｜单文件 exe 解压即用，不写系统、不装运行时，卸载即删目录。</div>
+    </div>
+    <div class="sec-caution reveal">⚠️ 首次运行 Windows 可能提示「未知发布者 / SmartScreen」，因未做付费代码签名所致，属正常现象 —— 点「更多信息 → 仍要运行」，或将安装目录加入杀软白名单即可。</div>
+  </div>
+</section>
+
+<!-- ================= FAQ ================= -->
+<section id="faq" style="background:linear-gradient(180deg,transparent,rgba(129,140,248,.05) 40%,rgba(129,140,248,.05) 60%,transparent)">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="sec-tag">FAQ</span>
+      <h2>常见问题</h2>
+      <p class="sec-desc">下载前，你可能想知道的几件事。</p>
+    </div>
+    <div class="faq reveal">
+      <details><summary>不装 Python 能用吗？</summary><div class="faq-body">能。下载「便携版 exe」双击即用，无需安装 Python；只有想改源码时才需要 Python 3.7+。</div></details>
+      <details><summary>支持哪些系统？</summary><div class="faq-body">Windows 桌面系统，提供 x64 便携压缩包（及安装版）。</div></details>
+      <details><summary>真的免费？能商用吗？</summary><div class="faq-body">完全免费，MIT 开源协议，个人与企业均可自由使用、修改与商用；无功能或时长限制，无广告、无内购。</div></details>
+      <details><summary>杀毒软件 / SmartScreen 报毒怎么办？</summary><div class="faq-body">因未做付费代码签名，首次运行可能被拦截。可点「更多信息 → 仍要运行」或把目录加入白名单；也欢迎从源码自行构建校验。</div></details>
+      <details><summary>AI 功能要额外付费吗？</summary><div class="faq-body">ACRPA 本身免费。AI 用你自己的模型 Key（DeepSeek / 通义千问 / OpenAI / Anthropic / 本地 Ollama 等），费用由对应服务商按量计；不用 AI 则完全离线、零成本。</div></details>
+      <details><summary>和按键精灵 / 影刀 / UiPath 有何不同？</summary><div class="faq-body">更轻（单文件免安装）、更直观（以 Excel 表格为脚本，人人能读写）、支持本地 AI 视觉定位，且完全开源、可免费改源码。</div></details>
+      <details><summary>我的脚本和数据安全吗？</summary><div class="faq-body">自动化在本机执行，密钥存于系统凭据库，程序不收集、不上传你的操作数据。</div></details>
+    </div>
   </div>
 </section>
 

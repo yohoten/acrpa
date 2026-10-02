@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ACRPA · Lightweight Windows Desktop Automation · v0.1.28-beta</title>
+<title>ACRPA · Lightweight Windows Desktop Automation</title>
 <meta name="description" content="ACRPA is a lightweight Windows desktop automation tool: Excel spreadsheets are your scripts. It supports image-based localization, window management, OCR, browser automation, record and replay, scheduled tasks, workflow orchestration and AI enhancement.">
 <meta name="keywords" content="ACRPA,RPA,desktop automation,automation script,Excel script,image recognition,window management,OCR,browser automation,workflow orchestration,scheduled tasks,AI enhancement,Python automation,Windows automation,portable">
 <meta name="author" content="yohoten">
@@ -13,20 +13,20 @@
 <link rel="canonical" href="https://yohoten.github.io/acrpa/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ACRPA">
-<meta property="og:title" content="ACRPA · Lightweight Windows Desktop Automation · v0.1.28-beta">
+<meta property="og:title" content="ACRPA · Lightweight Windows Desktop Automation">
 <meta property="og:description" content="Excel spreadsheets as scripts, image recognition + window management + OCR + browser automation + workflow orchestration + AI enhancement. A lightweight, portable Windows desktop automation tool.">
 <meta property="og:url" content="https://yohoten.github.io/acrpa/">
 <meta property="og:image" content="https://raw.githubusercontent.com/yohoten/acrpa/main/img/image1.png">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="ACRPA · Lightweight Windows Desktop Automation · v0.1.28-beta">
+<meta name="twitter:title" content="ACRPA · Lightweight Windows Desktop Automation">
 <meta name="twitter:description" content="Excel spreadsheets as scripts, image recognition + window management + OCR + browser automation + workflow orchestration + AI enhancement. A lightweight, portable Windows desktop automation tool.">
 <meta name="twitter:image" content="https://raw.githubusercontent.com/yohoten/acrpa/main/img/image1.png">
 <link rel="icon" type="image/png" sizes="32x32" href="res/icon-32.png">
 <link rel="icon" type="image/png" sizes="128x128" href="res/icon.png">
 <link rel="apple-touch-icon" sizes="180x180" href="res/apple-touch-icon.png">
 <link rel="shortcut icon" type="image/x-icon" href="res/automation.ico">
-<script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"ACRPA","alternateName":"A/C RPA Desktop Automation Workflow Tool","applicationCategory":"UtilitiesApplication","applicationSubCategory":"RPA Desktop Automation","operatingSystem":"Windows","softwareVersion":"0.1.28-beta","datePublished":"2026-10-01","description":"Lightweight Windows desktop automation tool: Excel spreadsheets as scripts, with image-based localization, window management, OCR, browser automation, workflow orchestration, scheduled tasks and AI enhancement.","url":"https://yohoten.github.io/acrpa/","downloadUrl":"https://github.com/yohoten/acrpa/releases/download/v0.1.28-beta/ACRPA-v0.1.28-beta.exe","author":{"@type":"Person","name":"yohoten"},"offers":{"@type":"Offer","price":"0","priceCurrency":"CNY"}}
+<script type="application/ld+json" id="ldjson">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"ACRPA","alternateName":"A/C RPA Desktop Automation Workflow Tool","applicationCategory":"UtilitiesApplication","applicationSubCategory":"RPA Desktop Automation","operatingSystem":"Windows","softwareVersion":"","datePublished":"2026-10-01","description":"Lightweight Windows desktop automation tool: Excel spreadsheets as scripts, with image-based localization, window management, OCR, browser automation, workflow orchestration, scheduled tasks and AI enhancement.","url":"https://yohoten.github.io/acrpa/","downloadUrl":"","author":{"@type":"Person","name":"yohoten"},"offers":{"@type":"Offer","price":"0","priceCurrency":"CNY"}}
 </script>
 <noscript><style>.reveal{opacity:1 !important;transform:none !important}.timeline .tl-item{display:block !important}</style></noscript>
 <style>
@@ -882,9 +882,9 @@
         <div class="dl-drop" id="dlDrop">
           <button class="btn-download" id="dlToggle" aria-haspopup="true" aria-expanded="false">⬇ Download Installer <span class="caret">▾</span></button>
           <div class="dl-menu" id="dlMenu">
-            <a href="https://github.com/yohoten/acrpa/releases/download/v0.1.28-beta/ACRPA-v0.1.28-beta.exe" data-download target="_blank" rel="noopener noreferrer">
+            <a href="https://github.com/yohoten/acrpa/releases" data-download target="_blank" rel="noopener noreferrer">
               <span class="row"><span class="gi">⬇</span> Direct download <span data-ver></span></span>
-              <small>ACRPA-v0.1.28-beta.exe · Portable · 13.4 MiB · Pre-release</small>
+              <small><span data-asset></span> · Portable · 13.4 MiB · Pre-release</small>
             </a>
             <a href="https://github.com/yohoten/acrpa/releases" target="_blank" rel="noopener noreferrer">
               <span class="row"><span class="gi">⌥</span> GitHub repository</span>
@@ -899,7 +899,7 @@
         <a class="btn btn-ghost" href="#screenshots">▶ See it in action</a>
         <a class="btn btn-ghost" href="#contact">💬 Join the community</a>
       </div>
-      <p style="font-size:12.5px;color:var(--dim);margin:-10px 0 22px">Latest: v0.1.28-beta (pre-release) · ACRPA-v0.1.28-beta.exe · 13.4 MiB · SHA-256 473f1db3…06d54</p>
+      <p style="font-size:12.5px;color:var(--dim);margin:-10px 0 22px">Latest: <span data-ver></span> (pre-release) · <span data-asset></span> · 13.4 MiB · SHA-256 473f1db3…06d54</p>
       <div class="hero-trust">
         <span class="badge-free">✔ Completely free · MIT open source</span>
         <span class="badge-free">✔ Single file · portable, no installation</span>
@@ -1835,20 +1835,27 @@
 
 <script>
   /* ================= 单一版本来源 · 更新日志折叠 =================
-     For a new release, edit ACRPA_RELEASE below only: every version number,
-     release date, download link and newest changelog entry is rendered from it,
-     avoiding a dozen manual edits and download URLs that 404.
-     Note: <title> / og:title / twitter:title / JSON-LD in <head> keep static
-     text as a fallback for search engines and no-JS environments; the script below
-     syncs them at runtime. For fully precise SEO, update those static strings too. */
+     For a new release, edit ACRPA_RELEASE.version below only (the SINGLE version
+     literal on this page): every version number, release date, download link,
+     asset name and newest changelog entry is rendered from it, avoiding a dozen
+     manual edits and download URLs that 404.
+     The version literals in <head> (<title> / og:title / twitter:title / JSON-LD)
+     have been removed and are injected at load time by the script below (elements
+     carry data-ver / data-asset markers or id="ldjson"), so no second version
+     literal exists in the page source.
+     Limitation: meta / JSON-LD written from JS have no immediate effect for
+     crawlers or no-JS environments (SEO); for precise SEO, maintain a static
+     snapshot on the site side at release time.
+     The two language pages each keep their own single source and do not share. */
   var ACRPA_RELEASE = {
-    version: "0.1.28-beta",      // version for display (may include a pre-release suffix)
-    tag: "v0.1.28-beta",         // GitHub Release tag (used for the direct download link; pre-release tag for this build)
+    version: "0.1.28-beta",      // SINGLE source of truth: version for display (may include a pre-release suffix)
     date: "2026-10-01",          // release date
     ghUser: "yohoten",
-    ghRepo: "acrpa",
-    asset: "ACRPA-v0.1.28-beta.exe"  // Release asset filename
+    ghRepo: "acrpa"
   };
+  // tag and asset filename derive from version, avoiding a repeated version literal
+  ACRPA_RELEASE.tag = "v" + ACRPA_RELEASE.version;                  // GitHub Release tag
+  ACRPA_RELEASE.asset = "ACRPA-v" + ACRPA_RELEASE.version + ".exe"; // Release asset filename
 
   // —— render version / date / download link ——
   (function(){
@@ -1859,6 +1866,7 @@
     }
     fill('data-ver', shown);
     fill('data-date', R.date);
+    fill('data-asset', R.asset);
     var url = "https://github.com/" + R.ghUser + "/" + R.ghRepo +
               "/releases/download/" + R.tag + "/" + R.asset;
     var dls = document.querySelectorAll('[data-download]');
@@ -1869,6 +1877,16 @@
       var metas = document.querySelectorAll(
         'meta[property="og:title"], meta[name="twitter:title"]');
       for(var j = 0; j < metas.length; j++){ metas[j].setAttribute('content', title); }
+    }catch(e){}
+    try{
+      // JSON-LD softwareVersion / downloadUrl injected from the single source (no-op for crawlers / no-JS, see above)
+      var ld = document.getElementById('ldjson');
+      if(ld){
+        var obj = JSON.parse(ld.textContent);
+        obj.softwareVersion = R.version;
+        obj.downloadUrl = url;
+        ld.textContent = JSON.stringify(obj);
+      }
     }catch(e){}
   })();
 

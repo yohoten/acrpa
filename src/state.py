@@ -60,6 +60,24 @@ _config_schema = [
     # 浏览器自动化 (Playwright 可选后端)
     ("browser_headless",      True,     bool),   # 浏览器无头模式(True=不显示窗口)
     ("browser_slow_mo",       0,        int),    # 浏览器操作慢放(ms, 0=最快)
+    # 浏览器后端增强 P0 (默认值不改变现有行为)
+    ("browser_wait_timeout",       15.0,  float),  # 通用等待超时(秒)
+    ("browser_poll_interval",      0.2,   float),  # waiter 轮询间隔(秒)
+    ("browser_full_page_screenshot", False, bool), # 截图缺省整页开关(默认与现状一致=False)
+    ("browser_js_timeout",         15.0,  float),  # 执行 JS 超时(秒)
+    ("browser_retry",              1,     int),    # facade 内部瞬态重试次数
+    ("browser_retry_interval",     0.5,   float),  # 内部重试间隔(秒)
+    ("browser_silent",             False, bool),   # 静默模式(元素缺失/超时不判失败)
+    # 浏览器后端增强 P1 (默认值不改变现有行为)
+    ("browser_download_dir",       "",    str),    # 下载目录(空=CONFIG_PATH 同级 downloads)
+    ("browser_download_timeout",   15.0,  float),  # 等待下载缺省超时(秒)
+    ("browser_download_overwrite", True,  bool),   # 同名下载文件是否覆盖
+    ("browser_screenshot_dir",     "",    str),    # 截图目录覆盖(空=沿用 screenshots)
+    # 浏览器后端增强 P2 (默认值不改变现有行为)
+    ("browser_cdp_endpoint",           "",   str),   # CDP 接管地址(空=须由命令参数给出)
+    ("browser_listen_max",             200,  int),   # 监听队列上限(超出丢弃最旧)
+    ("browser_listen_default_timeout", 15.0, float), # 等待数据包缺省超时(秒)
+    ("browser_user_agent",             "",   str),   # 自定义UA(预留)
     # 录制增强
     ("recording_mode",        "absolute", str),  # 录制模式: absolute(绝对坐标) / relative(相对窗口)
     ("recording_stop_hotkey", "Ctrl+Alt+F12", str),  # 停止录制快捷键
@@ -91,6 +109,14 @@ _config_schema = [
     ("netlink_web_enabled", False,        bool),   # 启用浏览器只读监控面板
     ("netlink_web_port",    19712,        int),    # 面板监听端口
     ("netlink_web_bind",    "0.0.0.0",    str),    # 监听地址(0.0.0.0=允许同网段访问)
+    # ── 网页面板「有限控制」(Phase4-2 演进，默认全关 = 行为完全不变) ──
+    # ⚠ 控制 PIN 明文/哈希不在此列：只进 Windows 凭据库
+    #   (target=ACRPA/netlink/web-control-pin)，绝不写入 config.json。
+    ("netlink_web_control", False,        bool),   # 启用面板有限控制(run/stop)
+    ("netlink_web_control_ttl", 300,      int),    # 控制会话 TTL(秒)
+    ("netlink_web_tls",     False,        bool),   # 面板 HTTPS(控制开启时强制)
+    ("netlink_web_confirm_control", False, bool),  # 本地面板控制是否也需桌面弹窗确认
+    ("netlink_web_allow_remote_control", False, bool),  # 控制开启且 bind=0.0.0.0 时是否允许局域网控制(默认收窄 127.0.0.1)
     ("netlink_tls_cert",  "",  str),   # TLS 服务端证书 PEM 路径(启用 TLS 时必填)
     ("netlink_tls_key",   "",  str),   # TLS 服务端私钥 PEM 路径(启用 TLS 时必填)
     ("netlink_tls_pins",  [],  list),  # 已固定的对端证书指纹(sha256 hex，TOFU)
@@ -107,7 +133,20 @@ _config_schema = [
     ("python_default_perm", "sandbox", str),   # 默认权限 sandbox/trusted/full
     ("python_full_enabled", False,     bool),  # 是否允许 full 权限（默认关闭）
     ("python_timeout",      30,        int),   # 单段代码超时(秒)
+    # 过渡开关（§1.2）：True = 「代码」命令回退旧的受限内建 exec 路径（兼容存量
+    # 脚本，文档公告一个版本周期后移除）；False（默认）= 与 Python 命令统一走
+    # py_sandbox 沙箱内核（AST 预检 / 超时 / 审计 / AcrpaAPI / print 转发）。
+    ("legacy_code_command", False,     bool),
     ("ui_scale", 1.0, float),   # 界面缩放 0.8-1.5
+    # ── 脚本市场 v2 (全部非敏感) ──
+    # ⚠ token 不在此列：只进 Windows 凭据库 (复用 cred_write/cred_read/cred_delete)，
+    #   与 api_key 同款安全策略，绝不写入 config.json、绝不写日志。
+    ("market_provider",          "gitee",   str),  # 上次登录/上传所用 provider
+    ("market_username",          "",        str),  # 展示用登录名(非密钥)
+    ("market_auto_check_update", True,      bool), # 打开市场时后台查更新
+    ("market_install_dir",       "",        str),  # 自定义安装根目录(空=CONFIG_PATH 同级)
+    ("market_last_category",     "全部",    str),  # UI 记忆: 上次分类筛选
+    ("market_index_cache_ttl",   3600,      int),  # 索引缓存秒数(覆盖 CACHE_TTL 常量)
 ]
 
 # ── Config globals (initialised from schema defaults) ──

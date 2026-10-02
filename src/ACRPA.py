@@ -1748,6 +1748,14 @@ def _refresh_theme():
     _applied_dark_mode = bool(getattr(state, "DARK_MODE", False))
     apply_theme(root, style)
 
+    # 主题切换后同步脚本市场窗口 (已打开则即时重刷颜色；未开为安全 no-op)。
+    # 放在 apply_theme 之后: 此时 utils.C 已重绑，market_window 的 themed() 读到新色。
+    try:
+        import market_window
+        market_window.retheme_marketplace()
+    except Exception:
+        pass
+
     def _walk(p, prev):
         for w in p.winfo_children():
             try:
@@ -3071,254 +3079,38 @@ def _show_variables_window():
 
 
 def _open_marketplace():
-    """Open script marketplace dialog to browse and download community scripts."""
-    dlg = tkinter.Toplevel(root)
-    dlg.title("脚本市场 — ACRPA")
-    dlg.geometry("600x520+400+80")
-    dlg.minsize(500, 420)
-    dlg.transient(root)
-    dlg.grab_set()
-    dlg.configure(bg=C["bgc"])
-    _set_window_icon(dlg)
-    dlg.columnconfigure(0, weight=1)
-    dlg.rowconfigure(3, weight=1)
+    """打开脚本市场窗口 (批次 2：委托独立模块 market_window)。
 
-    # Title
-    title_frame = tkinter.Frame(dlg, bg=C["bgc"])
-    title_frame.grid(row=0, column=0, sticky="ew", padx=12, pady=(10, 4))
-    tkinter.Label(title_frame, text="脚本市场", font=FONT_TITLE, bg=C["bgc"],
-        fg=C["fgt"]).pack(side="left")
-    tkinter.Label(title_frame, text="浏览社区共享的自动化脚本", font=FONT_SMALL,
-        bg=C["bgc"], fg=C["fgm"]).pack(side="left", padx=(8, 0))
+    工具栏「市场」按钮绑定保持不变；窗口/卡片/详情/账号区/安装进度实现全部
+    移入 src/market_window.py (设计 §3)。安装成功回调 _market_on_install 负责
+    落盘口径与载入编辑器。
+    """
+    import market_window
+    market_window.open_market_window(root, on_install=_market_on_install)
 
-    # Search bar
-    search_frame = tkinter.Frame(dlg, bg=C["bgc"])
-    search_frame.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 6))
-    search_var = tkinter.StringVar()
-    search_entry = tkinter.Entry(search_frame, textvariable=search_var,
-        font=FONT_BODY, width=30, relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"],
-        insertbackground=C["fgt"])
-    search_entry.pack(side="left", fill="x", expand=True, padx=(0, 4))
 
-    # Category filter
-    cat_var = tkinter.StringVar(value="全部")
-    cat_combo = ttk.Combobox(search_frame, textvariable=cat_var, width=8,
-        values=("全部", "办公", "财务", "系统", "其他"), state="readonly")
-    cat_combo.pack(side="left", padx=2)
+def _market_on_install(xls_path):
+    """市场安装成功回调：把脚本载入编辑器。
 
-    # Script list frame
-    list_frame = tkinter.Frame(dlg, bg=C["bgc"],
-        highlightbackground=C["bd"], highlightthickness=1)
-    list_frame.grid(row=2, column=0, sticky="nsew", padx=12, pady=(0, 4))
-    list_frame.columnconfigure(0, weight=1)
-    list_frame.rowconfigure(0, weight=1)
-
-    # Use a canvas with scroll for script cards
-    canvas = tkinter.Canvas(list_frame, bg=C["bgc"], highlightthickness=0, bd=0)
-    scrollbar = tkinter.Scrollbar(list_frame, orient="vertical", command=canvas.yview, width=6)
-    scripts_inner = tkinter.Frame(canvas, bg=C["bgc"])
-
-    scripts_inner.bind("<Configure>",
-        lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-    canvas.create_window((0, 0), window=scripts_inner, anchor="nw")
-    canvas.configure(yscrollcommand=scrollbar.set)
-
-    canvas.pack(side="left", fill="both", expand=True)
-    scrollbar.pack(side="right", fill="y")
-
-    # Mouse wheel binding - use widget-level binding instead of bind_all
-    def _on_canvas_mousewheel(event):
-        canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-    
-    # Bind directly to canvas, no need for bind_all/enter/leave
-    canvas.bind("<MouseWheel>", _on_canvas_mousewheel)
-    # Status
-    status_var = tkinter.StringVar(value="正在加载脚本库...")
-    status_label = tkinter.Label(dlg, textvariable=status_var, font=FONT_SMALL,
-        bg=C["bgc"], fg=C["fgm"])
-    status_label.grid(row=3, column=0, sticky="w", padx=12, pady=(0, 8))
-
-    # Progress bar
-    progress = ttk.Progressbar(dlg, mode="indeterminate", length=300)
-    progress.grid(row=4, column=0, sticky="ew", padx=12, pady=(0, 8))
-    progress.start(10)
-
-    # Store loaded scripts
-    _market_scripts = []
-
-    def _refresh_script_list(scripts=None, keyword=""):
-        """Refresh the script card list."""
-        for w in scripts_inner.winfo_children():
-            w.destroy()
-
-        if scripts is None:
-            scripts = _market_scripts
-
-        # Filter by category
-        cat = cat_var.get()
-        if cat != "全部":
-            scripts = [s for s in scripts if s.category == cat]
-
-        # Filter by keyword
-        kw = keyword.strip().lower()
-        if kw:
-            scripts = [s for s in scripts if kw in s.name.lower()
-                       or kw in s.description.lower()
-                       or kw in s.category.lower()
-                       or any(kw in t.lower() for t in s.tags)]
-
-        if not scripts:
-            tkinter.Label(scripts_inner, text="没有找到匹配的脚本",
-                font=FONT_BODY, fg=C["fgm"], bg=C["bgc"]).pack(pady=20)
-            return
-
-        for i, s in enumerate(scripts):
-            card = tkinter.Frame(scripts_inner, bg=C["bgc"],
-                highlightbackground=C["bd"], highlightthickness=1 if i > 0 else 0)
-            card.pack(fill="x", padx=4, pady=(0 if i == 0 else 1, 1))
-
-            # Star rating
-            stars = "★" * int(s.rating) + "☆" * (5 - int(s.rating))
-            header = tkinter.Frame(card, bg=C["bgc"])
-            header.pack(fill="x", padx=8, pady=(6, 2))
-            tkinter.Label(header, text=s.name, font=FONT_TITLE,
-                fg=C["fgt"], bg=C["bgc"]).pack(side="left")
-            tkinter.Label(header, text="  {} {} ({}评价)".format(
-                stars, s.rating, s.rating_count),
-                font=FONT_SMALL, fg=C["wn"], bg=C["bgc"]).pack(side="left", padx=(4, 0))
-            tkinter.Label(header, text="{} 下载".format(s.downloads),
-                font=FONT_SMALL, fg=C["fgm"], bg=C["bgc"]).pack(side="right")
-
-            # Description + tags
-            body = tkinter.Frame(card, bg=C["bgc"])
-            body.pack(fill="x", padx=8, pady=(0, 2))
-            tkinter.Label(body, text=s.description, font=FONT_SMALL,
-                fg=C["fgb"], bg=C["bgc"], wraplength=500, justify="left").pack(
-                anchor="w")
-            tag_row = tkinter.Frame(body, bg=C["bgc"])
-            tag_row.pack(fill="x", pady=(3, 0))
-            tkinter.Label(tag_row, text="[{}]".format(s.category), font=FONT_TINY,
-                fg=C["ac"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
-            for t in s.tags[:4]:
-                tkinter.Label(tag_row, text=t, font=FONT_TINY,
-                    fg=C["fgm"], bg=C["acl"], padx=4, pady=1).pack(side="left", padx=1)
-            if s.requires:
-                tkinter.Label(tag_row, text="需要: {}".format(",".join(s.requires)),
-                    font=FONT_TINY, fg=C["wn"], bg=C["bgc"]).pack(
-                    side="right")
-
-            # Button row
-            btn_row = tkinter.Frame(card, bg=C["bgc"])
-            btn_row.pack(fill="x", padx=8, pady=(2, 6))
-            tkinter.Button(btn_row, text="导入到编辑器", font=FONT_SMALL,
-                bg=C["sc"], fg="white", relief="raised", bd=2, cursor="hand2",
-                activebackground=_darken(C["sc"]), activeforeground="white",
-                command=lambda sid=s.id: _import_script(sid)).pack(
-                side="left", padx=(0, 4))
-            tkinter.Button(btn_row, text="详情", font=FONT_SMALL,
-                bg=C["bgc"], fg=C["fgb"], relief="raised", bd=2, cursor="hand2",
-                command=lambda s_=s: _show_script_detail(s_)).pack(side="left")
-
-        status_var.set("共 {} 个脚本".format(len(scripts)))
-
-    def _import_script(script_id):
-        """Download and import a script into the editor."""
-        progress.start(10)
-        status_var.set("正在下载脚本...")
-
-        def _do_import():
-            try:
-                from marketplace import download_script
-                save_dir = os.path.dirname(state.CONFIG_PATH)
-                fp = download_script(script_id, save_dir)
-
-                def _on_done():
-                    progress.stop()
-                    state.filename = fp
-                    state.has_script = True
-                    state.script_dir = os.path.dirname(fp)
-                    script_name_var.set(os.path.basename(fp))
-                    edit_file_label.config(text=os.path.basename(fp))
-                    _editor_load_xls(fp)
-                    dlg.destroy()
-                    from utils import show_toast
-                    show_toast(root, "脚本已导入: {}".format(os.path.basename(fp)), "success")
-                dlg.after(0, _on_done)
-            except Exception as e:
-                _err_msg = str(e)
-                def _on_error(err=_err_msg):
-                    progress.stop()
-                    status_var.set("导入失败: {}".format(err))
-                    from utils import show_toast
-                    show_toast(root, "导入失败: {}".format(err), "error")
-                dlg.after(0, _on_error)
-
-        threading.Thread(target=_do_import, daemon=True).start()
-
-    def _show_script_detail(s_info):
-        """Show script detail popup."""
-        detail = tkinter.Toplevel(dlg)
-        detail.title(s_info.name)
-        detail.geometry("400x300")
-        detail.transient(dlg)
-        detail.configure(bg=C["bgc"])
-        _set_window_icon(detail)
-
-        tkinter.Label(detail, text=s_info.name, font=FONT_TITLE,
-            fg=C["fgt"], bg=C["bgc"]).pack(pady=(10, 4))
-        tkinter.Label(detail, text="作者: {} | 版本: {} | 分类: {}".format(
-            s_info.author, s_info.version, s_info.category),
-            font=FONT_SMALL, fg=C["fgm"], bg=C["bgc"]).pack()
-        tkinter.Label(detail, text=s_info.description, font=FONT_BODY,
-            fg=C["fgb"], bg=C["bgc"], wraplength=350, justify="left").pack(
-            pady=(10, 6), padx=20)
-        tkinter.Label(detail, text="下载: {} | 评分: {} ({})".format(
-            s_info.downloads, s_info.rating, s_info.rating_count),
-            font=FONT_SMALL, fg=C["ac"], bg=C["bgc"]).pack()
-
-        if s_info.requires:
-            tkinter.Label(detail, text="依赖: {}".format(", ".join(s_info.requires)),
-                font=FONT_SMALL, fg=C["wn"], bg=C["bgc"]).pack(pady=(4, 0))
-
-        tkinter.Button(detail, text="导入此脚本", font=FONT_BUTTON,
-            bg=C["sc"], fg="white", relief="raised", bd=3,
-            command=lambda: (_import_script(s_info.id), detail.destroy())).pack(pady=10)
-
-    # Search on type
-    def _on_search(*args):
-        _refresh_script_list(_market_scripts, search_var.get())
-    search_var.trace_add("write", _on_search)
-
-    # Category change
-    def _on_cat_change(*args):
-        _refresh_script_list(_market_scripts, search_var.get())
-    cat_var.trace_add("write", _on_cat_change)
-
-    # Load scripts in background
-    def _load_scripts():
-        try:
-            from marketplace import fetch_index
-            scripts = fetch_index()
-        except Exception:
-            from marketplace import _load_builtin_scripts
-            scripts = _load_builtin_scripts()
-
-        def _on_loaded():
-            nonlocal _market_scripts
-            _market_scripts = scripts
-            progress.stop()
-            progress.grid_remove()
-            _refresh_script_list(scripts)
-        dlg.after(0, _on_loaded)
-
-    # Ensure mousewheel restored on ALL close paths (X button + code destroy)
-    _orig_dlg_destroy = dlg.destroy
-    def _safe_dlg_destroy():
-        canvas.unbind_all("<MouseWheel>")
-        _orig_dlg_destroy()
-    dlg.destroy = _safe_dlg_destroy
-
-    threading.Thread(target=_load_scripts, daemon=True).start()
+    script_dir 口径 (批次 2 固定，与 marketplace 安装落点一致)：
+        state.script_dir = os.path.dirname(xls_path)
+      - 包模式   : <save_dir>/market_scripts/<id>/  (脚本与拍平 png 同目录)
+      - 旧单文件 : <save_dir>/                       (平铺)
+    不再另行从 CONFIG_PATH 推算，消除批次 1 遗留的两套口径歧义。
+    """
+    try:
+        state.filename = xls_path
+        state.has_script = True
+        state.script_dir = os.path.dirname(xls_path)
+        script_name_var.set(os.path.basename(xls_path))
+        edit_file_label.config(text=os.path.basename(xls_path))
+        _editor_load_xls(xls_path)
+        from utils import show_toast
+        show_toast(root, "脚本已导入: {}".format(os.path.basename(xls_path)), "success")
+    except Exception as e:
+        log1("市场脚本导入失败: {}".format(e), "error")
+        from utils import show_toast
+        show_toast(root, "脚本导入失败: {}".format(e), "error")
 
 
 def _init_toolbar_buttons():

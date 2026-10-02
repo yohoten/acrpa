@@ -73,3 +73,10 @@ build/
 
 # UPX (如果使用)
 upx.exe
+
+# 脚本市场 v2 运行时产物 —— 均为本机下载 / 安装 / 仓库勘察产生，不入库
+.tmp_recon/
+market_scripts/
+*.acrpapkg
+# 根目录散落的脚本下载残留（脚本模板应放 template/，该目录已纳管）
+/*.xls

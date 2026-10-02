@@ -76,6 +76,20 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
 > **双方设备都要各自生成一套证书并各自开启 TLS**。TLS 是本机监听（Server）与出站连接
 > （Client）共用的：本机既用证书对外提供服务端握手，也作为客户端去连接对端。
 
+### 3.1 网页面板（WebUI）也可用同一套证书
+
+Phase 4-2 的浏览器面板**默认明文 HTTP**；可选择开启 **「面板启用 HTTPS」**，
+或在开启**有限控制（run/stop）**时由系统**强制**开启 HTTPS：
+
+* 面板与互联**复用同一套** `netlink_tls_cert` / `netlink_tls_key`（不同端口、各自
+  `SSLContext`），无需额外证书管理；
+* 控制开启时若证书不可用，**面板拒绝启用（绝不回落明文）**，并在 GUI 显示原因
+  （`cert missing` / `key missing` / `cert load failed` / `tls unavailable`）；
+* 自签证书下浏览器会提示「不安全」，需手动信任/继续；**不影响** HTTPS 被视为安全上下文
+  （Service Worker 与「添加到主屏」仍可用）。
+
+> 本期**不提供**面板侧证书自动生成（仍需按上文用 `openssl` 生成 PEM）。
+
 ---
 
 ## 4. 指纹固定（TOFU）与「不符即拒绝」
@@ -120,8 +134,10 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
 1. **自签不做链验证**：证书由指纹固定保证真实性，不做 CA 链校验、不校验主机名。
    因此「首次信任」那一刻若已被 MITM，仍可能固定到攻击者证书——请确保**首次**连接
    在可信网络内进行。
-2. **`webui` 网页面板未加密**：Phase 4-2 的浏览器只读面板仍是**明文 HTTP**，
-   TLS 只加密 NetLink 的 TCP 主链路，不影响 WebUI 端口。
+2. **网页面板（WebUI）默认明文，可选/强制 HTTPS**：面板**默认**仍为明文 HTTP（只读场景）；
+   在「设置 → 网络互联」勾选 **面板启用 HTTPS**，或开启**有限控制**（自动强制 HTTPS）后，
+   面板复用**同一套** `netlink_tls_cert` / `netlink_tls_key`（不同端口、各自 `SSLContext`），
+   与互联 TCP 主链路互不影响。自签证书下浏览器仍会告警「不安全」，需手动信任/继续。
 3. **UDP 自动发现仍为明文**：`ANNOUNCE/BYE` 广播（UDP 19711）不含业务数据、仍明文；
    TLS 只保护 TCP 主链路。
 4. **换证书需清指纹**：更换证书后旧指纹不再匹配，必须清空 `netlink_tls_pins` 重新信任。

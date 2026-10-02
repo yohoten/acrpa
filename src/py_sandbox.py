@@ -15,9 +15,9 @@
 对外接口
 --------
     PERM_SANDBOX / PERM_TRUSTED / PERM_FULL / VALID_PERMS
-    FORBIDDEN_CALLS / FORBIDDEN_ATTR_PREFIX / SANDBOX_BUILTINS
+    FORBIDDEN_CALLS / FORBIDDEN_ATTR_CALLS / FORBIDDEN_ATTR_PREFIX / SANDBOX_BUILTINS
     precheck(code, perm=PERM_SANDBOX) -> (bool, str)
-    run(code, perm=PERM_SANDBOX, timeout=None, api=None, audit=None, row=0) -> dict
+    run(code, perm=PERM_SANDBOX, timeout=None, api=None, audit=None, row=0, log=None) -> dict
     audit_path() -> str
     audit_write(record) -> None
     make_record(code, perm, row, elapsed, ok, error, timed_out, source) -> dict
@@ -42,9 +42,15 @@ PERM_FULL = "full"
 VALID_PERMS = (PERM_SANDBOX, PERM_TRUSTED, PERM_FULL)
 
 # ── 预检黑名单 ──
+# §1.1：format / format_map 原先在 SANDBOX_BUILTINS 白名单里，可通过
+#       "{0.__class__...}".format(x) 穿透读取任意 dunder 属性（AST 看不到
+#       format 字符串内部的纯文本）。现移出白名单并加入拒绝名单。
 FORBIDDEN_CALLS = {"eval", "exec", "compile", "open", "input", "breakpoint",
                    "__import__", "globals", "locals", "vars", "getattr", "setattr",
-                   "delattr", "memoryview", "classmethod", "staticmethod", "super"}
+                   "delattr", "memoryview", "classmethod", "staticmethod", "super",
+                   "format", "format_map"}
+# sandbox 下拒绝的「属性调用」名（形如 "<str>".format(...) / x.format_map(...)）。
+FORBIDDEN_ATTR_CALLS = frozenset(("format", "format_map"))
 FORBIDDEN_ATTR_PREFIX = "__"
 
 # trusted / full 仅拒绝的核心危险调用（其余放行）
@@ -67,11 +73,12 @@ _SHA1_LEN = 12
 
 # ── sandbox 白名单内建（只读/无害）──
 # 注意：绝不含 __import__/open/eval/exec/compile/globals/locals/getattr/setattr/
-#       input/help/breakpoint 等危险或具逃逸能力的内建。
+#       input/help/breakpoint 等危险或具逃逸能力的内建，也不含 format
+#       （§1.1：可经 format 字符串读取 dunder，见 FORBIDDEN_ATTR_CALLS）。
 SANDBOX_BUILTINS = {
     "abs": abs, "all": all, "any": any, "bool": bool, "dict": dict,
     "divmod": divmod, "enumerate": enumerate, "filter": filter,
-    "float": float, "format": format, "frozenset": frozenset, "int": int,
+    "float": float, "frozenset": frozenset, "int": int,
     "isinstance": isinstance, "issubclass": issubclass, "iter": iter,
     "len": len, "list": list, "map": map, "max": max, "min": min,
     "next": next, "pow": pow, "print": print, "range": range, "repr": repr,
@@ -99,7 +106,11 @@ def precheck(code, perm=PERM_SANDBOX):
         "forbidden attribute: <name>"
         "forbidden import"
         "forbidden statement: <kind>"
+        "forbidden dunder in string"
         "code too large"
+
+    §1.1：sandbox 档额外拒绝「含 __ 的字符串常量」（含 f-string 字面量片段），
+    以及 str.format / str.format_map 属性调用；trusted / full 语义不变。
     """
     try:
         if code is None:
@@ -132,6 +143,12 @@ def precheck(code, perm=PERM_SANDBOX):
                 return (False, "forbidden import")
             if isinstance(node, _FORBIDDEN_STMTS):
                 return (False, "forbidden statement: %s" % type(node).__name__)
+            # §1.1：拒绝任何含 "__" 的字符串常量（含 f-string 字面量片段）。
+            # format 字符串内部的 {0.__class__} 是纯文本、AST 不可见，故必须按
+            # 字面量文本拦截；拼接绕过（"{0." + "__class__" + "}"）亦被此规则覆盖。
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                if "__" in node.value:
+                    return (False, "forbidden dunder in string")
         if isinstance(node, ast.Call):
             func = node.func
             if isinstance(func, ast.Name):
@@ -139,6 +156,10 @@ def precheck(code, perm=PERM_SANDBOX):
                     return (False, "forbidden call: %s" % func.id)
                 if (not sandbox) and func.id in _CORE_UNSAFE_CALLS:
                     return (False, "forbidden call: %s" % func.id)
+            elif sandbox and isinstance(func, ast.Attribute):
+                # §1.1：拒绝 "<str>".format(...) / x.format_map(...) 属性调用。
+                if func.attr in FORBIDDEN_ATTR_CALLS:
+                    return (False, "forbidden call: %s" % func.attr)
         if sandbox and isinstance(node, ast.Attribute):
             attr = node.attr
             if isinstance(attr, str) and attr.startswith(FORBIDDEN_ATTR_PREFIX):
@@ -149,13 +170,19 @@ def precheck(code, perm=PERM_SANDBOX):
 # ======================================================================
 # 执行
 # ======================================================================
-def run(code, perm=PERM_SANDBOX, timeout=None, api=None, audit=None, row=0):
-    """执行代码。返回 {ok,result,error,elapsed,perm,timed_out}，绝不抛异常。
+def run(code, perm=PERM_SANDBOX, timeout=None, api=None, audit=None, row=0, log=None):
+    """执行代码。返回 {ok,result,raw_result,error,elapsed,perm,timed_out}，绝不抛异常。
 
     api    : 暴露给脚本的 acrpa 对象（AcrpaAPI 实例），可为 None。
     audit  : 审计来源标记：字符串（"excel"/"plugin"/"hook"/"console"）或可调用对象
              （接收 record dict）。字符串会写入审计记录的 source 字段。
     row    : 当前执行行号（写入审计）。
+    log    : §1.5 可注入日志回调 log(msg, level="info")，用于转发脚本 print /
+             子进程日志；缺省依次退化 utils.log1 → sys.stderr → 安全 no-op
+             （py_sandbox 不硬依赖 GUI）。
+
+    返回字典保持既有字段语义；raw_result 为加性字段（P1 §2.1 写回变量用，本批次
+    不强制消费）。
     """
     if perm not in VALID_PERMS:
         perm = PERM_SANDBOX
@@ -169,17 +196,17 @@ def run(code, perm=PERM_SANDBOX, timeout=None, api=None, audit=None, row=0):
         timeout = DEFAULT_TIMEOUT
 
     t0 = time.time()
-    result = {"ok": False, "result": None, "error": "", "elapsed": 0.0,
-              "perm": perm, "timed_out": False}
+    result = {"ok": False, "result": None, "raw_result": None, "error": "",
+              "elapsed": 0.0, "perm": perm, "timed_out": False}
 
     try:
         ok, reason = precheck(code, perm)
         if not ok:
             result["error"] = reason
         elif perm == PERM_FULL:
-            _exec_full(code, timeout, result)
+            _exec_full(code, timeout, result, log)
         else:
-            _exec_inprocess(code, perm, timeout, api, result)
+            _exec_inprocess(code, perm, timeout, api, result, log)
     except Exception as e:  # 兜底：任何未预期异常都必须被吞掉
         result["error"] = "%s: %s" % (type(e).__name__, e)
 
@@ -208,14 +235,88 @@ def _make_tracer(deadline, step=_TRACE_STEP):
     return _tracer
 
 
-def _exec_inprocess(code, perm, timeout, api, result):
+def _rewrite_last_expr(tree):
+    """§1.4：把最后一条 ast.Expr 语句改写为 `result = <expr>`（只执行一次）。
+
+    原先 `_extract_result` 会在末行表达式为 None 时重新 eval 一次，导致同一语句
+    执行两次（末行是 `acrpa.click(...)` / `x.append(1)` 时即真实的双击 / 重复输入）。
+    改写后单次执行，值直接落入 `result`。
+    """
+    try:
+        body = tree.body
+        if body and isinstance(body[-1], ast.Expr):
+            last = body[-1]
+            assign = ast.Assign(targets=[ast.Name(id="result", ctx=ast.Store())],
+                                value=last.value)
+            ast.copy_location(assign, last)
+            ast.fix_missing_locations(assign)
+            body[-1] = assign
+    except Exception:
+        pass
+    return tree
+
+
+def _compile_units(code):
+    """解析源码 + §1.4 末行改写，返回可 exec 的 code object。"""
+    return compile(_rewrite_last_expr(ast.parse(code)), "<acrpa-py>", "exec")
+
+
+def _default_log(msg, level="info"):
+    """print 转发兜底通道：ACRPA 日志面板（utils.log1）→ sys.stderr → 安全 no-op。
+
+    惰性 import utils 以避免 py_sandbox 硬依赖 GUI；任何失败都不得影响脚本执行。
+    """
+    try:
+        import utils
+        fn = getattr(utils, "log1", None)
+        if callable(fn):
+            fn(msg, level)
+            return
+    except Exception:
+        pass
+    try:
+        if sys.stderr is not None:
+            sys.stderr.write(str(msg) + "\n")
+    except Exception:
+        pass
+
+
+def _resolve_log(log):
+    """可注入日志回调；缺省退化为 _default_log（不硬依赖 GUI）。"""
+    return log if callable(log) else _default_log
+
+
+def _make_print(log):
+    """构造转发到 ACRPA 日志的 print 包装（§1.5）。
+
+    保留 sep/end 语义；显式 file 参数时仍写该流；打包版 sys.stdout=None 时
+    print 不再静默丢失。
+    """
+    def _print(*args, sep=" ", end="\n", file=None, flush=False):
+        try:
+            if file is not None:
+                print(*args, sep=sep, end=end, file=file, flush=flush)
+                return
+            text = sep.join([str(a) for a in args])
+            if end and end != "\n":
+                text += end
+            log("[py] " + text, "info")
+        except Exception:
+            pass
+
+    return _print
+
+
+def _exec_inprocess(code, perm, timeout, api, result, log=None):
     """sandbox / trusted 在当前进程内执行（单一命名空间）。"""
     if perm == PERM_TRUSTED:
         ns = {"__builtins__": _real_builtins(), "acrpa": api, "result": None}
     else:
         ns = {"__builtins__": dict(SANDBOX_BUILTINS), "acrpa": api, "result": None}
+    # §1.5：print 转发到 ACRPA 日志（修复打包版 windowed 模式静默丢失）。
+    ns["print"] = _make_print(_resolve_log(log))
 
-    compiled = compile(code, "<acrpa-py>", "exec")
+    compiled = _compile_units(code)
     deadline = time.time() + timeout
     tracer = _make_tracer(deadline)
     sys.settrace(tracer)
@@ -233,20 +334,16 @@ def _exec_inprocess(code, perm, timeout, api, result):
         sys.settrace(None)
 
     result["ok"] = True
-    result["result"] = _extract_result(ns, code)
+    result["raw_result"] = ns.get("result")
+    result["result"] = _extract_result(ns)
 
 
-def _extract_result(ns, code):
-    """取 result 变量值；否则尝试求值最后一个表达式语句。返回 repr 截断字符串。"""
-    val = ns.get("result")
-    if val is None:
-        try:
-            tree = ast.parse(code)
-            if tree.body and isinstance(tree.body[-1], ast.Expr):
-                expr = ast.Expression(tree.body[-1].value)
-                val = eval(compile(expr, "<acrpa-py-expr>", "eval"), ns)
-        except Exception:
-            val = None
+def _extract_result(ns):
+    """§1.4：只读取命名空间中的 result 变量（不再对末行重新 eval）。
+
+    返回 repr 截断字符串；无结果返回 None。
+    """
+    val = ns.get("result") if isinstance(ns, dict) else None
     if val is None:
         return None
     try:
@@ -259,19 +356,37 @@ def _extract_result(ns, code):
 
 
 # full 权限：独立子进程执行。代码以 base64 经 stdin 传入（规避引号转义问题）。
+# §1.4：子进程内同样做「末行 Expr → result=」改写（杜绝二次执行）。
+# §1.5：用户 print 重定向到 stderr（日志通道），结果带标记单独走原 stdout，
+#       result 不再被用户输出淹没。
+_RESULT_MARKER = "ACRPA-RESULT:"
 _FULL_WRAPPER = (
-    "import sys, base64\n"
+    "import sys, base64, ast\n"
     "src = base64.b64decode(sys.stdin.buffer.read()).decode('utf-8')\n"
+    "tree = ast.parse(src)\n"
+    "if tree.body and isinstance(tree.body[-1], ast.Expr):\n"
+    "    _last = tree.body[-1]\n"
+    "    tree.body[-1] = ast.Assign(targets=[ast.Name(id='result', "
+    "ctx=ast.Store())], value=_last.value)\n"
+    "    ast.fix_missing_locations(tree)\n"
+    "_real_out = sys.stdout\n"
+    "sys.stdout = sys.stderr\n"
     "ns = {'__name__': '__main__', 'result': None}\n"
-    "exec(compile(src, '<acrpa-py-full>', 'exec'), ns)\n"
+    "exec(compile(tree, '<acrpa-py-full>', 'exec'), ns)\n"
     "r = ns.get('result')\n"
     "if r is not None:\n"
-    "    sys.stdout.write(repr(r))\n"
+    "    _real_out.write('" + _RESULT_MARKER + "' + repr(r))\n"
+    "_real_out.flush()\n"
 )
 
 
-def _exec_full(code, timeout, result):
-    """full 权限：subprocess 独立进程，超时 kill。不使用 multiprocessing。"""
+def _exec_full(code, timeout, result, log=None):
+    """full 权限：subprocess 独立进程，超时 kill。不使用 multiprocessing。
+
+    §1.5：日志通道（用户 print → stderr，转发进 ACRPA 日志）与结果通道
+    （result → 带标记的 stdout）分离。
+    """
+    log_fn = _resolve_log(log)
     try:
         payload = base64.b64encode(code.encode("utf-8", "replace"))
     except Exception as e:
@@ -315,13 +430,25 @@ def _exec_full(code, timeout, result):
         result["error"] = "TimeoutError: code timeout"
         return
 
-    txt_out = (out or b"").decode("utf-8", "replace").strip()
-    txt_err = (err or b"").decode("utf-8", "replace").strip()
+    txt_out = (out or b"").decode("utf-8", "replace")
+    txt_err = (err or b"").decode("utf-8", "replace")
     if proc.returncode == 0:
         result["ok"] = True
-        result["result"] = txt_out if txt_out else None
+        # §1.5：result 只认带标记的结果通道，stdout 其余内容不再充当 result。
+        out_txt = txt_out.strip()
+        if out_txt.startswith(_RESULT_MARKER):
+            val = out_txt[len(_RESULT_MARKER):]
+            result["result"] = val if val else None
+            result["raw_result"] = val if val else None
+        log_txt = txt_err.strip()
+        if log_txt:
+            for ln in log_txt.splitlines():
+                try:
+                    log_fn("[py] " + ln, "info")
+                except Exception:
+                    pass
     else:
-        msg = txt_err or ("exit code %s" % proc.returncode)
+        msg = txt_err.strip() or ("exit code %s" % proc.returncode)
         result["ok"] = False
         result["error"] = ("RuntimeError: " + msg)[:400]
 

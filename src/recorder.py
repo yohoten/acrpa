@@ -497,3 +497,41 @@ def recorder_thread():
             _uninstall_hooks()
         except Exception:
             pass
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 浏览器录制薄适配（P2-A）—— codegen 文本 → DSL → ScriptData → recorded_actions
+# ═══════════════════════════════════════════════════════════════════════
+# 说明: 转换器本体 codegen_to_dsl 位于 browser_backend（纯函数、无 playwright 依赖）；
+#       本节仅做“取文本 → 转换 → 追加 state.recorded_actions”的薄适配。
+#       不改动任何既有键鼠录制函数、不改动 GUI/窗口代码。
+def convert_and_append(code_text, strict=False):
+    """codegen 文本 → rows → ScriptData → 追加到 state.recorded_actions。
+
+    返回 ``(added, warnings)``：added=追加条数；warnings=未识别语句清单。
+    ``strict=True`` 时若存在未识别语句，由转换器抛 CodegenConvertError。
+    """
+    from browser_backend import codegen_to_dsl  # 延迟 import（无 playwright 依赖）
+    rows, warnings = codegen_to_dsl(code_text, strict=strict)
+    added = 0
+    for r in (rows or []):
+        cmd = r.get("cmd") or ""
+        if not cmd:
+            continue
+        sd = ScriptData(cmd, list(r.get("args") or []))
+        state.recorded_actions.append(sd)
+        added += 1
+    return (added, warnings)
+
+
+def record_browser_codegen(code_text, strict=False):
+    """便捷包装：转换并记录日志（供菜单/外部入口调用）。返回 ``(added, warnings)``。"""
+    try:
+        added, warnings = convert_and_append(code_text, strict=strict)
+    except Exception as e:
+        log1("浏览器录制转换失败: {}".format(e), "error")
+        return (0, [])
+    log1("浏览器录制: 追加 {} 条动作, {} 条未识别".format(added, len(warnings or [])))
+    for w in (warnings or []):
+        log1("  未识别: {}".format(w), "warning")
+    return (added, warnings)

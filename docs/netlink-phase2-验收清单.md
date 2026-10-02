@@ -223,3 +223,26 @@ netsh advfirewall firewall add rule name="ACRPA NetLink UDP" dir=in action=allow
   已在自动化中覆盖基本路径，但**大规模拓扑**未做压测。
 - 工作流分叉依赖被控端存在真实 `workflow` 引擎；无 GUI/缺依赖环境下该路径仅以假引擎覆盖
   （真实模块路径见 `tools/_test_netlink_phase2_e2e.py` 断言 5，可自动跳过并记 WARN）。
+
+---
+
+## 10. Phase 4-2 演进补充（仅增量，不改变上文既有验收事实）
+
+> 上文第 0 节的「仍不能」条目为 **Phase 2 时点**的事实记录，予以保留。Phase 4 起的
+> 演进如下（详见 [`docs/netlink-网页只读面板说明.md`](netlink-网页只读面板说明.md) 与
+> [`docs/netlink-网页控制使用说明.md`](netlink-网页控制使用说明.md)）：
+
+| 检查项 | 期望 | 实测 | 结论 |
+| --- | --- | --- | --- |
+| 网页面板默认只读 | 仍只暴露只读 GET（写端点 405/404），令牌鉴权不变 | | ☐通过 ☐不通过 |
+| 可选有限控制 | GUI 开启后仅 `run`/`stop` 可用；`pause`/`resume` 被拒 | | ☐通过 ☐不通过 |
+| 控制强制 HTTPS | 控制开启时 URL 为 `https://`；证书不可用则面板拒绝启用 | | ☐通过 ☐不通过 |
+| 控制 PIN | 凭据库 target `ACRPA/netlink/web-control-pin`，不落 config.json | | ☐通过 ☐不通过 |
+| 面板 PWA | 可「添加到主屏」；离线显示最后快照（`localStorage` `acrpa.snap.v1`） | | ☐通过 ☐不通过 |
+| 审计 | 含 `WEB_*` 与 `CMD_RUN/CMD_STOP`（`actor=web-panel\|…`） | | ☐通过 ☐不通过 |
+
+- ⛔ **仍未开放**：面板侧的 `pause`/`resume`、推脚本、截图、配对/权限变更；
+  也**不含**自签证书自动生成（需用户用 `openssl` 生成 PEM）。
+- 自动化对应脚本：`tools/_test_netlink_webui.py`（扩展 PWA/控制断言）、
+  `tools/_test_netlink_webui_control_core.py`、`tools/_test_netlink_webui_control.py`、
+  `tools/_smoke_netlink_window.py`。

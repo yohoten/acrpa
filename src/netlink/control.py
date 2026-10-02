@@ -40,6 +40,12 @@ _CONFIRM_CMDS = _CMD_SET
 
 _CONFIRM_TIMEOUT = 30      # 确认弹窗超时（秒）
 
+# ── 网页面板「有限控制」本地提交白名单（Phase4-2 批次1）─────────────────
+# 只开放 run / stop；pause / resume 属「未开放」（面板层返回 action not allowed）。
+_LOCAL_ACTIONS = {"run": T_CMD_RUN, "stop": T_CMD_STOP}
+
+_LOCAL_DEFAULT_TIMEOUT = 8.0    # submit_local 等待终态上限（秒）
+
 
 # ── 工作流引擎懒加载（本 Phase 的核心分叉点）─────────────────────────────
 def _workflow_engine():
@@ -283,6 +289,30 @@ class ControlExecutor(object):
         except Exception:
             pass
 
+    # ── 本地提交回复通道 ──────────────────────────────────────────────
+    def _reply_fire(self, reply, status, detail, mode=""):
+        """把终态回复给本地等待方（reply 为 None 时为空操作，绝不抛）。"""
+        try:
+            if reply is None:
+                return
+            reply(str(status or ""), str(detail or ""), str(mode or ""))
+        except Exception as e:
+            _nl_log("control local reply failed: {}".format(e), "WARN")
+
+    def _reply_once(self, reply):
+        """包装为「只生效一次」的回复回调，避免重复终态（超时后丢弃）。"""
+        if reply is None:
+            return None
+        box = {"done": False}
+
+        def _cb(status, detail, mode=""):
+            if box["done"]:
+                return
+            box["done"] = True
+            self._reply_fire(reply, status, detail, mode)
+
+        return _cb
+
     # ── 回执发送 ──────────────────────────────────────────────────────
     def _err(self, conn, cmd, reason, actor, broadcast=True):
         """即时/终态错误回执（默认广播给所有已认证连接，多控制台状态一致）。"""
@@ -364,35 +394,114 @@ class ControlExecutor(object):
                 self._set_script(abspath, self._script_dir())
 
             # ── 门控校验（稳定英文 reason，便于测试断言）──
-            if t in (T_CMD_RUN, T_CMD_RUN_SCRIPT):
-                if self._running():
-                    self._err(conn, t, "already running", actor)
-                    self._audit_write(actor, t, data, "rejected", "already running", remote)
-                    return
-                if self._recording():
-                    self._err(conn, t, "recording in progress", actor)
-                    self._audit_write(actor, t, data, "rejected", "recording in progress", remote)
-                    return
-                if t == T_CMD_RUN and not self._has_script():
-                    self._err(conn, t, "no script selected", actor)
-                    self._audit_write(actor, t, data, "rejected", "no script selected", remote)
-                    return
-            elif t in (T_CMD_PAUSE, T_CMD_RESUME):
-                if not self._running():
-                    self._err(conn, t, "not running", actor)
-                    self._audit_write(actor, t, data, "rejected", "not running", remote)
-                    return
-                if self._recording():
-                    self._err(conn, t, "recording in progress", actor)
-                    self._audit_write(actor, t, data, "rejected", "recording in progress", remote)
-                    return
-            # CMD_STOP：幂等，无前置拒绝
+            ok, reason = self._precheck(t, data)
+            if not ok:
+                self._err(conn, t, reason, actor)
+                self._audit_write(actor, t, data, "rejected", reason, remote)
+                return
 
             # ── 受理：入队 + 立即回 accepted ──
-            self._q.put((conn, t, dict(data), actor, loops, remote))
+            self._q.put((conn, t, dict(data), actor, loops, remote, None, False))
             self._ack_accept(conn, t, actor, "queued")
         except Exception as e:
             _nl_log("control handle error: {}".format(e), "ERROR")
+
+    # ── 前置校验（handle 与 submit_local 共用，稳定英文 reason）────────
+    def _precheck(self, t, data):
+        """同步门控校验 → (ok:bool, reason:str)。
+
+        reason 与既有远端路径**逐字一致**（already running / recording in progress /
+        no script selected / not running），供远端与面板两条路径复用同一语义。
+        CMD_STOP 幂等：无前置拒绝。
+        """
+        try:
+            if t in (T_CMD_RUN, T_CMD_RUN_SCRIPT):
+                if self._running():
+                    return False, "already running"
+                if self._recording():
+                    return False, "recording in progress"
+                if t == T_CMD_RUN and not self._has_script():
+                    return False, "no script selected"
+            elif t in (T_CMD_PAUSE, T_CMD_RESUME):
+                if not self._running():
+                    return False, "not running"
+                if self._recording():
+                    return False, "recording in progress"
+            return True, ""
+        except Exception as e:
+            _nl_log("control precheck error: {}".format(e), "WARN")
+            return False, "precheck error"
+
+    # ── 本地面板提交入口（Phase4-2 批次1）────────────────────────────
+    def submit_local(self, action, actor, remote, timeout=_LOCAL_DEFAULT_TIMEOUT):
+        """把面板线程的本地写请求提交到既有单 worker，同步等待终态。
+
+        action ∈ {"run","stop"}（其余 → action not allowed）；复用 `_do_run`/
+        `_do_stop` 与其内部审计，**不复刻停止状态、不绕过审计、不双写审计**。
+
+        返回 dict：{"ok":bool,"action":str,"status":"done|failed|rejected",
+                    "detail":str,"mode":str}；不抛异常。
+        执行仍在 Tk 主线程（worker → `_post` → `root.after` 泵），本方法只做
+        「入队 + threading.Event 等待」，timeout 到期返回 rejected/execution timeout
+        （HTTP 线程绝不被长期占用，也绝不触碰 Tk）。
+        """
+        res = {"ok": False, "action": "", "status": "rejected",
+               "detail": "", "mode": ""}
+        t = None
+        data = {}
+        try:
+            act = str(action or "").strip().lower()
+            res["action"] = act
+            t = _LOCAL_ACTIONS.get(act)
+            if t is None:
+                res["detail"] = "action not allowed"
+                self._audit_write(actor, act or "unknown", {}, "rejected",
+                                  "action not allowed", remote)
+                return res
+
+            ok, reason = self._precheck(t, data)
+            if not ok:
+                res["detail"] = reason
+                self._audit_write(actor, t, data, "rejected", reason, remote)
+                return res
+
+            evt = threading.Event()
+            holder = {"res": None}
+            fired = {"done": False}
+
+            def reply(status, detail, mode=""):
+                try:
+                    if fired["done"]:
+                        return
+                    fired["done"] = True
+                    holder["res"] = {"status": str(status or ""),
+                                     "detail": str(detail or ""),
+                                     "mode": str(mode or "")}
+                finally:
+                    evt.set()
+
+            self._q.put((None, t, data, actor, None, remote, reply, True))
+            try:
+                wait_s = float(timeout)
+            except Exception:
+                wait_s = _LOCAL_DEFAULT_TIMEOUT
+            if not evt.wait(max(0.1, wait_s)):
+                res["detail"] = "execution timeout"
+                self._audit_write(actor, t, data, "rejected",
+                                  "execution timeout", remote)
+                return res
+            r = holder["res"] or {}
+            status = str(r.get("status") or "failed")
+            res["status"] = status
+            res["detail"] = str(r.get("detail") or "")
+            res["mode"] = str(r.get("mode") or "")
+            res["ok"] = (status == "done")
+            return res
+        except Exception as e:
+            _nl_log("control submit_local error: {}".format(e), "WARN")
+            res["status"] = "rejected"
+            res["detail"] = res["detail"] or "local submit error"
+            return res
 
     # ── worker：全序串行处理 ──────────────────────────────────────────
     def _worker(self):
@@ -412,23 +521,31 @@ class ControlExecutor(object):
             _nl_log("control worker fatal: {}".format(e), "ERROR")
 
     def _process(self, item):
+        # 队列项：旧 6 元组 (conn,t,data,actor,loops,remote) 向后兼容；
+        # 新 8 元组追加 (reply, local) —— local=True 即网页面板本地提交。
         try:
-            conn, t, data, actor, loops, remote = item
+            conn, t, data, actor, loops, remote = item[:6]
+            reply = item[6] if len(item) > 6 else None
+            local = bool(item[7]) if len(item) > 7 else False
         except Exception:
             return
-        # ── 首次操控确认门控（worker 发起，主线程弹窗）──
-        ok, reason = self._confirm_gate(conn, t, actor, remote)
+        # ── 首次操控确认门控（worker 发起，主线程弹窗；local 策略见 _confirm_gate）──
+        ok, reason = self._confirm_gate(conn, t, actor, remote, local=local)
         if not ok:
             self._err(conn, t, reason, actor)
             self._audit_write(actor, t, data, "rejected", reason, remote)
+            self._reply_fire(reply, "rejected", reason)
             return
 
         if t in (T_CMD_PAUSE, T_CMD_RESUME):
             self._do_pause_resume(conn, t, actor, data, remote)
         elif t == T_CMD_STOP:
-            self._do_stop(conn, t, actor, data, remote)
+            self._do_stop(conn, t, actor, data, remote, reply=reply)
         elif t in (T_CMD_RUN, T_CMD_RUN_SCRIPT):
-            self._do_run(conn, t, actor, data, loops, remote)
+            self._do_run(conn, t, actor, data, loops, remote, reply=reply)
+        elif reply is not None:
+            # 未匹配指令（理论上不可达）：确保本地等待方不被挂死
+            self._reply_fire(reply, "rejected", "unsupported command")
 
     # ── 工作流分叉执行 ────────────────────────────────────────────────
     def _do_pause_resume(self, conn, t, actor, data, remote):
@@ -458,7 +575,8 @@ class ControlExecutor(object):
         self._ack_terminal(t, "done", "done", actor, mode=mode)
         self._audit_write(actor, t, data, "ok", "mode={}".format(mode), remote)
 
-    def _do_stop(self, conn, t, actor, data, remote):
+    def _do_stop(self, conn, t, actor, data, remote, reply=None):
+        reply = self._reply_once(reply)
         eng = _workflow_engine()
         wf = _workflow_active(eng)
         if wf:
@@ -489,10 +607,12 @@ class ControlExecutor(object):
         self._ack_terminal(t, "done", detail, actor, mode=mode)
         self._audit_write(actor, t, data, "ok",
                           "mode={} {}".format(mode, detail), remote)
+        self._reply_fire(reply, "done", detail, mode)
 
-    def _do_run(self, conn, t, actor, data, loops, remote):
+    def _do_run(self, conn, t, actor, data, loops, remote, reply=None):
         mode = "script"
         hook = self._hooks.get("run")
+        reply = self._reply_once(reply)
 
         def fn():
             try:
@@ -500,6 +620,7 @@ class ControlExecutor(object):
                     self._err(conn, t, "run hook not registered", actor)
                     self._audit_write(actor, t, data, "err",
                                       "run hook not registered", remote)
+                    self._reply_fire(reply, "failed", "run hook not registered", mode)
                     return
                 try:
                     hook(loops)
@@ -507,11 +628,14 @@ class ControlExecutor(object):
                     self._ack_terminal(t, "failed", "run failed: {}".format(e),
                                        actor, mode=mode)
                     self._audit_write(actor, t, data, "err", str(e), remote)
+                    self._reply_fire(reply, "failed", "run failed: {}".format(e), mode)
                     return
                 self._ack_terminal(t, "done", "done", actor, mode=mode)
                 self._audit_write(actor, t, data, "ok", "mode={}".format(mode), remote)
+                self._reply_fire(reply, "done", "done", mode)
             except Exception as e:
                 _nl_log("control run fn error: {}".format(e), "WARN")
+                self._reply_fire(reply, "failed", "run error: {}".format(e), mode)
 
         # 优先投递到主线程泵执行；泵不可用时退化直接执行，保证 headless 可用
         if self._post(fn):
@@ -519,11 +643,31 @@ class ControlExecutor(object):
         fn()
 
     # ── 首次操控确认门控 ──────────────────────────────────────────────
-    def _confirm_gate(self, conn, cmd, actor, remote):
-        """返回 (ok, reason)。关闭确认 / 已记住该设备 / 无 GUI 时按规则放行或拒绝。"""
+    def _confirm_gate(self, conn, cmd, actor, remote, local=False):
+        """返回 (ok, reason)。关闭确认 / 已记住该设备 / 无 GUI 时按规则放行或拒绝。
+
+        local=True（网页面板本地提交）：**PIN 解锁即视为本机所有者授权**，
+        默认不再弹桌面确认（配置 `netlink_web_confirm_control` 默认 False）；
+        置 True 时走与远端一致的 `_confirm_action` 弹窗（更严档）。
+        本地路径**绝不**读取/写入 `NETLINK_CONFIRMED_PEERS`（那是远端设备指纹集合）。
+        """
         try:
             if cmd not in _CONFIRM_CMDS:
                 return True, ""
+            if local:
+                need_local = False
+                try:
+                    need_local = bool(getattr(state,
+                                              "NETLINK_WEB_CONFIRM_CONTROL", False))
+                except Exception:
+                    need_local = False
+                if not need_local:
+                    return True, ""        # 本地面板默认直通（PIN 已授权）
+                ok2, _remember, reason2 = self._confirm_action(
+                    actor, cmd, remote=remote)
+                if not ok2:
+                    return False, (reason2 or "user rejected")
+                return True, ""            # 本地不写入已确认设备集合
             need = True
             try:
                 need = bool(getattr(state, "NETLINK_CONFIRM_CONTROL", True))
@@ -553,6 +697,13 @@ class ControlExecutor(object):
         except Exception as e:
             _nl_log("control confirm gate error: {}".format(e), "WARN")
             return False, "confirm error"
+
+    def _confirm_action(self, actor, cmd, timeout=_CONFIRM_TIMEOUT, remote=""):
+        """确认动作的可替换入口（测试 mock 点）：默认委托 `_confirm`。
+
+        `_confirm_gate` 只经此入口发起弹窗，便于自测断言「未弹窗」。
+        """
+        return self._confirm(actor, cmd, timeout=timeout, remote=remote)
 
     def _confirm(self, actor, cmd, timeout=_CONFIRM_TIMEOUT, remote=""):
         """主线程弹出自绘确认对话框；返回 (ok, remember, reason)。

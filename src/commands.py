@@ -41,7 +41,7 @@ register("释放",     "释放已按下的按键",            "按键名")
 register("复制",     "Ctrl+A, Ctrl+C",              "无参数")
 register("粘贴",     "Ctrl+A, Ctrl+V",              "无参数")
 register("截屏",     "截图并保存",                  "名称, 保存路径")
-register("代码",     "执行txt中的Python代码",       "文件名(不含后缀)")
+register("代码",     "执行脚本目录下的txt/Python代码（已受权限与AST预检约束）", "文件名(不含后缀)")
 register("Python",   "执行 Python 代码（受权限与 AST 预检约束）", "代码, 权限(sandbox/trusted/full, 可空)")
 register("如果",     "条件判断（如果为真则执行）",    "条件表达式")
 register("否则",     "否则分支（否则执行）",          "无参数")
@@ -83,6 +83,29 @@ register("浏览器点击", "点击页面元素(CSS选择器或text=)", "选择�
 register("浏览器输入", "在输入框中填入文本",          "选择器, 文本")
 register("等待元素",   "等待页面元素出现或消失",      "选择器, 超时秒数, 出现/消失")
 register("浏览器截图", "截取页面或元素截图",          "名称, 目标(page或选择器)")
+
+# ── 浏览器后端增强 P0 新增命令 (纯追加，不改现有 5 条) ──
+register("浏览器执行JS",   "在页面执行JS并把返回值写入变量",   "脚本, 目标变量名(可选), 是否表达式(是/否)")
+register("执行JS",         "在页面执行JS(浏览器执行JS的别名)", "脚本, 目标变量名(可选), 是否表达式(是/否)")
+register("浏览器读取Cookie", "导出当前上下文Cookie到变量或文件", "目标变量名(默认cookie), 格式(json/header/netscape), 保存路径(可选)")
+register("浏览器设置Cookie", "从变量或文件注入Cookie",         "来源(变量名/文件路径), 域名(可选)")
+
+# ── 浏览器后端增强 P1 新增命令 (纯追加，不改任何既有命令) ──
+register("切换框架",   "进入iframe(DSL定位/索引)或回到主文档", "定位表达式/索引/main")
+register("返回主框架", "回到顶层frame(等价 切换框架,main)",    "无参数")
+register("新建标签页", "新建标签页并切换为活动页",              "网址(可选)")
+register("切换标签页", "按序号/标题/URL切换活动标签页",        "序号或标题/URL匹配")
+register("关闭标签页", "关闭当前或指定标签页",                 "序号(可选,默认当前页)")
+register("等待下载",   "等待浏览器下载完成并保存文件",         "保存目录(可选), 文件名匹配(可选), 超时秒数(可选), 写回变量(可选)")
+register("浏览器上传", "对input[type=file]设置本地文件",       "定位表达式, 文件路径1, 文件路径2..N(可选), 是否清空(可选)")
+
+# ── 浏览器后端增强 P2 新增命令 (纯追加，不改任何既有命令) ──
+register("连接已开浏览器", "通过CDP endpoint接管已开浏览器(需--remote-debugging-port)", "endpoint(可选,默认配置), 是否关闭旧会话(可选,默认是)")
+register("接管浏览器",     "连接已开浏览器 的别名",                                    "endpoint(可选), 是否关闭旧会话(可选)")
+register("开始监听",       "监听网络响应入队(抓包),支持URL匹配/资源类型",              "URL匹配(可选), 资源类型(可选), 队列上限(可选)")
+register("等待数据包",     "等待并取回命中的数据包,写回变量或落盘",                    "URL匹配(可选), 数量(可选,默认1), 超时秒数(可选), 写回变量(可选), 导出路径(可选), 导出格式(可选,默认json)")
+register("停止监听",       "停止监听并清空队列",                                      "无参数")
+register("启动浏览器录制", "调用 playwright codegen 并把结果转为DSL追加到录制",       "无参数")
 
 def _set_handler(name, handler):
     """Update a registered command's handler (called by engine)."""

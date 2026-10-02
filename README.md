@@ -15,12 +15,14 @@
 - [下载与校验](#download)
 - [快速开始](#quickstart)
 - [脚本与模板](#templates)
+- [脚本市场](#market)
 - [脚本格式与命令总表](#script-format)
 - [配置说明](#config)
 - [多设备局域网互联（NetLink）](#netlink)
 - [软件更新](#update)
 - [DD 驱动增强（可选）](#dd-driver)
 - [常见问题](#faq)
+- [合规与使用边界声明](#compliance)
 - [详细文档](#docs)
 - [界面截图](#screenshots)
 - [更新日志](#changelog)
@@ -37,7 +39,7 @@
 - **图像识别定位**：全屏 / 区域找图，精度可调，支持 OpenCV 降级与 LRU 图像缓存。
 - **窗口管理**：直接操作 Windows 窗口（激活 / 关闭 / 最小化 / 最大化 / 等待 / 相对坐标），无需图像识别，速度比找图快一个量级。
 - **OCR 文字识别**：识别文字、等待文字、点击文字，后端可选 Paddle / WinRT / Tesseract。
-- **浏览器自动化**（可选，需 `pip install playwright`）：打开网页、点击元素、填写表单、等待元素、截图。
+- **浏览器自动化**（可选，需 `pip install playwright`）：打开网页、点击元素、填写表单、等待元素、截图、执行 JS、读写 Cookie。
 - **工作流编排**：多脚本串联 + 可视化流程图（节点 / 连线 / 拖拽）+ 流程控制命令（如果 / 循环 / 跳出）。
 - **变量系统**：设置变量、读取剪贴板、字符串处理、数学运算，支持复杂数据处理。
 - **AI 增强**：视觉定位（AI 找图 / AI 识别界面）、智能重试、异常检测、自然语言调试。
@@ -146,6 +148,10 @@ python tools/bump_version.py --verify       # 扫描 src/ 确认无旧版本号�
 - **内置场景模板 10 个**（应用内「模板」对话框直接选用）：登录流程、表单填写、数据采集、批量点击、页面截图、文件下载、窗口切换、文本编辑、滚动浏览、右键菜单。
 - **`template/` 目录示例脚本 5 个 + 工作流 1 个**：`脚本模板.xls`、`发送邮件.xls`、`数据采集.xls`、`网银票载.xls`、`间隔点击.xls`、`workflow001.json`。
 
+> ⚖️ **受监管场景模板声明**：`template/网银票载.xls` 一类面向金融机构 / 票据业务的模板，
+> **仅限持牌金融机构授权员工在受控内网 / 授权范围内使用**；使用者应自行确保业务合规与相应授权。
+> 详见 [`README.md`](README.md#compliance) 的「合规与使用边界声明」。
+
 ![ACRPA 执行编辑界面](img/image2.png)
 
 ### 上手四步
@@ -154,6 +160,19 @@ python tools/bump_version.py --verify       # 扫描 src/ 确认无旧版本号�
 2. **导入脚本**：菜单「文件 → 导入脚本」，选择 `.xls` 文件。
 3. **修改参数**：按实际需求调整窗口标题、坐标、输入内容等。
 4. **测试运行**：点击「运行」（或按 <kbd>F5</kbd>）查看效果。
+
+---
+
+<a id="market"></a>
+## 🛒 脚本市场
+
+市场支持在应用内**浏览 / 搜索 / 按分类与标签筛选**社区脚本，并**一键安装**到脚本编辑器；
+上传投稿需先用 **GitHub / Gitee 个人访问令牌（PAT）** 登录（令牌仅存 **Windows 凭据库**，不落 `config.json`），
+再经 **5 步上传向导**打包为 `.acrpapkg`（或旧单文件 `.xls`）并发起 PR。
+
+- 完整操作指引（浏览 / 安装 / 登录 / 上传 / `.acrpapkg` 包格式 / 常见问题）：[`docs/marketplace-v2-使用说明.md`](docs/marketplace-v2-使用说明.md)
+- 市场仓库（Gitee，客户端后端）：<https://gitee.com/yohoten/acrpa-marketplace>
+- 设计文档：[`docs/marketplace-v2-design.md`](docs/marketplace-v2-design.md)
 
 ---
 
@@ -189,7 +208,7 @@ python tools/bump_version.py --verify       # 扫描 src/ 确认无旧版本号�
 | 按下 / 释放 | `shift` | 按下 / 释放按键不松开 |
 | 复制 / 粘贴 | 无参数 | `Ctrl+A, Ctrl+C` / `Ctrl+A, Ctrl+V` |
 | 截屏 | `shot1, 保存路径` | 截图并保存 |
-| 代码 | `myscript` | 执行 txt 中的 Python 代码（文件名不含后缀） |
+| 代码 | `myscript` | 执行 `.txt` 中的 Python 代码（文件名不含后缀）；走 `py_sandbox`（AST 预检 + 超时 + 审计，失败返回 `False`） |
 
 ### 流程控制
 
@@ -251,21 +270,50 @@ python tools/bump_version.py --verify       # 扫描 src/ 确认无旧版本号�
 
 ### 浏览器自动化（可选，需 `pip install playwright`）
 
+> 定位统一支持 DSL（`css:` / `xpath:` / `text:` / `tag:` / `role:` / `label:` / `placeholder:` / `testid:` / `@attr` / `@@` 组合）、**链式 / 相对定位**（`A >> B` 逐级收窄；步骤 `nth:` / `first:` / `last:` / `parent:` / `next:` / `prev:` / `child:` / `filter:` / `has:`）与原生 CSS / `text=`；
+> `${变量}` 在部分浏览器命令中生效，结果写回 `engine.variables`（详见下文「变量引用」）。
+> 完整语法、状态表、失败短语与用法见 [`docs/浏览器使用说明.md`](docs/浏览器使用说明.md) 与 [`docs/浏览器后端增强设计.md`](docs/浏览器后端增强设计.md)。
+
 | 命令 | 参数 | 说明 |
 | --- | --- | --- |
-| 打开网页 | `https://example.com` | 浏览器打开指定 URL |
-| 浏览器点击 | `#submit` 或 `text=登录` | 点击页面元素 |
-| 浏览器输入 | `#user, admin` | 在输入框填入文本 |
-| 等待元素 | `#loading, 10, 消失` | 等待元素出现 / 消失 |
-| 浏览器截图 | `shot1, page` | 截取页面或元素截图 |
+| 打开网页 | `https://example.com` | 浏览器打开指定 URL（支持 `${变量}`） |
+| 浏览器点击 | `#submit` / `text=登录` / `role:button[name=登录]` | 点击页面元素（支持定位 DSL） |
+| 浏览器输入 | `#user, admin` 或 `#user, ${kw}` | 在输入框填入文本（支持 `${变量}`） |
+| 等待元素 | `#loading, 10, 消失` | 等待元素 / 页面状态：出现 / 消失 / 存在 / 移除 / 可点击 / 可用 / url变动 / 标题变动（第 3 参数缺省 = 出现，`消失` → hidden） |
+| 浏览器截图 | `shot1, page` / `shot1, 整页` / `h1, tag:h1, D:\shot\a.png, shot_path` | 视口 / 整页 / 元素截图，可指定保存路径并把路径写回变量 |
+| 浏览器执行JS（别名 执行JS） | `document.title, page_title, 是` | 在当前页执行 JS，返回值写回变量（`是/否` 表示是否按表达式包裹） |
+| 浏览器读取Cookie | `cookie_json, json, D:\out\cookies.json` | 导出上下文 Cookie（`json` / `header` / `netscape`）到变量或文件 |
+| 浏览器设置Cookie | `cookie_json` 或 `D:\in\cookies.json, .example.com` | 从变量或文件注入 Cookie，可指定兜底域名 |
+| 切换框架 | `#pay` / `2` / `main` | 进入 iframe（DSL 定位 / 第 N 个 / `main`/`主文档` 回顶层） |
+| 返回主框架 | 无参数 | 回到顶层 frame（等价 `切换框架, main`） |
+| 新建标签页 | `https://example.com/report`（可空） | 新建标签页并切换为活动页，刷新 `browser_url`/`browser_title` |
+| 切换标签页 | `0` / `报表` / `example.com` | 按序号（0 基）/ 标题 / URL 包含匹配切换活动标签页 |
+| 关闭标签页 | 无参数 / `1` | 关闭当前或指定序号标签页（关活动页自动回退到剩余页） |
+| 等待下载 | `D:\out, 报表, 30, dl_path` | 等待下载完成并保存，绝对路径写回变量（缺省 `浏览器下载路径`） |
+| 浏览器上传 | `tag:input@type=file, D:\a.pdf, D:\b.pdf` | 对 `input[type=file]` 设置本地文件（多文件，路径支持 `${变量}`） |
+| 连接已开浏览器（别名 接管浏览器） | `http://127.0.0.1:9222`（可空=用配置） | 通过 CDP 接管已开 Chrome/Edge（需 `--remote-debugging-port` 启动） |
+| 开始监听 | `/api/login, xhr`（可空） | 监听网络响应入队（抓包），URL 包含 / `/正则/`，资源类型过滤 |
+| 等待数据包 | `/api/token, 1, 20, token_json` | 等待并取回命中数据包，JSON 列表写回变量或落盘 |
+| 停止监听 | 无参数 | 停止监听并清空队列（幂等） |
+| 启动浏览器录制 | 无参数 | 调用 playwright codegen 并把结果转为 DSL 追加（需 playwright CLI） |
+
+> 新增配置项（`config.json`，默认值均不改变既有行为）：`browser_wait_timeout`、`browser_poll_interval`、
+> `browser_full_page_screenshot`、`browser_js_timeout`、`browser_retry`、`browser_retry_interval`、`browser_silent`；
+> P1/P2 补充：`browser_download_dir`、`browser_download_timeout`、`browser_download_overwrite`、`browser_screenshot_dir`、
+> `browser_cdp_endpoint`、`browser_listen_max`、`browser_listen_default_timeout`、`browser_user_agent`。
 
 ### 变量引用
 
-使用 `${variable_name}` 引用变量。**注意：替换只在以下三处生效**（见 `src/engine.py`）：
+使用 `${variable_name}` 引用变量。**注意：桌面端（`src/engine.py`）的替换只在以下三处生效**：
 
 1. `如果` / `循环开始` 的**条件表达式**
 2. `数学运算` 的**表达式**
 3. `浏览器输入` 的**文本**
+
+> 另有：**浏览器命令**在 [`browser_backend.py`](src/browser_backend.py) 内自行解析 `${变量}`
+> （`打开网页` 网址、`浏览器输入` 文本、`浏览器截图` 与 `浏览器读取Cookie` 的保存路径、`浏览器设置Cookie` 的来源），
+> 并把结果写回 `engine.variables`：目标变量名；`打开网页` 另写 `browser_url` / `browser_title`；
+> `浏览器截图` 默认写 `浏览器截图路径`；任意浏览器命令失败写 `browser_last_error` / `browser_last_message`。
 
 ```text
 如果        ${count} > 10            # ✅ 条件表达式
@@ -364,6 +412,10 @@ python tools/bump_version.py --verify       # 扫描 src/ 确认无旧版本号�
 | `python_timeout` | `30` | Python 代码超时（秒） |
 | `ui_scale` | `1.0` | 界面缩放 0.8–1.5 |
 
+> 另：**P0 安全修复批次**新增开关 `legacy_code_command`（默认 `false`）：置 `true` 时
+> `代码` 命令回退旧的 `exec` 行为且**失去全部安全护栏**，仅作临时过渡、建议尽快移除；
+> 详见 [Python 代码扩展使用说明](docs/python扩展使用说明.md) §12。
+
 ---
 
 <a id="netlink"></a>
@@ -455,7 +507,7 @@ ACRPA 自 v0.1.22 起支持 **DD 驱动**作为高性能输入后端：
 
 **优势**
 
-- ✅ 内核级模拟，难以检测，失败可回退到 PyAutoGUI；
+- ✅ 内核级模拟、后台低干扰输入，失败可回退到 PyAutoGUI；
 - ✅ 后台操作，无需激活窗口，输入速度提升。
 
 **快速启用**
@@ -464,6 +516,10 @@ ACRPA 自 v0.1.22 起支持 **DD 驱动**作为高性能输入后端：
 2. 放入 `lib/dd_driver/` 目录；
 3. 在 `config.json` 中设置 `"use_dd_driver": true`；
 4. 以管理员身份运行程序。
+
+> 📦 **关于 DD DLL 再分发（说明 / 建议）**：仓库内 [`lib/dd_driver/dd63330.dll`](lib/dd_driver/dd63330.dll) 的**再分发需遵守其原始许可**，
+> 本仓库不对其授权方式作任何变更或授予；**建议使用者自行获取并放置**符合许可的 DLL。
+> 本说明仅记录现状与建议，不构成本任务对任何文件的删除或变更。
 
 **Excel 示例**
 
@@ -537,7 +593,8 @@ ACRPA 自 v0.1.22 起支持 **DD 驱动**作为高性能输入后端：
 
 **脚本市场**
 
-- 市场仓库（Gitee，客户端后端）：<https://gitee.com/yohoten/acrpa-marketplace> —— 索引 `index.json` + `scripts/*.xls`
+- [使用说明（浏览 / 安装 / 登录 / 上传 / 包格式）](docs/marketplace-v2-使用说明.md)
+- 市场仓库（Gitee，客户端后端）：<https://gitee.com/yohoten/acrpa-marketplace> —— 索引 `index.json` + `scripts/*.xls` + `packages/*.acrpapkg`
 - 投稿手册（仓库位置与分支、index.json 字段、xls 格式、上传流程、自检清单）：见该仓库 `README.md`
 - 客户端代码：`src/marketplace.py`（`MARKETPLACE_REPO` / `MARKETPLACE_INDEX`，固定读取 **master** 分支的 raw 文件）
 
@@ -603,6 +660,51 @@ ACRPA 自 v0.1.22 起支持 **DD 驱动**作为高性能输入后端：
 - QQ 交流群：**682075338**（扫码加入，二维码见 `res/qq-group.jpg`）
 - 微信：扫码添加（二维码见 `res/wechat_qrcode.png`）
 - 欢迎提出建议、报告 Bug、参与共建。
+
+---
+
+<a id="compliance"></a>
+## ⚖️ 合规与使用边界声明
+
+> 本节以**中性、审慎**的措辞说明工具的能力边界与使用者责任，不构成任何形式的授权或免责承诺。
+> 使用者应在**合法合规、获得授权**的前提下使用本工具；因使用方式不当导致的一切后果由使用者自行承担。
+
+**1. 输入模拟（DD 驱动）**
+
+- DD 驱动作为高性能输入后端，定位为 **后台低干扰输入**：在内核层模拟输入、无需激活目标窗口，失败可回退 PyAutoGUI。
+- 本工具**不以规避任何检测 / 风控机制为卖点**，也不提供针对特定系统绕过其安全策略的能力；
+  请勿将其用于违反目标系统使用条款的场景。
+
+**2. 受监管场景模板**
+
+- `template/网银票载.xls` 一类面向金融机构 / 票据业务的模板，**仅限持牌金融机构授权员工在受控内网 / 授权范围内使用**。
+- 使用者应自行确认业务授权与合规要求，并承担相应责任。
+
+**3. 脚本市场供应链**
+
+- 市场**远程下发脚本等同于一条代码 / 内容分发通道**：安装即意味着在本地运行第三方提供的脚本。
+- 当前客户端对包模式（`.acrpapkg`）**仅有 sha256 完整性校验**，用于确认「下载内容与索引声明一致」，
+  **不能证明来源可信**；**作者签名与客户端验签为后续规划项**。
+- 因此**请谨慎安装未签名 / 来源不明的脚本**，安装前建议先查看详情中的作者、依赖与文件清单。
+
+**4. 隐私（AI 找图 / AI 识别界面）**
+
+- 「AI 找图」「AI 识别界面」等功能会把**整屏截图**编码后**上传到所配置的云端 AI 服务**进行分析。
+- 截图中可能包含**网银表单、聊天窗口、验证码、个人身份信息**等敏感内容。
+- 请在使用前将界面切换到**不涉敏的区域**（或对截图区域做脱敏），避开敏感窗口；
+  这是使用该功能的**合规底线**。
+
+**5. DD DLL 再分发**
+
+- 仓库内 `lib/dd_driver/dd63330.dll` 的**再分发需遵守其原始许可**；本仓库不对其授权方式作任何变更或授予。
+- **建议使用者自行获取并放置**符合许可的 DLL。本声明仅记录现状与建议，不构成对该文件许可的授予。
+
+**6. NetLink 暴露面**
+
+- NetLink 的多机互联（UDP 发现 / TCP 控制 / 远程截图 / 脚本分发 / 浏览器只读面板）面向**企业内网**，
+  存在端口暴露与权限管理带来的风险，**请勿在不可信网络或公网环境直接开放**。
+- 详见 [`docs/netlink-总览与部署指南.md`](docs/netlink-总览与部署指南.md) 及同目录各 `docs/netlink-*.md` 专项说明
+  （配对与权限 / 远程操控 / 脚本分发 / 远程截图 / 网页只读面板 / TLS 加密）。
 
 ---
 

@@ -139,6 +139,259 @@ def forget_peer_token(fingerprint):
         pass
 
 
+# ═════════════════════════════════════════════════════════════════════════
+# 网页面板「有限控制」控制 PIN（Phase4-2 批次1：内核 + PIN 存储）
+#
+# 与配对 PIN 的区别：
+#   * 配对 PIN 是「一次性、短期、被控端现场展示给控制端」；
+#   * 控制 PIN 是「本机所有者持有的长期第二因子」，用于解锁网页面板的
+#     run/stop 有限控制 —— 因此必须可校验（不能只存短期窗口），
+#     只能存「salt + PBKDF2 派生值」，绝不落 config.json / 绝不落日志。
+#
+# 存储格式（单字符串，UTF-8，写入 Windows 凭据库）：
+#     pbkdf2$<salt_hex(32)>$<dkhash_hex(64)>
+# 前缀预留算法演进（未来可 argon2$ / scrypt$）。
+# ═════════════════════════════════════════════════════════════════════════
+CONTROL_PIN_TARGET = "ACRPA/netlink/web-control-pin"
+
+# 防暴力：与 MAX_AUTH_FAILS 对齐；锁定 300s 起，指数退避，上限 1h
+MAX_PIN_FAILS = 5
+LOCK_BASE = 300
+LOCK_CAP = 3600
+
+_PIN_LOCK = threading.RLock()
+_pin_fails = 0
+_pin_lock_until = 0.0
+_pin_last_fail = 0.0
+
+# 会话清空钩子预留：批次2 的 _ControlSessionStore.lock_all 在此接入；
+# 「设置/重置/清除控制 PIN」即触发（防止旧会话继续持有已失效授权的控制权）。
+_session_reset_hooks = []
+
+
+def control_pin_target():
+    """控制 PIN 的凭据库 target 名（稳定常量）。"""
+    return CONTROL_PIN_TARGET
+
+
+def _control_pin_audit(cmd, result, detail, actor="web-panel", remote=""):
+    """写控制 PIN 相关审计（复用 AuditLog 单点落盘；失败静默，绝不抛）。"""
+    try:
+        global _control_pin_audit_log
+        if _control_pin_audit_log is None:
+            from .audit import AuditLog
+            _control_pin_audit_log = AuditLog()
+        _control_pin_audit_log.write(actor, cmd, {}, result, detail, remote)
+    except Exception:
+        pass
+
+
+_control_pin_audit_log = None
+
+
+def _load_control_pin_record():
+    """读取并解析凭据库中的控制 PIN 记录；无/格式非法返回 None，不抛。"""
+    try:
+        if _state is None:
+            return None
+        raw = _state.cred_read(CONTROL_PIN_TARGET)
+        if not raw:
+            return None
+        parts = str(raw).strip().split("$")
+        if len(parts) != 3 or parts[0] != "pbkdf2":
+            return None
+        salt_hex, dk_hex = parts[1], parts[2]
+        if not salt_hex or not dk_hex:
+            return None
+        return salt_hex, dk_hex
+    except Exception:
+        return None
+
+
+def _is_valid_pin(pin):
+    """PIN 规格 ^\\d{6}$（ASCII 六位数字，便于手机输入）。"""
+    try:
+        p = str(pin or "").strip()
+        return len(p) == 6 and all(c in "0123456789" for c in p)
+    except Exception:
+        return False
+
+
+def has_control_pin():
+    """凭据库中是否存在合法的控制 PIN 记录。"""
+    return _load_control_pin_record() is not None
+
+
+def _pin_lock_state_now(now=None):
+    """(locked, retry_after, fails) —— 内部查询，不产生副作用。"""
+    now = time.time() if now is None else now
+    with _PIN_LOCK:
+        fails = int(_pin_fails)
+        until = float(_pin_lock_until)
+    if until > now:
+        return True, int(until - now) + 1, fails
+    return False, 0, fails
+
+
+def control_pin_lock_state():
+    """当前防暴力锁定状态：{"locked":bool,"retry_after":int,"fails":int}。
+
+    供批次2 的 /api/control/status 与 unlock 的 429 Retry-After 使用。
+    """
+    try:
+        locked, retry, fails = _pin_lock_state_now()
+        return {"locked": bool(locked), "retry_after": int(retry), "fails": int(fails)}
+    except Exception:
+        return {"locked": False, "retry_after": 0, "fails": 0}
+
+
+def _pin_fail(now=None, actor="web-panel", remote=""):
+    """记一次失败：fails+1；达上限后按指数退避置锁定，并写审计。"""
+    now = time.time() if now is None else now
+    try:
+        global _pin_fails, _pin_lock_until, _pin_last_fail
+        with _PIN_LOCK:
+            _pin_fails += 1
+            _pin_last_fail = now
+            fails = int(_pin_fails)
+            retry = 0
+            if fails >= MAX_PIN_FAILS:
+                delay = min(LOCK_BASE * (2 ** (fails - MAX_PIN_FAILS)), LOCK_CAP)
+                _pin_lock_until = now + delay
+                retry = int(delay)
+        _control_pin_audit("WEB_PIN_FAIL", "err",
+                           "fails={}/{}".format(fails, MAX_PIN_FAILS),
+                           actor=actor, remote=remote)
+        if retry:
+            _nl_log("control pin locked for {}s after {} fails".format(retry, fails),
+                    "WARN")
+    except Exception as e:
+        _nl_log("control pin fail counter error: {}".format(e), "WARN")
+
+
+def _pin_reset_fails():
+    """清零失败计数与锁定（成功校验 / 重置 PIN / 测试复位）。"""
+    try:
+        global _pin_fails, _pin_lock_until, _pin_last_fail
+        with _PIN_LOCK:
+            _pin_fails = 0
+            _pin_lock_until = 0.0
+            _pin_last_fail = 0.0
+    except Exception:
+        pass
+
+
+def reset_control_pin_guard():
+    """清空防暴力失败计数与锁定（GUI「重置 PIN」或批处理/测试复位用）。"""
+    _pin_reset_fails()
+    return True
+
+
+def register_control_session_reset_hook(fn):
+    """注册「控制 PIN 变更 → 清空全部控制会话」回调（批次2 会话表接入点）。
+
+    fn() 无参、无返回值；重复注册幂等；None/非可调用值忽略。
+    """
+    try:
+        if fn is None or not callable(fn):
+            return False
+        with _PIN_LOCK:
+            if fn not in _session_reset_hooks:
+                _session_reset_hooks.append(fn)
+        return True
+    except Exception:
+        return False
+
+
+def _fire_control_session_reset(reason=""):
+    """触发全部会话清空回调（钩子未接入时为空操作），异常只记日志。"""
+    try:
+        with _PIN_LOCK:
+            hooks = list(_session_reset_hooks)
+    except Exception:
+        hooks = []
+    for fn in hooks:
+        try:
+            fn()
+        except Exception as e:
+            _nl_log("control session reset hook error: {}".format(e), "WARN")
+
+
+def store_control_pin(pin, actor="gui", remote=""):
+    """设置/重置控制 PIN（salt + PBKDF2-10万轮）→ 凭据库；成功返回 True。
+
+    成功后：清空防暴力计数 + 触发「清空全部控制会话」钩子 + 审计 WEB_PIN_SET。
+    PIN 规格非法或凭据库写入失败 → False（不写审计，不抛）。
+    """
+    try:
+        if _state is None:
+            return False
+        p = str(pin or "").strip()
+        if not _is_valid_pin(p):
+            _nl_log("control pin rejected: invalid format", "WARN")
+            return False
+        salt_hex = new_salt()
+        dk_hex = derive_token(p, salt_hex).hex()
+        blob = "pbkdf2${}${}".format(salt_hex, dk_hex)
+        if not _state.cred_write(CONTROL_PIN_TARGET, blob):
+            return False
+        _pin_reset_fails()
+        _control_pin_audit("WEB_PIN_SET", "ok", "action=set",
+                           actor=actor, remote=remote)
+        _fire_control_session_reset("pin set")
+        return True
+    except Exception as e:
+        _nl_log("store control pin failed: {}".format(e), "WARN")
+        return False
+
+
+def verify_control_pin(pin, actor="web-panel", remote=""):
+    """校验控制 PIN（常量时间比较）。含防暴力：锁定期间正确 PIN 亦拒绝。
+
+    返回值单一 bool（与设计文档一致）；锁定态请用 control_pin_lock_state()。
+    失败必写审计（WEB_PIN_FAIL）；锁定期间尝试写 WEB_UNLOCK result=rejected
+    （避免「静默拒绝」造成审计盲区）。
+    """
+    try:
+        now = time.time()
+        locked, retry, _fails = _pin_lock_state_now(now)
+        if locked:
+            _control_pin_audit("WEB_UNLOCK", "rejected",
+                               "locked retry_after={}".format(retry),
+                               actor=actor, remote=remote)
+            return False
+        rec = _load_control_pin_record()
+        if rec is None:
+            _pin_fail(now, actor=actor, remote=remote)
+            return False
+        salt_hex, dk_hex = rec
+        try:
+            cand = derive_token(str(pin or ""), salt_hex).hex()
+        except Exception:
+            cand = ""
+        if cand and hmac.compare_digest(cand, dk_hex):
+            _pin_reset_fails()
+            return True
+        _pin_fail(now, actor=actor, remote=remote)
+        return False
+    except Exception as e:
+        _nl_log("verify control pin failed: {}".format(e), "WARN")
+        return False
+
+
+def forget_control_pin(actor="gui", remote=""):
+    """清除控制 PIN：删除凭据库记录 + 清锁定 + 触发会话清空钩子（不抛）。"""
+    try:
+        if _state is not None:
+            _state.cred_delete(CONTROL_PIN_TARGET)
+        _pin_reset_fails()
+        _control_pin_audit("WEB_PIN_SET", "ok", "action=clear",
+                           actor=actor, remote=remote)
+        _fire_control_session_reset("pin cleared")
+    except Exception as e:
+        _nl_log("forget control pin failed: {}".format(e), "WARN")
+
+
 # ── 权限映射 ─────────────────────────────────────────────────────────────
 _PERM_MAP = {
     "PING": "observe", "PONG": "observe",

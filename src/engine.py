@@ -1101,75 +1101,128 @@ class ExecutionEngine:
         pa.dragRel(dx, dy, duration=duration)
         log1("从{}相对移动{},{}".format(current_pos, dx, dy))
 
-    def _exec(self,row,z):
-        """执行外部Python脚本文件
-        
-        ⚠️ 安全警告: 此命令会执行任意Python代码，仅用于可信脚本！
-        建议: 使用沙盒环境或白名单机制限制可执行的文件路径
+    def _exec(self, row, z):
+        """代码 — 执行脚本目录下的 .txt Python 脚本（§1.2 统一走沙箱内核）。
+
+        Excel 命令行: 代码, 文件名(不含后缀)
+
+        §1.2 安全修复：与 Python 命令共用同一执行内核 py_sandbox.run（AST 预检 /
+        超时 / 审计 / AcrpaAPI 注入 / print 转发），权限取 state.PYTHON_DEFAULT_PERM；
+        请求 full 但 state.PYTHON_FULL_ENABLED 为假时拒绝（原因 "full disabled"）。
+        失败返回 False（不再 raise —— 避免引擎 retry 导致整段代码重复执行副作用）。
+
+        过渡开关：state.LEGACY_CODE_COMMAND 为真时回退旧的
+        exec(code, safe_globals, safe_locals) 路径（兼容依赖"无限制"行为的存量
+        脚本），默认关闭；文档公告一个版本周期后移除。
         """
         self._chk()
-        
+
         # Get script file path
         if hasattr(row, 'args'):
             script_name = row.args[0] if len(row.args) > 0 else ""
         else:
             script_name = str(row[1].value) if row[1].value else ""
-        
+
         if not script_name:
             log1("错误: 未指定脚本文件名", "error")
-            return
-        
-        cp = "{}/{}.txt".format(z, script_name)
-        
+            return False
+
+        cp = os.path.join(z, "{}.txt".format(script_name))
+
         # Security check: prevent directory traversal
+        # §1.2：原 abs_path.startswith(base_dir) 为弱校验（base_dir=D:\app\scripts 时
+        #       D:\app\scripts_evil\x.txt 亦被放行），改 os.path.commonpath 等价比较。
         abs_path = os.path.abspath(cp)
         base_dir = os.path.abspath(z)
-        if not abs_path.startswith(base_dir):
+        try:
+            inside = os.path.commonpath([base_dir, abs_path]) == base_dir
+        except ValueError:
+            # 不同盘符（如 base 在 D:、目标在 E:）→ commonpath 抛 ValueError，视为越权
+            inside = False
+        if not inside:
             log1("安全错误: 禁止访问脚本目录外的文件", "error")
-            return
-        
+            return False
+
         # Check if file exists
         if not os.path.exists(cp):
             log1("错误: 脚本文件不存在: {}".format(cp), "error")
-            return
-        
+            return False
+
         try:
             with open(cp, encoding="utf-8") as f:
                 code = f.read()
-            
-            # Execute with restricted globals/locals for safety
-            # Only allow basic operations, no import/module access
-            safe_globals = {
-                '__builtins__': {
-                    'print': print,
-                    'len': len,
-                    'str': str,
-                    'int': int,
-                    'float': float,
-                    'bool': bool,
-                    'list': list,
-                    'dict': dict,
-                    'tuple': tuple,
-                    'set': set,
-                    'range': range,
-                    'enumerate': enumerate,
-                    'zip': zip,
-                    'map': map,
-                    'filter': filter,
-                    'sum': sum,
-                    'min': min,
-                    'max': max,
-                    'abs': abs,
-                    'round': round,
-                }
-            }
-            safe_locals = {}
-            
-            exec(code, safe_globals, safe_locals)
-            log1("✅ 执行了脚本: {}".format(cp))
         except Exception as e:
             log1("❌ 代码执行失败 {}: {}".format(cp, e), "error")
-            raise
+            return False
+
+        # ── 过渡开关：回退旧的受限内建 exec 路径（兼容存量脚本）──
+        if getattr(state, "LEGACY_CODE_COMMAND", False):
+            return self._exec_legacy(cp, code)
+
+        # ── 统一沙箱内核（与 Python 命令一致）──
+        try:
+            import py_sandbox
+        except Exception as e:
+            log1("Python 沙箱不可用: {}".format(e), "error")
+            return False
+
+        perm = str(getattr(state, "PYTHON_DEFAULT_PERM", py_sandbox.PERM_SANDBOX)
+                   ).strip().lower()
+        if perm not in py_sandbox.VALID_PERMS:
+            perm = py_sandbox.PERM_SANDBOX
+
+        # full 权限需上层显式开启（与 _python 一致）
+        if perm == py_sandbox.PERM_FULL and not getattr(state, "PYTHON_FULL_ENABLED", False):
+            py_sandbox.audit_write(py_sandbox.make_record(
+                code, perm, self._current_row(), 0.0, False, "full disabled",
+                False, "file"))
+            log1("代码执行被拒绝: full disabled（完全权限默认关闭）", "warning")
+            return False
+
+        try:
+            timeout = float(getattr(state, "PYTHON_TIMEOUT", 30))
+        except (TypeError, ValueError):
+            timeout = 30.0
+
+        try:
+            from acrpa_api import AcrpaAPI
+            api = AcrpaAPI(self, {"script_dir": z or "", "row": self._current_row()})
+        except Exception:
+            api = None
+
+        # run() 内部会再次 precheck 并自行写审计（source="file"）
+        res = py_sandbox.run(code, perm, timeout=timeout, api=api,
+                             audit="file", row=self._current_row(), log=log1)
+        if res.get("ok"):
+            log1("✅ 执行了脚本: {} result={}".format(cp, res.get("result")))
+            return None
+        log1("❌ 代码执行失败 {}: {}".format(cp, res.get("error")), "error")
+        return False
+
+    def _exec_legacy(self, cp, code):
+        """legacy_code_command=True 时的旧「受限内建」执行路径（仅过渡兼容）。
+
+        ⚠️ safe_globals 白名单可被 dunder 链完全绕过，且无 AST 预检 / 无超时 /
+        无审计 / 无 API 注入。默认（legacy_code_command=False）走 py_sandbox 统一
+        沙箱，不进入此分支。失败返回 False（与 _exec 失败语义一致，不再 raise）。
+        """
+        safe_globals = {
+            '__builtins__': {
+                'print': print, 'len': len, 'str': str, 'int': int,
+                'float': float, 'bool': bool, 'list': list, 'dict': dict,
+                'tuple': tuple, 'set': set, 'range': range,
+                'enumerate': enumerate, 'zip': zip, 'map': map, 'filter': filter,
+                'sum': sum, 'min': min, 'max': max, 'abs': abs, 'round': round,
+            }
+        }
+        safe_locals = {}
+        try:
+            exec(code, safe_globals, safe_locals)
+            log1("✅ 执行了脚本(legacy): {}".format(cp))
+            return None
+        except Exception as e:
+            log1("❌ 代码执行失败 {}: {}".format(cp, e), "error")
+            return False
 
     def _current_row(self):
         """当前执行行号（1-based），用于审计。"""
@@ -1247,7 +1300,7 @@ class ExecutionEngine:
             api = None
 
         res = py_sandbox.run(code, perm, timeout=timeout, api=api,
-                             audit="excel", row=self._current_row())
+                             audit="excel", row=self._current_row(), log=log1)
         if res.get("ok"):
             log1("Python 执行成功 [{}] {:.3f}s result={}".format(
                 perm, res.get("elapsed", 0.0), res.get("result")))
@@ -1879,12 +1932,38 @@ try:
     from browser_backend import (
         _browser_navigate, _browser_click, _browser_input,
         _browser_wait_element, _browser_screenshot,
+        _browser_exec_js, _browser_cookie_get, _browser_cookie_set,
+        _browser_switch_frame, _browser_main_frame,
+        _browser_new_tab, _browser_switch_tab, _browser_close_tab,
+        _browser_wait_download, _browser_upload,
+        _browser_connect_cdp, _browser_start_listen, _browser_wait_packets,
+        _browser_stop_listen, _browser_record,
     )
     commands._set_handler("打开网页", _browser_navigate)
     commands._set_handler("浏览器点击", _browser_click)
     commands._set_handler("浏览器输入", _browser_input)
     commands._set_handler("等待元素", _browser_wait_element)
     commands._set_handler("浏览器截图", _browser_screenshot)
+    # 浏览器后端增强 P0 新命令（纯追加绑定）
+    commands._set_handler("浏览器执行JS", _browser_exec_js)
+    commands._set_handler("执行JS", _browser_exec_js)
+    commands._set_handler("浏览器读取Cookie", _browser_cookie_get)
+    commands._set_handler("浏览器设置Cookie", _browser_cookie_set)
+    # 浏览器后端增强 P1 新命令（纯追加绑定）
+    commands._set_handler("切换框架", _browser_switch_frame)
+    commands._set_handler("返回主框架", _browser_main_frame)
+    commands._set_handler("新建标签页", _browser_new_tab)
+    commands._set_handler("切换标签页", _browser_switch_tab)
+    commands._set_handler("关闭标签页", _browser_close_tab)
+    commands._set_handler("等待下载", _browser_wait_download)
+    commands._set_handler("浏览器上传", _browser_upload)
+    # 浏览器后端增强 P2 新命令（纯追加绑定）
+    commands._set_handler("连接已开浏览器", _browser_connect_cdp)
+    commands._set_handler("接管浏览器", _browser_connect_cdp)
+    commands._set_handler("开始监听", _browser_start_listen)
+    commands._set_handler("等待数据包", _browser_wait_packets)
+    commands._set_handler("停止监听", _browser_stop_listen)
+    commands._set_handler("启动浏览器录制", _browser_record)
 except ImportError:
     pass
 

@@ -346,6 +346,115 @@ for mod in ("pyautogui", "xlrd", "pyperclip"):
         warn("q dependency missing: %s (%r)" % (mod, e))
 
 # ======================================================================
+# r. §1.1 format 逃逸（文档 §1.1 复现，修复后应被 precheck 拒绝）
+# ======================================================================
+expect_reject('result = "{0.__class__.__base__}".format([])', "sandbox",
+              "forbidden call: format", "r1 sandbox rejects str.format dunder read")
+expect_reject('result = "{0._injected._python.__globals__[os].name}".format(acrpa)',
+              "sandbox", "forbidden call: format",
+              "r2 sandbox rejects format dunder leak chain")
+expect_reject('x = "a__b"', "sandbox", "forbidden dunder in string",
+              "r3 sandbox rejects string constant containing __")
+expect_reject('x = "{0." + "__class__" + "}"', "sandbox", "forbidden dunder in string",
+              "r3b sandbox rejects concatenated dunder string")
+expect_reject('format("{0}", 1)', "sandbox", "forbidden call: format",
+              "r4 sandbox rejects bare format() call")
+check("format" not in py_sandbox.SANDBOX_BUILTINS,
+      "r5 'format' removed from SANDBOX_BUILTINS")
+check("format" in py_sandbox.FORBIDDEN_CALLS,
+      "r6 'format' present in FORBIDDEN_CALLS")
+expect_allow('result = "{0}".format(1)', "trusted", "r7 trusted still allows str.format")
+expect_allow('x = "a__b"', "trusted", "r8 trusted still allows __ in string")
+r = py_sandbox.run('result = "{0.__class__.__base__}".format([])', "sandbox")
+check((r.get("ok") is False and "forbidden call: format" in (r.get("error") or "")),
+      "r9 run() blocks format escape at precheck (error=%r)" % (r.get("error"),))
+
+# ======================================================================
+# s. §1.4 末尾表达式只执行一次（文档 §1.4 复现）
+# ======================================================================
+_seen = []
+
+
+def _collector(msg, level="info"):
+    _seen.append(str(msg))
+
+
+_seen[:] = []
+r = py_sandbox.run('print("MARKER-SIDE-EFFECT")', "sandbox", log=_collector)
+_marks = [m for m in _seen if "MARKER-SIDE-EFFECT" in m]
+check(len(_marks) == 1, "s1 doc repro: print marker occurs once (got %d)" % len(_marks))
+
+_seen[:] = []
+code_bump = ("def bump():\n"
+             "    print('SIDE')\n"
+             "    return 1\n"
+             "bump()")
+r = py_sandbox.run(code_bump, "sandbox", log=_collector)
+_side = [m for m in _seen if "SIDE" in m]
+check(len(_side) == 1, "s2 last-expr call executed once (got %d)" % len(_side))
+check(r.get("result") == "1",
+      "s3 last-expr value captured as result (got %r)" % (r.get("result"),))
+
+r = py_sandbox.run("1 + 2", "sandbox")
+check(r.get("result") == "3",
+      "s4 bare last-expr becomes result (got %r)" % (r.get("result"),))
+r = py_sandbox.run("result = 5\nresult + 1", "sandbox")
+check(r.get("result") == "6",
+      "s5 last-expr rewrites result (got %r)" % (r.get("result"),))
+_ps = read_text(os.path.join(SRC, "py_sandbox.py"))
+check("<acrpa-py-expr>" not in _ps,
+      "s6 no second-eval path remains (_extract_result)")
+
+# ======================================================================
+# t. §1.5 print 转发 / full stdout 与 result 通道分离（文档 §1.5）
+# ======================================================================
+_seen[:] = []
+r = py_sandbox.run('print("hello-log")', "sandbox", log=_collector)
+check(any("hello-log" in m for m in _seen),
+      "t1 in-process print forwarded to injected log callback")
+check(r.get("ok") is True, "t2 print script ok=True")
+
+_seen[:] = []
+r = py_sandbox.run('print("hi")\nresult = 5', "full", timeout=15, log=_collector)
+check(r.get("ok") is True, "t3 full run ok (error=%r)" % (r.get("error"),))
+check(r.get("result") == "5",
+      "t4 full result not polluted by stdout (got %r)" % (r.get("result"),))
+check("hi" not in (r.get("result") or ""),
+      "t4b full result carries no print output")
+check(any("hi" in m for m in _seen),
+      "t5 full user print forwarded to log channel")
+
+_seen[:] = []
+r = py_sandbox.run('result = 7*6', "full", timeout=15, log=_collector)
+check(r.get("result") == "42",
+      "t6 full result channel marker parsed (got %r)" % (r.get("result"),))
+check(r.get("raw_result") == "42", "t7 additive raw_result present (full)")
+
+# ======================================================================
+# u. §1.2 假沙箱逃逸链（文档 §1.2 复现）—— sandbox precheck 应拒绝
+#    原 repro: ().__class__.__base__.__subclasses__()
+#    （旧「代码」命令无预检、可自由执行该链并定位 Popen → RCE；
+#     现统一走沙箱，被 dunder 属性规则 forbidden attribute 拦截。）
+# ======================================================================
+expect_reject("subs = ().__class__.__base__.__subclasses__()", "sandbox",
+              "forbidden attribute", "u1 §1.2 subclasses chain rejected (sandbox precheck)")
+r = py_sandbox.run("subs = ().__class__.__base__.__subclasses__()", "sandbox")
+check(r.get("ok") is False, "u2 §1.2 subclasses chain blocked by run() precheck")
+
+# ======================================================================
+# v. §1.3 trusted 超时绕过 —— 本期未修（已知限制，如实标注）
+#    repro A: import sys; sys.settrace(None); while True: pass
+#    repro B: import time; time.sleep(8)（settrace 仅行事件生效，阻塞期不检查）
+#    当前 deadline 仍依赖 sys.settrace，两种绕过依旧成立；预期修复
+#    （常驻 worker 子进程 + 超时 kill / Job Object 内存限制）属后续批次。
+#    为避免挂起测试进程，此处不执行死循环，仅以 [WARN] 如实标注现状。
+# ======================================================================
+_has_worker = any(t in _ps for t in ("Watchdog", "JOB_OBJECT", "Job Object",
+                                     "worker_process", "_WORKER"))
+warn("v1 §1.3 KNOWN LIMITATION (本期未修/后续批次): trusted 超时仍基于 sys.settrace，"
+     "可被 sys.settrace(None) 或 C 层阻塞绕过 (worker_added=%r)" % (_has_worker,))
+
+# ======================================================================
 # 汇总
 # ======================================================================
 print("")

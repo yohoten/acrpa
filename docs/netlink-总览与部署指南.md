@@ -35,7 +35,7 @@ NetLink 是 ACRPA 的**多设备局域网互联**能力：任意一台设备既�
                  └──────────────────────────┼──────────────────────────────────────┘
                                             │
                         ┌───────────────────┴────────────────────┐
-                        │  WebUI 只读面板（TCP 19712，明文 HTTP）   │
+                        │  WebUI 面板（TCP 19712，默认明文/可 TLS） │
                         │  GUI：netlink_window / settings_window   │
                         └──────────────────────────────────────────┘
 
@@ -50,7 +50,8 @@ NetLink 是 ACRPA 的**多设备局域网互联**能力：任意一台设备既�
 * **对等节点** = `Server`（入站）+ `Client`（出站）+ `Agent`（上报）+ `Discovery`（发现）
   + `Control` + `Transfer` + `Screen` + `WebUI`，由 `NetLinkNode` 统一编排。
 * 进程内所有模块通过 `NetBus` 发布/订阅解耦；节点间通过 `protocol` 定义的消息交互。
-* **TLS 为可选档**（默认关闭）：开启后 TCP 主链路加密，UDP 发现与 WebUI 仍明文。
+* **TLS 为可选档**（默认关闭）：开启后 TCP 主链路加密；UDP 发现仍明文，
+  WebUI 默认明文、可选 HTTPS（**有限控制开启时强制 HTTPS**）。
 
 ---
 
@@ -103,6 +104,11 @@ NetLink 是 ACRPA 的**多设备局域网互联**能力：任意一台设备既�
 | `netlink_web_enabled` | `false` | 启用浏览器只读监控面板 |
 | `netlink_web_port` | `19712` | 面板监听端口 |
 | `netlink_web_bind` | `"0.0.0.0"` | 面板监听地址（`0.0.0.0` = 允许同网段访问） |
+| `netlink_web_control` | `false` | **面板有限控制（Phase 4-2 演进）**：启用 `run`/`stop`（强制 HTTPS） |
+| `netlink_web_control_ttl` | `300` | 控制会话 TTL（秒），滑动续期；范围 60–3600 |
+| `netlink_web_tls` | `false` | 面板 HTTPS；**控制开启时被强制为 `true`** |
+| `netlink_web_confirm_control` | `false` | 本地面板控制是否也需桌面弹窗二次确认 |
+| `netlink_web_allow_remote_control` | `false` | 控制开启且 `bind=0.0.0.0` 时是否允许局域网控制（默认收窄 `127.0.0.1`） |
 | `netlink_tls_cert` | `""` | TLS 服务端证书 PEM 路径（启用 TLS 时必填） |
 | `netlink_tls_key` | `""` | TLS 服务端私钥 PEM 路径（启用 TLS 时必填） |
 | `netlink_tls_pins` | `[]` | 已固定的对端证书指纹（sha256 hex，TOFU） |
@@ -141,7 +147,7 @@ NetLink 是 ACRPA 的**多设备局域网互联**能力：任意一台设备既�
 | --- | --- | --- | --- | --- |
 | NetLink 主链路 | TCP | `19710` | 双向 | 状态/指令/脚本/截图（TLS 开启时在此加密） |
 | UDP 自动发现 | UDP | `19711` | 双向广播 | `ANNOUNCE/BYE`（明文） |
-| WebUI 只读面板 | TCP | `19712` | 入站 | 浏览器访问（明文 HTTP；默认关闭） |
+| WebUI 面板 | TCP | `19712` | 入站 | 浏览器访问（**默认明文 HTTP**；可选 HTTPS；**控制开启时强制 HTTPS**；默认关闭） |
 
 防火墙放行（Windows，管理员 cmd）：
 
@@ -210,7 +216,8 @@ netsh advfirewall firewall add rule name="ACRPA NetLink WebUI" dir=in action=all
 
 **已知限制**
 
-1. **UDP 发现与 WebUI 仍为明文**：TLS 仅覆盖 TCP 主链路（19710）。
+1. **UDP 发现仍为明文；WebUI 默认明文、可选/强制 HTTPS**：TLS 覆盖 TCP 主链路（19710）；
+   面板默认明文，勾选「面板启用 HTTPS」或开启**有限控制**时强制 HTTPS（复用同一套证书）。
 2. **自签证书不做链验证**：信任建立在 TOFU 首次固定上；首次连接务必在可信网络进行。
 3. **换证书需清空 `netlink_tls_pins`**：否则连接被拒（`pin mismatch`）。
 4. **凭据库依赖 Windows**：免配对重连依赖 Windows 凭据库可写；受限账户下可能退化。
@@ -218,7 +225,8 @@ netsh advfirewall firewall add rule name="ACRPA NetLink WebUI" dir=in action=all
 
 **后续路线（建议）**
 
-* 为 WebUI 增加可选 HTTPS 或反向代理支持。
+* WebUI 可选/强制 HTTPS **已实现**（复用互联证书）；后续可加反向代理支持与证书自动生成。
+* 面板「有限控制」**已实现**（仅 `run`/`stop`）；后续可评估更多白名单动作（需重新做威胁建模）。
 * UDP 发现引入轻量签名/共享密钥，防止伪造 ANNOUNCE。
 * 指纹固定支持「按对端分片」存储与管理界面。
 * 引入证书自动轮换与「指纹变更二次确认」交互。
@@ -232,5 +240,6 @@ netsh advfirewall firewall add rule name="ACRPA NetLink WebUI" dir=in action=all
 * [`docs/netlink-远程操控使用说明.md`](netlink-远程操控使用说明.md) —— 远程运行/暂停/停止
 * [`docs/netlink-脚本分发使用说明.md`](netlink-脚本分发使用说明.md) —— 脚本清单与推送
 * [`docs/netlink-远程截图说明.md`](netlink-远程截图说明.md) —— 远程截图
-* [`docs/netlink-网页只读面板说明.md`](netlink-网页只读面板说明.md) —— WebUI 面板
+* [`docs/netlink-网页只读面板说明.md`](netlink-网页只读面板说明.md) —— WebUI 面板（只读 + 可选有限控制）
+* [`docs/netlink-网页控制使用说明.md`](netlink-网页控制使用说明.md) —— 手机看进度 / 一键停止
 * [`docs/netlink-phase1-验收清单.md`](netlink-phase1-验收清单.md) / [`docs/netlink-phase2-验收清单.md`](netlink-phase2-验收清单.md) —— 阶段验收

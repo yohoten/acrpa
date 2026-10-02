@@ -703,3 +703,61 @@ class ThreadSafeLog:
         self._buffer = []
         self._file_buffer = []
         self._last_flush = time.time()
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 共享尺寸令牌 (设计 px) — 供脚本市场窗口与现有组件复用
+# (docs/marketplace-v2-design.md §2.7)
+#
+# 尺度口径 (须统一)：
+#   * 字体走 fit_pt()  —— 不含 dpi_factor (Tk 的 `tk scaling` 已处理 pt→px)；
+#   * sp()  走 scaled() —— 含 dpi_factor * ui_scale。
+#   留白若与文字行高强相关，优先用 gap/ctrl_h (走 scaled) 保持一致；
+#   命中尺寸/图标用 icon_size/tk_px (走 scaled)。
+#
+# 纯新增：不修改 scaled/fit_pt/PAD/PI/create_card/_btn/themed 的任何现有语义。
+# ═══════════════════════════════════════════════════════════════════════
+
+TOKENS = {
+    "sp_xs": 4, "sp_sm": 8, "sp_md": 12, "sp_lg": 16, "sp_xl": 24,
+    "radius": 6, "radius_sm": 4, "radius_lg": 10,
+    "ctrl_h": 26, "ctrl_h_sm": 22, "ctrl_h_lg": 30,
+    "gap": 8, "gap_tight": 4, "card_pad": 10,
+    "icon_sm": 16, "icon_md": 24, "icon_lg": 40,
+    "card_min_h": 84, "bar_h": 4,
+}
+
+
+def tk_px(value):
+    """设计 px → 实际 px = scaled(value) (含 dpi_factor * ui_scale)。"""
+    return scaled(value)
+
+
+def sp(key_or_px):
+    """间距/尺寸访问器：键名命中 TOKENS → scaled(TOKENS[key])；数字 → scaled(n)。
+
+    未知键名按 0 处理 (scaled 下限 1)，不抛异常，便于 UI 侧容错迭代。
+    """
+    if isinstance(key_or_px, str):
+        return scaled(TOKENS.get(key_or_px, 0))
+    return scaled(key_or_px)
+
+
+def radius(token="radius"):
+    """圆角半径 (默认 6 设计 px)。"""
+    return sp(token)
+
+
+def ctrl_h(token="ctrl_h"):
+    """控件高度 (默认 26 设计 px)。"""
+    return sp(token)
+
+
+def gap(token="gap"):
+    """通用间距 (默认 8 设计 px)。"""
+    return sp(token)
+
+
+def icon_size(token="icon_md"):
+    """图标边长 (默认 24 设计 px)。"""
+    return sp(token)

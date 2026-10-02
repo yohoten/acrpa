@@ -31,6 +31,7 @@ __all__ = [
 _bus = None
 _node = None
 _webui = None
+_webui_last_error = ""      # 最近一次 start_webui 失败原因（供 GUI 展示）
 _lock = threading.Lock()
 _webui_lock = threading.Lock()
 # 操控钩子缓存：节点尚未启动时先登记，start_netlink 创建节点后补注入
@@ -247,11 +248,15 @@ def send_command(peer_node_id, t, data=None):
 
 # ── Phase4-2 浏览器只读监控面板（门面）──────────────────────────────────
 def start_webui():
-    """按 state.NETLINK_WEB_ENABLED 启动只读面板；需先 start_netlink 且 enabled。
+    """按 state 配置启动面板；需先 start_netlink 且 NETLINK_WEB_ENABLED。
 
-    返回 True 表示面板可访问；配置关闭 / 互联未启动 / 绑定失败均返回 False。
+    读取控制相关键（控制/ TTL / TLS / 确认 / 局域网控制许可）传入 WebUI。
+    返回 True 表示面板可访问；配置关闭 / 互联未启动 / TLS 不可用 / 绑定失败
+    均返回 False（失败原因经 webui_last_error() 取回，GUI 侧展示）。
+
+    兼容 `WebUI.start()` 返回 bool 或 (ok, reason) 两种形态。
     """
-    global _webui
+    global _webui, _webui_last_error
     try:
         import state
         if not getattr(state, "NETLINK_WEB_ENABLED", False):
@@ -270,13 +275,33 @@ def start_webui():
             from .webui import WebUI, DEFAULT_PORT
             port = getattr(state, "NETLINK_WEB_PORT", DEFAULT_PORT)
             bind = getattr(state, "NETLINK_WEB_BIND", "0.0.0.0")
-            ui = WebUI(node, port=port, bind=bind)
-            if not ui.start():
+            control = bool(getattr(state, "NETLINK_WEB_CONTROL", False))
+            ttl = getattr(state, "NETLINK_WEB_CONTROL_TTL", 300)
+            tls_on = bool(getattr(state, "NETLINK_WEB_TLS", False))
+            confirm = bool(getattr(state, "NETLINK_WEB_CONFIRM_CONTROL", False))
+            allow_remote = bool(getattr(state,
+                                        "NETLINK_WEB_ALLOW_REMOTE_CONTROL",
+                                        False))
+            cert = str(getattr(state, "NETLINK_TLS_CERT", "") or "")
+            key = str(getattr(state, "NETLINK_TLS_KEY", "") or "")
+            ui = WebUI(node, port=port, bind=bind, control=control,
+                       control_ttl=ttl, tls=tls_on, confirm_control=confirm,
+                       allow_remote_control=allow_remote, cert=cert, key=key)
+            res = ui.start()
+            if isinstance(res, (tuple, list)):
+                ok = bool(res[0]) if len(res) > 0 else False
+                reason = str(res[1]) if len(res) > 1 else ""
+            else:
+                ok = bool(res)
+                reason = ""
+            if not ok:
+                _webui_last_error = reason or "start failed"
                 try:
                     ui.stop()
                 except Exception:
                     pass
                 return False
+            _webui_last_error = ""
             _webui = ui
             return True
     except Exception as e:
@@ -285,7 +310,13 @@ def start_webui():
             _nl_log("start_webui failed: {}".format(e), "ERROR")
         except Exception:
             pass
+        _webui_last_error = str(e)
         return False
+
+
+def webui_last_error():
+    """最近一次 start_webui 失败原因（成功或未尝试时为空串）。"""
+    return _webui_last_error
 
 
 def stop_webui():
@@ -346,3 +377,58 @@ def rotate_webui_token():
         return rotate_token()
     except Exception:
         return ""
+
+
+# ── 面板「有限控制」门面（批次3：供 GUI 开关 / PIN 管理 / 状态展示）──────
+def webui_control_status():
+    """面板控制状态 dict（供 GUI 展示）；未运行返回 {"enabled": <配置值>}。"""
+    ui = _webui
+    if ui is not None:
+        try:
+            return ui.api_control_status("")
+        except Exception:
+            pass
+    enabled = False
+    try:
+        import state
+        enabled = bool(getattr(state, "NETLINK_WEB_CONTROL", False))
+    except Exception:
+        enabled = False
+    return {"enabled": enabled}
+
+
+def webui_control_enabled():
+    """state 中是否已启用面板有限控制（不依赖面板是否运行）。"""
+    try:
+        import state
+        return bool(getattr(state, "NETLINK_WEB_CONTROL", False))
+    except Exception:
+        return False
+
+
+def has_webui_control_pin():
+    """是否已设置控制 PIN（凭据库可读且格式合法）。"""
+    try:
+        from . import security
+        return bool(security.has_control_pin())
+    except Exception:
+        return False
+
+
+def set_webui_control_pin(pin):
+    """设置/重置控制 PIN（6 位数字）；成功同时清空全部控制会话。返回 bool。"""
+    try:
+        from . import security
+        return bool(security.store_control_pin(str(pin or "").strip(), actor="gui"))
+    except Exception:
+        return False
+
+
+def clear_webui_control_pin():
+    """清除控制 PIN（并清会话 + 防暴力计数）；成功返回 True。"""
+    try:
+        from . import security
+        security.forget_control_pin(actor="gui")
+        return True
+    except Exception:
+        return False

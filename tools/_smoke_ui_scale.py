@@ -284,7 +284,9 @@ def check_dynamic():
             _p("FAIL", "utils.font 未知角色未回退 FONT_BODY")
 
         def _size(role="ACRPA_BODY"):
-            return int(tkinter.font.nametofont(role, root=r).actual()["size"])
+            # Python 3.9 的 nametofont 不接受 root=; Font(exists=True) 精确取同一命名。
+            return int(tkinter.font.Font(root=r, name=role,
+                                         exists=True).actual()["size"])
 
         want = utils.fit_pt(9, 1.0)
         got = _size()

@@ -1,0 +1,46 @@
+================================================================
+NetLink Phase2-1a security kernel self-test
+================================================================
+[OK]   1a. derive_token 同输入同输出(len==TOKEN_LEN)
+[OK]   1b. verify_proof 正确通过
+[OK]   1c. 篡改 proof 1 字符 → False
+[OK]   1d. ts 偏差 120s → False
+[OK]   1e. ts 偏差 30s → True
+[OK]   11a. PairWindow.open → 6 位数字 PIN
+[OK]   11b. PairWindow.active True
+[OK]   11c. TTL 到期 → active False
+[OK]   11d. TTL 到期 → expires_in <= 0
+[OK]   12a. add 返回完整字段
+[OK]   12b. get_by_node 命中
+[OK]   12c. is_trusted True
+[OK]   12d. set_perm control 生效
+[OK]   12e. set_perm 非法权限 → False
+[OK]   12f. remove 返回 True
+[OK]   12g. remove 后 is_trusted False
+[OK]   12h. persist=False 不写 state.NETLINK_PEERS
+[OK]   0. 被控端 A start (tcp 19960)
+[OK]   0b. 打开配对窗口拿到 PIN
+[OK]   2a. 错误 PIN → T_AUTH_FAIL
+[OK]   2b. 未认证 SUBSCRIBE → T_AUTH_FAIL（而非 STATE_SYNC）
+[OK]   3a. 正确 PIN → T_AUTH_OK
+[OK]   3b. AUTH_OK.perm == observe
+[OK]   3c. AUTH_OK 带 secret_stored 字段
+[OK]   3d. 订阅 T_SUBSCRIBE → T_CMD_ACK
+[OK]   3e. 订阅后 <=3s 收到 T_STATE_SYNC
+[OK]   4a. 同连接重放同一条 AUTH → T_AUTH_FAIL
+[OK]   4b. 新连接重放 → T_AUTH_FAIL
+[OK]   6a. A.list_peers() 含该 peer
+[OK]   6b. peer 字段完整(node_id/name/fingerprint/perm/added_at/last_seen)
+[OK]   6c. peer.perm == observe
+[OK]   7. config 无 proof/token/pin/secret 及超长 hex
+[OK]   5a. 凭据库已存该 peer token
+[OK]   5b. resume → T_AUTH_OK（不需要 PIN）
+[OK]   8a. observe + CMD_STOP → permission denied
+[OK]   8b. state.quit2 未被置 True
+[OK]   8c. control + CMD_STOP → 已受理执行 (Phase2-2)
+[OK]   9. 连续 5 次错误 PIN → 连接被 A 主动关闭
+[OK]   10a. 被控端 A2 start(require_auth=False)
+[OK]   10b. 关闭认证后免配对直接收到 STATE_SYNC
+----------------------------------------------------------------
+elapsed 3.97s, warns=0
+PASS (all assertions OK)

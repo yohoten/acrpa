@@ -1,0 +1,22 @@
+[SYNTAX] checked 106 files, 0 failed
+[IMPORT OK] state
+[IMPORT OK] utils
+[IMPORT OK] scriptdata
+[IMPORT OK] commands
+[IMPORT OK] safe_eval
+[IMPORT OK] ai_client
+[IMPORT OK] engine
+[IMPORT OK] scheduler
+[IMPORT OK] recorder
+[IMPORT OK] updater
+[IMPORT OK] marketplace
+[IMPORT OK] templates
+[IMPORT OK] version_manager
+[IMPORT OK] workflow
+[IMPORT OK] dd_backend
+[IMPORT OK] ocr_backend
+[IMPORT OK] browser_backend
+[IMPORT OK] ai_enhance
+[IMPORT] 18/18 modules imported
+
+Done. syntax_failed=0 import_failed=0

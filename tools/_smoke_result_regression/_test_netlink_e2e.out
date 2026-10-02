@@ -1,0 +1,28 @@
+================================================================
+NetLink Phase1-4 E2E acceptance (same-host dual node)
+================================================================
+[OK]   0a. node A start (tcp 19910/udp 19911)
+[OK]   0b. node B start (tcp 19920/udp 19921)
+[OK]   0c. B 静态对端连上 A (client alive)
+[OK]   1. B 收到 STATE 且 row==34/total_rows==120/loop==2/script 正确
+[OK]   2a. clear() -> paused==True
+[OK]   2b. set() -> paused==False（恢复）
+[OK]   3a. B 收到含 'E2E-行34-找图成功' 的 LOG_TAIL (<=3s)
+[OK]   3b. lines[0] 具备 ts/tag/level/msg 四键
+      [info] log real-chain used = True
+[OK]   4. SUBSCRIBE 后立即推送 (<2s, 实测 0.064s)
+[OK]   5a. 掉线后 <=6s 重连成功 (实测 1.370s)
+[OK]   5b. 重连后重新 SUBSCRIBE 再次收到 STATE
+[OK]   6a. A 对 T_CMD_STOP 回 CMD_ERR 且 reason 非空
+[OK]   6b. state.quit2 未被置 True（本地执行未受影响）
+[OK]   7a. 字符串 '127.0.0.1:19920' 静态对端可连 (dt=3.052s)
+[OK]   7b. 序列 ['127.0.0.1', 19920] 静态对端可连 (dt=3.040s)
+[OK]   8a. 端口被占用时 start() 返回 False（无异常逃逸）
+[OK]   8b. 已启动节点 A/B 的 accept 线程仍存活
+[OK]   8c. 释放端口后重新启动成功
+[OK]   9a. 两节点 stop() 各调 2 次不抛异常
+[OK]   9b. start()→stop() 各一轮成功
+[OK]   10. 全部 stop() 后 nl-* 线程收敛为 0
+----------------------------------------------------------------
+[OK]   总耗时 13.0s (< 60.0s)
+PASS (all assertions OK; warns=0)

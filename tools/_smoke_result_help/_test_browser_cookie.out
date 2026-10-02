@@ -1,0 +1,40 @@
+── cookies_to_json / parse_cookies 往返 ──
+[OK] cookies_to_json → JSON 数组串
+[OK] JSON 往返一致 -> [{'name': 'sid', 'value': 'abc123', 'domain': 'example.com', 'path': '/', 'secure': True, 'expires': 1893456000}, {'name': 'lang', 'value': 'zh-CN', 'domain': 'example.com', 'path': '/', 'secure': False}]
+────────────────────────────────────────────────────────────
+── cookies_to_header / parse_cookies ──
+[OK] cookies_to_header 格式 -> 'sid=abc123; lang=zh-CN'
+[OK] header 往返（name/value） -> [{'name': 'sid', 'value': 'abc123'}, {'name': 'lang', 'value': 'zh-CN'}]
+────────────────────────────────────────────────────────────
+── cookies_to_netscape / parse_cookies ──
+[OK] Netscape 头注释存在
+[OK] Netscape 使用制表符分隔
+[OK] Netscape 往返一致（domain/path/secure/expires） -> [{'name': 'sid', 'value': 'abc123', 'domain': 'example.com', 'path': '/', 'secure': True, 'expires': 1893456000}, {'name': 'lang', 'value': 'zh-CN', 'domain': 'example.com', 'path': '/', 'secure': False}]
+────────────────────────────────────────────────────────────
+── parse_cookies 多种输入 ──
+[OK] None → [] -> []
+[OK] 空串 → [] -> []
+[OK] 空白 → [] -> []
+[OK] dict → [dict] -> [{'name': 'a', 'value': '1'}]
+[OK] list → 原样 -> [{'name': 'a', 'value': '1'}]
+[OK] header 字面量解析 -> [{'name': 'a', 'value': '1'}, {'name': 'b', 'value': '2'}]
+[OK] 无可解析内容 → [] -> []
+[OK] JSON 特殊字符往返一致 -> [{'name': 'k', 'value': 'a=b;c', 'domain': '.x.com', 'path': '/p'}]
+────────────────────────────────────────────────────────────
+── AST 结构断言 ──
+[OK] 存在函数定义 cookies_to_json
+[OK] 存在函数定义 cookies_to_header
+[OK] 存在函数定义 cookies_to_netscape
+[OK] 存在函数定义 parse_cookies
+[OK] 存在函数定义 cookies_get_all
+[OK] 存在函数定义 cookies_set
+[OK] 存在函数定义 _browser_cookie_get
+[OK] 存在函数定义 _browser_cookie_set
+────────────────────────────────────────────────────────────
+── 降级断言（后端不可用 → return False） ──
+[OK] 后端不可用 读取Cookie return False
+[OK] 读取Cookie → PW_NOT_INSTALLED -> 'PW_NOT_INSTALLED'
+[OK] 后端不可用 设置Cookie return False
+[OK] 设置Cookie → PW_NOT_INSTALLED -> 'PW_NOT_INSTALLED'
+────────────────────────────────────────────────────────────
+结果: PASS (0 失败, 0 项警告)

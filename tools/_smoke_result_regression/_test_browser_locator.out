@@ -1,0 +1,150 @@
+[OK] import browser_backend 未触发 playwright 导入（懒加载契约）
+────────────────────────────────────────────────────────────
+── parse_locator 原生直通（向后兼容）──
+[OK] parse_locator('#login-btn').engine -> 'playwright'
+[OK] parse_locator('#login-btn').raw 原样直通 -> '#login-btn'
+[OK] parse_locator('.result').engine -> 'playwright'
+[OK] parse_locator('.result').raw 原样直通 -> '.result'
+[OK] parse_locator('[data-x=1]').engine -> 'playwright'
+[OK] parse_locator('[data-x=1]').raw 原样直通 -> '[data-x=1]'
+[OK] parse_locator('div > span').engine -> 'playwright'
+[OK] parse_locator('div > span').raw 原样直通 -> 'div > span'
+[OK] parse_locator('button').engine -> 'playwright'
+[OK] parse_locator('button').raw 原样直通 -> 'button'
+[OK] parse_locator('div').engine -> 'playwright'
+[OK] parse_locator('div').raw 原样直通 -> 'div'
+[OK] parse_locator('text=登录').engine -> 'playwright'
+[OK] parse_locator('text=登录').raw 原样直通 -> 'text=登录'
+[OK] parse_locator('xpath=//div').engine -> 'playwright'
+[OK] parse_locator('xpath=//div').raw 原样直通 -> 'xpath=//div'
+[OK] parse_locator('css=#a .b').engine -> 'playwright'
+[OK] parse_locator('css=#a .b').raw 原样直通 -> 'css=#a .b'
+[OK] parse_locator('role=button').engine -> 'playwright'
+[OK] parse_locator('role=button').raw 原样直通 -> 'role=button'
+────────────────────────────────────────────────────────────
+── parse_locator 自定义 DSL ──
+[OK] 无前缀非CSS → get_by_text -> 'get_by_text'
+[OK] get_by_text.text -> '登录按钮'
+[OK] get_by_text.exact=False（模糊） -> False
+[OK] css: → playwright -> 'playwright'
+[OK] css: 剥离前缀 -> '#id > .cls'
+[OK] xpath: → playwright -> 'playwright'
+[OK] xpath: 前缀补 xpath= -> 'xpath=//button[text()="登录"]'
+[OK] text: → get_by_text -> 'get_by_text'
+[OK] text: 文本 -> '登录'
+[OK] text: exact=False -> False
+[OK] text^ → get_by_text -> 'get_by_text'
+[OK] text^ regex ^... -> '^登\\ 录'
+[OK] text$ → get_by_text -> 'get_by_text'
+[OK] text$ regex ...$ -> '完成$'
+[OK] tag: 单标签 → playwright -> 'playwright'
+[OK] tag:button raw -> 'button'
+[OK] tag: 叠加属性 → playwright -> 'playwright'
+[OK] tag:input@type=submit raw -> 'input[type=submit]'
+[OK] @attr 存在 -> '[data-id]'
+[OK] @attr=val 等值 -> '[name=user]'
+[OK] @@ 组合 → playwright -> 'playwright'
+[OK] @@ 基串 raw -> 'button'
+[OK] @@ 追加 has_text -> '提交'
+[OK] role: → get_by_role -> 'get_by_role'
+[OK] role: 角色名 -> 'button'
+[OK] role: name -> '登录'
+[OK] label: → get_by_label -> 'get_by_label'
+[OK] label: 文本 -> '用户名'
+[OK] placeholder: → get_by_placeholder -> 'get_by_placeholder'
+[OK] placeholder: 文本 -> '请输入手机号'
+[OK] testid: → get_by_test_id -> 'get_by_test_id'
+[OK] testid: 标识 -> 'submit-btn'
+────────────────────────────────────────────────────────────
+── parse_locator 边界 ──
+[OK] 空/空白 '' → error -> 'error'
+[OK] 空/空白 '' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 空/空白 '   ' → error -> 'error'
+[OK] 空/空白 '   ' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 空/空白 None → error -> 'error'
+[OK] 空/空白 None → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 残缺前缀 'text:' → error -> 'error'
+[OK] 残缺前缀 'tag:' → error -> 'error'
+[OK] 残缺前缀 'role:' → error -> 'error'
+[OK] 残缺前缀 'label:' → error -> 'error'
+[OK] 残缺前缀 'placeholder:' → error -> 'error'
+[OK] 残缺前缀 'testid:' → error -> 'error'
+[OK] 残缺前缀 'css:' → error -> 'error'
+[OK] 残缺前缀 'xpath:' → error -> 'error'
+────────────────────────────────────────────────────────────
+── _row_arg 双接口 ──
+[OK] .args[0] -> 'a'
+[OK] .args[1] -> 'b'
+[OK] .args 空值→default -> 'd'
+[OK] .args 越界→default -> 'd'
+[OK] xlrd row[1].value -> 'a'
+[OK] xlrd row[2].value -> 'b'
+[OK] xlrd None→default -> 'd'
+[OK] xlrd 越界→default -> 'd'
+[OK] 两接口取参一致 -> 'a'
+────────────────────────────────────────────────────────────
+── _resolve_vars ──
+[OK] a${x}b (x=1) -> 'a1b'
+[OK] 缺失变量→空串 -> 'ab'
+[OK] 无占位符原样 -> 'plain'
+────────────────────────────────────────────────────────────
+── AST 结构断言 ──
+[OK] 模块级不存在 import playwright（AST）
+[OK] playwright import 确实位于函数体内（延迟导入）
+[OK] 存在函数定义 parse_locator
+[OK] 存在函数定义 build_locator
+[OK] 存在函数定义 parse_wait_state
+[OK] 存在函数定义 wait_for
+[OK] 存在函数定义 _run_js
+[OK] 存在函数定义 cookies_get_all
+[OK] 存在函数定义 cookies_set
+[OK] 存在函数定义 cookies_to_json
+[OK] 存在函数定义 parse_cookies
+[OK] 存在函数定义 _row_arg
+[OK] 存在函数定义 _resolve_vars
+[OK] 存在函数定义 _fail
+[OK] 存在函数定义 _clear_last_error
+[OK] 存在函数定义 _browser_exec_js
+[OK] 存在函数定义 _browser_cookie_get
+[OK] 存在函数定义 _browser_cookie_set
+[OK] 存在函数定义 _browser_navigate
+[OK] 存在函数定义 _browser_click
+[OK] 存在函数定义 _browser_input
+[OK] 存在函数定义 _browser_wait_element
+[OK] 存在函数定义 _browser_screenshot
+────────────────────────────────────────────────────────────
+── commands 注册断言 ──
+[OK] 注册表包含新命令 '浏览器执行JS'
+[OK] 注册表包含新命令 '执行JS'
+[OK] 注册表包含新命令 '浏览器读取Cookie'
+[OK] 注册表包含新命令 '浏览器设置Cookie'
+[OK] 既有命令注册逐字未变: 打开网页
+[OK] 既有命令注册逐字未变: 浏览器点击
+[OK] 既有命令注册逐字未变: 浏览器输入
+[OK] 既有命令注册逐字未变: 等待元素
+[OK] 既有命令注册逐字未变: 浏览器截图
+[OK] get_handler('浏览器执行JS') 非空
+[OK] get_handler('执行JS') 非空
+[OK] get_handler('浏览器读取Cookie') 非空
+[OK] get_handler('浏览器设置Cookie') 非空
+────────────────────────────────────────────────────────────
+── state 新键默认值 ──
+[OK] state.BROWSER_WAIT_TIMEOUT -> 15.0
+[OK] state.BROWSER_POLL_INTERVAL -> 0.2
+[OK] state.BROWSER_FULL_PAGE_SCREENSHOT -> False
+[OK] state.BROWSER_JS_TIMEOUT -> 15.0
+[OK] state.BROWSER_RETRY -> 1
+[OK] state.BROWSER_RETRY_INTERVAL -> 0.5
+[OK] state.BROWSER_SILENT -> False
+────────────────────────────────────────────────────────────
+── 降级 / 失败短路断言 ──
+[OK] 浏览器执行JS 缺参 return False
+[OK] 缺参 → INVALID_ARGUMENT -> 'INVALID_ARGUMENT'
+[OK] 浏览器执行JS 后端不可用 return False
+[OK] 后端不可用 → PW_NOT_INSTALLED -> 'PW_NOT_INSTALLED'
+[OK] 浏览器读取Cookie 后端不可用 return False
+[OK] 读Cookie → PW_NOT_INSTALLED -> 'PW_NOT_INSTALLED'
+[OK] 浏览器设置Cookie 缺来源 return False
+[OK] 设置Cookie 缺来源 → INVALID_ARGUMENT -> 'INVALID_ARGUMENT'
+────────────────────────────────────────────────────────────
+结果: PASS (0 失败, 0 项警告)

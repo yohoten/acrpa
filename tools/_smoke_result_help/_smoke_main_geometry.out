@@ -1,0 +1,23 @@
+=== 主窗口几何 冒烟测试 (utils + 4 分支) ===
+解释器: d:\CodingEmber\ACRPA\.venv\Scripts\python.exe
+解释器存在: True
+--------------------------------------------------------
+[OK] win_virtual_bounds -> (0, 0, 2048, 1280) 合理
+[OK] geometry_in_screen 对屏内 400x300+10+10 -> True
+[OK] geometry_in_screen 对无效/越界 '900x700+99999+99999' -> False
+[OK] geometry_in_screen 对无效/越界 '100x100+10+10' -> False
+[OK] geometry_in_screen 对无效/越界 '' -> False
+[OK] geometry_in_screen 对无效/越界 'abc' -> False
+[OK] geometry_in_screen 对无效/越界 '400x300' -> False
+[OK] center_geometry 结果 800x600+624+226 落在虚拟屏内
+[OK] 默认分支尺寸 1000x680 ≥ 设计派生下限 1000x680 (dpi=1 ui_scale=1)
+[OK] 默认分支几何 1000x680+780+306 落在虚拟屏内
+[OK] 默认分支 utils.geometry_in_screen -> True
+[OK] 记忆分支(屏内) geometry 与写入值一致: 700x600+20+20
+[OK] 越界记忆 (900x700+99999+99999) 回退居中: 1000x680+780+306 屏内且尺寸达标
+[OK] 越界记忆回退居中的几何与默认分支完全一致: 1000x680+780+306
+[OK] 最大化分支 root.state() == 'zoomed'
+[OK] 紧凑分支 geometry 500x625 == 期望 500x625 (ui_scale=1)
+--------------------------------------------------------
+FAIL=0 WARN=0
+结论: [OK] 全部通过 (WARN=0)

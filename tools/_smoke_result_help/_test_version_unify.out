@@ -1,0 +1,24 @@
+── V1 权威来源一致性 ──
+[OK]   根 VERSION 文件首行非空
+[OK]   version_info.get_version() == 根 VERSION 首行
+[OK]   version_info.VERSION == 根 VERSION 首行
+── V2 netlink/node.py 收敛 ──
+[OK]   node.py 不再直接读取 "VERSION" 文件
+[OK]   node.py 改为引用 version_info
+[OK]   node.py 不再直接 open VERSION（无 os.path.join(root, ...) 版本读取）
+[OK]   NetLinkNode.info['version'] == version_info.VERSION
+── V3 回退版本同步 ──
+[OK]   _FALLBACK_VERSION == 当前版本
+── V4 网页单一源 ──
+[OK]   index.html 存在 ACRPA_RELEASE 单一源
+[OK]   index.html 单一源 version 非空
+[OK]   index.html 除单一源外无其它版本字面量
+[OK]   index.en.html 存在 ACRPA_RELEASE 单一源
+[OK]   index.en.html 单一源 version 非空
+[OK]   index.en.html 除单一源外无其它版本字面量
+── V5 tools/README.md 指令修正 ──
+[OK]   README.md 不再含『修改 updater.py 中的 VERSION』
+[OK]   README.md 指明唯一来源为根 VERSION 文件
+
+通过 16 / 失败 0 / 警告 0
+结论: PASS

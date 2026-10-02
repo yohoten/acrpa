@@ -264,8 +264,10 @@ python build.py
 
 ### 版本管理
 
-- 修改 `src/updater.py` 中的 VERSION
-- 更新 `README.md` 中的版本号
+- 版本号的**唯一来源**是项目根目录的 `VERSION` 文件（首行）
+- 改版本请编辑 `VERSION` 文件，或使用 `tools/bump_version.py` 一键提升
+- 运行时由 `src/version_info.py` 读取 `VERSION` 并对外暴露为单一权威入口，
+  各模块统一引用，改一处即全局生效
 - 提交 git tag: `git tag v0.1.16 && git push --tags`
 
 ---

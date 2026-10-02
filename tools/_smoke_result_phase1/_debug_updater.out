@@ -1,0 +1,121 @@
+[V] 语义化版本比较
+  [PASS] V1  0.1.25 < 0.1.26
+  [PASS] V2  0.1.26 > 0.1.25
+  [PASS] V3  相同版本 = 0
+  [PASS] V4  正式版 > 同号预发布
+  [PASS] V5  预发布 < 同号正式版
+  [PASS] V6  rc1 > beta
+  [PASS] V7  位数不齐等价 (0.1 == 0.1.0)
+  [PASS] V8  v 前缀等价
+  [PASS] V9  0.2 > 0.1.99
+  [PASS] V10 无分隔符后缀 (0.1.26beta) 可解析
+  [PASS] V11 pytest 风格后缀 (1.0.0rc.1 < 1.0.0)
+  [PASS] V12 不可解析不误报新版本
+  [PASS] V13 旧接口 _compare_versions 兼容 (低→高 = True)
+  [PASS] V14 旧接口 _compare_versions 兼容 (高→低 = False)
+  [PASS] V15 旧接口对预发布后缀不再静默失败
+[M] VERSION 清单解析
+  [PASS] M1  清单解析成功
+  [PASS] M2  版本号取自首行
+  [PASS] M3  多直链全部收集
+  [PASS] M4  download_url 取首条直链
+  [PASS] M5  sha256 行解析
+  [PASS] M6  注释与空行被忽略
+  [PASS] M7  非法首行被拒
+  [PASS] M8  空清单被拒
+  [PASS] M9  第二行为占位符时不当作直链
+  [PASS] M10 notes 行解析
+[C] 下载直链候选
+  [PASS] C1  候选非空
+  [PASS] C2  远端清单直链优先
+  [PASS] C3  候选无重复
+  [PASS] C4  含 Release 约定直链
+  [PASS] C5  有 sha256 时含 raw 镜像兜底
+  [PASS] C5b 无 sha256 时放弃不带版本信息的 dist/ 兜底通道
+  [PASS] C5c 无 sha256 时仍保留 Release 约定直链
+  [PASS] C6  无显式直链时也能推导
+  [PASS] C7  resolve_download_url 可落回 Release 约定
+  [PASS] C8  推导直链同时覆盖三段与四段 tag 写法
+  [PASS] C9  候选列表含四段 tag 写法
+  [PASS] C10 已是四段版本时不重复补 .0
+[F] 下载产物校验
+  [PASS] F1  空文件被拒
+  [PASS] F2  HTML 错误页被拒
+  [PASS] F3  合法 ZIP 通过
+  [PASS] F4  正确 sha256 通过
+  [PASS] F5  错误 sha256 被拒
+  [PASS] F6  体积不符被拒
+  [PASS] F7  体积相符通过
+  [PASS] F8  PE 可执行文件被接受
+  [PASS] F9  get_expected_version 可读包内 VERSION
+  [PASS] F10 无 VERSION 的包返回空串
+  [PASS] F11 包内版本与目标一致时通过
+  [PASS] F12 包内版本与目标不一致时拒绝 (兜底镜像给旧包) 
+  [PASS] F13 目标版本为空时不做判定
+  [PASS] F14 包内无 VERSION 时不做判定 (兼容旧发布包)
+[D] 下载流程
+  [PASS] D1  首个直链 404 时自动换源
+  [PASS] D2  包已落盘且内容一致
+  [PASS] D3  已按顺序尝试两个直链
+  [PASS] D4  无残留 .part 文件
+  [PASS] D5  全部源失败时返回失败而非静默
+  [PASS] D6  失败原因可读 (含 HTTP 状态)
+  [PASS] D6b 候选列表全部被尝试过
+  [PASS] D7  sha256 不符时拒绝落盘
+  [PASS] D8  校验失败后不留下成品包
+  [PASS] D9  包内版本不符时换源而非接受旧包
+  [PASS] D10 最终落盘的是版本正确的包
+  [PASS] D11 所有源都给出旧包时明确失败
+  [PASS] D12 每个候选源都被核查过 (未提前放弃)
+[P] check() 结构化状态
+  [PASS] P1  全源不可达 → network_error
+  [PASS] P2  失败时 error 非空 (不再伪装成无更新)
+  [PASS] P3  Release API 解析 → 有更新
+  [PASS] P4  Release 直链与体积取自 assets
+  [PASS] P5  Release 正文与页面链接被带出
+  [PASS] P6  远端版本与本机相同 → no_update
+  [PASS] P7  远端版本更高 → ok
+  [PASS] P8  记录实际生效的来源
+  [PASS] P9  清单损坏 → 不误判为有新版本
+  [PASS] P10 首个镜像缓存落后时不吞掉真实新版本
+  [PASS] P11 记录的是真正给出新版本的来源
+  [PASS] P12 Release 落后而清单先行时仍报出更新
+[A] check_async 多路复用
+  [PASS] A1  并发调用两个回调都收到结果
+  [PASS] A2  两个回调拿到同类结果
+  [PASS] A3  只发起一次网络请求 (复用而非重复)
+  [PASS] A4  已有结论时同步复用, 不再发请求
+  [PASS] A5  复用回调仍被调用
+[T] 传输双栈 (requests 证书失败 → urllib 兜底)
+  [PASS] T1  requests 证书失败时 urllib 兜底成功
+  [PASS] T2  兜底成功时不残留错误信息
+  [PASS] T3  明确 404 不换栈重试
+  [PASS] T4  下载在 requests 失败时改用 urllib 完成
+  [PASS] T5  兜底下载内容与源一致
+[R] 冻结路径解析 (打包后版本号来源)
+  [PASS] R1  EXE 同级目录优先于内嵌副本与项目根
+  [PASS] R2  内嵌副本 (_MEIPASS) 进入候选
+  [PASS] R3  冻结时优先读到 EXE 旁 VERSION (不再回退内置值)
+  [PASS] R4  冻结时直链也来自 EXE 旁 VERSION
+  [PASS] R5  冻结时应用目录 = EXE 所在目录
+  [PASS] R6  清单路径可诊断
+  [PASS] R7  还原后回到源码运行 (读项目根 VERSION)
+  [PASS] R8  源码模式应用目录 = 项目根
+  [PASS] R9  版本一致性: 项目 VERSION == version_info.VERSION
+[S] 自更新前置条件
+  [PASS] S1  源码模式拒绝自更新并给出原因
+  [PASS] S2  拒绝时不抛异常
+  [PASS] S3  apply_update 在源码模式返回失败而非崩溃
+  [PASS] S4  format_size 可读
+  [PASS] S5  format_size 容忍非法输入
+[Z] 发布包内 VERSION (自引用校验和不得入包)
+  [PASS] Z1  包内 VERSION 剔除 sha256 行
+  [PASS] Z2  包内 VERSION 保留版本号与下载直链
+  [PASS] Z3  包内 VERSION 首行即客户端读取的版本号
+  [PASS] Z4  打包产物内 VERSION 不含自引用校验和
+  [PASS] Z5  客户端可从打包产物读到版本号
+  [PASS] Z6  客户端校验通过 (包内版本与目标一致)
+  [PASS] Z7  包内版本与目标不符时被拒
+
+========================================================
+ALL PASSED  (107 项)

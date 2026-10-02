@@ -41,7 +41,14 @@ _config_schema = [
     ("mini_bar_enabled", True,          bool),   # 启用折叠 Mini Bar 模式
     # UI 细节 (窗口/Tab 记忆)
     ("last_tab",       0,              int),    # 上次所在 Tab 索引 (重启恢复)
-    ("win_geometry",   "",             str),    # 主窗口位置尺寸 (空=默认)
+    ("win_geometry",   "",             str),    # 设置窗口位置尺寸 (空=默认)
+    ("main_geometry",  "",             str),    # 主窗口几何 (空=默认居中; 仿 win_geometry)
+    ("main_maximized", False,          bool),   # 主窗口最大化状态 (启动恢复)
+    ("compact_mode",   False,          bool),   # 紧凑模式: True=500x625 旧布局
+    # ── 片段库 (离线可用) ──
+    ("snippet_dir",        "",    str),   # 片段库主目录 (空=<app_root>/template)
+    ("snippet_extra_dirs", [],    list),  # 片段库追加目录列表
+    ("snippet_last_cat",   "全部", str),  # 片段库 UI 记忆: 上次分类
     ("hotkey_run",      "",             str),    # 运行脚本快捷键
     ("hotkey_pause",    "",             str),    # 暂停/恢复快捷键
     ("hotkey_stop",     "",             str),    # 停止脚本快捷键
@@ -147,6 +154,10 @@ _config_schema = [
     ("market_install_dir",       "",        str),  # 自定义安装根目录(空=CONFIG_PATH 同级)
     ("market_last_category",     "全部",    str),  # UI 记忆: 上次分类筛选
     ("market_index_cache_ttl",   3600,      int),  # 索引缓存秒数(覆盖 CACHE_TTL 常量)
+    # ── 帮助系统渲染层 (阶段1-2) ──
+    ("help_geometry",           "",     str),   # 帮助窗口几何记忆 (空=默认居中)
+    ("help_maximized",          False,  bool),  # 帮助窗口最大化状态 (启动恢复)
+    ("help_modal",              False,  bool),  # 帮助窗口是否模态 (默认非模态)
 ]
 
 # ── Config globals (initialised from schema defaults) ──
@@ -216,7 +227,14 @@ _editor_modified = False  # 编辑器是否有未保存修改
 
 # ── UI 状态 (窗口位置/Tab 记忆，由 ACRPA 读写) ──
 LAST_TAB = 0             # 上次所在 Tab 索引 (重启恢复)
-WIN_GEOMETRY = ""        # 主窗口位置尺寸 (如 "500x625+400+80"，空=默认)
+WIN_GEOMETRY = ""        # 设置窗口位置尺寸 (如 "680x680+450+60"，空=默认)
+MAIN_GEOMETRY = ""       # 主窗口几何 (如 "1000x680+100+50"，空=默认居中)
+MAIN_MAXIMIZED = False   # 主窗口是否最大化 (启动恢复)
+COMPACT_MODE = False     # 紧凑模式 (500x625 旧布局, 照顾小屏/便携)
+# 帮助窗口渲染层 (阶段1-2) — 与 _config_schema 同名大写别名
+HELP_GEOMETRY = ""       # 帮助窗口几何 (如 "900x640+200+120"，空=默认居中)
+HELP_MAXIMIZED = False   # 帮助窗口是否最大化 (启动恢复)
+HELP_MODAL = False       # 帮助窗口是否模态 (False=非模态, 可边看边操作)
 
 # ── Debugger state ──
 debug_mode = False          # 调试模式开关

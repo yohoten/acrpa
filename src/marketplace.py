@@ -22,7 +22,14 @@ MARKETPLACE_REPO = "https://gitee.com/yohoten/acrpa-marketplace/raw/master"
 MARKETPLACE_INDEX = MARKETPLACE_REPO + "/index.json"
 MARKETPLACE_PKG_DIR = MARKETPLACE_REPO + "/packages"   # v2 包存放目录约定
 CACHE_TTL = 3600  # Cache index for 1 hour
-MIN_APP_VERSION = "0.1.26"  # 兼容最低 ACRPA 版本 (兜底)
+
+# ── 兼容下限 (语义独立, 勿与 version_info.VERSION 混用) ──
+# 这里表示"运行脚本市场所需的最低兼容 ACRPA 应用版本", 是兼容性门槛,
+# 不是应用当前版本号。版本比较时以它作为下限判定 (低版本应用拒绝安装高版本包)。
+# 仅当市场包提高了最低兼容要求、需要抬高门槛时, 才手动提升此常量 ——
+# 它刻意不派生自 version_info.VERSION: 应用升级并不自动意味着兼容下限提升,
+# 二者语义不同, 强行绑定会导致每次发版都无谓地抬高安装门槛。
+MIN_APP_VERSION = "0.1.26"
 USER_AGENT = "ACRPA-Market/2.0"
 _CHUNK = 1024 * 1024
 
@@ -639,12 +646,20 @@ def _generate_builtin_script(script_info, save_dir):
         ],
     }
 
-    rows = BUILTIN_TEMPLATES.get(script_info.id, [])
+    # BUILTIN_TEMPLATES 以 filename 为键 (builtin_notepad...), 而条目 id 为 builtin_1..8;
+    # 早前按 id 直接查表恒空 → 内置脚本安装必失败。此处兼容两种键: 先试 id 再回退 filename。
+    rows = BUILTIN_TEMPLATES.get(script_info.id) or BUILTIN_TEMPLATES.get(
+        getattr(script_info, "filename", ""))
     if not rows:
-        raise MarketplaceError("内置脚本模板未找到: {}".format(script_info.id))
+        raise MarketplaceError("内置脚本模板未找到: {} / {}".format(
+            script_info.id, getattr(script_info, "filename", "")))
 
     filename = script_info.filename + ".xls"
     save_path = os.path.join(save_dir, filename)
+    # 与包模式一致: 落点目录不存在时先建, 否则 xlwt.save 抛 FileNotFoundError
+    # 导致内置脚本「解析成功但安装未完成」。
+    if save_dir and not os.path.isdir(save_dir):
+        os.makedirs(save_dir, exist_ok=True)
 
     wb = xlwt.Workbook()
     ws = wb.add_sheet("Sheet1")

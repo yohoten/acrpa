@@ -1,0 +1,7 @@
+=== save_config -> _refresh_theme 触发收窄实测 ===
+[OK] 已包装 ACRPA._refresh_theme 计数 (真实重绘仍执行)
+[OK] T1 无关保存(拖动 Mini Bar) refresh 增量: got 0 / expected 0
+[OK] T2 dark_mode 真变化 refresh 增量: got 1 / expected 1
+[OK] T3 同值再保存 refresh 增量: got 0 / expected 0
+[OK] T4 toggle_dark() refresh 增量: got 1 / expected 1
+=== 结果: OK ===

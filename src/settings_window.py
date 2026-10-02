@@ -437,10 +437,13 @@ def open_settings_window():
     _nav_active_key = None
     _win = tkinter.Toplevel(root)
     _win.title("设置 — ACRPA")
-    # 记忆上次位置/尺寸 (config.json win_geometry, 空=首次使用居中)
+    # 记忆上次位置/尺寸 (config.json win_geometry): 非空且经虚拟屏越界校验
+    # (utils.geometry_in_screen) 通过才应用; 空或越界一律回退居中 680x680,
+    # 避免显示器拔插/缩放变化后设置窗口落到屏幕外无法操作。
     try:
-        if getattr(state, "WIN_GEOMETRY", ""):
-            _win.geometry(state.WIN_GEOMETRY)
+        saved_geo = getattr(state, "WIN_GEOMETRY", "") or ""
+        if saved_geo and utils.geometry_in_screen(_win, saved_geo):
+            _win.geometry(saved_geo)
         else:
             rx, ry = root.winfo_x(), root.winfo_y()
             rw = max(root.winfo_width(), 680); rh = max(root.winfo_height(), 680)
@@ -1427,6 +1430,27 @@ def open_settings_window():
     ttk.Checkbutton(auto_start_frame, text="关闭时最小化到系统托盘", variable=tray_var,
         command=_toggle_tray).pack(side="left")
 
+    # 紧凑模式: 勾选回到 500x625 旧布局 (重启生效), 照顾小屏/便携习惯用户
+    compact_frame = tkinter.Frame(sys_content, bg=C["bgc"])
+    compact_frame.grid(row=4, column=0, sticky="ew", padx=8, pady=(2, 0))
+    compact_var = tkinter.BooleanVar(value=getattr(state, "COMPACT_MODE", False))
+    ttk.Checkbutton(compact_frame, text="紧凑模式（小屏/便携，重启生效）",
+        variable=compact_var).pack(side="left")
+    tkinter.Label(compact_frame, text="回到 500×625 旧布局", font=FONT_TINY,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(6, 0))
+
+    # 帮助窗口模态开关 (阶段1-2): 默认非模态(可边看边操作); 勾选恢复 grab_set 独占输入
+    help_modal_var = tkinter.BooleanVar(value=getattr(state, "HELP_MODAL", False))
+    def _toggle_help_modal():
+        state.HELP_MODAL = help_modal_var.get()
+        state.save_config()
+        _flash_saved("system")
+    ttk.Checkbutton(compact_frame, text="帮助窗口使用模态",
+        variable=help_modal_var, command=_toggle_help_modal).pack(
+            side="left", padx=(16, 0))
+    tkinter.Label(compact_frame, text="默认非模态", font=FONT_TINY,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(6, 0))
+
     # Mini Bar 折叠模式
     mini_bar_frame = tkinter.Frame(sys_content, bg=C["bgc"])
     mini_bar_frame.grid(row=1, column=0, sticky="ew", padx=8, pady=2)
@@ -1512,7 +1536,12 @@ def open_settings_window():
     def _apply_system_settings():
         state.AUTO_START = auto_start_var.get()
         state.MINIMIZE_TO_TRAY = tray_var.get()
+        state.COMPACT_MODE = compact_var.get()
         state.MINI_BAR_ENABLED = mini_bar_var.get()
+        try:
+            state.HELP_MODAL = help_modal_var.get()
+        except Exception:
+            pass
         try:
             w = int(mb_width_var.get())
         except (TypeError, ValueError):
@@ -1650,7 +1679,7 @@ def open_settings_window():
         row=5, column=0, sticky="w", padx=8, pady=(0, 6))
 
     # 系统卡: 任一控件改动 → 600ms 防抖后走 _apply_system_settings 即时落盘
-    _track_card_vars("system", (auto_start_var, tray_var, mini_bar_var,
+    _track_card_vars("system", (auto_start_var, tray_var, compact_var, mini_bar_var,
                                 mb_width_var, mb_height_var, mb_opacity_var,
                                 ui_scale_var))
 

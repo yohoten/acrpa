@@ -1,0 +1,30 @@
+=== ACRPA 应用启动存活验证 (run.py) ===
+解释器: d:\CodingEmber\ACRPA\.venv\Scripts\python.exe
+解释器存在: True
+工作目录(cwd): d:\CodingEmber\ACRPA
+子进程日志: d:\CodingEmber\ACRPA\tools\_smoke_result_phase2\_smoke_launch_app_child.log
+----------------------------------------------------------------
+已启动 run.py, PID=33716
+[t=2.0s] alive=True
+[t=4.1s] alive=True
+[t=6.1s] alive=True
+[t=8.2s] alive=True
+[t=10.2s] 进程仍存活 (>= 10s 阈值)
+[t=10.2s] alive=True
+[t=12.2s] alive=True
+[t=14.3s] alive=True
+[t=15.3s] 达到最长轮询 15s，进程仍存活
+----------------------------------------------------------------
+[清理] 强制终止进程树 PID=33716 (taskkill /F /T)
+taskkill rc=0 out= err=
+[清理] 终止后 poll()=1
+----------------------------------------------------------------
+判定: 启动成功（GUI 已建窗）
+存活至阈值(>=10s): True
+子进程输出含 Traceback: False
+----------------------------------------------------------------
+子进程 stdout/stderr 全文:
+<<<CHILD_OUT_BEGIN>>>
+(空)
+<<<CHILD_OUT_END>>>
+=== 结果: OK (rc=0) ===

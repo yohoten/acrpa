@@ -1,0 +1,111 @@
+[OK] import browser_backend 未触发 playwright 导入（懒加载契约）
+────────────────────────────────────────────────────────────
+── codegen_to_dsl 基础映射 ──
+[OK] goto → 打开网页 -> [{'cmd': '打开网页', 'args': ['https://a.com']}]
+[OK] click → 浏览器点击 -> [{'cmd': '浏览器点击', 'args': ['#login-btn']}]
+[OK] locator().click() → 浏览器点击 -> [{'cmd': '浏览器点击', 'args': ['.item']}]
+[OK] fill → 浏览器输入 -> [{'cmd': '浏览器输入', 'args': ['input[name=q]', 'hello']}]
+[OK] press → 浏览器点击 + 按键（拆两行） -> [{'cmd': '浏览器点击', 'args': ['#search']}, {'cmd': '按键', 'args': ['Enter']}]
+[OK] get_by_role → role: DSL -> [{'cmd': '浏览器点击', 'args': ['role:button[name=登录]']}]
+[OK] get_by_text → text: DSL -> [{'cmd': '浏览器点击', 'args': ['text:提交']}]
+[OK] evaluate → 浏览器执行JS -> [{'cmd': '浏览器执行JS', 'args': ['() => document.title', '', '否']}]
+[OK] wait_for_timeout(500) → 等待 0.5 -> [{'cmd': '等待', 'args': ['0.5']}]
+[OK] wait_for_timeout(1000) → 等待 1 -> [{'cmd': '等待', 'args': ['1']}]
+[OK] keyboard.press → 按键 -> [{'cmd': '按键', 'args': ['Enter']}]
+[OK] expect_download → 等待下载 -> [{'cmd': '等待下载', 'args': ['', '', '', '']}]
+[OK] 链式 first() → DSL 步骤 -> [{'cmd': '浏览器点击', 'args': ['#list >> tag:li >> first:']}]
+── frame_locator（两行） ──
+[OK] frame_locator 内联 → 切换框架 + 子定位 -> [{'cmd': '切换框架', 'args': ['#pay']}, {'cmd': '浏览器点击', 'args': ['role:button[name=提交]']}]
+── screenshot / add_cookies ──
+[OK] screenshot(path=) → 浏览器截图 -> [{'cmd': '浏览器截图', 'args': ['shot', 'page', 'D:/out/shot.png']}]
+[OK] add_cookies 产出 1 行 -> 1
+[OK] add_cookies → 浏览器设置Cookie -> '浏览器设置Cookie'
+[OK] add_cookies args[0] 为合法 JSON 列表 -> 'sid'
+────────────────────────────────────────────────────────────
+── warnings / 样板 / 边界 ──
+[OK] 未知调用不产出 row -> []
+[OK] 未知调用进入 warnings -> 1
+[OK] warning 保留原始语句: page.unknown_thing("x")
+[OK] 样板代码不产出 row -> []
+[OK] 样板代码不产生 warning -> []
+[OK] 空输入 → ([], []) -> ([], [])
+[OK] None 输入 → ([], []) -> ([], [])
+[OK] 非文本输入 → 记为 warning -> ([], ['123'])
+[OK] 畸形输入不产出 row -> []
+[OK] 畸形输入进入 warnings -> 1
+── strict 模式 ──
+[OK] strict 抛出 CONVERT_ERROR -> 'CONVERT_ERROR'
+[OK] strict 干净输入正常返回 -> ([{'cmd': '打开网页', 'args': ['https://a.com']}], [])
+────────────────────────────────────────────────────────────
+── recorder.convert_and_append ──
+[OK] convert_and_append 追加 2 条 -> 2
+[OK] recorded_actions 长度 2 -> 2
+[OK] 第 1 条命令 = 打开网页 -> '打开网页'
+[OK] 第 1 条参数 = URL -> 'https://a.com'
+[OK] 第 2 条命令 = 浏览器点击 -> '浏览器点击'
+[OK] 无未识别语句 -> []
+[OK] 未知调用追加 0 条 -> 0
+[OK] 未知调用产生 1 条 warning -> 1
+[OK] record_browser_codegen 追加 1 条 -> 1
+────────────────────────────────────────────────────────────
+── AST 结构断言 ──
+[OK] 模块级不存在 import playwright（AST）
+[OK] 存在函数定义 codegen_to_dsl
+[OK] 存在函数定义 _codegen_statement
+[OK] 存在函数定义 _codegen_decompose
+[OK] 存在函数定义 _codegen_build_selector
+[OK] 存在函数定义 parse_cdp_endpoint
+[OK] 存在函数定义 plan_session_switch
+[OK] 存在函数定义 parse_resource_types
+[OK] 存在函数定义 dedup_key
+[OK] 存在函数定义 match_response
+[OK] 存在函数定义 match_url
+[OK] 存在函数定义 export_packets
+[OK] 存在函数定义 _start_listen
+[OK] 存在函数定义 _stop_listen
+[OK] 存在函数定义 _collect_packets
+[OK] 存在函数定义 _browser_connect_cdp
+[OK] 存在函数定义 _browser_start_listen
+[OK] 存在函数定义 _browser_wait_packets
+[OK] 存在函数定义 _browser_stop_listen
+[OK] 存在函数定义 _browser_record
+────────────────────────────────────────────────────────────
+── commands 注册 / handler 绑定 / state 新键 ──
+[OK] 注册表包含 P2 新命令 '连接已开浏览器'
+[OK] 注册表包含 P2 新命令 '接管浏览器'
+[OK] 注册表包含 P2 新命令 '开始监听'
+[OK] 注册表包含 P2 新命令 '等待数据包'
+[OK] 注册表包含 P2 新命令 '停止监听'
+[OK] 注册表包含 P2 新命令 '启动浏览器录制'
+[OK] 既有命令仍存在 '打开网页'
+[OK] 既有命令仍存在 '浏览器点击'
+[OK] 既有命令仍存在 '浏览器输入'
+[OK] 既有命令仍存在 '等待元素'
+[OK] 既有命令仍存在 '浏览器截图'
+[OK] 既有命令仍存在 '浏览器执行JS'
+[OK] 既有命令仍存在 '执行JS'
+[OK] 既有命令仍存在 '浏览器读取Cookie'
+[OK] 既有命令仍存在 '浏览器设置Cookie'
+[OK] 既有命令仍存在 '切换框架'
+[OK] 既有命令仍存在 '返回主框架'
+[OK] 既有命令仍存在 '新建标签页'
+[OK] 既有命令仍存在 '切换标签页'
+[OK] 既有命令仍存在 '关闭标签页'
+[OK] 既有命令仍存在 '等待下载'
+[OK] 既有命令仍存在 '浏览器上传'
+[OK] get_handler('连接已开浏览器') 非空
+[OK] get_handler('接管浏览器') 非空
+[OK] get_handler('开始监听') 非空
+[OK] get_handler('等待数据包') 非空
+[OK] get_handler('停止监听') 非空
+[OK] get_handler('启动浏览器录制') 非空
+[OK] 连接已开浏览器 与 接管浏览器 绑定同一 handler
+[OK] state.BROWSER_CDP_ENDPOINT 默认值 -> ''
+[OK] state.BROWSER_LISTEN_MAX 默认值 -> 200
+[OK] state.BROWSER_LISTEN_DEFAULT_TIMEOUT 默认值 -> 15.0
+[OK] state.BROWSER_USER_AGENT 默认值 -> ''
+────────────────────────────────────────────────────────────
+[SKIP] 真实 playwright codegen CLI 录制（需 playwright CLI + 图形界面）—— 未在本环境执行
+[SKIP] 启动浏览器录制 成功路径（需 playwright CLI）—— 未在本环境执行
+────────────────────────────────────────────────────────────
+结果: PASS (0 失败, 0 项警告)

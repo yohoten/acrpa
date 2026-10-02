@@ -1,0 +1,42 @@
+== E1-M3 execute() 结果语义 ==
+  [PASS] E1 未知命令返回 ok=False
+  [PASS] E1 未知命令 code=unknown_command
+  [PASS] E1 返回值具备 bool 兼容(falsy)
+  [PASS] E2 失败命令 ok=False
+  [PASS] E2 code=command_failed
+  [PASS] E2 attempts=retry+1=3
+  [PASS] E2 handler 实际被调用 3 次
+  [PASS] E3 成功命令 ok=True
+  [PASS] E3 attempts=1
+== E4-E5 找图超时语义 ==
+  [PASS] E4 找图超时抛 ImageNotFound
+  [PASS] E5 找图超时被重试并最终失败
+== E6-E7 stop_on_error 行为 ==
+  [PASS] E6 失败后后续命令未执行
+  [PASS] E6 _script_failed 置位
+  [PASS] E7 失败后仍继续执行
+  [PASS] E7 _script_failed 仍置位
+== E8 调试器耗时记录 ==
+  [PASS] E8 成功行 success=True
+  [PASS] E8 失败行 success=False
+== E9-E11 工作流错误传播 ==
+  [PASS] E9 缺失脚本步骤标记 error
+  [PASS] E9 stop_on_error=True 时后续步骤未执行
+  [PASS] E10 未知命令节点标记 error
+  [PASS] E10 后续步骤未执行
+  [PASS] E11 失败后继续执行后续步骤
+  [PASS] E11 失败步骤仍标记 error
+== E12-E14 循环体内失败传播 ==
+  [PASS] E12 循环体内失败仅执行 1 次(不再重跑 5 次)
+  [PASS] E12 失败后循环外命令未执行
+  [PASS] E13 循环内 IF 块失败仅执行 1 次
+  [PASS] E13 失败后未继续执行
+  [PASS] E14 stop_on_error=False 时循环跑满 3 次
+  [PASS] E14 循环后命令仍执行
+  [PASS] E15 无 handler 的块标记不判失败
+  [PASS] E15 block marker code=no_handler
+  [PASS] E15 '如果' 标记同样不判失败
+
+==================================================
+失败语义回归: 通过 32 项, 失败 0 项
+==================================================

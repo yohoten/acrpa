@@ -448,6 +448,15 @@ class ExecutionEngine:
                         "time": time.time(),
                     }
 
+                # 执行统计 (供「执行控制」Tab 仪表盘展示成功/失败计数)
+                try:
+                    if result.ok:
+                        state.exec_state["ok_cmds"] = state.exec_state.get("ok_cmds", 0) + 1
+                    else:
+                        state.exec_state["fail_cmds"] = state.exec_state.get("fail_cmds", 0) + 1
+                except Exception:
+                    pass
+
                 if not result.ok:
                     self._script_failed = True
                     if getattr(state, 'STOP_ON_ERROR', True):

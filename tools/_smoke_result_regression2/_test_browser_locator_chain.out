@@ -1,0 +1,115 @@
+[OK] import browser_backend 未触发 playwright 导入（懒加载契约）
+────────────────────────────────────────────────────────────
+── parse_locator 链式 `>>` ──
+[OK] #a >> div 基串 engine -> 'playwright'
+[OK] #a >> div 基串 raw -> '#a'
+[OK] #a >> div → chain=[child(div)] -> [{'op': 'child', 'plan': {'engine': 'playwright', 'raw': 'div'}}]
+[OK] tag:li >> nth:2 基串 raw -> 'li'
+[OK] tag:li >> nth:2 → nth:2 -> [{'op': 'nth', 'index': 2}]
+[OK] index:N 等价 nth:N -> [{'op': 'nth', 'index': 3}]
+[OK] #child >> parent: → parent -> [{'op': 'parent'}]
+[OK] #a >> next: → next -> [{'op': 'next'}]
+[OK] #a >> prev: → prev -> [{'op': 'prev'}]
+[OK] #form >> child:input → child(input) -> [{'op': 'child', 'plan': {'engine': 'playwright', 'raw': 'input'}}]
+[OK] tag:li >> filter:完成 -> [{'op': 'filter', 'text': '完成'}]
+[OK] tag:div >> has:tag:a → has(a) -> [{'op': 'has', 'plan': {'engine': 'playwright', 'raw': 'a'}}]
+[OK] 非算子步骤 → 子代文本定位（get_by_text） -> [{'op': 'child', 'plan': {'engine': 'get_by_text', 'text': '某段文字', 'exact': False}}]
+────────────────────────────────────────────────────────────
+── 索引糖 / 多级链 ──
+[OK] first: → nth:0 -> [{'op': 'nth', 'index': 0}]
+[OK] last: → nth:-1 -> [{'op': 'nth', 'index': -1}]
+[OK] #table >> tag:tr >> nth:1 基串 raw -> '#table'
+[OK] #table >> tag:tr >> nth:1 两级 chain -> [{'op': 'child', 'plan': {'engine': 'playwright', 'raw': 'tr'}}, {'op': 'nth', 'index': 1}]
+[OK] 文档示例 #table >> tag:tr >> first: -> [{'op': 'child', 'plan': {'engine': 'playwright', 'raw': 'tr'}}, {'op': 'nth', 'index': 0}]
+────────────────────────────────────────────────────────────
+── `@@` + `>>` 组合 ──
+[OK] A@@B>>C 基串 engine -> 'playwright'
+[OK] A@@B>>C 基串 raw（@@ 已先求值） -> 'button'
+[OK] A@@B>>C 保留 @@ 的 has_text -> '提交'
+[OK] A@@B>>C chain=[nth:0] -> [{'op': 'nth', 'index': 0}]
+────────────────────────────────────────────────────────────
+── 链式非法边界 → INVALID_LOCATOR ──
+[OK] 独立步骤 'nth:2' → error -> 'error'
+[OK] 独立步骤 'nth:2' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 独立步骤 'index:1' → error -> 'error'
+[OK] 独立步骤 'index:1' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 独立步骤 'first:' → error -> 'error'
+[OK] 独立步骤 'first:' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 独立步骤 'last:' → error -> 'error'
+[OK] 独立步骤 'last:' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 独立步骤 'parent:' → error -> 'error'
+[OK] 独立步骤 'parent:' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 独立步骤 'next:' → error -> 'error'
+[OK] 独立步骤 'next:' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 独立步骤 'prev:' → error -> 'error'
+[OK] 独立步骤 'prev:' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 独立步骤 'child:' → error -> 'error'
+[OK] 独立步骤 'child:' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 独立步骤 'child:input' → error -> 'error'
+[OK] 独立步骤 'child:input' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 独立步骤 'filter:x' → error -> 'error'
+[OK] 独立步骤 'filter:x' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 独立步骤 'has:div' → error -> 'error'
+[OK] 独立步骤 'has:div' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 残缺链式 '#a >> ' → error -> 'error'
+[OK] 残缺链式 '#a >> ' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 残缺链式 '#a >>' → error -> 'error'
+[OK] 残缺链式 '#a >>' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 残缺链式 ' >> div' → error -> 'error'
+[OK] 残缺链式 ' >> div' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 残缺链式 '>>div' → error -> 'error'
+[OK] 残缺链式 '>>div' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 非法步骤 '#a >> nth:x' → error -> 'error'
+[OK] 非法步骤 '#a >> nth:x' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 非法步骤 '#a >> nth:' → error -> 'error'
+[OK] 非法步骤 '#a >> nth:' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 非法步骤 '#a >> nth:1.5' → error -> 'error'
+[OK] 非法步骤 '#a >> nth:1.5' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 非法步骤 '#a >> filter:' → error -> 'error'
+[OK] 非法步骤 '#a >> filter:' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 非法步骤 '#a >> has:' → error -> 'error'
+[OK] 非法步骤 '#a >> has:' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 非法步骤 '#a >> child:' → error -> 'error'
+[OK] 非法步骤 '#a >> child:' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+[OK] 非法步骤 'tag:div >> has:nth:2' → error -> 'error'
+[OK] 非法步骤 'tag:div >> has:nth:2' → INVALID_LOCATOR -> 'INVALID_LOCATOR'
+────────────────────────────────────────────────────────────
+── 单 `>` CSS 直通回归 ──
+[OK] '#a > div' → playwright -> 'playwright'
+[OK] '#a > div' raw 原样直通 -> '#a > div'
+[OK] '#a > div' 无 chain（非链式）
+[OK] 'div > span' → playwright -> 'playwright'
+[OK] 'div > span' raw 原样直通 -> 'div > span'
+[OK] 'div > span' 无 chain（非链式）
+[OK] '#a>div' → playwright -> 'playwright'
+[OK] '#a>div' raw 原样直通 -> '#a>div'
+[OK] '#a>div' 无 chain（非链式）
+[OK] 'ul > li > a' → playwright -> 'playwright'
+[OK] 'ul > li > a' raw 原样直通 -> 'ul > li > a'
+[OK] 'ul > li > a' 无 chain（非链式）
+────────────────────────────────────────────────────────────
+── P0 DSL 回归 ──
+[OK] text: 不变 -> 'get_by_text'
+[OK] text: 文本不变 -> '登录'
+[OK] tag:@attr 不变 -> 'input[type=submit]'
+[OK] @@ 基串不变 -> 'button'
+[OK] @@ has_text 不变 -> '提交'
+[OK] @@ 单独使用无 chain
+[OK] role: 不变 -> 'get_by_role'
+[OK] role: name 不变 -> '登录'
+[OK] 'label:用户名' engine 不变 -> 'get_by_label'
+[OK] 'placeholder:请输入手机号' engine 不变 -> 'get_by_placeholder'
+[OK] 'testid:submit-btn' engine 不变 -> 'get_by_test_id'
+[OK] 空串仍 INVALID_LOCATOR -> 'INVALID_LOCATOR'
+────────────────────────────────────────────────────────────
+── AST 结构断言 ──
+[OK] 模块级不存在 import playwright（AST）
+[OK] 存在函数定义 parse_locator
+[OK] 存在函数定义 build_locator
+[OK] 存在函数定义 _build_base_locator
+[OK] 存在函数定义 _parse_chain
+[OK] 存在函数定义 _parse_step
+[OK] 存在函数定义 _looks_chain_step
+[OK] 存在函数定义 _apply_chain_step
+────────────────────────────────────────────────────────────
+结果: PASS (0 失败, 0 项警告)

@@ -7,7 +7,12 @@
   import state 仅用于读取日志保留天数，且 try/except 兜底）。
 * 三级权限：sandbox（默认，最严）/ trusted（受信）/ full（独立子进程，默认禁用）。
 * 执行前 AST 预检（precheck）+ 执行期超时：
-    - sandbox / trusted：sys.settrace 行级时间检查（finally 中必定清理）；
+    - sandbox / trusted：sys.settrace 行级时间检查（finally 中必定清理）
+      + 看门狗线程（墙钟计时，超时经 ctypes.PyThreadState_SetAsyncExc 向
+      执行线程注入 TimeoutError）双层防护，并临时屏蔽 sys.settrace /
+      sys.setprofile，使被测代码无法用 sys.settrace(None) 关闭超时检查
+      （BUG-04）。残留限制：C 层阻塞（如 time.sleep）无法被按时中断，
+      仅在其返回后抛出超时异常（详见 tools/_fix_report_B.md）。
     - full：subprocess timeout + kill（不使用 multiprocessing）。
 * 审计：每次执行写一行 JSON 到 <程序目录>/logs/acrpa_py_YYYYMMDD.log，
   只记录 code_sha1 / 长度 / 首行预览，绝不写代码全文。
@@ -26,6 +31,7 @@
 import ast
 import base64
 import builtins
+import ctypes
 import glob
 import hashlib
 import json
@@ -307,8 +313,92 @@ def _make_print(log):
     return _print
 
 
+# ── BUG-04：超时加固（追踪器保护 + 看门狗线程异步异常注入）──
+_WATCHDOG_GRACE = 0.3      # 看门狗在行级追踪器之后额外等待的宽限秒数
+_WATCHDOG_JOIN = 2.0       # 注入后等待执行线程自然退出的上限秒数
+
+
+def _block_trace_call(tracefunc=None):
+    """执行期间替代 sys.settrace / sys.setprofile 的占位实现。
+
+    BUG-04：被测代码可调用 sys.settrace(None) 关闭逐行时间检查，从而绕过
+    超时。此处对执行窗口内的一切外部调用一律忽略（既不清理也不替换），
+    使内层 tracer 始终生效；窗口结束后在 finally 中恢复原函数。
+    """
+    return None
+
+
+def _async_raise(ident, exc_type):
+    """向 ident 线程异步注入 exc_type（Windows 下唯一可行的强制中断手段）。
+
+    Python 无跨平台取消线程 API；ctypes 调用 PyThreadState_SetAsyncExc 可在
+    目标线程下一字节码边界抛出异常（纯 Python 死循环即刻生效）。返回影响
+    的线程数，0 表示失败（已吞异常，绝不抛出）。
+    """
+    try:
+        res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
+            ctypes.c_ulong(ident), ctypes.py_object(exc_type))
+    except Exception:
+        return 0
+    if res > 1:
+        # 目标不唯一：立即回滚，避免误伤其它线程。
+        try:
+            ctypes.pythonapi.PyThreadState_SetAsyncExc(
+                ctypes.c_ulong(ident), None)
+        except Exception:
+            pass
+    return res
+
+
+def _start_watchdog(deadline, ident, state):
+    """启动守护线程，按墙钟时间监测执行线程耗时；超时则注入 TimeoutError。
+
+    与行级追踪器（sys.settrace）互补：后者按「每 _TRACE_STEP 个 line 事件」
+    检查时间，可被 sys.settrace(None) 关闭；本看门狗基于墙钟，不受其影响，
+    对纯 Python 死循环可强制中断。返回 stop 事件用于协同收尾并避免线程泄漏。
+    残留限制：C 层阻塞（如 time.sleep）期间注入的异常无法即时生效，仅在其
+    返回后于下一字节码边界抛出。
+    """
+    stop = threading.Event()
+
+    def _watch():
+        # 先等到 deadline，再给行级追踪器留一小段优先响应窗口，避免二者
+        # 同时触发造成重复抛异常。
+        delay = max(0.0, deadline - time.time()) + _WATCHDOG_GRACE
+        if stop.wait(delay):
+            return
+        if state.get("exec_done") or stop.is_set():
+            return
+        # 追踪器可能已被绕过（BUG-04）：向执行线程注入超时异常。
+        _async_raise(ident, TimeoutError)
+        # 等待执行线程自然退出（纯 Python 循环会立即抛出）；C 层阻塞期间
+        # 该 wait 超时后线程自行退出（daemon），不产生常驻泄漏。
+        stop.wait(_WATCHDOG_JOIN)
+
+    th = threading.Thread(target=_watch, name="acrpa-py-watchdog", daemon=True)
+    th.start()
+    return stop
+
+
+def _stop_watchdog(stop):
+    """通知看门狗线程停止（幂等、失败静默）。"""
+    try:
+        if stop is not None:
+            stop.set()
+    except Exception:
+        pass
+
+
 def _exec_inprocess(code, perm, timeout, api, result, log=None):
-    """sandbox / trusted 在当前进程内执行（单一命名空间）。"""
+    """sandbox / trusted 在当前进程内执行（单一命名空间）。
+
+    BUG-04 加固：保留 sys.settrace 行级检查作为兜底，同时叠加
+    (1) 追踪器保护——执行期间屏蔽 sys.settrace / sys.setprofile，使被测代码
+        无法用 sys.settrace(None) 关闭超时检查；
+    (2) 看门狗线程——按墙钟时间在 deadline 后经 PyThreadState_SetAsyncExc
+        注入 TimeoutError，覆盖纯 Python 死循环。
+    对外语义不变：超时仍抛 TimeoutError 并置 timed_out=True。
+    """
     if perm == PERM_TRUSTED:
         ns = {"__builtins__": _real_builtins(), "acrpa": api, "result": None}
     else:
@@ -319,19 +409,35 @@ def _exec_inprocess(code, perm, timeout, api, result, log=None):
     compiled = _compile_units(code)
     deadline = time.time() + timeout
     tracer = _make_tracer(deadline)
-    sys.settrace(tracer)
+    ident = threading.get_ident()
+    state = {"exec_done": False}
+
+    # BUG-04：捕获真实 settrace/setprofile，执行窗口内用占位实现接管其对外
+    # 可见属性，屏蔽被测代码关闭追踪的企图；窗口结束后必定恢复。
+    orig_settrace = sys.settrace
+    orig_setprofile = sys.setprofile
+    sys.settrace = _block_trace_call
+    sys.setprofile = _block_trace_call
+
+    orig_settrace(tracer)
+    watchdog_stop = _start_watchdog(deadline, ident, state)
     try:
         exec(compiled, ns)
     except TimeoutError as e:
         result["timed_out"] = True
-        result["error"] = "TimeoutError: %s" % e
+        result["error"] = "TimeoutError: %s" % (str(e) or "code timeout")
         return
     except Exception as e:
         result["error"] = "%s: %s" % (type(e).__name__, e)
         return
     finally:
-        # 关键：无论如何都要清除 trace，否则会拖慢整个进程后续执行。
-        sys.settrace(None)
+        # 关键：先置 exec_done 并停看门狗，再清除 trace 并恢复原函数，
+        # 避免看门狗误注入到窗口之外，也避免追踪拖慢进程后续执行。
+        state["exec_done"] = True
+        _stop_watchdog(watchdog_stop)
+        orig_settrace(None)
+        sys.settrace = orig_settrace
+        sys.setprofile = orig_setprofile
 
     result["ok"] = True
     result["raw_result"] = ns.get("result")

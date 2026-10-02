@@ -1,0 +1,71 @@
+[OK] import browser_backend 未触发 playwright 导入（懒加载契约）
+────────────────────────────────────────────────────────────
+── match_download_name ──
+[OK] 包含匹配命中 -> True
+[OK] 包含匹配未命中 -> False
+[OK] 空 pattern 恒真 -> True
+[OK] None pattern 恒真 -> True
+[OK] 空文件名 + 空 pattern 恒真 -> True
+[OK] /re/ 正则命中 -> True
+[OK] /re/ 正则未命中 -> False
+[OK] 非法正则 → False（不抛异常） -> False
+[OK] None 文件名 + 非空 pattern → False -> False
+────────────────────────────────────────────────────────────
+── _download_dir / _download_target_path ──
+[OK] 参数优先 -> 'C:\\Users\\yohoten\\AppData\\Local\\Temp\\acrpa_dl_v1sdii8m'
+[OK] 回退 browser_download_dir -> 'C:\\Users\\yohoten\\AppData\\Local\\Temp\\acrpa_dl_v1sdii8m'
+[OK] 默认目录以 downloads 结尾: d:\CodingEmber\ACRPA\downloads
+[OK] overwrite=True 原样路径 -> 'C:\\Users\\yohoten\\AppData\\Local\\Temp\\acrpa_dl_v1sdii8m\\report.xlsx'
+[OK] overwrite=False 避让为 _1 -> 'C:\\Users\\yohoten\\AppData\\Local\\Temp\\acrpa_dl_v1sdii8m\\report_1.xlsx'
+[OK] overwrite=True 仍原样 -> 'C:\\Users\\yohoten\\AppData\\Local\\Temp\\acrpa_dl_v1sdii8m\\report.xlsx'
+────────────────────────────────────────────────────────────
+── session 下载队列 ──
+[OK] _on_download 去重（同对象仅入队 1 次） -> 2
+[OK] _pop_matching_download 命中 readme -> True
+[OK] 命中项已被取出 -> 1
+[OK] _wait_download_state 命中即成功 -> True
+[OK] _wait_download_state 不消费队列（保留给落盘） -> 1
+[OK] _wait_download_state 未命中 → 失败 -> False
+[OK] 未命中 → TIMEOUT -> 'TIMEOUT'
+────────────────────────────────────────────────────────────
+── 等待下载 facade（模拟队列，无浏览器） ──
+[OK] 等待下载 成功 return None
+[OK] 绝对路径写回变量 -> 'C:\\Users\\yohoten\\AppData\\Local\\Temp\\acrpa_dl_v1sdii8m\\报表B.csv'
+[OK] 下载文件已落盘
+[OK] 成功清空错误码 -> ''
+[OK] 等待下载 超时 return False
+[OK] 超时 → DOWNLOAD_TIMEOUT -> 'DOWNLOAD_TIMEOUT'
+[OK] 浏览器上传 单文件 return None
+[OK] set_input_files 收到单文件路径 -> 'C:\\Users\\yohoten\\AppData\\Local\\Temp\\acrpa_dl_v1sdii8m\\a.pdf'
+[OK] 浏览器上传 缺文件 return False
+[OK] 缺文件 → INVALID_ARGUMENT -> 'INVALID_ARGUMENT'
+[OK] 浏览器上传 文件不存在 return False
+[OK] 文件不存在 → INVALID_ARGUMENT -> 'INVALID_ARGUMENT'
+[OK] 浏览器上传 缺定位 return False
+[OK] 缺定位 → INVALID_ARGUMENT -> 'INVALID_ARGUMENT'
+[SKIP] 真实浏览器下载落盘（需 playwright + Chromium）—— 未在本环境执行
+[SKIP] 真实浏览器上传设值（需 playwright + Chromium）—— 未在本环境执行
+[SKIP] 等待元素 状态=download 真实命中（需 playwright）—— 未在本环境执行
+────────────────────────────────────────────────────────────
+── AST 结构断言 ──
+[OK] 模块级不存在 import playwright（AST）
+[OK] 存在函数定义 match_download_name
+[OK] 存在函数定义 _download_dir
+[OK] 存在函数定义 _download_target_path
+[OK] 存在函数定义 _on_download
+[OK] 存在函数定义 _pop_matching_download
+[OK] 存在函数定义 _wait_download_state
+[OK] 存在函数定义 _browser_wait_download
+[OK] 存在函数定义 _browser_upload
+────────────────────────────────────────────────────────────
+── commands 注册 / handler 绑定 / state 新键 ──
+[OK] 注册表包含新命令 '等待下载'
+[OK] 注册表包含新命令 '浏览器上传'
+[OK] get_handler('等待下载') 非空
+[OK] get_handler('浏览器上传') 非空
+[OK] state.BROWSER_DOWNLOAD_DIR 默认值 -> ''
+[OK] state.BROWSER_DOWNLOAD_TIMEOUT 默认值 -> 15.0
+[OK] state.BROWSER_DOWNLOAD_OVERWRITE 默认值 -> True
+[OK] state.BROWSER_SCREENSHOT_DIR 默认值 -> ''
+────────────────────────────────────────────────────────────
+结果: PASS (0 失败, 0 项警告)

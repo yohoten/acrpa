@@ -1,0 +1,39 @@
+[OK] import py_sandbox OK
+[OK] import engine/state OK (dynamic 代码-command tests enabled)
+[OK] a1 state.py has legacy_code_command key (default False)
+[OK] a2 engine.py uses os.path.commonpath
+[OK] a3 weak 'if not abs_path.startswith(...)' check removed
+[OK] a4 engine.py has _exec_legacy helper
+[OK] a5 engine.py 代码 passes audit="file"
+[OK] a6 engine._python run() call now injects log=log1
+[OK] a7 _exec new signature present
+[OK] a8 no bare 'raise' statement left in _exec (return False semantics)
+[OK] a9 commands.py 代码 description mentions AST precheck
+[OK] b1 normal .txt executed -> returns None (got None)
+[OK] b2 success log carries result=3
+[OK] c1 print .txt ok -> returns None
+[OK] c2 print forwarded via log=log1 callback
+[OK] d1 audit record source=="file" (got 'file')
+[OK] e1 import .txt rejected -> returns False (got False)
+[OK] e2 stable phrase 'forbidden import'
+[OK] e3 dunder .txt rejected -> returns False (got False)
+[OK] e4 stable phrase 'forbidden attribute'
+[OK] e5 §1.2 subclasses escape rejected -> False (got False)
+[OK] e6 §1.2 stable phrase 'forbidden attribute'
+[OK] f1 runtime error does NOT raise (raised=None)
+[OK] f2 runtime error returns False (got False)
+[OK] g1 '../evil' traversal rejected -> False (got False)
+[OK] g2 traversal logs 安全错误
+[OK] h1 old startswith() would ALLOW sibling-prefix path (repro of weak check)
+[OK] h2 sibling-prefix path rejected by commonpath (got False)
+[OK] h3 sibling-prefix logs 安全错误
+[OK] i1 legacy=True executes sandbox-rejected dunder .txt -> None (got None)
+[OK] i2 legacy path taken (log '(legacy)')
+[OK] i3 legacy=False back to sandbox -> False (got False)
+[OK] j1 full (disabled) rejected -> False (got False)
+[OK] j2 stable phrase 'full disabled'
+[OK] k1 missing file -> False (got False)
+[OK] k2 missing-file friendly message kept
+[OK] k3 empty name -> False (got False)
+
+SUMMARY: 0 FAIL, 0 WARN

@@ -1,0 +1,22 @@
+==================================================================
+NetLink Phase 4-3 TLS acceptance (stdlib ssl + TOFU pinning)
+==================================================================
+[..] cryptography 分支不可用: No module named 'cryptography'
+[..] 证书获取分支: 不可用（TLS 握手断言将记 WARN）
+[OK]   1a. tls.available() 为真
+[OK]   1b. server_context('','') == (None,'cert missing')
+[OK]   1c. 非法路径返回非空原因
+[OK]   3. client_context() 返回非 None
+[OK]   2a. TLS 启用但无证书 → start() 返回 False
+[OK]   2b. 总线收到 TOPIC_STATUS level=error
+[OK]   2c. _started 保持 False
+[OK]   2d. 关闭 TLS 后 start() 成功
+[OK]   7. pin_add 同一指纹两次 → 仍 1 条
+[WARN] 无可用证书（cryptography/openssl 均不可用）→ TLS 真实握手/配对/指令/指纹拒绝/审计断言记 WARN，不假通过
+[OK]   8a. 明文双节点 start 成功
+[OK]   8b. 明文 B→A 连接建立且 alive（3.05s）
+[OK]   8c. 明文（免认证）自动 SUBSCRIBE 后收到 STATE（0.00s）
+[OK]   10. 收尾：nl-* 线程 ≤5s 收敛为 0
+==================================================================
+耗时 3.23s (budget 60s)
+PASS (all assertions OK; warns=1)

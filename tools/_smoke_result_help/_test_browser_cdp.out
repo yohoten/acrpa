@@ -1,0 +1,46 @@
+[OK] import browser_backend 未触发 playwright 导入（懒加载契约）
+────────────────────────────────────────────────────────────
+── parse_cdp_endpoint ──
+[OK] 完整 http URL 原样 -> 'http://127.0.0.1:9222'
+[OK] 缺 scheme → 补 http:// -> 'http://127.0.0.1:9222'
+[OK] 去尾斜杠 -> 'http://127.0.0.1:9222'
+[OK] 参数空 → 回退默认 -> 'http://localhost:9333'
+[OK] 两者皆空 → 空串 -> ''
+[OK] 去空白（保留 scheme） -> 'HTTP://x:1'
+[OK] ws scheme 保留 -> 'ws://127.0.0.1:9222'
+────────────────────────────────────────────────────────────
+── plan_session_switch ──
+[OK] 无会话 → connect -> 'connect'
+[OK] 有会话+关闭旧 → reconnect -> 'reconnect'
+[OK] 有会话+不关旧 → reuse -> 'reuse'
+[OK] 已是 cdp → reuse -> 'reuse'
+[OK] 已是 cdp+不关旧 → reuse -> 'reuse'
+[OK] cdp 无会话 → connect -> 'connect'
+────────────────────────────────────────────────────────────
+── _connect_cdp / 失败短语 ──
+[OK] 已是 cdp 会话 → (True, reuse) -> (True, 'reuse')
+[OK] 空 endpoint → return False
+[OK] 空 endpoint → INVALID_ARGUMENT -> 'INVALID_ARGUMENT'
+[OK] 连接失败 → return False
+[OK] 连接失败 → CDP_CONNECT_FAILED -> 'CDP_CONNECT_FAILED'
+[OK] 无 playwright → return False
+[OK] 无 playwright → PW_NOT_INSTALLED -> 'PW_NOT_INSTALLED'
+────────────────────────────────────────────────────────────
+── AST 结构断言 ──
+[OK] 模块级不存在 import playwright（AST）
+[OK] 存在函数定义 parse_cdp_endpoint
+[OK] 存在函数定义 plan_session_switch
+[OK] 存在函数定义 _connect_cdp
+[OK] 存在函数定义 _browser_connect_cdp
+────────────────────────────────────────────────────────────
+── commands 注册 / handler 绑定 / state 新键 ──
+[OK] 注册表包含新命令 '连接已开浏览器'
+[OK] 注册表包含新命令 '接管浏览器'
+[OK] get_handler('连接已开浏览器') 非空
+[OK] get_handler('接管浏览器') 非空
+[OK] 别名绑定同一 handler
+[OK] state.BROWSER_CDP_ENDPOINT 默认值 -> ''
+────────────────────────────────────────────────────────────
+[SKIP] 真实 CDP 接管（需本机 chrome --remote-debugging-port=9222 且 playwright 已安装）—— 未在本环境执行
+────────────────────────────────────────────────────────────
+结果: PASS (0 失败, 0 项警告)

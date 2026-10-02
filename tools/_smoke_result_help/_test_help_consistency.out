@@ -1,0 +1,29 @@
+=== 帮助系统内容层一致性校验 (_test_help_consistency.py) ===
+[OK]   help_content 未引入 tkinter 依赖
+[OK]   命令双向一致：注册表 68 条 == 帮助渲染 68 条
+[OK]   章节数 13 (>=13)
+[OK]   章节 id 唯一（13 个）
+[OK]   全部章节 body 非空
+[OK]   13 章标题与顺序符合预期
+[OK]   sections.json 的 order 顺序生效
+[OK]   get_section('quickstart') 正常
+[OK]   get_section(不存在) 返回 None
+[OK]   command_groups.json 可解析为对象
+[OK]   分组列表非空且有序
+[OK]   分组数量: 9，标题: ['基础操作', '流程控制', '窗口管理', '变量与数据处理', '代码执行', 'OCR 文字识别', 'AI 增强', '工作流', '浏览器自动化']
+[OK]   command_groups.json 所列命令均在注册表内
+[OK]   块类型顺序符合预期: ['heading', 'para', 'ulist', 'olist', 'table', 'code', 'hr']
+[OK]   标题 level/text 正确
+[OK]   无序列表解析正确
+[OK]   有序列表解析正确
+[OK]   表格行解析正确
+[OK]   代码块解析正确
+[OK]   行内解析出 bold/code/link: ['bold', 'code', 'link', 'text']
+[OK]   链接 target 正确
+[OK]   段落 spans 含 bold/code/link
+[OK]   get_about_info() 字段完整: author=yohoten, version=0.1.28-beta
+[OK]   qr_path 指向存在文件: d:\CodingEmber\ACRPA\res\wechat_qrcode.png
+[OK]   未映射/插件命令落入兜底分组（不丢失）
+----------------------------------------------------------------
+注册表命令数: 68 | FAIL=0 | WARN=0
+结论: PASS

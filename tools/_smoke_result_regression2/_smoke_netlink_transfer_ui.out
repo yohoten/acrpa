@@ -1,0 +1,25 @@
+==================================================================
+NetLink Phase 3-1b script-distribution UI integration smoke test
+==================================================================
+[OK]   0. A(被控端) start (tcp 19985)
+[OK]   0b. B(控制端) start (tcp 19995)
+[OK]   0c. netlink.get_node() 可用
+[OK]   0d. open_netlink_window 成功
+[OK]   0e. A.open_pair_window() 返回 6 位 PIN
+[OK]   0f. 配对完成（A 白名单有 B / B 窗口 _authed 有 A）
+[OK]   1. 配对后(perm=observe) [推脚本]/[📂 远端脚本] 均 disabled
+[OK]   2. A.set_peer_perm(script) → ≤2s [推脚本]/[📂 远端脚本] 均可用
+[OK]   3a. A recv_dir/pushed.xls 落盘且 sha256 与源文件一致
+[OK]   3b. B「传输」列表出现该行且状态由 传输中 → 成功
+[OK]   3c. 底部状态行摘要含「推送 pushed.xls 成功」
+[OK]   4. sending 阶段进度列至少出现一次 n/total (%) 形式
+[OK]   5a. 远端脚本对话框存在且请求发送成功
+[OK]   5b. 含 root1.xls(脚本目录) 与 received/recv1.xls(已接收)
+[OK]   6. 对话框内选中 received 条目点[▶远程运行选中] → fake_run 被调用且 state.filename 指向该文件
+[OK]   7a. perm 改回 observe → [推脚本]/[📂 远端脚本] 重新 disabled
+[OK]   7b. 失败传输在「传输」列表显示 失败：…（红：xfer_fail）
+[OK]   8. 两节点 stop 后 nl-* 线程收敛为 0 (实测 0.0s)
+------------------------------------------------------------------
+[OK]   总耗时 5.9s (< 60.0s)
+warns=0
+PASS (all assertions OK; warns=0)

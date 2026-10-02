@@ -151,7 +151,7 @@ def check_static():
         FAILS.append("ACRPA 主题切换处未调用 retheme_marketplace()")
         _p("FAIL", "ACRPA 主题切换处未调用 retheme_marketplace()")
 
-    if '_btn(toolbar_inner,"市场",_open_marketplace' in a_src:
+    if '_tbtn(toolbar_inner,"市场",_open_marketplace' in a_src:
         _p("OK", "工具栏「市场」按钮绑定保持不变")
     else:
         FAILS.append("工具栏「市场」按钮绑定被改动")
@@ -393,19 +393,24 @@ def check_dynamic():
             if win.cards_count() != len(fake):
                 scales_ok = False
                 FAILS.append("ui_scale={} 卡片重建异常".format(sc))
+                _p("FAIL", "ui_scale={} 卡片重建异常".format(sc))
             if prev_body is not None and body_pt <= prev_body:
                 scales_ok = False
                 FAILS.append("ui_scale 增大但 FONT_BODY 未变大: {}->{}".format(prev_body, body_pt))
+                _p("FAIL", "ui_scale 增大但 FONT_BODY 未变大: {}->{}".format(prev_body, body_pt))
             if prev_pad is not None and pad == prev_pad:
                 scales_ok = False
                 FAILS.append("ui_scale 增大但卡片 padding 未变: {}".format(pad))
+                _p("FAIL", "ui_scale 增大但卡片 padding 未变: {}".format(pad))
             expect_pad = str(utils.sp("gap_tight"))
             if expect_pad not in pad:
                 scales_ok = False
                 FAILS.append("ui_scale={} 卡片 pady={} 未含期望间距 {}".format(sc, pad, expect_pad))
+                _p("FAIL", "ui_scale={} 卡片 pady={} 未含期望间距 {}".format(sc, pad, expect_pad))
             if not wrap or int(wrap) <= 0:
                 scales_ok = False
                 FAILS.append("ui_scale={} wraplength 无效: {}".format(sc, wrap))
+                _p("FAIL", "ui_scale={} wraplength 无效: {}".format(sc, wrap))
             prev_body, prev_pad = body_pt, pad
         if scales_ok:
             _p("OK", "三档 ui_scale 下卡片重建、字体与间距同步变化")

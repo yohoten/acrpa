@@ -1,0 +1,31 @@
+== T1 基础节点 (variable/log/wait) ==
+  [PASS] T1 变量 a=5
+  [PASS] T1 变量 b 解析 ${a} 为 5
+  [PASS] T1 结束后 current_step 复位 -1
+  [PASS] T1 _step_results 全部 ok
+== T2 禁用跳过 + 注释 ==
+  [PASS] T2 禁用节点未写入变量 skip
+  [PASS] T2 注释节点正常执行 ok=2
+  [PASS] T2 禁用步骤标记 ok(无异常)
+== T3 loop 节点固定次数 ==
+  [PASS] T3 内层循环执行 3 次
+  [PASS] T3 外层步骤执行 1 次
+== T4 外层 loop_count ==
+  [PASS] T4 外层循环执行 3 次
+== T5 loop 条件循环 ==
+  [PASS] T5 条件为假时内层执行 0 次
+  [PASS] T5 前后步骤正常执行
+== T6 command 节点容错 ==
+  [PASS] T6 未知命令在 stop_on_error=False 时不中断 (done 已执行)
+  [PASS] T6 未知命令步骤标记 error
+== T7 max_minutes 参数 ==
+  [PASS] T7 max_minutes 运行完成并复位
+== T8 _normalize_step 默认字段 ==
+  [PASS] T8 command 默认 params 为 9 个空串
+  [PASS] T8 variable 默认 var_value 空串
+  [PASS] T8 loop 默认 times=1
+  [PASS] T8 字符串简写→script 节点
+
+==================================================
+工作流引擎验证: 通过 19 项, 失败 0 项
+==================================================

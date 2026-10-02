@@ -102,7 +102,28 @@ def _set_window_icon(window):
 # 帮助对话框
 # ======================================================================
 def show_help_dialog():
-    """Display command reference and contact info in a modal dialog."""
+    """帮助 / 命令速查入口（薄委托）。
+
+    阶段 1-2：委托给渲染层 `help_window.open_help_window()`；导入/建窗失败时
+    自动回落到旧实现 `_show_help_dialog_legacy()`，保证「新窗口崩了也不会没帮助」。
+    函数名 / 位置 / 签名与调用方（ACRPA.py 标题栏「?」）保持不变。
+    """
+    try:
+        import help_window
+        win = help_window.open_help_window(
+            root, C, (FONT_TITLE, FONT_BODY, FONT_SMALL, FONT_BUTTON))
+        if win is not None:
+            return win
+    except Exception as e:
+        try:
+            log1("帮助窗口委托失败, 回落旧实现: {}".format(e), "warning")
+        except Exception:
+            pass
+    return _show_help_dialog_legacy()
+
+
+def _show_help_dialog_legacy():
+    """旧版帮助对话框（阶段 1 保留为 fallback；模态单页文本）。"""
     def _write_cmd_table(txt_widget, cmds):
         for name, desc, params, _ in cmds:
             txt_widget.insert("end", "  {}  ".format(name), "cmd")

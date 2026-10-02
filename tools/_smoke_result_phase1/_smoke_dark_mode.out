@@ -1,0 +1,34 @@
+=== ACRPA 暗黑模式修复 + 互联按钮自测 (静态断言) ===
+[OK] utils.py 存在 def themed(
+[OK] show_toast 已无固定色字面量
+[OK] show_toast 使用主题化 bg_map
+[OK] show_toast 引用主题色 C['ac'/'sc'/'wn'/'dg']
+[OK] utils.py themed 定义位置就绪
+[OK] dialogs.py 已无 #9CA3AF (占位符改 themed('fgm'))
+[OK] scheduler.py 已无 #9CA3AF/#10B981 (改 themed('fgm'/'sc'))
+[OK] ACRPA.py 的 #9CA3AF 仅保留在 _FLOW_COLORS 图形色板内 (刻意固定)
+[OK] themed( 使用分布合格 (dialogs=1 scheduler=2 ACRPA=6, 合计 9)
+[OK] ACRPA.py 存在 insertbackground= (光标色随主题)
+[OK] devlink_btn text='🌐' 且 font 字号 11
+[OK] ACRPA.py 已无 '🌐 互联' 旧文案
+[OK] NetLink 块 'open_devlink' 出现 1 次
+[OK] NetLink 块 'set_control_hooks' 出现 1 次
+[OK] NetLink 块 'start_netlink' 出现 1 次
+[OK] NetLink 块 '_nl_hook_run' 出现 1 次
+[OK] NetLink 集成块未见改动
+[OK] 存在 _mb_animate_width (Mini Bar 守护)
+[OK] _destroy_mini_bar 含 after_cancel (定时器可取消)
+[OK] G1 _refresh_theme 同步 dialogs.C (D1)
+[OK] G2 语义色判定改用旧快照, 无 C['old_*'] 残留 (D2)
+[OK] G2b _refresh_theme 使用旧主题色快照 _prev
+[OK] G2c _prev 快照行号 < C=_colors() 重绑行号 (1838 < 1839)
+[OK] G3 mini bar 主题同步元组含 ac/bd/acl
+[OK] G4 ACRPA.py 无写死 #FEF3C7 颜色值 (改用 C['hlbg'] ; 注释提及不计)
+[OK] G5 _refresh_theme 重刷日志区 + 脚本树 tag (D3)
+[OK] G6 settings_window.refresh_theme 接受 prev 旧快照 (D2)
+[OK] G7 netlink_window.refresh_theme 存在且被 _refresh_theme 调用 (D4)
+[OK] G8 utils._colors 提供 hlbg 主题键
+[OK] G9 ACRPA._walk 覆盖 Menu/Checkbutton/Radiobutton (D5)
+[OK] G9b settings._walk 覆盖 Menu/Canvas/Listbox/Spinbox (D5)
+[OK] 依赖探测: python -c "import pyautogui, xlrd, pyperclip" 通过 (rc=0)
+=== 结果: OK ===

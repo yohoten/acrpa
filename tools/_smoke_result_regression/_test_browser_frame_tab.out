@@ -1,0 +1,91 @@
+[OK] import browser_backend 未触发 playwright 导入（懒加载契约）
+────────────────────────────────────────────────────────────
+── parse_frame_selector ──
+[OK] parse_frame_selector('main') -> ('main', None)
+[OK] parse_frame_selector('MAIN') -> ('main', None)
+[OK] parse_frame_selector('Main') -> ('main', None)
+[OK] parse_frame_selector('主文档') -> ('main', None)
+[OK] parse_frame_selector('顶层') -> ('main', None)
+[OK] parse_frame_selector('top') -> ('main', None)
+[OK] parse_frame_selector('TOP') -> ('main', None)
+[OK] 纯数字 → index -> ('index', 2)
+[OK] 0 → index -> ('index', 0)
+[OK] DSL → locator -> ('locator', '#payment-iframe')
+[OK] tag: DSL → locator -> ('locator', 'tag:iframe@name=pay')
+[OK] None → locator('') -> ('locator', '')
+[OK] 含空白 main -> ('main', None)
+── parse_tab_selector ──
+[OK] 纯数字 0 → index -> ('index', 0)
+[OK] 纯数字 12 → index -> ('index', 12)
+[OK] 标题 → match -> ('match', '报表')
+[OK] URL → match -> ('match', 'https://example.com/report')
+[OK] 负号非纯数字 → match -> ('match', '-1')
+[OK] None → match('') -> ('match', '')
+────────────────────────────────────────────────────────────
+── session 句柄管理（Fake page，无浏览器） ──
+[OK] _register_page 追加第 1 页 -> 1
+[OK] 第 1 页成为活动页 -> True
+[OK] _active_index=0 -> 0
+[OK] 追加第 2 页 -> 2
+[OK] 第 2 页成为活动页 -> True
+[OK] p0 挂载 download 监听 -> True
+[OK] 重复 _register_page 不新增页 -> 2
+[OK] download 监听去重（仅 1 次） -> 1
+[OK] _switch_tab('0') 成功 -> True
+[OK] 活动页切到索引 0 -> True
+[OK] _switch_tab('报表') 成功 -> True
+[OK] 标题匹配切到报表页 -> True
+[OK] _switch_tab(URL) 成功 -> True
+[OK] URL 匹配切到首页 -> True
+[OK] _switch_tab(未命中) 失败 -> False
+[OK] 未命中 → TAB_NOT_FOUND -> 'TAB_NOT_FOUND'
+[OK] _switch_tab(越界索引) 失败 -> False
+[OK] 越界索引 → TAB_NOT_FOUND -> 'TAB_NOT_FOUND'
+[OK] _close_tab('') 成功 -> True
+[OK] 活动页 p0 已关闭 -> True
+[OK] 剩余 1 页 -> 1
+[OK] 回退到最后一个剩余页 p1 -> True
+[OK] _close_tab('0') 成功 -> True
+[OK] _pages 清空 -> 0
+[OK] 无剩余页 _page=None -> None
+[OK] _active_index=-1 -> -1
+[OK] 空列表关页失败 -> False
+[OK] 空列表关页 → TAB_NOT_FOUND -> 'TAB_NOT_FOUND'
+[OK] _switch_frame('main') 成功 -> True
+[OK] main → _frame=None -> None
+[OK] _switch_frame(越界索引) 失败 -> False
+[OK] 越界索引 → FRAME_NOT_FOUND -> 'FRAME_NOT_FOUND'
+[OK] _switch_frame(无效 DSL) 失败 -> False
+[OK] 定位失败 → FRAME_NOT_FOUND -> 'FRAME_NOT_FOUND'
+[SKIP] 真实浏览器进入/返回 iframe（需 playwright + Chromium）—— 未在本环境执行
+[SKIP] 真实浏览器标签页新建/切换/关闭（需 playwright + Chromium）—— 未在本环境执行
+────────────────────────────────────────────────────────────
+── AST 结构断言 ──
+[OK] 模块级不存在 import playwright（AST）
+[OK] 存在函数定义 parse_frame_selector
+[OK] 存在函数定义 parse_tab_selector
+[OK] 存在函数定义 _switch_frame
+[OK] 存在函数定义 get_top_page
+[OK] 存在函数定义 get_active_page
+[OK] 存在函数定义 _register_page
+[OK] 存在函数定义 _switch_tab
+[OK] 存在函数定义 _close_tab
+[OK] 存在函数定义 _browser_switch_frame
+[OK] 存在函数定义 _browser_main_frame
+[OK] 存在函数定义 _browser_new_tab
+[OK] 存在函数定义 _browser_switch_tab
+[OK] 存在函数定义 _browser_close_tab
+────────────────────────────────────────────────────────────
+── commands 注册 / handler 绑定 ──
+[OK] 注册表包含新命令 '切换框架'
+[OK] 注册表包含新命令 '返回主框架'
+[OK] 注册表包含新命令 '新建标签页'
+[OK] 注册表包含新命令 '切换标签页'
+[OK] 注册表包含新命令 '关闭标签页'
+[OK] get_handler('切换框架') 非空
+[OK] get_handler('返回主框架') 非空
+[OK] get_handler('新建标签页') 非空
+[OK] get_handler('切换标签页') 非空
+[OK] get_handler('关闭标签页') 非空
+────────────────────────────────────────────────────────────
+结果: PASS (0 失败, 0 项警告)

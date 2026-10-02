@@ -30,7 +30,9 @@ import re
 import sys
 
 # ── 内置回退版本 (仅当 VERSION 文件全部缺失/损坏时使用) ──
-_FALLBACK_VERSION = "0.1.26"
+# 必须与根 VERSION 文件首行保持一致, 每次发版同步更新;
+# 否则 VERSION 不可读时全应用会自报旧版本号、更新检查结论失真。
+_FALLBACK_VERSION = "0.1.28-beta"
 
 # ── 发布仓库 (直链推导用; 与 updater.UPDATE_SOURCES / DOWNLOAD_MIRRORS 配套) ──
 GITHUB_REPO = "yohoten/acrpa"

@@ -31,7 +31,7 @@
 | `_toggle_debug_mode` / `_toggle_step_mode` / `_show_variables_window` | [`2749`](../src/ACRPA.py#L2749) / [`2761`](../src/ACRPA.py#L2761) / [`2780`](../src/ACRPA.py#L2780) |
 | 执行态字典 `exec_state{loop,total_loops,row,total_rows,start_time,elapsed}` | [`state.py:9`](../src/state.py#L9) |
 | `breakpoints` / `highlight_row` | [`state.py:213`](../src/state.py#L213) / [`214`](../src/state.py#L214) |
-| 执行相关配置键：`max_execution_minutes` / `stop_on_error` / `retry_max` / `retry_interval` / `input_mode` | [`state.py:50`](../src/state.py#L50) / [`52`](../src/state.py#L52) / [`18`](../src/state.py#L18) / [`19`](../src/state.py#L19) / [`88`](../src/state.py#L88) |
+| 执行相关配置键：`max_execution_minutes` / `stop_on_error` / `retry_max` / `retry_interval` / `input_mode` | [`state.py:50`](../src/state.py#L50) / [`52`](../src/state.py#L52) / [`18`](../src/state.py#L18) / [`19`](../src/state.py#L19) / [`88`](../src/state.py#L88) |zhi
 
 ### 0.2 问题诊断（按严重度排序）
 

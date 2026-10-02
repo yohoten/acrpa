@@ -1,0 +1,35 @@
+=== ACRPA 顶部标题双击可编辑 验证 ===
+解释器: d:\CodingEmber\ACRPA\.venv\Scripts\python.exe
+默认文案: 'A/C RPA Automation Workflow'
+[IMPORT] import ACRPA ...
+[IMPORT] ACRPA 导入完成, root=<tkinter.Tk object .>
+[CFG] config.json 路径: 'd:\\CodingEmber\\ACRPA\\config.json'
+----------------------------------------------------------------
+[OK] 1). 启动标题为默认文案 实际='A/C RPA Automation Workflow'
+[CFG] 编辑前: (True, '7f54fe5fd325e411b13a5027653178cb', 3383, 1790955016.644091)
+[LBL] font='ACRPA_TITLE' fg='#1a202c' bg='#f5f6f8'
+----------------------------------------------------------------
+[OK] 2a-binding). 标题已注册 <Double-Button-1> 双击绑定 bind='if {"[2012693071360_start_title_edit %# %b %f %h %k %s %t %w %x %y %A %E %K %N %W %T %X %Y %D]" == "break"} break\n'
+[OK] 2a). 双击后产生编辑控件 (Entry) entry=<tkinter.Entry object .!frame.!entry> child=<tkinter.Entry object .!frame.!entry>
+[OK] 2b). 编辑控件字体与标题一致 entry='ACRPA_TITLE' lbl='ACRPA_TITLE'
+[OK] 2c). 编辑控件前景/背景与标题一致 entry(fg='#1a202c',bg='#f5f6f8') lbl(fg='#1a202c',bg='#f5f6f8')
+[OK] 2d). 编辑控件无可见边框 borderwidth=0 highlightthickness=0
+[OK] 2e). 编辑控件预填当前文本 entry='A/C RPA Automation Workflow'
+----------------------------------------------------------------
+[OK] 3a). <Return> 后 Label 更新为新值 实际='自定义标题 ABC-123'
+[OK] 3b). <Return> 后编辑控件消失 entry=None child=None
+[OK] 3c). 会话变量已更新 session='自定义标题 ABC-123'
+----------------------------------------------------------------
+[CFG] 编辑后: (True, '7f54fe5fd325e411b13a5027653178cb', 3383, 1790955016.644091)
+[OK] 4). config.json 内容/md5/mtime 未被编辑改动 before=(True, '7f54fe5fd325e411b13a5027653178cb', 3383, 1790955016.644091) after=(True, '7f54fe5fd325e411b13a5027653178cb', 3383, 1790955016.644091)
+----------------------------------------------------------------
+[OK] 5a). 空/纯空白回退为默认文案 实际='A/C RPA Automation Workflow'
+[OK] 5b). FocusOut 后编辑控件消失 entry=None child=None
+[OK] 5c). 会话变量回退为默认 session='A/C RPA Automation Workflow'
+----------------------------------------------------------------
+[OK] 6). <Escape> 放弃修改, 保持编辑前文本 实际='A/C RPA Automation Workflow'
+----------------------------------------------------------------
+[CHILD] rc=0 out=CHILD_TITLE=A/C RPA Automation Workflow CHILD_SESSION=A/C RPA Automation Workflow 
+[OK] 7). 干净子进程重新 import → 标题为默认 (重启回默认) rc=0
+----------------------------------------------------------------
+=== 结果: OK  通过 16/16, 失败 0 ===

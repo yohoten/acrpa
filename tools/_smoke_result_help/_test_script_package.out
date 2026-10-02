@@ -1,0 +1,145 @@
+工作目录: C:\Users\yohoten\AppData\Local\Temp\acrpa_pkg_test_f0465jjs
+
+== 0. utils TOKENS 与访问器 ==
+[OK] TOKENS 含 sp_* 间距族
+[OK] TOKENS 含 'radius'
+[OK] TOKENS 含 'ctrl_h'
+[OK] TOKENS 含 'gap'
+[OK] TOKENS 含 'card_pad'
+[OK] TOKENS 含 'icon_md'
+[OK] TOKENS 含 'bar_h'
+[OK] sp('sp_md') == scaled(12)
+[OK] radius() == scaled(6)
+[OK] ctrl_h() == scaled(26)
+[OK] gap() == scaled(8)
+[OK] icon_size('icon_lg') == scaled(40)
+[OK] tk_px(10) == scaled(10)
+[OK] sp(数字) 走 scaled
+[OK] sp(未知键) 退化为下限 1（不抛异常）
+[OK] sp() 随 ui_scale 增大 (0.8→13, 1.5→24)
+[OK] 既有 PAD 未被改动
+[OK] 既有 PI 未被改动
+[OK] 既有 fit_pt/themed 仍可用
+
+== 0b. state 新增 6 个非敏感配置键 ==
+[OK] _config_schema 含 'market_provider'
+[OK] _config_schema 含 'market_username'
+[OK] _config_schema 含 'market_auto_check_update'
+[OK] _config_schema 含 'market_install_dir'
+[OK] _config_schema 含 'market_last_category'
+[OK] _config_schema 含 'market_index_cache_ttl'
+[OK] config schema 内不存在任何 *token* 键（敏感项不入 config.json）
+
+== 1. pack → unpack round-trip ==
+[OK] pack() 生成包文件: test_sample_pkg-1.0.0.acrpapkg
+[OK] pack() 返回 sha256 == 独立计算值
+[OK] compute_sha256(pkg) == pack 返回值
+[OK] manifest.id 正确
+[OK] manifest.entry == scripts/脚本模板.xls
+[OK] manifest.images == ['images/demo.png']
+[OK] manifest.readme == README.md
+[OK] manifest.script_sha256 为 64 位 hex
+[OK] unpack 返回 manifest.id 一致
+[OK] 解包后 .xls 字节与原始一致 (38400 bytes)
+[OK] images/demo.png 已还原
+[OK] README.md 已还原
+[OK] manifest.json 已还原
+[OK] round-trip 后无残留临时目录
+[OK] install_package: 图片已拍平到安装根目录
+[OK] install_package: 图片已拍平到脚本同目录 (engine {script_dir}/{名}.png 可命中)
+[OK] install_package: _install.script_path 指向存在的 .xls
+[OK] install_package: _install.files 清单非空
+
+== 2. sha256 前置校验 ==
+[OK] expected_sha256 不符: 已拒绝 → 包 sha256 校验失败 (期望 000000000000... 实际 f6c20ee89e2c...)
+[OK] 篡改一字节后 unpack: 已拒绝 → 包 sha256 校验失败 (期望 f6c20ee89e2c... 实际 038936bd7be5...)
+[OK] sha256 不符时未产生任何解包目录
+[OK] sha256 拒绝后无残留临时目录
+
+== 3. zip-slip / 软链 / 白名单 ==
+[OK] zip-slip dotdot: 已拒绝 → 拒绝含 '..' 的成员: ../evil.txt
+[OK] zip-slip abs: 已拒绝 → 拒绝绝对路径成员: /abs/evil.xls
+[OK] zip-slip drive: 已拒绝 → 拒绝含盘符的成员: C:/evil.xls
+[OK] zip-slip sandwich: 已拒绝 → 拒绝含 '..' 的成员: a/../../evil.xls
+[OK] zip-slip: 目标目录外无 evil.txt 落盘
+[OK] zip-slip: 更上层目录亦无 evil.txt 落盘
+[OK] zip-slip 拒绝后无残留临时目录
+[OK] 符号链接成员: 已拒绝 → 拒绝符号链接成员: scripts/link.xls
+[OK] 白名单外成员 bin/x.exe: 已拒绝 → 包内成员不在白名单前缀内: bin/x.exe
+
+== 4. 限额 (文件数/体积/单文件/压缩比) ==
+[OK] 文件数超限 (260 > 256): 已拒绝 → 包内条目数超限: 260 > 256
+[OK] 解压总体积超限 (阈值缩至 1024B): 已拒绝 → 解压后总体积超限 (> 1024)
+[OK] 单文件超限 (阈值缩至 8B): 已拒绝 → 单文件超限: scripts/a.xls (100)
+[OK] 疑似 zip bomb (2MB 全零高压缩比): 已拒绝 → 疑似 zip bomb (压缩比过高): scripts/bomb.xls
+[OK] 限额拒绝后无残留临时目录
+
+== 5. manifest 校验 ==
+[OK] 合法 manifest: manifest_errors 为空
+[OK] 合法 manifest: validate_manifest 通过
+[OK] manifest_errors 捕获「缺 id」
+[OK] validate_manifest 拒绝「缺 id」: 已拒绝 → 缺少必填字段 id
+[OK] manifest_errors 捕获「非法 category」
+[OK] validate_manifest 拒绝「非法 category」: 已拒绝 → category 非法 (应为 办公/财务/系统/其他): 乱写
+[OK] manifest_errors 捕获「builtin_ 前缀 id」
+[OK] validate_manifest 拒绝「builtin_ 前缀 id」: 已拒绝 → id 不得以 builtin_ 开头: builtin_x
+[OK] manifest_errors 捕获「非法 version」
+[OK] validate_manifest 拒绝「非法 version」: 已拒绝 → version 非法 (应为 MAJOR.MINOR[.PATCH]): v1
+[OK] manifest_errors 捕获「entry 前缀非法」
+[OK] validate_manifest 拒绝「entry 前缀非法」: 已拒绝 → entry 未命中 scripts/ 前缀: other/a.xls
+[OK] manifest_errors 捕获「manifest_version=2」
+[OK] validate_manifest 拒绝「manifest_version=2」: 已拒绝 → 不支持的 manifest_version=2 (当前支持 1)，请升级 ACRPA
+[OK] min_app_version 99.0.0 > 当前 0.1.26 被拒: 已拒绝 → 该脚本需要 ACRPA >= 99.0.0 (当前 0.1.26)，请升级
+[OK] entry 不在包内: 已拒绝 → entry 在包内不存在: scripts/missing.xls
+[OK] unpack 拒绝 manifest_version=2: 已拒绝 → 不支持的 manifest_version=2 (当前支持 1)，请升级 ACRPA
+[OK] images 声明缺失文件: 已拒绝 → images 声明的文件在包内不存在: images/nope.png
+
+== 6. marketplace 扩展 (离线) ==
+[OK] 旧 filename-only 条目 is_package=False
+[OK] 旧模式下载直链与原实现完全一致（零回归）
+[OK] to_dict 兼容输出原字段并补 v2 键
+[OK] v2 条目 is_package=True
+[OK] 包模式直链 == MARKETPLACE_PKG_DIR/<pkg>
+[OK] from_dict 与 __init__ 对称
+[OK] from_dict(空) 容错
+[OK] check_update: 远端 2.0.0 > 本地 1.0.0
+[OK] check_update: 版本相等 → False
+[OK] check_update: 旧条目 1.2 > 1.0
+[OK] check_update: 未知 id → False
+[OK] marketplace.install_package 返回 manifest.id
+[OK] 安装落点 <dest_root>/<id>/ 且图片已拍平
+[OK] 返回 .xls 绝对路径存在
+[OK] 脚本落点: <dest_root>/<id>/scripts/<entry>.xls
+[OK] 包模式缺 sha256 → 拒绝 (该脚本包缺少 sha256 校验值，已拒绝安装: nosha)
+[OK] resolve_download_url: url 优先
+[OK] resolve_download_url: 无 url/pkg/filename → 空串
+[OK] download_script 包模式 → 返回存在的 .xls 路径
+[OK] 包模式安装落点 <save_dir>/market_scripts/<id>/scripts/
+[OK] 包模式: 图片与脚本同目录 → engine {script_dir}/{名}.png 可命中
+[OK] 包模式 sha256 不符 → 拒绝 (脚本包下载失败: sha256 校验失败 (期望 000000000000... 实际 f6c20ee89e2c...))
+[OK] builtin 脚本生成路径零回归
+
+== 7. accounts 凭据 / 脱敏 / config.json ==
+[OK] cred 往返: get_token == 写入值
+[OK] has_token == True
+[OK] list_logged_in 含 gitee
+[OK] 凭据 target == ACRPA/market/gitee_token
+[OK] clear_token 后 get_token == None
+[OK] clear_token 后 has_token == False
+[OK] clear_token 幂等（重复调用不抛异常）
+[OK] 非法 provider → AccountError
+[OK] verify_token 401 → AccountError 且不含 token 明文
+[OK] verify_token 200 → 归一化 user_info
+[OK] verify_token 网络异常 → 已脱敏(网络请求失败: conn failed token=***)
+[OK] 空 token → AccountError
+[OK] 日志脱敏: 1 条日志中均无 token 明文
+[OK] config.json 不含 token 明文
+[OK] config.json 无任何 *_token 键
+[OK] config.json 含全部 6 个市场非敏感键
+[OK] load_config: 缺键用默认 market_provider=gitee
+[OK] load_config: 缺键用默认 market_index_cache_ttl=3600
+[OK] load_config: 缺键用默认 market_last_category
+
+============================================================
+结果: 全部 项通过, 0 项 FAIL, 0 项 WARN
+所有批次1基础设施验收点通过。

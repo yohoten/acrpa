@@ -1,0 +1,36 @@
+==================================================================
+NetLink Phase 4-3 TLS acceptance (stdlib ssl + TOFU pinning)
+==================================================================
+[..] 证书获取分支: cryptography
+[OK]   1a. tls.available() 为真
+[OK]   1b. server_context('','') == (None,'cert missing')
+[OK]   1c. 非法路径返回非空原因
+[OK]   3. client_context() 返回非 None
+[OK]   2a. TLS 启用但无证书 → start() 返回 False
+[OK]   2b. 总线收到 TOPIC_STATUS level=error
+[OK]   2c. _started 保持 False
+[OK]   2d. 关闭 TLS 后 start() 成功
+[OK]   7. pin_add 同一指纹两次 → 仍 1 条
+[OK]   4a. A(TLS) start() 成功
+[OK]   4b. B(TLS, 静态对端→A) start() 成功
+[OK]   4c. B 经 TLS 连上 A（conn.alive，3.05s）
+[OK]   4d. NETLINK_TLS_PINS 出现 1 条指纹（TOFU）
+[OK]   4e. B 的 TOPIC_STATUS 出现 tofu/pinned 信息
+[OK]   4f. A.open_pair_window() 返回 6 位 PIN
+[OK]   4g. TLS 通道上完成 AUTH(pin) 配对（0.11s）
+[OK]   4h. B 在 TLS 通道收到 A 的 STATE_SYNC（业务消息可用，0.09s）
+[OK]   5a. set_peer_perm(control) → B 收到 TOPIC_AUTH stage=perm（0.03s）
+[OK]   5b. B 在 TLS 通道下发 CMD_RUN
+[OK]   5c. B 收到 CMD_ACK done（TLS 不影响既有功能，0.03s）
+[OK]   5d. A 侧 fake_run 被调用
+[OK]   6a. 指纹不符 → connect_to 返回 None（拒绝连接）
+[OK]   6b. client.get() 为 None（无存活连接）
+[OK]   6c. TOPIC_STATUS 出现 pin/指纹 warning 文案
+[OK]   9. 指纹拒绝路径写入审计（含 TLS_PIN）
+[OK]   8a. 明文双节点 start 成功
+[OK]   8b. 明文 B→A 连接建立且 alive（3.05s）
+[OK]   8c. 明文（免认证）自动 SUBSCRIBE 后收到 STATE（0.00s）
+[OK]   10. 收尾：nl-* 线程 ≤5s 收敛为 0
+==================================================================
+耗时 6.94s (budget 60s)
+PASS (all assertions OK; warns=0)

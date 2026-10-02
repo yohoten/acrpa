@@ -3,7 +3,7 @@
 P0 Optimization #5: Batched log writing to reduce I/O operations by 80%.
 P1 Enhancement: Structured logging with LogLevel, daily rotation, and retention ( AutomationOperation).
 """
-import queue, time, os, glob
+import queue, time, os, glob, re
 import tkinter
 import tkinter.font
 import state
@@ -253,8 +253,10 @@ def init_fonts(root):
         pt = fit_pt(size, scale)
         f = None
         try:
-            # 已存在: 仅改属性 (幂等; nametofont 自带 delete_font=False)
-            f = tkinter.font.nametofont(role, root=root)
+            # 已存在: 仅改属性 (幂等; exists=True 包装既有命名, 不删底层字体)。
+            # 不能用 nametofont(role, root=root): Python 3.9 签名为 nametofont(name),
+            # 传 root= 会抛 TypeError 并被吞掉; Font(..., exists=True) 跨 3.8~3.10+ 等价。
+            f = tkinter.font.Font(root=root, name=role, exists=True)
         except Exception:
             # 首次: 创建命名; 必须保留强引用并关闭自动删除, 否则初始化即被回收
             try:
@@ -267,8 +269,9 @@ def init_fonts(root):
                 continue
         try:
             f.configure(family=family, size=pt, weight=weight)
-        except Exception:
-            pass
+        except Exception as e:
+            # 不再静默吞掉: 改配失败必须可见, 否则「字体未生效」会被掩盖。
+            log1("命名字体改配失败: {} -> {}pt ({})".format(role, pt, e))
 
 
 def set_ui_scale(scale):
@@ -288,10 +291,14 @@ def set_ui_scale(scale):
     if _font_root is not None:
         for role, (family, size, weight) in _FONT_SPECS.items():
             try:
-                tkinter.font.nametofont(role, root=_font_root).configure(
-                    size=fit_pt(size, v))
-            except Exception:
-                pass
+                # 同 init_fonts: 3.9 不支持 nametofont(root=), 用 Font(exists=True)
+                # 取命名句柄后改字号。
+                tkinter.font.Font(root=_font_root, name=role,
+                                  exists=True).configure(size=fit_pt(size, v))
+            except Exception as e:
+                # 不再静默吞掉: 缩放档位切换时的改配失败必须可见。
+                log1("界面缩放字体改配失败: {} -> {}pt ({})".format(
+                    role, fit_pt(size, v), e))
     return v
 
 PAD = {"padx":12,"pady":6}
@@ -307,7 +314,10 @@ def create_card(parent):
 
 
 def _btn(parent, text, cmd, bg_c=None, fg_c=None, tip=None):
-    """Toolbar button factory with hover darken effect + optional tooltip."""
+    """Toolbar button factory with hover darken effect + optional tooltip.
+
+    内边距走 scaled() 令牌, 随 dpi_factor * ui_scale 缩放, 避免大字号下串行。
+    """
     if bg_c is None: bg_c = C["bgc"]
     if fg_c is None: fg_c = C["fgb"]
     if bg_c in ("white", "#ffffff", C["bgc"]):
@@ -317,7 +327,7 @@ def _btn(parent, text, cmd, bg_c=None, fg_c=None, tip=None):
     btn = tkinter.Button(parent, text=text, font=FONT_SMALL, bg=bg_c, fg=fg_c,
         activebackground=abg, activeforeground=fg_c,
         relief="raised", bd=3, cursor="hand2",
-        padx=10, pady=4, command=cmd)
+        padx=scaled(10), pady=scaled(4), command=cmd)
     if tip:
         attach_tooltip(btn, tip)
     return btn
@@ -761,3 +771,49 @@ def gap(token="gap"):
 def icon_size(token="icon_md"):
     """图标边长 (默认 24 设计 px)。"""
     return sp(token)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 窗口几何工具 (主窗口 / 设置窗口复用): 虚拟屏取值 + 越界校验 + 居中派生
+# 抽取自 ACRPA._main_win_bounds / _main_geometry_in_screen / _main_center_geometry,
+# 行为完全等价, 供主窗口启动几何与设置窗口记忆几何共用同一套判定。
+# ═══════════════════════════════════════════════════════════════════════
+
+def win_virtual_bounds(root):
+    """返回虚拟屏 (vx, vy, vw, vh); 不支持虚拟屏时回退主屏 (0, 0, 屏宽, 屏高)。"""
+    try:
+        vx, vy = root.winfo_vrootx(), root.winfo_vrooty()
+        vw, vh = root.winfo_vrootwidth(), root.winfo_vrootheight()
+        if vw > 0 and vh > 0:
+            return vx, vy, vw, vh
+    except Exception:
+        pass
+    return 0, 0, root.winfo_screenwidth(), root.winfo_screenheight()
+
+
+def geometry_in_screen(root, geo):
+    """校验 "WxH+X+Y" 是否落在当前虚拟屏内 (至少标题栏与 ≥40px 可见)。
+
+    geo 为空/格式不符/尺寸过小 (w<200 或 h<150) 一律返回 False。
+    """
+    m = re.match(r"^(\d+)x(\d+)([+-]\d+)([+-]\d+)$", geo or "")
+    if not m:
+        return False
+    w, h, x, y = (int(m.group(i)) for i in range(1, 5))
+    if w < 200 or h < 150:
+        return False
+    vx, vy, vw, vh = win_virtual_bounds(root)
+    if (x + w) < (vx + 40) or x > (vx + vw - 40):
+        return False
+    if (y + 40) < vy or y > (vy + vh - 40):
+        return False
+    return True
+
+
+def center_geometry(root, w, h):
+    """把 w×h 居中到虚拟屏 (纵向略偏上 1/3), 并按虚拟屏夹取上限。"""
+    vx, vy, vw, vh = win_virtual_bounds(root)
+    w = min(w, max(200, vw - 40)); h = min(h, max(150, vh - 40))
+    x = vx + max(0, (vw - w) // 2)
+    y = vy + max(0, (vh - h) // 3)
+    return "{}x{}+{}+{}".format(w, h, x, y)

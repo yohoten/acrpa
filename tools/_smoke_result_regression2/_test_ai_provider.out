@@ -1,0 +1,62 @@
+================================================================
+ACRPA AI 提供商/模型自定义 自测 (不弹窗 / 不联网)
+================================================================
+[OK] list_providers 含全部预设 id（6 个）
+[OK] get_provider('deepseek') base_url 正确
+[OK] anthropic 预设 openai_compatible=False
+[OK] list_providers 合并自定义提供商
+[OK] 自定义提供商字段解析正确
+[OK] 同名 id 以自定义为准（覆盖预设）
+[OK] 自定义条目敏感字段被剔除
+[OK] 推断 deepseek-chat → deepseek
+[OK] 推断 qwen-plus → qwen
+[OK] 推断 gpt-4o-mini → openai
+[OK] 推断 claude-3-5-sonnet-latest → anthropic
+[OK] llama3.1 + 空 base_url → custom
+[OK] qwq 前缀 → qwen
+[OK] AI_PROVIDER=ollama → resolve_base_url 含 11434
+[OK] AI_BASE_URL 非空优先返回
+[OK] AI_BASE_URL 命中预设 → resolve_provider=deepseek
+[OK] base_url 含 11434 → resolve_provider=ollama
+[OK] resolve_model 一级：AI_MODEL 优先
+[OK] resolve_model 二级：回退 API_MODEL
+[OK] resolve_model 三级：回退预设首个模型
+[OK] set_provider_key 返回 True
+[OK] get_provider_key 读回一致
+[OK] resolve_api_key 命中凭据库
+[OK] config.json 不含密钥明文 sk-test-123
+[OK] config.json 的 ai_custom_providers 内无 key/api_key/token/secret
+[OK] config.json 已写入 ai_provider 键
+[OK] config.json 已写入 ai_custom_providers 键
+[OK] clear_provider_key 后 resolve_api_key 回退 state.API_KEY
+[OK] test_connection 200 → (True, ok...)
+[OK] test_connection 404 → 回退 chat/completions 且成功
+[OK] test_connection 超时 → (False, 含'超时')
+[OK] test_connection 连接错误 → (False, 含'网络不可达')
+[OK] test_connection 401 → (False, 含'401')
+[OK] test_connection anthropic → (False, 含'不支持') 且不发请求
+[OK] create_client_active 构造 AIClient 且 base_url 正确
+[OK] create_client 旧签名仍可用
+[OK] create_client_active base_url 为空回退 get_base_url(model)
+[OK] AI 卡含 提供商 Combobox
+[OK] AI 卡含 模型 Entry
+[OK] AI 卡含 BaseURL Entry
+[OK] AI 卡含 [测试连接] 按钮
+[OK] AI 卡含 [添加自定义提供商] 按钮
+[OK] _apply_map["ai"] 仍注册
+[OK] _track_card_vars("ai" 存在
+[OK] _apply_ai_settings 调用 set_provider_key
+[OK] NetLink 守护 'open_devlink' 出现 1 次
+[OK] NetLink 守护 'set_control_hooks' 出现 1 次
+[OK] NetLink 守护 'start_netlink' 出现 1 次
+[OK] NetLink 守护 '_nl_hook_run' 出现 1 次
+[OK] Mini Bar 守护 _mb_animate_width 存在
+[OK] _destroy_mini_bar 含 after_cancel
+[OK] utils.py 的 def themed( 仍在
+[OK] devlink_btn 仍为地球图标(text=🌐) 且字号 11
+[OK] ACRPA.py 已无『地球图标+互联』旧文案
+[OK] 依赖探测: pyautogui/xlrd/pyperclip 齐备
+[OK] 依赖探测: requests 已安装（走真实 requests，HTTP 仍被 monkeypatch）
+----------------------------------------------------------------
+warns=0
+PASS (all assertions OK)

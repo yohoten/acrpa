@@ -1,0 +1,62 @@
+── parse_wait_state 同义词归一 ──
+[OK] parse_wait_state('出现') -> 'visible'
+[OK] parse_wait_state('可见') -> 'visible'
+[OK] parse_wait_state('显示') -> 'visible'
+[OK] parse_wait_state('visible') -> 'visible'
+[OK] parse_wait_state('消失') -> 'hidden'
+[OK] parse_wait_state('隐藏') -> 'hidden'
+[OK] parse_wait_state('hidden') -> 'hidden'
+[OK] parse_wait_state('存在') -> 'attached'
+[OK] parse_wait_state('附加') -> 'attached'
+[OK] parse_wait_state('attached') -> 'attached'
+[OK] parse_wait_state('移除') -> 'detached'
+[OK] parse_wait_state('删除') -> 'detached'
+[OK] parse_wait_state('detached') -> 'detached'
+[OK] parse_wait_state('可点击') -> 'clickable'
+[OK] parse_wait_state('clickable') -> 'clickable'
+[OK] parse_wait_state('可用') -> 'enabled'
+[OK] parse_wait_state('enabled') -> 'enabled'
+[OK] parse_wait_state('URL变动') -> 'url'
+[OK] parse_wait_state('网址变动') -> 'url'
+[OK] parse_wait_state('url') -> 'url'
+[OK] parse_wait_state('标题变动') -> 'title'
+[OK] parse_wait_state('title') -> 'title'
+[OK] parse_wait_state('下载开始') -> 'download'
+[OK] parse_wait_state('download') -> 'download'
+[OK] parse_wait_state('导航') -> 'navigation'
+[OK] parse_wait_state('navigation') -> 'navigation'
+[OK] 英文大小写不敏感 -> 'visible'
+────────────────────────────────────────────────────────────
+── parse_wait_state 边界（未知/空 → ） ──
+[OK] parse_wait_state('') → '' -> ''
+[OK] parse_wait_state('   ') → '' -> ''
+[OK] parse_wait_state('不存在的状态') → '' -> ''
+[OK] parse_wait_state('？？？') → '' -> ''
+[OK] parse_wait_state(None) → '' -> ''
+────────────────────────────────────────────────────────────
+── WAIT_STATES 枚举 ──
+[OK] WAIT_STATES 与设计文档一致 -> ('visible', 'hidden', 'attached', 'detached', 'clickable', 'enabled', 'url', 'title', 'download', 'navigation')
+────────────────────────────────────────────────────────────
+── wait_for 纯逻辑分支（无需浏览器） ──
+[OK] wait_for(page=None).ok -> False
+[OK] wait_for(page=None).code -> 'PW_NOT_INSTALLED'
+[OK] wait_for(error plan).ok -> False
+[OK] wait_for(error plan).code -> 'INVALID_LOCATOR'
+[OK] wait_for(state=download).ok -> False
+[OK] wait_for(state=download).code（P0 预留） -> 'INVALID_ARGUMENT'
+[OK] wait_for(state=navigation).ok -> False
+[OK] wait_for(state=navigation).code（P0 预留） -> 'INVALID_ARGUMENT'
+[OK] wait_for(unknown state).ok -> False
+[OK] wait_for(unknown state).code -> 'INVALID_ARGUMENT'
+────────────────────────────────────────────────────────────
+── 等待元素 facade 参数解析（纯逻辑，无浏览器） ──
+[OK] 旧 2 参形态进入参数解析（后端不可用时 PW_NOT_INSTALLED） -> 'PW_NOT_INSTALLED'
+[OK] 缺选择器 → INVALID_ARGUMENT -> 'INVALID_ARGUMENT'
+────────────────────────────────────────────────────────────
+── AST 结构断言 ──
+[OK] 存在函数定义 parse_wait_state
+[OK] 存在函数定义 wait_for
+[OK] 存在函数定义 _browser_wait_element
+[OK] 模块级常量 WAIT_STATES 存在
+────────────────────────────────────────────────────────────
+结果: PASS (0 失败, 0 项警告)

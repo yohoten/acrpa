@@ -1,0 +1,90 @@
+
+== 1. prepare_package → unpack round-trip ==
+[OK] prepare_package 生成包: off_upload_sample-1.0.0.acrpapkg
+[OK] 返回 sha256 == compute_sha256(pkg)
+[OK] manifest.id 正确
+[OK] manifest.entry 命中 scripts/
+[OK] manifest.images 收录同目录 png
+[OK] unpack 还原 manifest.id 一致
+[OK] round-trip: 解包 .xls 字节与原始一致 (38400 bytes)
+[OK] round-trip: images/demo.png 已还原
+
+== 2. Gitee mock 请求序列 ==
+[OK] upload 前调用 accounts.verify_token 校验登录
+[OK] 返回 dict 且 pr_url 取自响应 html_url
+[OK] 返回 pr_number == 12
+[OK] 调用顺序: 建分支 → 传包 → 取 index sha → 更新 index → 发 PR (#0/1/2/3/4)
+[OK] 建分支 body.refs == base_branch(master)
+[OK] 建分支 body.branch_name 非空 (upload-off_upload_sample-1.0.0-20261002230235)
+[OK] Gitee 请求体携带 access_token (仅在 body, 不进日志)
+[OK] 传包 body.content 为合法 base64 且解码等于 .acrpapkg 原始字节
+[OK] 传包 body.branch == 新建分支名
+[OK] 传包 URL 指向 packages/<id>-<ver>.acrpapkg
+[OK] 更新 index body.sha == 取回的旧 index sha
+[OK] 更新后的 index.json 含新脚本 id
+[OK] index 条目 pkg 字段正确
+[OK] index 条目 sha256 为 64 位 hex
+[OK] PR body.head == 上传分支
+[OK] PR body.base == base_branch
+[OK] PR body 含自检清单
+[OK] progress 首阶段 verify、末阶段 done (6 阶段)
+[OK] progress 阶段顺序完整: ['verify', 'branch', 'upload_pkg', 'upload_index', 'pull', 'done']
+
+== 3. GitHub mock 请求序列 (contents API) ==
+[OK] GitHub 返回 pr_url 正确
+[OK] GitHub 返回 pr_number == 7
+[OK] 调用顺序: 取基点 → 建分支 → 取 index sha → PUT 包 → PUT index → 发 PR (#0/1/2/3/4/5)
+[OK] 建分支 body.sha 取自 GET ref 的 object.sha
+[OK] 建分支 body.ref == refs/heads/<branch>
+[OK] PUT 包 body.branch == 新建分支
+[OK] GitHub 请求头携带 Authorization: token <t>
+[OK] GitHub 请求头携带 User-Agent
+[OK] PUT index body.sha == 取回旧 sha
+[OK] PR body.base == master
+
+== 4. GitHub >1MB 走 Git Data API ==
+[OK] 构造包体积 >1MB (1370476 bytes)
+[OK] 大文件走 Git Data API：blobs/trees/commits/refs 均已调用
+[OK] 大文件未走 contents API (PUT) 路径
+[OK] blob body.encoding == base64
+[OK] commit body.parents == 基点 sha
+[OK] PATCH ref body.sha == 新建 commit sha
+
+== 5. token 缺失时 upload 明确拒绝 ==
+[OK] token 缺失被拒且给出可读引导: 未配置 gitee token，请先在「设置 → 脚本市场账号」或市场窗口登录后再上传
+[OK] 非法 provider 被拒: 不支持的账号提供商: bitbucket
+
+== 6. 上传向导前端校验 validate_meta ==
+[OK] 合法 meta 无 errors/warnings
+[OK] id=builtin_x → 拒绝 (builtin_ 前缀)
+[OK] category=乱写 → 拒绝 (四选一)
+[OK] 必填缺失 (name/description) → 拒绝
+[OK] id 唯一性 → 非阻断提示 (已存在: ['id 已存在，上传将更新该条目: off_upload_sample'])
+[OK] upload 端亦拒绝 builtin_ 前缀
+
+== 7. check_script_commands（未注册命令拦截） ==
+[OK] 未注册命令被检出
+[OK] 全部已注册命令 → 返回空列表
+[OK] commands.list_names() 含『等待』(基准校验)
+
+== 8. upload_index_patch 合并语义 ==
+[OK] 空 index → 追加一条
+[OK] 条目 size 写入
+[OK] 同 id → 原地替换 (不新增)
+[OK] 同 id 替换保留 downloads/rating 统计
+[OK] 同 id 替换写入新 pkg/sha256
+
+== 9. token 脱敏（日志/异常无明文） ==
+[OK] accounts._redact 抹除已知 token 明文
+[OK] UploadError 文本不含 token 明文: 创建分支失败 (HTTP 401)，请重新登录（token 无效或已过期）: bad credential ***
+[OK] 捕获的全部 log1 输出不含 token 明文
+[OK] 401 归类为需重新登录的提示
+[OK] 传输层异常经重试后报错且不含 token 明文
+
+== 10. 真实测试仓库 PR（可选） ==
+[SKIP] 未配置 ACRPA_MARKET_TOKEN 或 ACRPA_MARKET_TEST_REPO=owner/repo，跳过真实 PR（不伪造 PASS）
+
+============================================================
+汇总: FAIL=0  WARN=0  SKIP=1
+  [SKIP] 未配置 ACRPA_MARKET_TOKEN 或 ACRPA_MARKET_TEST_REPO=owner/repo，跳过真实 PR（不伪造 PASS）
+============================================================

@@ -1,0 +1,41 @@
+_debug_check.out ||| [IMPORT] 18/18 modules imported /  / Done. syntax_failed=0 import_failed=0
+_debug_dark_theme.out ||| rz error tag (实测)                          #ef4444 / dialogs.C['ac'] (实测)                       #2563eb / === 结果: OK (共 57 项检查) ===
+_debug_error_semantics.out ||| ================================================== / 失败语义回归: 通过 32 项, 失败 0 项 / ==================================================
+_debug_functional.out |||  / ================================================== / 全部通过 ✓
+_debug_theme_trigger.out ||| [OK] T3 同值再保存 refresh 增量: got 0 / expected 0 / [OK] T4 toggle_dark() refresh 增量: got 1 / expected 1 / === 结果: OK ===
+_debug_updater.out |||  / ======================================================== / ALL PASSED  (107 项)
+_debug_workflow.out ||| ================================================== / 工作流引擎验证: 通过 19 项, 失败 0 项 / ==================================================
+_env01_pip_install.out ||| Installing collected packages: typing-extensions, pycparser, cffi, cryptography /  / Successfully installed cffi-2.0.0 cryptography-50.0.2 pycparser-2.23 typing-extensions-4.16.0
+_env01_verify.out ||| cryptography 50.0.2
+_smoke_dark_mode.out ||| [OK] G9b settings._walk 覆盖 Menu/Canvas/Listbox/Spinbox (D5) / [OK] 依赖探测: python -c "import pyautogui, xlrd, pyperclip" 通过 (rc=0) / === 结果: OK ===
+_smoke_engine.out |||   ✓ 跳出循环后继续执行 / ---------------------------------------- / 全部通过 ✓
+_smoke_launch_app.out ||| (空) / <<<CHILD_OUT_END>>> / === 结果: OK (rc=0) ===
+_smoke_marketplace.out ||| [OK] 导入完成后市场窗口已关闭 / [OK] close_marketplace()/retheme_marketplace() 未开时安全 no-op / === 结果: OK (FAIL=0 WARN=0) ===
+_smoke_mini_bar.out ||| [OK] NetLink 集成块未见改动 / [OK] 依赖探测通过 (pyautogui/xlrd/pyperclip) / === 结果: OK ===
+_smoke_mini_bar_launch.out ||| [OK] 依赖探测通过 (pyautogui/xlrd/pyperclip) / [OK] 启动存活冒烟: run.py 存活 10s (无导入/构建期异常) / === 结果: OK ===
+_smoke_netlink.out ||| [OK]   8. state netlink config / ---------------------------------------------------- / PASS 8/8
+_smoke_netlink_control_ui.out ||| [OK]   总耗时 8.7s (< 50.0s) / warns=0 / PASS (all assertions OK)
+_smoke_netlink_pairing_ui.out ||| ---------------------------------------------------------------- / elapsed 8.48s, warns=0 / PASS (all assertions OK)
+_smoke_netlink_transfer_ui.out ||| [OK]   总耗时 5.6s (< 60.0s) / warns=0 / PASS (all assertions OK; warns=0)
+_smoke_netlink_window.out ||| [OK]   网页面板: 门面接口可调用（has pin / control status） / [OK]   网页面板: 关闭窗口后 is_open() 为 False / [OK]   all window smoke checks passed
+_smoke_ui_introspect.out ||| [SUM] notebook_tabs=['脚本编辑', '执行控制', '工作流'] / [SUM] 控件溢出命中=0 / === 结果: OK (introspect 完成) ===
+_smoke_ui_scale.out ||| --- F. 依赖探测 --- / [OK] 依赖探测: python -c "import pyautogui, xlrd, pyperclip" 通过 (rc=0) / === 结果: OK ===
+_test_ai_provider.out ||| ---------------------------------------------------------------- / warns=0 / PASS (all assertions OK)
+_test_browser_cdp.out ||| [SKIP] 真实 CDP 接管（需本机 chrome --remote-debugging-port=9222 且 playwright 已安装）—— 未在本环境执行 / ──────────────────────────────────────────────────────────── / 结果: PASS (0 失败, 0 项警告)
+_test_browser_codegen_convert.out ||| [SKIP] 启动浏览器录制 成功路径（需 playwright CLI）—— 未在本环境执行 / ──────────────────────────────────────────────────────────── / 结果: PASS (0 失败, 0 项警告)
+_test_browser_cookie.out ||| [OK] 设置Cookie → PW_NOT_INSTALLED -> 'PW_NOT_INSTALLED' / ──────────────────────────────────────────────────────────── / 结果: PASS (0 失败, 0 项警告)
+_test_browser_download.out ||| [OK] state.BROWSER_SCREENSHOT_DIR 默认值 -> '' / ──────────────────────────────────────────────────────────── / 结果: PASS (0 失败, 0 项警告)
+_test_browser_frame_tab.out ||| [OK] get_handler('关闭标签页') 非空 / ──────────────────────────────────────────────────────────── / 结果: PASS (0 失败, 0 项警告)
+_test_browser_listen.out ||| [SKIP] 真实网络响应监听（需 playwright + Chromium 真实请求）—— 未在本环境执行 / ──────────────────────────────────────────────────────────── / 结果: PASS (0 失败, 0 项警告)
+_test_browser_locator.out ||| [OK] 设置Cookie 缺来源 → INVALID_ARGUMENT -> 'INVALID_ARGUMENT' / ──────────────────────────────────────────────────────────── / 结果: PASS (0 失败, 0 项警告)
+_test_browser_locator_chain.out ||| [OK] 存在函数定义 _apply_chain_step / ──────────────────────────────────────────────────────────── / 结果: PASS (0 失败, 0 项警告)
+_test_browser_waiter.out ||| [OK] 模块级常量 WAIT_STATES 存在 / ──────────────────────────────────────────────────────────── / 结果: PASS (0 失败, 0 项警告)
+_test_code_command.out ||| [OK] k3 empty name -> False (got False) /  / SUMMARY: 0 FAIL, 0 WARN
+_test_market_upload.out ||| 汇总: FAIL=0  WARN=0  SKIP=1 /   [SKIP] 未配置 ACRPA_MARKET_TOKEN 或 ACRPA_MARKET_TEST_REPO=owner/repo，跳过真实 PR（不伪造 PASS） / ============================================================
+_test_netlink_auth.out ||| ---------------------------------------------------------------- / elapsed 3.97s, warns=0 / PASS (all assertions OK)
+_test_netlink_control.out ||| [OK]   总耗时 7.4s (< 45.0s) / warns=0 / PASS (all assertions OK)
+_test_netlink_e2e.out ||| ---------------------------------------------------------------- / [OK]   总耗时 13.0s (< 60.0s) / PASS (all assertions OK; warns=0)
+_test_netlink_tls.out ||| ================================================================== / 耗时 4.26s (budget 60s) / FAIL (1 assertion(s) failed; warns=0)
+_test_netlink_transfer.out ||| [OK]   总耗时 1.1s (< 60.0s) / warns=0 / PASS (all assertions OK; warns=0)
+_test_python_sandbox.out ||| [OK] v8 no watchdog thread leak (active=1 base=1) /  / SUMMARY: 0 FAIL, 1 WARN
+_test_script_package.out ||| ============================================================ / 结果: 全部 项通过, 0 项 FAIL, 0 项 WARN / 所有批次1基础设施验收点通过。

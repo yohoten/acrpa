@@ -1,0 +1,15 @@
+[
+  {"id": "quickstart",        "title": "快速开始",       "order": 1,  "file": "00-快速开始.md",       "source": "内嵌（迁移自 使用说明.txt 头部 + 新增）"},
+  {"id": "commands",          "title": "命令速查",       "order": 2,  "file": "01-命令速查.md",       "source": "命令注册表 commands.list_all() + command_groups.json（运行时生成）", "dynamic": "commands"},
+  {"id": "script-editing",    "title": "脚本编辑",       "order": 3,  "file": "02-脚本编辑.md",       "source": "内嵌 + docs/python扩展使用说明.md"},
+  {"id": "execution-control", "title": "执行控制",       "order": 4,  "file": "03-执行控制.md",       "source": "摘要 docs/执行控制tab设计方案.md"},
+  {"id": "workflow",          "title": "工作流",         "order": 5,  "file": "04-工作流.md",         "source": "内嵌（workflow 能力摘要）"},
+  {"id": "browser",           "title": "浏览器自动化",   "order": 6,  "file": "05-浏览器自动化.md",   "source": "摘要 docs/浏览器使用说明.md + docs/浏览器后端增强设计.md"},
+  {"id": "netlink",           "title": "NetLink 设备互联", "order": 7, "file": "06-NetLink设备互联.md", "source": "摘要 docs/netlink-*.md（8 份）"},
+  {"id": "marketplace",       "title": "脚本市场",       "order": 8,  "file": "07-脚本市场.md",       "source": "摘要 docs/marketplace-v2-使用说明.md"},
+  {"id": "settings",          "title": "设置",           "order": 9,  "file": "08-设置.md",           "source": "src/settings_window.py _NAV_ITEMS（静态镜像）"},
+  {"id": "faq",               "title": "常见问题 FAQ",   "order": 10, "file": "09-常见问题FAQ.md",    "source": "内嵌（新增）"},
+  {"id": "hotkeys",           "title": "快捷键",         "order": 11, "file": "10-快捷键.md",         "source": "src/settings_window.py 快捷键注册表 + state 配置项"},
+  {"id": "releases",          "title": "版本与更新",     "order": 12, "file": "11-版本与更新.md",     "source": "汇总 docs/releases/*.md（运行时生成）", "dynamic": "releases"},
+  {"id": "contact",           "title": "联系与支持",     "order": 13, "file": "12-联系与支持.md",     "source": "内嵌（迁移自 dialogs.show_help_dialog 联系卡片）"}
+]

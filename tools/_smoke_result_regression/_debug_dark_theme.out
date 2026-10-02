@@ -1,0 +1,78 @@
+=== ACRPA 暗黑模式往返切换运行时验证 (真实 Tk) ===
+[light] sc=#10b981 dg=#ef4444 wn=#f59e0b ac=#2563eb acl=#eff6ff bd=#e2e8f0 hlbg=#FEF3C7 bgc=#ffffff bg=#f5f6f8
+[OK] btn_run.bg(运行=sc): got '#10b981' / expected '#10b981'
+[OK] btn_pause.bg(暂停=wn): got '#f59e0b' / expected '#f59e0b'
+[OK] btn_step.bg(单步=ac): got '#2563eb' / expected '#2563eb'
+[OK] btn_record.bg(录制=dg): got '#ef4444' / expected '#ef4444'
+[OK] tree.tag('running').background: got '#FEF3C7' / expected '#FEF3C7'
+[OK] rz.tag('error').foreground: got '#ef4444' / expected '#ef4444'
+[OK] rz.tag('success').foreground: got '#10b981' / expected '#10b981'
+[OK] rz.tag('warning').foreground: got '#f59e0b' / expected '#f59e0b'
+[OK] dialogs.C 取值 == 当前 utils.C dialogs.C={'bg': '#f5f6f8', 'bgc': '#ffffff', 'fgt': '#1a202c', 'fgb': '#2d3748', 'fgm': '#718096', 'ac': '#2563eb', 'ach': '#1d4ed8', 'acl': '#eff6ff', 'sc': '#10b981', 'dg': '#ef4444', 'wn': '#f59e0b', 'bd': '#e2e8f0', 'logbg': '#fdfdfd', 'logfg': '#2d3748', 'ebg': '#ffffff', 'err': '#ef4444', 'errbg': '#fff0f0', 'ok': '#10b981', 'hover': '#1d4ed8', 'cardhover': '#3b82f6', 'focus': '#2563eb', 'flowbg': '#f8fafc', 'hlbg': '#FEF3C7'} utils.C={'bg': '#f5f6f8', 'bgc': '#ffffff', 'fgt': '#1a202c', 'fgb': '#2d3748', 'fgm': '#718096', 'ac': '#2563eb', 'ach': '#1d4ed8', 'acl': '#eff6ff', 'sc': '#10b981', 'dg': '#ef4444', 'wn': '#f59e0b', 'bd': '#e2e8f0', 'logbg': '#fdfdfd', 'logfg': '#2d3748', 'ebg': '#ffffff', 'err': '#ef4444', 'errbg': '#fff0f0', 'ok': '#10b981', 'hover': '#1d4ed8', 'cardhover': '#3b82f6', 'focus': '#2563eb', 'flowbg': '#f8fafc', 'hlbg': '#FEF3C7'}
+[OK] dialogs.C is ACRPA.C (同一颜色表对象) dialogs.C=2284711921728 acrpa.C=2284711921728
+[OK] dialogs.C['ac'] == 当前 ac: got '#2563eb' / expected '#2563eb'
+[OK] 幂等: 同主题两次 _refresh_theme 色板一致 diff={}
+[OK] 幂等: 同主题两次 _refresh_theme 控件色不变 before=('#10b981', '#f59e0b', '#2563eb', '#ef4444', '#FEF3C7', '#ef4444') after=('#10b981', '#f59e0b', '#2563eb', '#ef4444', '#FEF3C7', '#ef4444')
+[dark ] sc=#34d399 dg=#f87171 wn=#fbbf24 ac=#60a5fa acl=#1b3d6e bd=#374051 hlbg=#4a3a12 bgc=#1a2332 bg=#0b1120
+[OK] 暗色色板与亮色不同 
+[OK] btn_run.bg(运行=sc): got '#34d399' / expected '#34d399'
+[OK] btn_pause.bg(暂停=wn): got '#fbbf24' / expected '#fbbf24'
+[OK] btn_step.bg(单步=ac): got '#60a5fa' / expected '#60a5fa'
+[OK] btn_record.bg(录制=dg): got '#f87171' / expected '#f87171'
+[OK] tree.tag('running').background: got '#4a3a12' / expected '#4a3a12'
+[OK] rz.tag('error').foreground: got '#f87171' / expected '#f87171'
+[OK] rz.tag('success').foreground: got '#34d399' / expected '#34d399'
+[OK] rz.tag('warning').foreground: got '#fbbf24' / expected '#fbbf24'
+[OK] dialogs.C 取值 == 当前 utils.C dialogs.C={'bg': '#0b1120', 'bgc': '#1a2332', 'fgt': '#f1f5f9', 'fgb': '#cbd5e0', 'fgm': '#9ca3af', 'ac': '#60a5fa', 'ach': '#3b82f6', 'acl': '#1b3d6e', 'sc': '#34d399', 'dg': '#f87171', 'wn': '#fbbf24', 'bd': '#374051', 'logbg': '#1a2332', 'logfg': '#e2e8f0', 'ebg': '#1a2332', 'err': '#f87171', 'errbg': '#3a2525', 'ok': '#34d399', 'hover': '#3b82f6', 'cardhover': '#60a5fa', 'focus': '#60a5fa', 'flowbg': '#0f172a', 'hlbg': '#4a3a12'} utils.C={'bg': '#0b1120', 'bgc': '#1a2332', 'fgt': '#f1f5f9', 'fgb': '#cbd5e0', 'fgm': '#9ca3af', 'ac': '#60a5fa', 'ach': '#3b82f6', 'acl': '#1b3d6e', 'sc': '#34d399', 'dg': '#f87171', 'wn': '#fbbf24', 'bd': '#374051', 'logbg': '#1a2332', 'logfg': '#e2e8f0', 'ebg': '#1a2332', 'err': '#f87171', 'errbg': '#3a2525', 'ok': '#34d399', 'hover': '#3b82f6', 'cardhover': '#60a5fa', 'focus': '#60a5fa', 'flowbg': '#0f172a', 'hlbg': '#4a3a12'}
+[OK] dialogs.C is ACRPA.C (同一颜色表对象) dialogs.C=2284829476352 acrpa.C=2284829476352
+[OK] dialogs.C['ac'] == 当前 ac: got '#60a5fa' / expected '#60a5fa'
+[OK] 幂等: 同主题两次 _refresh_theme 色板一致 diff={}
+[OK] 幂等: 同主题两次 _refresh_theme 控件色不变 before=('#34d399', '#fbbf24', '#60a5fa', '#f87171', '#4a3a12', '#f87171') after=('#34d399', '#fbbf24', '#60a5fa', '#f87171', '#4a3a12', '#f87171')
+[OK] settings: 无按钮停留在上一主题语义色 残留旧色按钮 0 个: []
+[OK] settings: _prev_colors 已同步为当前主题 _prev_colors.ac=#60a5fa
+[OK] netlink_window 暴露模块级 refresh_theme() 
+[OK] NetLinkWindow 存在 refresh_theme() 
+[OK] netlink.win.bg: got '#0b1120' / expected '#0b1120'
+[OK] netlink.tv tag('run').foreground: got '#34d399' / expected '#34d399'
+[OK] netlink.tv tag('pause').foreground: got '#fbbf24' / expected '#fbbf24'
+[OK] mini bar icon.fg: got '#60a5fa' / expected '#60a5fa'
+[OK] mini bar outer.bg: got '#60a5fa' / expected '#60a5fa'
+[OK] mini bar run.bg: got '#34d399' / expected '#34d399'
+[OK] mini bar stop.bg: got '#f87171' / expected '#f87171'
+[OK] mini bar pause.bg: got '#fbbf24' / expected '#fbbf24'
+[OK] mini bar step.bg: got '#60a5fa' / expected '#60a5fa'
+[OK] mini bar 主题同步元组含 ac/bd/acl 见 _sync_mini_bar_status 的 theme 元组
+[light*] sc=#10b981 dg=#ef4444 wn=#f59e0b ac=#2563eb acl=#eff6ff bd=#e2e8f0 hlbg=#FEF3C7 bgc=#ffffff bg=#f5f6f8
+[OK] btn_run.bg(运行=sc): got '#10b981' / expected '#10b981'
+[OK] btn_pause.bg(暂停=wn): got '#f59e0b' / expected '#f59e0b'
+[OK] btn_step.bg(单步=ac): got '#2563eb' / expected '#2563eb'
+[OK] btn_record.bg(录制=dg): got '#ef4444' / expected '#ef4444'
+[OK] tree.tag('running').background: got '#FEF3C7' / expected '#FEF3C7'
+[OK] rz.tag('error').foreground: got '#ef4444' / expected '#ef4444'
+[OK] rz.tag('success').foreground: got '#10b981' / expected '#10b981'
+[OK] rz.tag('warning').foreground: got '#f59e0b' / expected '#f59e0b'
+[OK] dialogs.C 取值 == 当前 utils.C dialogs.C={'bg': '#f5f6f8', 'bgc': '#ffffff', 'fgt': '#1a202c', 'fgb': '#2d3748', 'fgm': '#718096', 'ac': '#2563eb', 'ach': '#1d4ed8', 'acl': '#eff6ff', 'sc': '#10b981', 'dg': '#ef4444', 'wn': '#f59e0b', 'bd': '#e2e8f0', 'logbg': '#fdfdfd', 'logfg': '#2d3748', 'ebg': '#ffffff', 'err': '#ef4444', 'errbg': '#fff0f0', 'ok': '#10b981', 'hover': '#1d4ed8', 'cardhover': '#3b82f6', 'focus': '#2563eb', 'flowbg': '#f8fafc', 'hlbg': '#FEF3C7'} utils.C={'bg': '#f5f6f8', 'bgc': '#ffffff', 'fgt': '#1a202c', 'fgb': '#2d3748', 'fgm': '#718096', 'ac': '#2563eb', 'ach': '#1d4ed8', 'acl': '#eff6ff', 'sc': '#10b981', 'dg': '#ef4444', 'wn': '#f59e0b', 'bd': '#e2e8f0', 'logbg': '#fdfdfd', 'logfg': '#2d3748', 'ebg': '#ffffff', 'err': '#ef4444', 'errbg': '#fff0f0', 'ok': '#10b981', 'hover': '#1d4ed8', 'cardhover': '#3b82f6', 'focus': '#2563eb', 'flowbg': '#f8fafc', 'hlbg': '#FEF3C7'}
+[OK] dialogs.C is ACRPA.C (同一颜色表对象) dialogs.C=2284829477120 acrpa.C=2284829477120
+[OK] dialogs.C['ac'] == 当前 ac: got '#2563eb' / expected '#2563eb'
+[OK] netlink_window 暴露模块级 refresh_theme() 
+[OK] NetLinkWindow 存在 refresh_theme() 
+[OK] netlink.win.bg: got '#f5f6f8' / expected '#f5f6f8'
+[OK] netlink.tv tag('run').foreground: got '#10b981' / expected '#10b981'
+[OK] netlink.tv tag('pause').foreground: got '#f59e0b' / expected '#f59e0b'
+--- 往返切换前后「主题期望色」对照 ---
+palette key                         light       dark     light*
+play btn (sc)                     #10b981    #34d399    #10b981
+pause btn (wn)                    #f59e0b    #fbbf24    #f59e0b
+step btn (ac)                     #2563eb    #60a5fa    #2563eb
+record btn (dg)                   #ef4444    #f87171    #ef4444
+tree running (hlbg)               #FEF3C7    #4a3a12    #FEF3C7
+log error (dg)                    #ef4444    #f87171    #ef4444
+--- 控件实测 (往返切换后, 应等于 light* 列) ---
+btn_run.bg (实测)                            #10b981
+btn_pause.bg (实测)                          #f59e0b
+btn_step.bg (实测)                           #2563eb
+btn_record.bg (实测)                         #ef4444
+tree running tag (实测)                      #FEF3C7
+rz error tag (实测)                          #ef4444
+dialogs.C['ac'] (实测)                       #2563eb
+=== 结果: OK (共 57 项检查) ===

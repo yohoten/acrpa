@@ -133,6 +133,20 @@ def _import_state():
         return None
 
 
+def _import_version_info():
+    """懒 import version_info（版本号唯一事实来源）；失败返回 None。
+
+    与 _import_state 同口径：netlink 作为应用内包加载时 sys.path 已含 src。
+    集中在一处导入既避免顶层硬依赖，也便于新增回退逻辑。
+    """
+    try:
+        import version_info
+        return version_info
+    except Exception as e:
+        _nl_log("node: import version_info failed: {}".format(e), "WARN")
+        return None
+
+
 def _safe_int(v, default):
     try:
         return int(v)
@@ -395,13 +409,21 @@ class NetLinkNode(object):
             pass
 
     def _read_version(self):
+        """当前应用版本号 —— 统一取自 version_info（读根 VERSION，唯一事实来源）。
+
+        历史实现直接读取项目根目录下的 VERSION 文件，绕过了 version_info 的
+        多级查找（EXE 同级 / _MEIPASS / 项目根）与冻结路径处理，打包环境下
+        本节点可能读到空版本，与其它模块的版本口径出现分叉。此处改为复用
+        version_info，改一处（根 VERSION 文件）即全局生效。
+        极端情况下 version_info 不可导入时返回空串，由上层忽略版本字段。
+        """
+        vi = _import_version_info()
+        if vi is None:
+            return ""
         try:
-            base = os.path.dirname(os.path.abspath(__file__))
-            root = os.path.dirname(os.path.dirname(base))
-            path = os.path.join(root, "VERSION")
-            with open(path, "r", encoding="utf-8") as f:
-                return f.read().strip()
-        except Exception:
+            return str(vi.get_version() or "").strip()
+        except Exception as e:
+            _nl_log("node: version_info.get_version failed: {}".format(e), "WARN")
             return ""
 
     # ── Phase4-3 TLS 状态（供 UI 只读展示）─────────────────────────────

@@ -1,0 +1,10 @@
+[OK]   1. import netlink
+[OK]   2. frame roundtrip (1~5 bytes chunked)
+[OK]   3. sticky packet (3 frames in one feed)
+[OK]   4. bad frames raise FrameError
+[OK]   5. loopback Connection x200 + idempotent close
+[OK]   6. NetBus post/subscribe/publish/drain
+[OK]   7. log sink register/broadcast/unregister
+[OK]   8. state netlink config
+----------------------------------------------------
+PASS 8/8

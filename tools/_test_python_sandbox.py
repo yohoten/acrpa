@@ -9,6 +9,7 @@ import os
 import sys
 import json
 import time
+import threading
 import subprocess
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -442,17 +443,67 @@ r = py_sandbox.run("subs = ().__class__.__base__.__subclasses__()", "sandbox")
 check(r.get("ok") is False, "u2 §1.2 subclasses chain blocked by run() precheck")
 
 # ======================================================================
-# v. §1.3 trusted 超时绕过 —— 本期未修（已知限制，如实标注）
-#    repro A: import sys; sys.settrace(None); while True: pass
-#    repro B: import time; time.sleep(8)（settrace 仅行事件生效，阻塞期不检查）
-#    当前 deadline 仍依赖 sys.settrace，两种绕过依旧成立；预期修复
-#    （常驻 worker 子进程 + 超时 kill / Job Object 内存限制）属后续批次。
-#    为避免挂起测试进程，此处不执行死循环，仅以 [WARN] 如实标注现状。
+# v. BUG-04 对抗性超时用例（trusted 超时不可被绕过）
+#    方案 B（保留行级追踪器兜底 + 追踪器保护 + 看门狗线程异步注入）：
+#    v1/v2: sys.settrace(None) 后死循环 → 必须被按时中断
+#    v3/v4: 纯 Python 死循环 → 必须被按时中断
+#    v5   : C 层阻塞 time.sleep → 方案 B 无法按时中断（KNOWN LIMITATION，WARN）
+#    v6/v7: 正常返回 / 正常异常语义回归
+#    v8   : 执行结束后无看门狗线程泄漏
 # ======================================================================
-_has_worker = any(t in _ps for t in ("Watchdog", "JOB_OBJECT", "Job Object",
-                                     "worker_process", "_WORKER"))
-warn("v1 §1.3 KNOWN LIMITATION (本期未修/后续批次): trusted 超时仍基于 sys.settrace，"
-     "可被 sys.settrace(None) 或 C 层阻塞绕过 (worker_added=%r)" % (_has_worker,))
+_ps = read_text(os.path.join(SRC, "py_sandbox.py"))
+check("PyThreadState_SetAsyncExc" in _ps,
+      "v0 watchdog async-inject (PyThreadState_SetAsyncExc) present")
+check("_block_trace_call" in _ps,
+      "v0b trace-guard (_block_trace_call) present")
+
+_base_threads = threading.active_count()
+
+# v1/v2: 关闭追踪 + 死循环，必须在限定时间内被中断
+t0 = time.time()
+r = py_sandbox.run("import sys\nsys.settrace(None)\nwhile True:\n    pass",
+                   "trusted", timeout=1.0)
+dt1 = time.time() - t0
+check(r.get("ok") is False and r.get("timed_out") is True,
+      "v1 settrace(None)+deadloop timed_out (timed_out=%r)" % (r.get("timed_out"),))
+check(dt1 < 5.0, "v2 settrace(None) bypass interrupted in time (%.2fs <5s)" % dt1)
+
+# v3/v4: 纯 Python 死循环
+t0 = time.time()
+r = py_sandbox.run("while True:\n    pass", "trusted", timeout=1.0)
+dt3 = time.time() - t0
+check(r.get("ok") is False and r.get("timed_out") is True,
+      "v3 pure-python deadloop timed_out (timed_out=%r)" % (r.get("timed_out"),))
+check(dt3 < 5.0, "v4 pure-python deadloop interrupted in time (%.2fs <5s)" % dt3)
+
+# v5: C 层阻塞（time.sleep）——方案 B 无法按时中断，如实标注 KNOWN LIMITATION
+t0 = time.time()
+r = py_sandbox.run("import time\ntime.sleep(4)\nresult = 1", "trusted", timeout=1.0)
+dt5 = time.time() - t0
+if dt5 < 3.0:
+    # 若能在限定时间内中断（更强手段 / 未来方案 A），则视为通过
+    check(r.get("timed_out") is True,
+          "v5 C-level block interrupted in time (elapsed=%.2fs)" % dt5)
+else:
+    warn("v5 KNOWN LIMITATION (方案 B): C 层阻塞 time.sleep 无法按时中断，"
+         "仅在阻塞返回后抛超时 (elapsed=%.2fs, timed_out=%r)"
+         % (dt5, r.get("timed_out")))
+
+# v6: 正常代码仍正确返回结果（回归）
+r = py_sandbox.run("result = 6*7", "trusted", timeout=5)
+check(r.get("ok") is True and r.get("result") == "42",
+      "v6 trusted normal result preserved (got %r)" % (r.get("result"),))
+
+# v7: 正常异常仍按原语义抛出（回归）
+r = py_sandbox.run("result = 1 / 0", "trusted", timeout=5)
+check(r.get("ok") is False and "ZeroDivisionError" in (r.get("error") or ""),
+      "v7 trusted normal exception preserved (error=%r)" % (r.get("error"),))
+
+# v8: 执行结束后无看门狗线程泄漏
+time.sleep(0.5)
+check(threading.active_count() <= _base_threads,
+      "v8 no watchdog thread leak (active=%d base=%d)"
+      % (threading.active_count(), _base_threads))
 
 # ======================================================================
 # 汇总

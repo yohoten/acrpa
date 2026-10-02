@@ -1,0 +1,31 @@
+Traceback (most recent call last):
+  File "d:\CodingEmber\ACRPA\tools\_test_netlink_tls.py", line 403, in main
+    busB.subscribe(TOPIC_CMD_RESULT, lambda tp, pl: cmd_events.append(
+NameError: name 'TOPIC_CMD_RESULT' is not defined
+==================================================================
+NetLink Phase 4-3 TLS acceptance (stdlib ssl + TOFU pinning)
+==================================================================
+[..] 证书获取分支: cryptography
+[OK]   1a. tls.available() 为真
+[OK]   1b. server_context('','') == (None,'cert missing')
+[OK]   1c. 非法路径返回非空原因
+[OK]   3. client_context() 返回非 None
+[OK]   2a. TLS 启用但无证书 → start() 返回 False
+[OK]   2b. 总线收到 TOPIC_STATUS level=error
+[OK]   2c. _started 保持 False
+[OK]   2d. 关闭 TLS 后 start() 成功
+[OK]   7. pin_add 同一指纹两次 → 仍 1 条
+[OK]   4a. A(TLS) start() 成功
+[OK]   4b. B(TLS, 静态对端→A) start() 成功
+[OK]   4c. B 经 TLS 连上 A（conn.alive，3.06s）
+[OK]   4d. NETLINK_TLS_PINS 出现 1 条指纹（TOFU）
+[OK]   4e. B 的 TOPIC_STATUS 出现 tofu/pinned 信息
+[OK]   4f. A.open_pair_window() 返回 6 位 PIN
+[OK]   4g. TLS 通道上完成 AUTH(pin) 配对（0.12s）
+[OK]   4h. B 在 TLS 通道收到 A 的 STATE_SYNC（业务消息可用，0.06s）
+[OK]   5a. set_peer_perm(control) → B 收到 TOPIC_AUTH stage=perm（0.03s）
+[FAIL] 未捕获异常:
+[OK]   10. 收尾：nl-* 线程 ≤5s 收敛为 0
+==================================================================
+耗时 4.26s (budget 60s)
+FAIL (1 assertion(s) failed; warns=0)

@@ -219,7 +219,8 @@ def main():
     from netlink.bus import NetBus
     from netlink import tls
     from netlink.protocol import make_msg, T_CMD_RUN
-    from netlink.node import TOPIC_STATUS, TOPIC_PEER_STATE, TOPIC_AUTH
+    from netlink.node import (TOPIC_STATUS, TOPIC_PEER_STATE, TOPIC_AUTH,
+                              TOPIC_CMD_RESULT)
 
     orig_make_node_id = nl_node.make_node_id
     run_tag = uuid.uuid4().hex[:6]

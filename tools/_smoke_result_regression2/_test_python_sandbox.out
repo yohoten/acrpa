@@ -1,0 +1,101 @@
+[OK] import py_sandbox OK
+[OK] a1 sandbox rejects 'import os' (forbidden import)
+[OK] a2 trusted allows 'import os'
+[OK] b1 open: rejected (forbidden call: open)
+[OK] b2 eval: rejected (forbidden call: eval)
+[OK] b3 exec: rejected (forbidden call: exec)
+[OK] b4 __import__: rejected (forbidden call: __import__)
+[OK] c1 dunder attr: rejected (forbidden attribute: __bases__)
+[OK] d1 def allowed: allowed
+[OK] d2 class: rejected (forbidden statement: ClassDef)
+[OK] d3 with: rejected (forbidden statement: With)
+[OK] d4 lambda: rejected (forbidden statement: Lambda)
+[OK] e1 syntax error
+[OK] e2 code too large
+[OK] f1 run sandbox result=3 (got '3')
+[OK] g1 run len([1,2]) ok
+[OK] g2 run open() blocked by precheck
+[OK] h1 sandbox timeout detected (timed_out=True)
+[OK] h2 sandbox timeout elapsed=1.00s (<5s)
+[OK] h3 trace cleared -> sandbox runs normally after timeout
+[OK] i1 trusted import math result='3'
+[OK] j1 full subprocess result='42'
+[OK] j2 full timeout -> timed_out=True
+[OK] j2b full timeout elapsed=2.02s (<8s)
+[OK] j3 no 'import multiprocessing' in py_sandbox
+[OK] j4 subprocess used in py_sandbox
+[OK] k1 audit file exists: d:\CodingEmber\ACRPA\logs\acrpa_py_20261002.log
+[OK] k2 last audit line is valid JSON
+[OK] k3 audit has code_sha1
+[OK] k4 audit has perm
+[OK] k5 audit does NOT contain full source secret
+[OK] l1 cleanup_audit(0) / cleanup_audit(3650) did not raise
+[OK] l2 existing acrpa_*.log preserved (not deleted)
+[OK] m1 dangerous builtins absent (extra=[])
+[OK] m2 safe builtins present (missing=[])
+[OK] n1 engine.py has Python handler
+[OK] n2 engine.py calls py_sandbox.precheck
+[OK] n3 engine.py calls py_sandbox.run
+[OK] n4 commands.py registers Python
+[OK] n5 commands.py still registers 代码
+[OK] n6 state.py has python_default_perm
+[OK] n7 state.py has python_full_enabled
+[OK] n8 state.py has python_timeout
+[OK] n9 settings_window.py has Python card
+[OK] n10 settings_window has python apply_map
+[OK] n11 settings_window tracks python vars
+[OK] o1 src/workflow.py unchanged (git diff empty)
+[OK] o2 NetLink token present in ACRPA.py: open_devlink (x2)
+[OK] o2 NetLink token present in ACRPA.py: set_control_hooks (x1)
+[OK] o2 NetLink token present in ACRPA.py: start_netlink (x1)
+[OK] o2 NetLink token present in ACRPA.py: _nl_hook_run (x2)
+[OK] o3 Mini Bar hooks still in ACRPA.py
+[OK] o4 utils.themed still present
+[OK] o5 ai_client.PROVIDER_PRESETS still present
+[OK] o6 devlink_btn with globe emoji still present
+[OK] import engine OK (dynamic handler signature tests enabled)
+[OK] p1 arity of 2-arg handler == 2 (got 2)
+[OK] p2 arity of 3-arg handler == 3 (got 3)
+[OK] p3 2-arg handler invoked without api (got 'ok2')
+[OK] p4 3-arg handler invoked with api (type=AcrpaAPI)
+[OK] q dependency present: pyautogui
+[OK] q dependency present: xlrd
+[OK] q dependency present: pyperclip
+[OK] r1 sandbox rejects str.format dunder read: rejected (forbidden call: format)
+[OK] r2 sandbox rejects format dunder leak chain: rejected (forbidden call: format)
+[OK] r3 sandbox rejects string constant containing __: rejected (forbidden dunder in string)
+[OK] r3b sandbox rejects concatenated dunder string: rejected (forbidden dunder in string)
+[OK] r4 sandbox rejects bare format() call: rejected (forbidden call: format)
+[OK] r5 'format' removed from SANDBOX_BUILTINS
+[OK] r6 'format' present in FORBIDDEN_CALLS
+[OK] r7 trusted still allows str.format: allowed
+[OK] r8 trusted still allows __ in string: allowed
+[OK] r9 run() blocks format escape at precheck (error='forbidden call: format')
+[OK] s1 doc repro: print marker occurs once (got 1)
+[OK] s2 last-expr call executed once (got 1)
+[OK] s3 last-expr value captured as result (got '1')
+[OK] s4 bare last-expr becomes result (got '3')
+[OK] s5 last-expr rewrites result (got '6')
+[OK] s6 no second-eval path remains (_extract_result)
+[OK] t1 in-process print forwarded to injected log callback
+[OK] t2 print script ok=True
+[OK] t3 full run ok (error='')
+[OK] t4 full result not polluted by stdout (got '5')
+[OK] t4b full result carries no print output
+[OK] t5 full user print forwarded to log channel
+[OK] t6 full result channel marker parsed (got '42')
+[OK] t7 additive raw_result present (full)
+[OK] u1 §1.2 subclasses chain rejected (sandbox precheck): rejected (forbidden attribute: __subclasses__)
+[OK] u2 §1.2 subclasses chain blocked by run() precheck
+[OK] v0 watchdog async-inject (PyThreadState_SetAsyncExc) present
+[OK] v0b trace-guard (_block_trace_call) present
+[OK] v1 settrace(None)+deadloop timed_out (timed_out=True)
+[OK] v2 settrace(None) bypass interrupted in time (1.00s <5s)
+[OK] v3 pure-python deadloop timed_out (timed_out=True)
+[OK] v4 pure-python deadloop interrupted in time (1.00s <5s)
+[WARN] v5 KNOWN LIMITATION (方案 B): C 层阻塞 time.sleep 无法按时中断，仅在阻塞返回后抛超时 (elapsed=4.01s, timed_out=True)
+[OK] v6 trusted normal result preserved (got '42')
+[OK] v7 trusted normal exception preserved (error='ZeroDivisionError: division by zero')
+[OK] v8 no watchdog thread leak (active=1 base=1)
+
+SUMMARY: 0 FAIL, 1 WARN

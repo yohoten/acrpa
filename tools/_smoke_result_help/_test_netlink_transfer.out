@@ -1,0 +1,39 @@
+==================================================================
+NetLink Phase 3-1a script transfer kernel self-test
+==================================================================
+[OK]   1a. is_valid_script_name 正/反例（含 a/b.xls 为反例）
+[OK]   1b. resolve_script 不存在文件 → None
+[OK]   1c. sha256_file 与 hashlib 一致
+[OK]   2. list_scripts 返回 2 条(x.xls/root, received/y.xls/received) 且含 size/mtime
+[OK]   0. 被控端 A start (tcp 19980)
+[OK]   0b. 控制端 B start (tcp 19990, 静态对端→A)
+[OK]   0c. 配对完成（A 白名单出现 B, 0.12s）
+[OK]   3a. B.list_remote_scripts(A_node_id) 发送成功
+[OK]   3b. B 的 TOPIC_TRANSFER 收到 state=list 且 scripts 含 2 条（0.03s）
+[OK]   4a. push_script 返回非空 tid
+[OK]   4b. A recv_dir/pushed.xls 落盘且内容逐字节一致(sha256 相同, 0.09s)
+[OK]   4c. B 收到 CMD_ACK status=done 且 detail 含 received/pushed.xls
+[OK]   5a. A 收到 BLOB_CHUNK 数量 == ceil(size/CHUNK_RAW) = 4
+[OK]   5b. 分块 seq 严格递增 0..N-1
+[OK]   14a. A 发布 TOPIC_TRANSFER 含 sending 与 done
+[OK]   14b. A 审计文件含 cmd=SCRIPT_PUSH 与 result=
+[OK]   R0. 原始控制端配对成功(AUTH_OK)
+[OK]   6a. 校验和不匹配 → CMD_ERR reason=checksum mismatch
+[OK]   6b. 无目标文件且无 .tmp_*.part 残留
+[OK]   7. 声明大小超限 → CMD_ERR reason=file too large
+[OK]   8. 非法文件名(../../evil.xls 与 a.exe) → invalid script name
+[OK]   9. 分块乱序(先 seq=1) → chunk out of order
+[OK]   10. 同 tid 连发两次 BLOB_BEGIN → duplicate transfer
+[OK]   13a. perm=observe → CMD_ERR reason 含 permission denied
+[OK]   13b. 权限拒绝后 recv_dir 无新增文件/无 .part 残留
+[OK]   11a. 中断前确实存在 .tmp_*.part（证明已建临时文件）
+[OK]   11b. conn.close() 后 ≤3s 无 .tmp_*.part 残留（0.00s）
+[OK]   12a. push_script(run=True) 返回 tid
+[OK]   12b. run=True 后 ≤3s fake_run 被调用（0.03s）
+[OK]   12c. state.filename 指向 recv_dir/autorun.xls
+[OK]   15a. _verify_netlink_package.py NL_MODULES 含 netlink.transfer
+[OK]   15b. NL_MODULES 交叉校验覆盖 17 项
+------------------------------------------------------------------
+[OK]   总耗时 1.1s (< 60.0s)
+warns=0
+PASS (all assertions OK; warns=0)

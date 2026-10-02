@@ -1,0 +1,97 @@
+[OK] import browser_backend 未触发 playwright 导入（懒加载契约）
+────────────────────────────────────────────────────────────
+── parse_resource_types ──
+[OK] 空 → 不过滤（空集合） -> frozenset()
+[OK] 全部 → 不过滤 -> frozenset()
+[OK] all → 不过滤 -> frozenset()
+[OK] xhr -> frozenset({'xhr'})
+[OK] XHR → 归一化小写 -> frozenset({'xhr'})
+[OK] 中文 '接口' → xhr -> frozenset({'xhr'})
+[OK] 逗号分隔 -> frozenset({'xhr', 'fetch'})
+[OK] 空白分隔 -> frozenset({'xhr', 'fetch'})
+[OK] 中文多类型 -> frozenset({'script', 'document'})
+── dedup_key ──
+[OK] 去重键 -> ('GET', 'u', 200)
+[OK] 空对象 → 默认键 -> ('', '', None)
+── parse_url_pattern / match_url ──
+[OK] 空 pattern → 空/contains -> ('', 'contains')
+[OK] 含斜杠但非 /re/ → contains -> ('/api/token', 'contains')
+[OK] /re/ → regex -> ('api/\\d+', 'regex')
+[OK] 包含匹配命中 -> True
+[OK] 包含匹配未命中 -> False
+[OK] 正则命中 -> True
+[OK] 空 value 恒真 -> True
+[OK] 非法正则 → False（不抛） -> False
+── match_response / export_packets ──
+[OK] match_response 包含过滤 -> ['http://t/api/a', 'http://t/api/b']
+[OK] match_response /re/ 正则 -> ['http://t/api/a', 'http://t/api/b']
+[OK] 空 pattern 全部命中 -> ['http://t/api/a', 'http://t/api/b', 'http://t/other']
+[OK] export_packets JSON 可解析 -> 'u'
+────────────────────────────────────────────────────────────
+── session 监听队列 ──
+[OK] _start_listen 成功
+[OK] 队列 maxlen = 参数上限 -> 2
+[OK] 已注册 response 监听
+[OK] 命中入队 2 条 -> 2
+[OK] 去重 (method,url,status) 生效 -> 2
+[OK] 同 url 不同 status → 视为不同键（仍入队但受上限约束） -> 2
+[OK] 超上限丢弃最旧 -> 2
+[OK] 队列保留最新 2 条 -> ['http://t/api/a', 'http://t/api/c']
+[OK] 资源类型过滤：非 xhr 被排除 -> ['http://t/api/y']
+[OK] URL 正则过滤生效 -> 1
+[OK] _collect_packets 取回 2 条 -> (True, 2)
+[OK] 取值后队列清空 -> 0
+[OK] 无数据 + 超时 → ok=False -> False
+[OK] 超时 detail=TIMEOUT -> 'TIMEOUT'
+[OK] 空队列取包 → None -> None
+[OK] 重新监听后入队 -> 1
+[OK] 停止监听清空队列 -> 0
+[OK] 停止监听移除 handler -> None
+[OK] 停止监听已 remove_listener
+── facade：开始监听 / 等待数据包 / 停止监听 ──
+[OK] 未监听 → return False
+[OK] 未监听 → INVALID_ARGUMENT -> 'INVALID_ARGUMENT'
+[OK] 开始监听 return None
+[OK] 等待数据包 return None
+[OK] 等待数据包写回变量 pkt_var
+[OK] 写回内容为命中包的 JSON 列表 -> 'http://t/api/token'
+[OK] 无命中 → return False
+[OK] 无命中 → TIMEOUT -> 'TIMEOUT'
+[OK] 停止监听 return None
+[OK] 注册回调失败 → return False
+[OK] 注册回调失败 → LISTEN_ERROR -> 'LISTEN_ERROR'
+[OK] 无浏览器 → return False
+[OK] 无浏览器 → PW_NOT_INSTALLED -> 'PW_NOT_INSTALLED'
+────────────────────────────────────────────────────────────
+── AST 结构断言 ──
+[OK] 模块级不存在 import playwright（AST）
+[OK] 存在函数定义 parse_resource_types
+[OK] 存在函数定义 dedup_key
+[OK] 存在函数定义 parse_url_pattern
+[OK] 存在函数定义 match_url
+[OK] 存在函数定义 match_response
+[OK] 存在函数定义 export_packets
+[OK] 存在函数定义 _on_response
+[OK] 存在函数定义 _start_listen
+[OK] 存在函数定义 _stop_listen
+[OK] 存在函数定义 _pop_matching_packet
+[OK] 存在函数定义 _collect_packets
+[OK] 存在函数定义 _browser_start_listen
+[OK] 存在函数定义 _browser_wait_packets
+[OK] 存在函数定义 _browser_stop_listen
+────────────────────────────────────────────────────────────
+── commands 注册 / handler 绑定 / state 新键 ──
+[OK] 注册表包含新命令 '开始监听'
+[OK] 注册表包含新命令 '等待数据包'
+[OK] 注册表包含新命令 '停止监听'
+[OK] get_handler('开始监听') 非空
+[OK] get_handler('等待数据包') 非空
+[OK] get_handler('停止监听') 非空
+[OK] state.BROWSER_CDP_ENDPOINT 默认值 -> ''
+[OK] state.BROWSER_LISTEN_MAX 默认值 -> 200
+[OK] state.BROWSER_LISTEN_DEFAULT_TIMEOUT 默认值 -> 15.0
+[OK] state.BROWSER_USER_AGENT 默认值 -> ''
+────────────────────────────────────────────────────────────
+[SKIP] 真实网络响应监听（需 playwright + Chromium 真实请求）—— 未在本环境执行
+────────────────────────────────────────────────────────────
+结果: PASS (0 失败, 0 项警告)

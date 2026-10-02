@@ -1,0 +1,39 @@
+[1] safe_eval 测试
+  ✓ 条件 x > 5 
+  ✓ 条件 x == 1 
+  ✓ 数学 x + y * 2 
+  ✓ 数学 (a+b)/2 
+  ✓ 拒绝危险表达式 __import__ 
+  ✓ 复合 and 条件 
+[2] ScriptData 测试
+  ✓ args 中 None → 空串 
+  ✓ to_tuple 长度 
+  ✓ from_xlrd_row_values 
+[3] commands 注册表测试
+  ✓ 命令总数 >= 50 
+  ✓ 找图 handler 已绑定 
+  ✓ AI找图 handler 已绑定 
+  ✓ 运行工作流 handler 已绑定 
+  ✓ 打开网页 handler 已绑定 
+[4] version_manager 测试
+  ✓ 保存版本 v1 
+  ✓ 保存版本 v2 
+  ✓ 历史 2 条 
+  ✓ 恢复 v1 
+  ✓ diff 含变更 
+[5] scheduler 测试
+  ✓ 每日调度计算 
+[6] workflow 解析测试
+  ✓ 工作流 4 步骤 
+  ✓ 简写脚本规范化 
+  ✓ condition 分支规范化 
+  ✓ parallel 子步骤 
+[7] plugins 测试
+  已加载插件: []
+  ✓ list_plugins 可执行 
+[8] updater 版本比较测试
+  ✓ v1.0 < v1.1 
+  ✓ v1.1 > v1.0 
+
+==================================================
+全部通过 ✓

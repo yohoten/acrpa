@@ -1,0 +1,28 @@
+================================================================
+NetLink Phase2-1b pairing/permission UI integration smoke test
+================================================================
+[OK]   0. start node (tcp 19970)
+[OK]   0b. netlink.get_node() 可用
+[OK]   1. open_netlink_window 成功
+[OK]   1b. 窗口 alive()
+[OK]   2. open_pair_window 返回 6 位数字 PIN
+[OK]   2b. pair_window_status()['active'] is True
+[OK]   2c. 遍历窗口 widget 文本可找到 PIN（去空格后）
+[OK]   2d. 配对码对话框已创建
+[OK]   2e. 对话框中可找到 PIN
+[OK]   3. 收到被控端 HELLO
+[OK]   3b. 收到 AUTH_CHALLENGE(含 nonce+salt)
+[OK]   3c. AUTH 四步后收到 AUTH_OK
+[OK]   3d. AUTH_OK.perm == observe
+[OK]   4. 「已配对设备」区出现该设备
+[OK]   4b. 该行权限显示 仅观察
+[OK]   5. set_peer_perm(control) 返回 True
+[OK]   5b. 该行权限即时变为 允许操控
+[OK]   6. remove_peer 返回 True
+[OK]   6b. 该设备已从「已配对设备」区消失
+[OK]   6c. node.list_peers() 为空
+[OK]   7. stop 后窗口仍存活(alive)
+[OK]   7b. stop 后刷新阶段耗时 < 2s
+----------------------------------------------------------------
+elapsed 8.47s, warns=0
+PASS (all assertions OK)

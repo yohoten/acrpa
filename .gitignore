@@ -80,3 +80,4 @@ market_scripts/
 *.acrpapkg
 # 根目录散落的脚本下载残留（脚本模板应放 template/，该目录已纳管）
 /*.xls
+template/

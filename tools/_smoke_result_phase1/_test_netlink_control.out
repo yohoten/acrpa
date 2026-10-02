@@ -1,0 +1,52 @@
+================================================================
+NetLink Phase2-2 control kernel self-test
+================================================================
+[OK]   0. start node (tcp 19980)
+[OK]   0b. netlink.get_node() 可用
+[OK]   0c. 建立 ControlExecutor 并注入钩子
+[OK]   0d. 打开配对窗口拿到 PIN
+[OK]   0e. cli1 配对 AUTH_OK
+[OK]   0f. cli2 配对 AUTH_OK
+[OK]   1. observe + CMD_RUN → permission denied
+[OK]   2a. 收到 CMD_ACK status=accepted
+[OK]   2b. fake_run <=2s 被调用 1 次
+[OK]   2c. 收到广播终态 CMD_ACK status=done
+[OK]   3a. 无脚本 → reason=='no script selected'
+[OK]   3b. fake_run 未被调用
+[OK]   4. 运行中 → reason=='already running'
+[OK]   5. 录制中 → reason=='recording in progress'
+[OK]   6. 未运行 PAUSE → reason=='not running'
+[OK]   7a. PAUSE → CMD_ACK done 且 detail 含 mode=script
+[OK]   7b. 脚本模式 PAUSE → state.pause_event.is_set() is False
+[OK]   7c. RESUME → is_set() is True
+[OK]   8a. workflow PAUSE → fake.paused is True
+[OK]   8b. workflow PAUSE 未动 state.pause_event（仍为 True）
+[OK]   8c. workflow PAUSE detail 含 mode=workflow
+[OK]   8d. workflow RESUME → fake.resumed is True
+[OK]   8e. workflow STOP → fake.stopped_called is True
+[OK]   9a. 脚本 STOP → state.quit2 is True
+[OK]   9b. 脚本 STOP → state.pause_event.is_set() is True
+[OK]   9c. 脚本 STOP → fake_stop 被调用
+[OK]   9d. 脚本 STOP detail 含 mode=script
+[OK]   10a. RUN_SCRIPT 收到 accepted
+[OK]   10b. state.filename == 该绝对路径
+[OK]   10c. state.script_dir == 该目录
+[OK]   10d. fake_run 被调用
+[OK]   11a. 穿越名 → reason=='invalid script name'
+[OK]   11b. 不存在 → reason=='script not found'
+[OK]   12a. 连发三条 → fake_run 只被调用 1 次
+[OK]   12b. 假钩子并发计数器最大值为 1（无重入）
+[OK]   13a. ControlExecutor.audit 可用
+[OK]   13b. 审计文件存在且位于 logs 目录
+[OK]   13c. 审计含 cmd=CMD_RUN / result= / actor=
+[OK]   13d. audit.tail(50) 非空
+[OK]   13e. config.json 不含审计内容（审计只写 logs 目录）
+[OK]   14a. 发起方 cli1 收到终态 CMD_ACK
+[OK]   14b. 另一条已认证连接 cli2 也收到该指令终态（broadcast）
+[OK]   15a. 未确认设备 → 被拒绝（user rejected / confirm timeout）
+[OK]   15b. 被拒后指令未执行（fake_run 未调用）
+[OK]   15c. 已确认设备重发 → 直通执行（终态 done）
+----------------------------------------------------------------
+[OK]   总耗时 8.6s (< 45.0s)
+warns=0
+PASS (all assertions OK)

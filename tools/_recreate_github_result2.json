@@ -1,0 +1,15 @@
+{
+  "phase": "gate",
+  "steps": {
+    "head": {
+      "status": 200,
+      "sha": "00cc4de7d5639333777a26d92e176af3987d5543"
+    },
+    "create_ref": {
+      "status": 422,
+      "body": "{\"message\":\"Reference update failed\",\"documentation_url\":\"https://docs.github.com/rest/git/refs#create-a-reference\",\"status\":\"422\"}"
+    }
+  },
+  "ok": false,
+  "gate": "FAIL_422_IMMUTABLE"
+}

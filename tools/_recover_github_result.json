@@ -1,0 +1,21 @@
+{
+  "steps": {
+    "get_tag": {
+      "status": 200,
+      "sha": "4e1c619c66ea3e4fa10161a501e8df6ac41de5df"
+    },
+    "delete_tag": {
+      "status": 204,
+      "body": ""
+    },
+    "create": {
+      "ok": false,
+      "error": "{\"message\":\"Validation Failed\",\"errors\":[{\"resource\":\"Release\",\"code\":\"custom\",\"field\":\"pre_receive\",\"message\":\"pre_receive Repository rule violations found\\n\\nCannot create ref due to creations being restricted.\\n\\n\"},{\"resource\":\"Release\",\"code\":\"custom\",\"field\":\"tag_name\",\"message\":\"tag_name was used by an immutable release\"},{\"resource\":\"Release\",\"code\":\"custom\",\"message\":\"Published releases m"
+    },
+    "restore_tag": {
+      "status": 422,
+      "body": "{\"message\":\"Reference update failed\",\"documentation_url\":\"https://docs.github.com/rest/git/refs#create-a-reference\",\"status\":\"422\"}"
+    }
+  },
+  "state": "DELETED_NOT_RECREATED"
+}

@@ -1,11 +1,11 @@
 # ACRPA — 桌面自动化工作流工具
 
-> **当前版本**：`v0.1.28-beta`（预发布 / Pre-release） · 许可证 **MIT** · 平台 **Windows x64**
+> **当前版本**：`v0.1.29-beta`（预发布 / Pre-release） · 许可证 **MIT** · 平台 **Windows x64**
 
 把操作步骤写进一张 Excel 表格（或用「录制」跑一遍），剩下的交给电脑 —— 图像识别定位、窗口管理、OCR、浏览器自动化、工作流编排、NetLink 多机互联、定时任务与本地 AI 增强全部内置。单文件便携版，免安装，双击即用。
 
 - 项目主页：[`index.html`](index.html) · English：[`index.en.html`](index.en.html)
-- 下载：[GitHub Release](https://github.com/yohoten/acrpa/releases/tag/v0.1.28-beta) · [Gitee 发行版](https://gitee.com/yohoten/ACRPA/releases)
+- 下载：[GitHub Release](https://github.com/yohoten/acrpa/releases/tag/v0.1.29-beta) · [Gitee 发行版](https://gitee.com/yohoten/ACRPA/releases)
 
 ![ACRPA 脚本编辑主界面](img/image1.png)
 
@@ -62,26 +62,26 @@
 
 | 渠道 | 链接 |
 | --- | --- |
-| GitHub（推荐） | [Release 页面](https://github.com/yohoten/acrpa/releases/tag/v0.1.28-beta) · 资产直链 [`ACRPA-v0.1.28-beta.exe`](https://github.com/yohoten/acrpa/releases/download/v0.1.28-beta/ACRPA-v0.1.28-beta.exe) |
+| GitHub（推荐） | [Release 页面](https://github.com/yohoten/acrpa/releases/tag/v0.1.29-beta) · 资产直链 [`ACRPA-v0.1.29-beta.exe`](https://github.com/yohoten/acrpa/releases/download/v0.1.29-beta/ACRPA-v0.1.29-beta.exe) |
 | Gitee | [发行版列表页](https://gitee.com/yohoten/ACRPA/releases)（附件陆续补充，可先使用 GitHub 下载） |
 
-**文件名与大小**：`ACRPA-v0.1.28-beta.exe` —— 14,047,384 字节（13.4 MiB / 14.05 MB），便携版，双击即用。
+**文件名与大小**：`ACRPA-v0.1.29-beta.exe` —— 14,680,412 字节（14.0 MiB / 14.68 MB），便携版，双击即用。
 
-**SHA-256**：`473f1db3da347a1310213e4fd70955f111f0fc397eb9e1ee7f5913d2b2606d54`
+**SHA-256**：`f57f1687452affaf2acccb13b67cdf810e28e6ed319eaf1cf37994dd3e283790`
 
 校验命令：
 
 ```bat
-certutil -hashfile "ACRPA-v0.1.28-beta.exe" SHA256
+certutil -hashfile "ACRPA-v0.1.29-beta.exe" SHA256
 ```
 
 ```powershell
-Get-FileHash .\ACRPA-v0.1.28-beta.exe -Algorithm SHA256
+Get-FileHash .\ACRPA-v0.1.29-beta.exe -Algorithm SHA256
 ```
 
-### 本版更新摘要（v0.1.28-beta）
+### 本版更新摘要（v0.1.29-beta）
 
-完整说明见 [`docs/releases/v0.1.28-beta.md`](docs/releases/v0.1.28-beta.md)。
+完整说明见 [`docs/releases/v0.1.29-beta.md`](docs/releases/v0.1.29-beta.md)。
 
 **一、NetLink 多设备互联（新增，纯标准库零新增依赖）**
 
@@ -126,7 +126,7 @@ python run.py
 
 > `run.py` 会自动把项目根目录与 `src/` 加入 `sys.path` 并做依赖预检，无需手动 `cd src`。
 
-**免源码方式**：从 Releases 下载 `ACRPA-v0.1.28-beta.exe`，双击直接运行，无需安装、无需 Python 环境。
+**免源码方式**：从 Releases 下载 `ACRPA-v0.1.29-beta.exe`，双击直接运行，无需安装、无需 Python 环境。
 
 ### 版本管理
 
@@ -589,7 +589,7 @@ ACRPA 自 v0.1.22 起支持 **DD 驱动**作为高性能输入后端：
 **扩展与其他**
 
 - [Python 代码扩展使用说明](docs/python扩展使用说明.md)
-- [版本发布说明](docs/releases/v0.1.28-beta.md)
+- [版本发布说明](docs/releases/v0.1.29-beta.md)
 
 **脚本市场**
 
@@ -618,6 +618,8 @@ ACRPA 自 v0.1.22 起支持 **DD 驱动**作为高性能输入后端：
 
 <a id="changelog"></a>
 ## 🗒️ 更新日志
+
+- **v0.1.29-beta**（2026-10-01）**Beta 预发布 · 重新发布** —— 本次为**重新发布**：因 `v0.1.28-beta` 的 tag 名被 GitHub immutable release 策略永久保留、无法重建，改为新 tag `v0.1.29-beta` 发布；**沿用以 v0.1.28-beta 构建的二进制**（程序内自报版本仍为 `0.1.28-beta`），功能与 v0.1.28-beta 完全一致（NetLink 多设备互联 + 六项体验优化）。独立 EXE 已在 GitHub Release 提供下载（`ACRPA-v0.1.29-beta.exe`，14,680,412 字节）。完整说明见 [`docs/releases/v0.1.29-beta.md`](docs/releases/v0.1.29-beta.md)。
 
 - **v0.1.28-beta**（2026-10-01）**Beta 预发布** —— 新增 **NetLink 多设备互联**（内网多机实时监控 + 零配置 UDP 发现 + 6 位配对码与 `PBKDF2-HMAC-SHA256` 挑战应答 + 三档权限 + 远程运行 / 暂停 / 恢复 / 停止 + 脚本分发与远端脚本管理 + 远程截图 + 浏览器只读面板 + TLS 可选加密 + 审计日志，纯标准库零新增依赖），并落地 **六项体验优化**（Mini Bar 三形态重做、暗黑模式显示修复、互联按钮瘦身、自定义 AI 提供商 / 模型 / BaseURL、Python 代码扩展、字体与显示缩放）。本版为预发布，可能存在问题，建议先在同版本测试机验证；`python_full_enabled` 与 `netlink_tls` 默认关闭。独立 EXE 已在 GitHub Release 提供下载（`ACRPA-v0.1.28-beta.exe`，14,047,384 字节）。完整说明见 [`docs/releases/v0.1.28-beta.md`](docs/releases/v0.1.28-beta.md)。
 

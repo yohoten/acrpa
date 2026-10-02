@@ -1,0 +1,31 @@
+{
+  "phase": "run",
+  "steps": {
+    "gate_ref": {
+      "status": 201,
+      "body": "{\"ref\":\"refs/tags/v0.1.29-beta\",\"node_id\":\"REF_kwDOSoghQ7ZyZWZzL3RhZ3MvdjAuMS4yOS1iZXRh\",\"url\":\"https://api.github.com/repos/yohoten/acrpa/git/refs/tags/v0.1.29-beta\",\"object\":{\"sha\":\"00cc4de7d5639333777a26d92e176af3987d5543\",\"type\":\"commit\",\"url\":\"https://api.github.com/repos/yohoten/acrpa/git/commits/00cc4de7d5639333777a26d92e176af3987d5543\"}}"
+    },
+    "create": {
+      "ok": true,
+      "id": 401970038,
+      "html_url": "https://github.com/yohoten/acrpa/releases/tag/v0.1.29-beta",
+      "prerelease": true,
+      "draft": false,
+      "name": "ACRPA v0.1.29-beta (Pre-release)",
+      "target_commitish": "main"
+    },
+    "upload": {
+      "ok": false,
+      "error": "http:422 body:{\"message\":\"Cannot upload assets to an immutable release.\",\"request_id\":\"3E32:2172C9:2E602:5A03B:6ABFD8A7\",\"documentation_url\":\"https://docs.github.com/rest\"}"
+    }
+  },
+  "asset": {
+    "path": "dist\\ACRPA v0.1.28-beta\\ACRPA v0.1.28-beta.exe",
+    "size": 14680412,
+    "sha256": "f57f1687452affaf2acccb13b67cdf810e28e6ed319eaf1cf37994dd3e283790"
+  },
+  "body_len": 2053,
+  "head_sha": "00cc4de7d5639333777a26d92e176af3987d5543",
+  "gate": "PASS",
+  "state": "CREATED_NO_ASSET"
+}

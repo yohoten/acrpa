@@ -1,0 +1,23 @@
+{
+  "phase": "finish",
+  "steps": {
+    "patch_to_draft": {
+      "status": 422,
+      "body": "{\"message\":\"Validation Failed\",\"errors\":[{\"resource\":\"Release\",\"code\":\"custom\",\"field\":\"state\",\"message\":\"state cannot be changed when release is immutable\"},{\"resource\":\"Release\",\"code\":\"custom\",\"field\":\"immutable\",\"message\":\"immutable cannot be changed when release is immutable\"}],\"documentation_url\":\"https://docs.github.com/rest/releases/releases#update-a-release\",\"status\":\"422\"}"
+    }
+  },
+  "release": {
+    "id": 401970038,
+    "html_url": "https://github.com/yohoten/acrpa/releases/tag/v0.1.29-beta",
+    "draft": false,
+    "prerelease": true,
+    "immutable": true
+  },
+  "asset": {
+    "path": "dist\\ACRPA v0.1.28-beta\\ACRPA v0.1.28-beta.exe",
+    "size": 14680412,
+    "sha256": "f57f1687452affaf2acccb13b67cdf810e28e6ed319eaf1cf37994dd3e283790"
+  },
+  "ok": false,
+  "state": "IMMUTABLE_PATCH_BLOCKED"
+}

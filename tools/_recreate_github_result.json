@@ -1,0 +1,35 @@
+{
+  "phase": "run",
+  "ok": false,
+  "steps": {
+    "delete": {
+      "status": 204
+    },
+    "create": {
+      "ok": false,
+      "error": "http:422 body:{\"message\":\"Validation Failed\",\"errors\":[{\"resource\":\"Release\",\"code\":\"custom\",\"field\":\"tag_name\",\"message\":\"tag_name was used by an immutable release\"}],\"documentation_url\":\"https://docs.github.com/rest/releases/releases#create-a-release\",\"status\":\"422\"}"
+    }
+  },
+  "facts": {
+    "asset_path": "dist\\ACRPA v0.1.28-beta\\ACRPA v0.1.28-beta.exe",
+    "asset_size": 14680412,
+    "asset_sha256": "f57f1687452affaf2acccb13b67cdf810e28e6ed319eaf1cf37994dd3e283790",
+    "body_path": "docs\\releases\\v0.1.28-beta.md",
+    "body_len": 1465,
+    "old_id": 400645621,
+    "old_name": "ACRPA v0.1.28-beta (Pre-release)",
+    "old_prerelease": true,
+    "old_immutable": true,
+    "old_html_url": "https://github.com/yohoten/acrpa/releases/tag/v0.1.28-beta",
+    "old_assets": [
+      {
+        "name": "ACRPA-v0.1.28-beta.exe",
+        "size": 14047384,
+        "digest": "sha256:473f1db3da347a1310213e4fd70955f111f0fc397eb9e1ee7f5913d2b2606d54",
+        "download_count": 6,
+        "browser_download_url": "https://github.com/yohoten/acrpa/releases/download/v0.1.28-beta/ACRPA-v0.1.28-beta.exe"
+      }
+    ]
+  },
+  "state": "DELETED_NOT_RECREATED"
+}

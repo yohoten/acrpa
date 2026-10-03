@@ -199,13 +199,20 @@ def _check_netlink(acrpa, utils):
 
 
 def _mb_theme_tuple_has(acrpa):
-    """源码级确认 mini bar 主题同步元组补入了 ac/bd/acl (签名健壮性)。"""
+    """源码级确认 mini bar 主题同步元组补入了 ac/bd/acl (签名健壮性)。
+
+    注意: `_sync_mini_bar_status` 已抽到 src/mini_bar.py (拆分第一阶段),
+    因此这里按「两文件合集」查找。
+    """
     try:
-        fp = os.path.join(ROOT, "src", "ACRPA.py")
-        with io.open(fp, "r", encoding="utf-8") as f:
-            src = f.read()
-        i = src.index("def _sync_mini_bar_status")
-        seg = src[i:i + 2000]
+        text = ""
+        for rel in ("src/ACRPA.py", "src/mini_bar.py"):
+            fp = os.path.join(ROOT, rel)
+            if os.path.exists(fp):
+                with io.open(fp, "r", encoding="utf-8") as f:
+                    text += f.read() + "\n"
+        i = text.index("def _sync_mini_bar_status")
+        seg = text[i:i + 2000]
         return ('C["ac"], C["bd"], C["acl"]' in seg)
     except Exception:
         return False

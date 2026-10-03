@@ -286,8 +286,11 @@ for token in ("open_devlink", "set_control_hooks", "start_netlink", "_nl_hook_ru
         # start_netlink 可能在 netlink 包内，本文件通过 netlink.start_netlink 间接调用
         warn("o2 NetLink token not found in ACRPA.py: %s" % token)
 
-check(("_mb_animate_width" in acrpa_text and "def _destroy_mini_bar" in acrpa_text
-       and "after_cancel" in acrpa_text), "o3 Mini Bar hooks still in ACRPA.py")
+check(("_mb_animate_width" in acrpa_text or
+       "_mb_animate_width" in read_text(os.path.join(SRC, "mini_bar.py")))
+      and ("def _destroy_mini_bar" in read_text(os.path.join(SRC, "mini_bar.py")))
+      and "after_cancel" in read_text(os.path.join(SRC, "mini_bar.py")),
+      "o3 Mini Bar hooks still present (已抽到 src/mini_bar.py)")
 check("def themed" in read_text(os.path.join(SRC, "utils.py")),
       "o4 utils.themed still present")
 check("PROVIDER_PRESETS" in read_text(os.path.join(SRC, "ai_client.py")),

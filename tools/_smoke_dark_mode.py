@@ -45,6 +45,16 @@ def _parse(rel):
     return ast.parse(_read(rel), filename=rel)
 
 
+# Mini Bar 已抽到 src/mini_bar.py: 针对它的静态断言要同时看两个文件
+UI_SOURCES = ("src/ACRPA.py", "src/mini_bar.py")
+
+
+def _parse_ui():
+    text = "\n".join(_read(r) for r in UI_SOURCES
+                     if os.path.exists(os.path.join(ROOT, r)))
+    return ast.parse(text, filename="<ACRPA.py+mini_bar.py>")
+
+
 def _find_func(tree, name):
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
@@ -245,8 +255,8 @@ def check_netlink_untouched():
 
 
 def check_mini_bar_guards():
-    """E. Mini Bar 守护断言。"""
-    tree = _parse("src/ACRPA.py")
+    """E. Mini Bar 守护断言 (函数已抽到 src/mini_bar.py, 故解析两文件合集)。"""
+    tree = _parse_ui()
 
     if _find_func(tree, "_mb_animate_width") is not None:
         _p("OK", "存在 _mb_animate_width (Mini Bar 守护)")
@@ -337,8 +347,11 @@ def check_theme_refresh_regressions():
             prev_line, colors_line))
 
     # G3. mini bar 主题同步元组含 ac/bd/acl
-    mb = _find_func(a_tree, "_sync_mini_bar_status")
-    mb_seg = ast.get_source_segment(a_src, mb) if mb is not None else ""
+    #     该函数已抽到 src/mini_bar.py, 因此这里用「两文件合集」的树与源码。
+    mb_src = "\n".join(_read(r) for r in UI_SOURCES
+                       if os.path.exists(os.path.join(ROOT, r)))
+    mb = _find_func(_parse_ui(), "_sync_mini_bar_status")
+    mb_seg = ast.get_source_segment(mb_src, mb) if mb is not None else ""
     if 'C["ac"], C["bd"], C["acl"]' in (mb_seg or ""):
         _p("OK", "G3 mini bar 主题同步元组含 ac/bd/acl")
     else:

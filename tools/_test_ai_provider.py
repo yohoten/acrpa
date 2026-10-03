@@ -454,12 +454,16 @@ def test_guards():
     for k, v in counts.items():
         ok("NetLink 守护 '{}' 出现 1 次".format(k), v == 1, "count={}".format(v))
 
+    # Mini Bar 已抽到 src/mini_bar.py, 这几条守护要看两文件合集
+    ui_tree = ast.parse("\n".join(
+        _read(r) for r in ("src/ACRPA.py", "src/mini_bar.py")
+        if os.path.exists(os.path.join(ROOT, r))), filename="<ACRPA.py+mini_bar.py>")
     has_mb = any(isinstance(n, ast.FunctionDef) and n.name == "_mb_animate_width"
-                 for n in ast.walk(tree))
+                 for n in ast.walk(ui_tree))
     ok("Mini Bar 守护 _mb_animate_width 存在", has_mb)
 
     dest = None
-    for n in ast.walk(tree):
+    for n in ast.walk(ui_tree):
         if isinstance(n, ast.FunctionDef) and n.name == "_destroy_mini_bar":
             dest = n
     has_cancel = False

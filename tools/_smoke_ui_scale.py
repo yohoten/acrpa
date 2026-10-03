@@ -63,6 +63,16 @@ def _parse(rel):
     return ast.parse(_read(rel), filename=rel)
 
 
+# Mini Bar 已抽到 src/mini_bar.py: 针对它的静态断言要同时看两个文件
+UI_SOURCES = ("src/ACRPA.py", "src/mini_bar.py")
+
+
+def _parse_ui():
+    text = "\n".join(_read(r) for r in UI_SOURCES
+                     if os.path.exists(os.path.join(ROOT, r)))
+    return ast.parse(text, filename="<ACRPA.py+mini_bar.py>")
+
+
 UI_MODULES = ("src/utils.py", "src/ACRPA.py", "src/settings_window.py",
               "src/dialogs.py", "src/tray.py", "src/netlink_window.py")
 
@@ -449,13 +459,14 @@ def check_guards():
             FAILS.append("NetLink 块 '{}' 出现 {} 次 (期望 1)".format(k, v))
             _p("FAIL", "NetLink 块 '{}' 出现 {} 次 (期望 1)".format(k, v))
 
-    if _find_func(tree, "_mb_animate_width") is not None:
+    tree_ui = _parse_ui()          # Mini Bar 断言用: ACRPA.py + mini_bar.py
+    if _find_func(tree_ui, "_mb_animate_width") is not None:
         _p("OK", "守护: 存在 _mb_animate_width (Mini Bar 宽度动画)")
     else:
         FAILS.append("守护: 缺 _mb_animate_width")
         _p("FAIL", "守护: 缺 _mb_animate_width")
 
-    node = _find_func(tree, "_destroy_mini_bar")
+    node = _find_func(tree_ui, "_destroy_mini_bar")
     has_cancel = False
     if node is not None:
         for sub in ast.walk(node):

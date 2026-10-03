@@ -36,6 +36,20 @@ def _parse(rel):
     return ast.parse(_read(rel), filename=rel)
 
 
+# Mini Bar 已抽到 src/mini_bar.py (拆分第一阶段): 针对它的静态断言必须同时看两个文件,
+# 否则"函数搬走了"会被误判成"函数没了"。
+UI_SOURCES = ("src/ACRPA.py", "src/mini_bar.py")
+
+
+def _read_ui():
+    return "\n".join(_read(r) for r in UI_SOURCES
+                     if os.path.exists(os.path.join(ROOT, r)))
+
+
+def _parse_ui():
+    return ast.parse(_read_ui(), filename="<ACRPA.py+mini_bar.py>")
+
+
 def _iter_funcs(tree):
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -113,9 +127,9 @@ def check_settings():
 
 
 def check_mini_bar():
-    """C. ACRPA.py Mini Bar 静态断言。"""
-    src = _read("src/ACRPA.py")
-    tree = _parse("src/ACRPA.py")
+    """C. Mini Bar 静态断言 (源码分布在 ACRPA.py 与 mini_bar.py 两处)。"""
+    src = _read_ui()
+    tree = _parse_ui()
     funcs = {n.name: n for n in _iter_funcs(tree)}
 
     # C1. Mini Bar 相关函数中不得出现字面量 430 / 560

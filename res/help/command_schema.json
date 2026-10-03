@@ -1,0 +1,2028 @@
+{
+  "app_version": "0.1.29-beta",
+  "source": "src/commands.py::commands.list_all()",
+  "stats": {
+    "commands": 68,
+    "with_schema": 59,
+    "no_params": 9,
+    "variadic": 1,
+    "with_choices": 12
+  },
+  "commands": [
+    {
+      "name": "找图",
+      "description": "找到目标图并悬停",
+      "params_text": "图片名, 精度(默认0.96)",
+      "signature": "图片名, 精度=0.96",
+      "params": [
+        {
+          "name": "图片名",
+          "raw": "图片名",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "精度",
+          "raw": "精度(默认0.96)",
+          "kind": "number",
+          "choices": [],
+          "default": "0.96",
+          "optional": true,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "区域找图",
+      "description": "限定范围找图(更快)",
+      "params_text": "图片名, 精度, 左, 上, 宽, 高, 灰度",
+      "signature": "图片名, 精度, 左, 上, 宽, 高, 灰度",
+      "params": [
+        {
+          "name": "图片名",
+          "raw": "图片名",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "精度",
+          "raw": "精度",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "左",
+          "raw": "左",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "上",
+          "raw": "上",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "宽",
+          "raw": "宽",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "高",
+          "raw": "高",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "灰度",
+          "raw": "灰度",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "点图",
+      "description": "找到图片并点击",
+      "params_text": "图片名, 精度(默认0.96)",
+      "signature": "图片名, 精度=0.96",
+      "params": [
+        {
+          "name": "图片名",
+          "raw": "图片名",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "精度",
+          "raw": "精度(默认0.96)",
+          "kind": "number",
+          "choices": [],
+          "default": "0.96",
+          "optional": true,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "区域点图",
+      "description": "限定范围找图并点击",
+      "params_text": "图片名, 精度, 左, 上, 宽, 高, 灰度, 按键, 次数",
+      "signature": "图片名, 精度, 左, 上, 宽, 高, 灰度, 按键, 次数",
+      "params": [
+        {
+          "name": "图片名",
+          "raw": "图片名",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "精度",
+          "raw": "精度",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "左",
+          "raw": "左",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "上",
+          "raw": "上",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "宽",
+          "raw": "宽",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "高",
+          "raw": "高",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "灰度",
+          "raw": "灰度",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "按键",
+          "raw": "按键",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "次数",
+          "raw": "次数",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "按键",
+      "description": "模拟键盘按键",
+      "params_text": "按键名, 次数(默认1), 间隔(默认0.1)",
+      "signature": "按键名, 次数=1, 间隔=0.1",
+      "params": [
+        {
+          "name": "按键名",
+          "raw": "按键名",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "次数",
+          "raw": "次数(默认1)",
+          "kind": "number",
+          "choices": [],
+          "default": "1",
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "间隔",
+          "raw": "间隔(默认0.1)",
+          "kind": "number",
+          "choices": [],
+          "default": "0.1",
+          "optional": true,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "热键",
+      "description": "组合键操作",
+      "params_text": "按键1, 按键2",
+      "signature": "按键1, 按键2",
+      "params": [
+        {
+          "name": "按键1",
+          "raw": "按键1",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "按键2",
+          "raw": "按键2",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "输入",
+      "description": "剪贴板方式输入文本",
+      "params_text": "内容",
+      "signature": "内容",
+      "params": [
+        {
+          "name": "内容",
+          "raw": "内容",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "写入",
+      "description": "模拟真实键盘逐字输入（支持DD驱动）",
+      "params_text": "内容, 按键间隔(秒), 模式(auto/direct/simulate)",
+      "signature": "内容, 按键间隔, 模式(auto/direct/simulate)",
+      "params": [
+        {
+          "name": "内容",
+          "raw": "内容",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "按键间隔",
+          "raw": "按键间隔(秒)",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "模式",
+          "raw": "模式(auto/direct/simulate)",
+          "kind": "string",
+          "choices": [
+            "auto",
+            "direct",
+            "simulate"
+          ],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "等待",
+      "description": "延时等待(秒)",
+      "params_text": "秒数",
+      "signature": "秒数",
+      "params": [
+        {
+          "name": "秒数",
+          "raw": "秒数",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "坐标",
+      "description": "点击屏幕坐标",
+      "params_text": "x, y, 按键(左/右), 次数, 间隔",
+      "signature": "x, y, 按键(左/右), 次数, 间隔",
+      "params": [
+        {
+          "name": "x",
+          "raw": "x",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "y",
+          "raw": "y",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "按键",
+          "raw": "按键(左/右)",
+          "kind": "string",
+          "choices": [
+            "左",
+            "右"
+          ],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "次数",
+          "raw": "次数",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "间隔",
+          "raw": "间隔",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "悬停",
+      "description": "鼠标移动到坐标",
+      "params_text": "x, y",
+      "signature": "x, y",
+      "params": [
+        {
+          "name": "x",
+          "raw": "x",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "y",
+          "raw": "y",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "拖拽",
+      "description": "鼠标拖拽到坐标",
+      "params_text": "x, y",
+      "signature": "x, y",
+      "params": [
+        {
+          "name": "x",
+          "raw": "x",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "y",
+          "raw": "y",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "滚轮",
+      "description": "鼠标滚轮滚动",
+      "params_text": "距离(负=下, 正=上)",
+      "signature": "距离",
+      "params": [
+        {
+          "name": "距离",
+          "raw": "距离(负=下, 正=上)",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "相移",
+      "description": "相对当前位置移动",
+      "params_text": "dx, dy",
+      "signature": "dx, dy",
+      "params": [
+        {
+          "name": "dx",
+          "raw": "dx",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "dy",
+          "raw": "dy",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "按下",
+      "description": "按下按键不松开",
+      "params_text": "按键名",
+      "signature": "按键名",
+      "params": [
+        {
+          "name": "按键名",
+          "raw": "按键名",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "释放",
+      "description": "释放已按下的按键",
+      "params_text": "按键名",
+      "signature": "按键名",
+      "params": [
+        {
+          "name": "按键名",
+          "raw": "按键名",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "复制",
+      "description": "Ctrl+A, Ctrl+C",
+      "params_text": "无参数",
+      "signature": "无参数",
+      "params": [],
+      "has_handler": false
+    },
+    {
+      "name": "粘贴",
+      "description": "Ctrl+A, Ctrl+V",
+      "params_text": "无参数",
+      "signature": "无参数",
+      "params": [],
+      "has_handler": false
+    },
+    {
+      "name": "截屏",
+      "description": "截图并保存",
+      "params_text": "名称, 保存路径",
+      "signature": "名称, 保存路径",
+      "params": [
+        {
+          "name": "名称",
+          "raw": "名称",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "保存路径",
+          "raw": "保存路径",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "代码",
+      "description": "执行脚本目录下的txt/Python代码（已受权限与AST预检约束）",
+      "params_text": "文件名(不含后缀)",
+      "signature": "文件名",
+      "params": [
+        {
+          "name": "文件名",
+          "raw": "文件名(不含后缀)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "Python",
+      "description": "执行 Python 代码（受权限与 AST 预检约束）",
+      "params_text": "代码, 权限(sandbox/trusted/full, 可空)",
+      "signature": "代码, 权限(sandbox/trusted/full)",
+      "params": [
+        {
+          "name": "代码",
+          "raw": "代码",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "权限",
+          "raw": "权限(sandbox/trusted/full, 可空)",
+          "kind": "string",
+          "choices": [
+            "sandbox",
+            "trusted",
+            "full"
+          ],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "如果",
+      "description": "条件判断（如果为真则执行）",
+      "params_text": "条件表达式",
+      "signature": "条件表达式",
+      "params": [
+        {
+          "name": "条件表达式",
+          "raw": "条件表达式",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "否则",
+      "description": "否则分支（否则执行）",
+      "params_text": "无参数",
+      "signature": "无参数",
+      "params": [],
+      "has_handler": false
+    },
+    {
+      "name": "结束如果",
+      "description": "结束条件块",
+      "params_text": "无参数",
+      "signature": "无参数",
+      "params": [],
+      "has_handler": false
+    },
+    {
+      "name": "循环开始",
+      "description": "开始循环",
+      "params_text": "次数或条件表达式",
+      "signature": "次数或条件表达式",
+      "params": [
+        {
+          "name": "次数或条件表达式",
+          "raw": "次数或条件表达式",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "循环结束",
+      "description": "结束当前循环",
+      "params_text": "无参数",
+      "signature": "无参数",
+      "params": [],
+      "has_handler": false
+    },
+    {
+      "name": "跳出循环",
+      "description": "立即跳出循环",
+      "params_text": "无参数",
+      "signature": "无参数",
+      "params": [],
+      "has_handler": false
+    },
+    {
+      "name": "激活窗口",
+      "description": "激活指定标题的窗口（支持模糊匹配）",
+      "params_text": "窗口标题",
+      "signature": "窗口标题",
+      "params": [
+        {
+          "name": "窗口标题",
+          "raw": "窗口标题",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "关闭窗口",
+      "description": "关闭指定窗口",
+      "params_text": "窗口标题",
+      "signature": "窗口标题",
+      "params": [
+        {
+          "name": "窗口标题",
+          "raw": "窗口标题",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "最小化窗口",
+      "description": "最小化指定窗口",
+      "params_text": "窗口标题",
+      "signature": "窗口标题",
+      "params": [
+        {
+          "name": "窗口标题",
+          "raw": "窗口标题",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "最大化窗口",
+      "description": "最大化指定窗口",
+      "params_text": "窗口标题",
+      "signature": "窗口标题",
+      "params": [
+        {
+          "name": "窗口标题",
+          "raw": "窗口标题",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "获取窗口位置",
+      "description": "获取窗口坐标和大小并保存到变量",
+      "params_text": "窗口标题, X变量名, Y变量名, 宽变量名, 高变量名",
+      "signature": "窗口标题, X变量名, Y变量名, 宽变量名, 高变量名",
+      "params": [
+        {
+          "name": "窗口标题",
+          "raw": "窗口标题",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "X变量名",
+          "raw": "X变量名",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "Y变量名",
+          "raw": "Y变量名",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "宽变量名",
+          "raw": "宽变量名",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "高变量名",
+          "raw": "高变量名",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "等待窗口",
+      "description": "等待窗口出现或消失",
+      "params_text": "窗口标题, 超时秒数, 存在/不存在",
+      "signature": "窗口标题, 超时秒数, 存在/不存在",
+      "params": [
+        {
+          "name": "窗口标题",
+          "raw": "窗口标题",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "超时秒数",
+          "raw": "超时秒数",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "存在/不存在",
+          "raw": "存在/不存在",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "窗口坐标",
+      "description": "相对于窗口左上角的坐标点击（窗口移动后仍准确）",
+      "params_text": "窗口标题, x, y, 按键(左/右), 次数, 间隔",
+      "signature": "窗口标题, x, y, 按键(左/右), 次数, 间隔",
+      "params": [
+        {
+          "name": "窗口标题",
+          "raw": "窗口标题",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "x",
+          "raw": "x",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "y",
+          "raw": "y",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "按键",
+          "raw": "按键(左/右)",
+          "kind": "string",
+          "choices": [
+            "左",
+            "右"
+          ],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "次数",
+          "raw": "次数",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "间隔",
+          "raw": "间隔",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "设置变量",
+      "description": "设置变量值",
+      "params_text": "变量名, 值",
+      "signature": "变量名, 值",
+      "params": [
+        {
+          "name": "变量名",
+          "raw": "变量名",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "值",
+          "raw": "值",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "读取剪贴板",
+      "description": "读取剪贴板内容到变量",
+      "params_text": "变量名",
+      "signature": "变量名",
+      "params": [
+        {
+          "name": "变量名",
+          "raw": "变量名",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "字符串处理",
+      "description": "截取/替换字符串",
+      "params_text": "源变量, 操作类型(截取/替换), 参数, 目标变量",
+      "signature": "源变量, 操作类型(截取/替换), 参数, 目标变量",
+      "params": [
+        {
+          "name": "源变量",
+          "raw": "源变量",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "操作类型",
+          "raw": "操作类型(截取/替换)",
+          "kind": "string",
+          "choices": [
+            "截取",
+            "替换"
+          ],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "参数",
+          "raw": "参数",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "目标变量",
+          "raw": "目标变量",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "数学运算",
+      "description": "执行数学计算",
+      "params_text": "表达式, 结果变量",
+      "signature": "表达式, 结果变量",
+      "params": [
+        {
+          "name": "表达式",
+          "raw": "表达式",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "结果变量",
+          "raw": "结果变量",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "识别文字",
+      "description": "OCR识别屏幕区域文字并存入变量",
+      "params_text": "左, 上, 宽, 高, 变量名",
+      "signature": "左, 上, 宽, 高, 变量名",
+      "params": [
+        {
+          "name": "左",
+          "raw": "左",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "上",
+          "raw": "上",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "宽",
+          "raw": "宽",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "高",
+          "raw": "高",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "变量名",
+          "raw": "变量名",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "等待文字",
+      "description": "等待指定文字出现或消失",
+      "params_text": "目标文字, 超时秒数, 存在/不存在, 左, 上, 宽, 高",
+      "signature": "目标文字, 超时秒数, 存在/不存在, 左, 上, 宽, 高",
+      "params": [
+        {
+          "name": "目标文字",
+          "raw": "目标文字",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "超时秒数",
+          "raw": "超时秒数",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "存在/不存在",
+          "raw": "存在/不存在",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "左",
+          "raw": "左",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "上",
+          "raw": "上",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "宽",
+          "raw": "宽",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "高",
+          "raw": "高",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "点击文字",
+      "description": "找到文字位置并点击",
+      "params_text": "目标文字, 置信度, 按键(左/右), 左, 上, 宽, 高",
+      "signature": "目标文字, 置信度, 按键(左/右), 左, 上, 宽, 高",
+      "params": [
+        {
+          "name": "目标文字",
+          "raw": "目标文字",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "置信度",
+          "raw": "置信度",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "按键",
+          "raw": "按键(左/右)",
+          "kind": "string",
+          "choices": [
+            "左",
+            "右"
+          ],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "左",
+          "raw": "左",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "上",
+          "raw": "上",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "宽",
+          "raw": "宽",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "高",
+          "raw": "高",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "AI找图",
+      "description": "AI分析截屏,用自然语言描述找元素并点击",
+      "params_text": "描述, 置信度(0-1), 操作(click/hover/find), 按键(左/右)",
+      "signature": "描述, 置信度, 操作(click/hover/find), 按键(左/右)",
+      "params": [
+        {
+          "name": "描述",
+          "raw": "描述",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "置信度",
+          "raw": "置信度(0-1)",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "操作",
+          "raw": "操作(click/hover/find)",
+          "kind": "string",
+          "choices": [
+            "click",
+            "hover",
+            "find"
+          ],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "按键",
+          "raw": "按键(左/右)",
+          "kind": "string",
+          "choices": [
+            "左",
+            "右"
+          ],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "AI识别界面",
+      "description": "AI分析截屏列出所有UI元素存入变量",
+      "params_text": "变量名前缀(默认ui)",
+      "signature": "变量名前缀=ui",
+      "params": [
+        {
+          "name": "变量名前缀",
+          "raw": "变量名前缀(默认ui)",
+          "kind": "string",
+          "choices": [],
+          "default": "ui",
+          "optional": true,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "AI优化建议",
+      "description": "AI分析执行数据给出脚本优化建议",
+      "params_text": "模式(log/save/var), 变量名",
+      "signature": "模式(log/save/var), 变量名",
+      "params": [
+        {
+          "name": "模式",
+          "raw": "模式(log/save/var)",
+          "kind": "string",
+          "choices": [
+            "log",
+            "save",
+            "var"
+          ],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "变量名",
+          "raw": "变量名",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "运行工作流",
+      "description": "调用工作流文件(.json)执行多脚本编排",
+      "params_text": "工作流路径",
+      "signature": "工作流路径",
+      "params": [
+        {
+          "name": "工作流路径",
+          "raw": "工作流路径",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "工作流变量",
+      "description": "设置工作流级共享变量",
+      "params_text": "变量名, 值",
+      "signature": "变量名, 值",
+      "params": [
+        {
+          "name": "变量名",
+          "raw": "变量名",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "值",
+          "raw": "值",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "打开网页",
+      "description": "浏览器打开指定URL",
+      "params_text": "网址",
+      "signature": "网址",
+      "params": [
+        {
+          "name": "网址",
+          "raw": "网址",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "浏览器点击",
+      "description": "点击页面元素(CSS选择器或text=)",
+      "params_text": "选择器",
+      "signature": "选择器",
+      "params": [
+        {
+          "name": "选择器",
+          "raw": "选择器",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "浏览器输入",
+      "description": "在输入框中填入文本",
+      "params_text": "选择器, 文本",
+      "signature": "选择器, 文本",
+      "params": [
+        {
+          "name": "选择器",
+          "raw": "选择器",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "文本",
+          "raw": "文本",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "等待元素",
+      "description": "等待页面元素出现或消失",
+      "params_text": "选择器, 超时秒数, 出现/消失",
+      "signature": "选择器, 超时秒数, 出现/消失",
+      "params": [
+        {
+          "name": "选择器",
+          "raw": "选择器",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "超时秒数",
+          "raw": "超时秒数",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "出现/消失",
+          "raw": "出现/消失",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "浏览器截图",
+      "description": "截取页面或元素截图",
+      "params_text": "名称, 目标(page或选择器)",
+      "signature": "名称, 目标",
+      "params": [
+        {
+          "name": "名称",
+          "raw": "名称",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "目标",
+          "raw": "目标(page或选择器)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "浏览器执行JS",
+      "description": "在页面执行JS并把返回值写入变量",
+      "params_text": "脚本, 目标变量名(可选), 是否表达式(是/否)",
+      "signature": "脚本, 目标变量名?, 是否表达式(是/否)",
+      "params": [
+        {
+          "name": "脚本",
+          "raw": "脚本",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "目标变量名",
+          "raw": "目标变量名(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "是否表达式",
+          "raw": "是否表达式(是/否)",
+          "kind": "string",
+          "choices": [
+            "是",
+            "否"
+          ],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "执行JS",
+      "description": "在页面执行JS(浏览器执行JS的别名)",
+      "params_text": "脚本, 目标变量名(可选), 是否表达式(是/否)",
+      "signature": "脚本, 目标变量名?, 是否表达式(是/否)",
+      "params": [
+        {
+          "name": "脚本",
+          "raw": "脚本",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "目标变量名",
+          "raw": "目标变量名(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "是否表达式",
+          "raw": "是否表达式(是/否)",
+          "kind": "string",
+          "choices": [
+            "是",
+            "否"
+          ],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "浏览器读取Cookie",
+      "description": "导出当前上下文Cookie到变量或文件",
+      "params_text": "目标变量名(默认cookie), 格式(json/header/netscape), 保存路径(可选)",
+      "signature": "目标变量名=cookie, 格式(json/header/netscape), 保存路径?",
+      "params": [
+        {
+          "name": "目标变量名",
+          "raw": "目标变量名(默认cookie)",
+          "kind": "string",
+          "choices": [],
+          "default": "cookie",
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "格式",
+          "raw": "格式(json/header/netscape)",
+          "kind": "string",
+          "choices": [
+            "json",
+            "header",
+            "netscape"
+          ],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "保存路径",
+          "raw": "保存路径(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "浏览器设置Cookie",
+      "description": "从变量或文件注入Cookie",
+      "params_text": "来源(变量名/文件路径), 域名(可选)",
+      "signature": "来源(变量名/文件路径), 域名?",
+      "params": [
+        {
+          "name": "来源",
+          "raw": "来源(变量名/文件路径)",
+          "kind": "string",
+          "choices": [
+            "变量名",
+            "文件路径"
+          ],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "域名",
+          "raw": "域名(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "切换框架",
+      "description": "进入iframe(DSL定位/索引)或回到主文档",
+      "params_text": "定位表达式/索引/main",
+      "signature": "定位表达式/索引/main",
+      "params": [
+        {
+          "name": "定位表达式/索引/main",
+          "raw": "定位表达式/索引/main",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "返回主框架",
+      "description": "回到顶层frame(等价 切换框架,main)",
+      "params_text": "无参数",
+      "signature": "无参数",
+      "params": [],
+      "has_handler": false
+    },
+    {
+      "name": "新建标签页",
+      "description": "新建标签页并切换为活动页",
+      "params_text": "网址(可选)",
+      "signature": "网址?",
+      "params": [
+        {
+          "name": "网址",
+          "raw": "网址(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "切换标签页",
+      "description": "按序号/标题/URL切换活动标签页",
+      "params_text": "序号或标题/URL匹配",
+      "signature": "序号或标题/URL匹配",
+      "params": [
+        {
+          "name": "序号或标题/URL匹配",
+          "raw": "序号或标题/URL匹配",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "关闭标签页",
+      "description": "关闭当前或指定标签页",
+      "params_text": "序号(可选,默认当前页)",
+      "signature": "序号=当前页",
+      "params": [
+        {
+          "name": "序号",
+          "raw": "序号(可选,默认当前页)",
+          "kind": "number",
+          "choices": [],
+          "default": "当前页",
+          "optional": true,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "等待下载",
+      "description": "等待浏览器下载完成并保存文件",
+      "params_text": "保存目录(可选), 文件名匹配(可选), 超时秒数(可选), 写回变量(可选)",
+      "signature": "保存目录?, 文件名匹配?, 超时秒数?, 写回变量?",
+      "params": [
+        {
+          "name": "保存目录",
+          "raw": "保存目录(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "文件名匹配",
+          "raw": "文件名匹配(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "超时秒数",
+          "raw": "超时秒数(可选)",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "写回变量",
+          "raw": "写回变量(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "浏览器上传",
+      "description": "对input[type=file]设置本地文件",
+      "params_text": "定位表达式, 文件路径1, 文件路径2..N(可选), 是否清空(可选)",
+      "signature": "定位表达式, 文件路径1, 文件路径2?…, 是否清空?",
+      "params": [
+        {
+          "name": "定位表达式",
+          "raw": "定位表达式",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "文件路径1",
+          "raw": "文件路径1",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "文件路径2",
+          "raw": "文件路径2..N(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": true
+        },
+        {
+          "name": "是否清空",
+          "raw": "是否清空(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "连接已开浏览器",
+      "description": "通过CDP endpoint接管已开浏览器(需--remote-debugging-port)",
+      "params_text": "endpoint(可选,默认配置), 是否关闭旧会话(可选,默认是)",
+      "signature": "endpoint=配置, 是否关闭旧会话=是",
+      "params": [
+        {
+          "name": "endpoint",
+          "raw": "endpoint(可选,默认配置)",
+          "kind": "string",
+          "choices": [],
+          "default": "配置",
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "是否关闭旧会话",
+          "raw": "是否关闭旧会话(可选,默认是)",
+          "kind": "string",
+          "choices": [],
+          "default": "是",
+          "optional": true,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "接管浏览器",
+      "description": "连接已开浏览器 的别名",
+      "params_text": "endpoint(可选), 是否关闭旧会话(可选)",
+      "signature": "endpoint?, 是否关闭旧会话?",
+      "params": [
+        {
+          "name": "endpoint",
+          "raw": "endpoint(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "是否关闭旧会话",
+          "raw": "是否关闭旧会话(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "开始监听",
+      "description": "监听网络响应入队(抓包),支持URL匹配/资源类型",
+      "params_text": "URL匹配(可选), 资源类型(可选), 队列上限(可选)",
+      "signature": "URL匹配?, 资源类型?, 队列上限?",
+      "params": [
+        {
+          "name": "URL匹配",
+          "raw": "URL匹配(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "资源类型",
+          "raw": "资源类型(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "队列上限",
+          "raw": "队列上限(可选)",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "等待数据包",
+      "description": "等待并取回命中的数据包,写回变量或落盘",
+      "params_text": "URL匹配(可选), 数量(可选,默认1), 超时秒数(可选), 写回变量(可选), 导出路径(可选), 导出格式(可选,默认json)",
+      "signature": "URL匹配?, 数量=1, 超时秒数?, 写回变量?, 导出路径?, 导出格式=json",
+      "params": [
+        {
+          "name": "URL匹配",
+          "raw": "URL匹配(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "数量",
+          "raw": "数量(可选,默认1)",
+          "kind": "number",
+          "choices": [],
+          "default": "1",
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "超时秒数",
+          "raw": "超时秒数(可选)",
+          "kind": "number",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "写回变量",
+          "raw": "写回变量(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "导出路径",
+          "raw": "导出路径(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "导出格式",
+          "raw": "导出格式(可选,默认json)",
+          "kind": "string",
+          "choices": [],
+          "default": "json",
+          "optional": true,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "停止监听",
+      "description": "停止监听并清空队列",
+      "params_text": "无参数",
+      "signature": "无参数",
+      "params": [],
+      "has_handler": false
+    },
+    {
+      "name": "启动浏览器录制",
+      "description": "调用 playwright codegen 并把结果转为DSL追加到录制",
+      "params_text": "无参数",
+      "signature": "无参数",
+      "params": [],
+      "has_handler": false
+    }
+  ]
+}

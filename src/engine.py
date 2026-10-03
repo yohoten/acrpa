@@ -699,6 +699,34 @@ class ExecutionEngine:
         log1("循环结束，共执行 {} 次".format(iteration_count))
         return loop_end_idx + 1
 
+    def _param_hint_once(self, cmd, row):
+        """按 commands 的参数 schema 体检一次, 同一命令只提示一次。
+
+        只记日志、绝不阻断: 存量脚本的列数与取值习惯各异, 硬拦会破坏本来能跑的
+        脚本; 而参数写错(次数写成"三次"、按键写成"中键")时用户原本只能看到命令
+        内部抛出的含糊错误, 现在日志里会直接点出是哪个参数。
+        """
+        try:
+            seen = getattr(self, "_param_hinted", None)
+            if seen is None:
+                seen = self._param_hinted = set()
+            if cmd in seen:
+                return
+            seen.add(cmd)
+            vals = []
+            for i in range(1, 24):
+                try:
+                    cell = row[i]
+                except Exception:
+                    break
+                if not hasattr(cell, "value"):
+                    break            # RowAdapter 越界返回空 Cell
+                vals.append(cell.value)
+            for hint in commands.hints(cmd, vals):
+                log1(hint, "warning")
+        except Exception:
+            pass
+
     def execute(self, row, script_dir):
         """执行单条命令并返回结果；保留 truthy 兼容，失败不再静默成功。"""
         if hasattr(row, 'cmd_type'):
@@ -720,6 +748,7 @@ class ExecutionEngine:
             return ExecutionResult(False, "unknown_command", message, 0)
 
         _t0 = time.time()
+        self._param_hint_once(cv, adapted_row)
         success = False
         last_error = ""
         attempts = 0

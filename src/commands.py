@@ -1,10 +1,116 @@
-"""Command registry — single source of truth for all automation commands."""
+"""Command registry — single source of truth for all automation commands.
+
+除了既有的 (name, description, params, handler) 四元组, 本模块现在还提供
+**结构化参数 schema**:
+
+    commands.schema("找图")
+    # [{'name': '图片名', 'kind': 'string', ...},
+    #  {'name': '精度', 'kind': 'number', 'default': '0.96', ...}]
+
+    commands.validate("按键", ["a", "abc"])      # → (["参数『次数』不是数字: 'abc'"], ...)
+    commands.signature("按键")                    # → "按键名, 次数=1, 间隔=0.1"
+
+设计取舍
+--------
+1. **向后兼容**: `list_all()` 仍返回四元组, 既有的 20+ 处消费方 (帮助窗口 /
+   脚本市场校验 / 插件系统 / 文档生成器) 一律不用改。
+2. **存量零改动即得 schema**: 68 条命令的参数说明本来就是
+   `名称(默认X)` / `名称(可选)` / `名称(是/否)` 这套写法, 直接解析出来即可,
+   不必回头去改每一条注册语句。
+3. **新命令可显式声明**: `register(..., schema=[{...}])` 优先于字符串解析。
+4. **不谎报必填**: 旧写法里"没有写(可选)"≠"必填"(脚本约定是: 不填的位置写 None),
+   因此 legacy 解析只标注 optional 标记, 不据此拒绝执行。
+"""
+import re
+
 _registry = []
+_schemas = {}
+
+# ── 参数说明解析 ─────────────────────────────────────────────────────
+_NUMERIC_HINTS = ("秒", "次数", "间隔", "精度", "超时", "宽度", "高度", "距离",
+                  "置信度", "数量", "上限", "序号", "坐标")
+_NUMERIC_EXACT = ("x", "y", "dx", "dy", "左", "上", "宽", "高", "n")
+_MARKER_WORDS = ("可选", "必填", "可空", "默认", "无参数", "-")
 
 
-def register(name, description, params, handler=None):
-    """Register a command. handler=None means engine provides it later."""
+def _split_params(text):
+    """按逗号切分参数说明, 但不切括号内的逗号 (如 `权限(sandbox/trusted/full, 可空)`)。"""
+    text = (text or "").strip()
+    if not text or text in ("无参数", "无", "-", "None"):
+        return []
+    parts, buf, depth = [], [], 0
+    for ch in text:
+        if ch in "（(":
+            depth += 1
+        elif ch in ")）":
+            depth = max(0, depth - 1)
+        if ch in ",，、" and depth == 0:
+            parts.append("".join(buf))
+            buf = []
+        else:
+            buf.append(ch)
+    if buf:
+        parts.append("".join(buf))
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _parse_param(token):
+    """单条参数说明 → schema 描述 dict。
+
+    支持写法: `名称` / `名称(默认X)` / `名称(可选)` / `名称(可选,默认X)` /
+              `名称(是/否)` / `名称(模式A/模式B)` / `名称..N(可选)` (变长)
+    """
+    raw = token.strip()
+    m = re.match(r"^(?P<name>[^()（）]+?)\s*(?:[（(](?P<meta>.*)[)）])?$", raw)
+    name = (m.group("name") if m else raw).strip()
+    meta = (m.group("meta") if m else "") or ""
+
+    variadic = bool(re.search(r"\.\.", name))
+    name = re.sub(r"\.\.+.*$", "", name).strip()
+
+    optional = ("可选" in meta) or ("默认" in meta)
+    default = None
+    dm = re.search(r"默认\s*[:=]?\s*([^,，/]+)", meta)
+    if dm:
+        default = dm.group(1).strip()
+
+    choices = ()
+    if "/" in meta:
+        cand = [c.strip() for c in re.split(r"[/|]", _strip_markers(meta))]
+        cand = [c for c in cand if c and not any(w in c for w in _MARKER_WORDS)]
+        choices = tuple(cand)
+
+    kind = "string"
+    if name.lower() in _NUMERIC_EXACT or any(h in name for h in _NUMERIC_HINTS):
+        kind = "number"
+
+    return {"name": name or raw, "raw": raw, "kind": kind, "choices": choices,
+            "default": default, "optional": optional, "variadic": variadic}
+
+
+def _strip_markers(meta):
+    """剔除括号内的纯标记片段 (可选 / 可空 / 必填 / 默认X), 只留枚举与说明。
+
+    必要性: `权限(sandbox/trusted/full, 可空)` 若不先剔除标记, 按 `/` 切出来的
+    最后一段会是 `full, 可空` —— 它命中标记词被丢弃, 枚举就少了一个 `full`。
+    """
+    parts = [x.strip() for x in re.split(r"[,，]", meta or "") if x.strip()]
+    keep = [x for x in parts
+            if x not in ("可选", "可空", "必填") and not x.startswith("默认")]
+    return ", ".join(keep)
+
+
+def _parse_params(text):
+    return [_parse_param(t) for t in _split_params(text)]
+
+
+def register(name, description, params, handler=None, schema=None):
+    """Register a command. handler=None means engine provides it later.
+
+    schema: 可选的显式参数声明 (list[dict]); 缺省时由 params 字符串解析而来。
+    """
     _registry.append((name, description, params, handler))
+    _schemas[name] = list(schema) if schema else _parse_params(params)
 
 
 def get_handler(name):
@@ -19,6 +125,133 @@ def list_names():
 
 def list_all():
     return list(_registry)
+
+
+# ── 结构化参数 schema ────────────────────────────────────────────────
+def schema(name):
+    """命令的参数 schema (list[dict]); 未注册返回空列表。"""
+    return [dict(p) for p in _schemas.get(name, [])]
+
+
+def signature(name):
+    """重建人类可读签名, 如 `按键名, 次数=1, 间隔=0.1, 按键(左/右)`。"""
+    out = []
+    for p in _schemas.get(name, []):
+        s = p["name"]
+        if p.get("choices"):
+            s += "(" + "/".join(p["choices"]) + ")"
+        if p.get("default") is not None:
+            s += "=" + str(p["default"])
+        elif p.get("optional"):
+            s += "?"
+        if p.get("variadic"):
+            s += "…"
+        out.append(s)
+    return ", ".join(out) if out else "无参数"
+
+
+def max_args(name):
+    """该命令可接受的最大参数个数 (None 表示不限)。
+
+    注意: 变长参数未必在末位 —— 例如 `浏览器上传` 是
+    `定位表达式, 文件路径1, 文件路径2..N(可选), 是否清空(可选)`,
+    因此只要**任一**参数是变长, 就不做个数上限判定。
+    """
+    ps = _schemas.get(name, [])
+    if any(p.get("variadic") for p in ps):
+        return None
+    return len(ps)
+
+
+def _variadic_index(name):
+    for i, p in enumerate(_schemas.get(name, [])):
+        if p.get("variadic"):
+            return i
+    return -1
+
+
+def _clean(v):
+    """归一化单元格值: None/空白视为"未填写"。"""
+    if v is None:
+        return ""
+    s = str(v).strip()
+    if s.lower() in ("none", "null", "-", ""):
+        return ""
+    return s
+
+
+def validate(name, args):
+    """按 schema 校验参数 → (errors, normalized)。
+
+    只做**能确定**的检查: 参数个数超限 / 数字写成了非数字 / 取值不在枚举内。
+    未写(空/None)一律放行 —— 脚本约定"不填的位置写 None", 由各命令自行取默认值。
+    """
+    ps = _schemas.get(name, [])
+    if name not in _schemas:
+        # 未注册的命令不在这里报错 (由 engine 统一报"未知命令")
+        return [], list(args or [])
+    args = list(args or [])
+    # 去掉尾部连续空值 (Excel 行常带尾随空列), 避免误报"参数过多"
+    while args and _clean(args[-1]) == "":
+        args.pop()
+
+    errors, normalized = [], []
+    limit = max_args(name)
+    if limit is not None and len(args) > limit:
+        errors.append("参数过多: 最多 {} 个 ({}), 收到 {} 个".format(
+            limit, signature(name), len(args)))
+
+    for i, p in enumerate(ps):
+        if i >= len(args):
+            break
+        val = args[i]
+        s = _clean(val)
+        if s == "":
+            normalized.append(val)
+            continue
+        if p["kind"] == "number":
+            try:
+                float(s)
+            except ValueError:
+                errors.append("参数『{}』不是数字: {!r}".format(p["name"], s))
+                normalized.append(val)
+                continue
+        if p.get("choices") and s not in p["choices"]:
+            errors.append("参数『{}』取值应为 {} 之一, 收到 {!r}".format(
+                p["name"], "/".join(p["choices"]), s))
+        normalized.append(val)
+    # 变长参数: 展开剩余位置 (用该变长项自身的类型/枚举做校验)
+    vi = _variadic_index(name)
+    if vi >= 0:
+        tail = ps[vi]
+        for val in args[len(ps):]:
+            s = _clean(val)
+            if s and tail["kind"] == "number":
+                try:
+                    float(s)
+                except ValueError:
+                    errors.append("参数『{}』不是数字: {!r}".format(tail["name"], s))
+            normalized.append(val)
+    return errors, normalized
+
+
+def hints(name, args):
+    """执行期参数体检 → 人类可读提示列表 (调用方决定是否只记日志)。"""
+    errors, _ = validate(name, args)
+    return ["参数提示[{}]: {}".format(name, e) for e in errors]
+
+
+def stats():
+    """注册表概览 (供自检/文档使用)。"""
+    return {
+        "commands": len(_registry),
+        "with_schema": sum(1 for n in _schemas if _schemas[n]),
+        "no_params": sum(1 for n in _schemas if not _schemas[n]),
+        "variadic": sum(1 for n in _schemas
+                        if any(p.get("variadic") for p in _schemas[n])),
+        "with_choices": sum(1 for n in _schemas
+                            if any(p.get("choices") for p in _schemas[n])),
+    }
 
 
 # ── 19 commands — name, description, params ──

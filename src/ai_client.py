@@ -68,29 +68,51 @@ class AIClient:
         
         try:
             response = self.session.post(url, json=payload, timeout=timeout)
-            
-            # Handle specific HTTP errors
-            if response.status_code == 401:
-                raise APIAuthError("API Key 无效或已过期")
-            elif response.status_code == 429:
-                raise APIRateLimitError("请求频率超限，请稍后重试")
-            elif response.status_code >= 500:
-                raise APIError(f"服务器错误: {response.status_code}")
-            
-            response.raise_for_status()
+
+            # 失败时把服务端的错误正文带出来 —— 只报 "400 Client Error" 等于没说。
+            if response.status_code >= 400:
+                detail = ""
+                try:
+                    body = response.json()
+                    err = body.get("error")
+                    if isinstance(err, dict):
+                        detail = err.get("message") or ""
+                    elif err:
+                        detail = str(err)
+                    if not detail:
+                        detail = json.dumps(body, ensure_ascii=False)[:300]
+                except Exception:
+                    detail = (response.text or "")[:300]
+                suffix = "（{}）".format(detail) if detail else ""
+                if response.status_code == 401:
+                    raise APIAuthError("API Key 无效或已过期" + suffix)
+                if response.status_code == 429:
+                    raise APIRateLimitError("请求频率超限，请稍后重试" + suffix)
+                if response.status_code >= 500:
+                    raise APIError("服务器错误: {} {}".format(response.status_code, suffix))
+                raise APIError("请求被拒绝: HTTP {}{}".format(response.status_code, suffix))
+
             data = response.json()
-            
+
             # Create a simple response object compatible with openai SDK
             class ChatCompletion:
                 def __init__(self, data):
+                    choice = (data.get("choices") or [{}])[0]
+                    message = choice.get("message") or {}
+                    # 推理模型 (deepseek-reasoner 一类) 会先产出 reasoning_content,
+                    # 正文为空时只有它能说明"token 预算被推理吃光了"。
+                    self.finish_reason = choice.get("finish_reason") or ""
+                    self.reasoning_content = message.get("reasoning_content") or ""
+                    self.usage = data.get("usage") or {}
+                    self.model = data.get("model") or ""
                     self.choices = [
                         type('Choice', (), {
                             'message': type('Message', (), {
-                                'content': data['choices'][0]['message']['content']
+                                'content': message.get('content')
                             })()
                         })()
                     ]
-            
+
             return ChatCompletion(data)
             
         except requests.exceptions.Timeout:
@@ -101,6 +123,83 @@ class AIClient:
             raise APIError(f"API 请求失败: {str(e)}")
         except (KeyError, IndexError) as e:
             raise APIError(f"API 响应格式错误: {str(e)}")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 脚本生成：调用 + 空正文重试 + 成因诊断
+# ══════════════════════════════════════════════════════════════════════
+# 背景（本机实测复现，非推测）：当前端点背后是**推理模型**，它"想"的时候会把整个
+# max_tokens 预算烧在 reasoning_content 上。此时 HTTP 仍是 200，但
+# message.content 为空 —— 调用方只看到"内容为空"，完全无从判断原因。
+#
+#   实测同一提示词（max_tokens → finish_reason / content / reasoning）：
+#     500  → length /   0 字符 /  943 字符
+#    2000  → length /   0 字符 / 5379 字符   ← 应用原先用的就是 2000
+#    1000  → stop   / 593 字符 /    0 字符
+#    8000  → stop   / 640 字符 /    0 字符
+#
+# 所以修法有两半：给足预算 + 空正文时自动放大预算重试一次，并把成因写进错误消息。
+SCRIPT_MAX_TOKENS = 8000            # 推理模型需要余量；实测 2000 会被吃光
+SCRIPT_RETRY_MULTIPLIER = 2
+
+
+def empty_output_reason(response):
+    """正文为空时的人类可读成因（finish_reason / 推理长度 / token 用量）。"""
+    parts = []
+    fr = getattr(response, "finish_reason", "") or ""
+    if fr:
+        parts.append("finish_reason={}".format(fr))
+    reasoning = getattr(response, "reasoning_content", "") or ""
+    if reasoning:
+        parts.append("推理过程 {} 字符".format(len(reasoning)))
+    usage = getattr(response, "usage", None) or {}
+    if usage.get("completion_tokens"):
+        detail = usage.get("completion_tokens_details") or {}
+        if detail.get("reasoning_tokens"):
+            parts.append("其中推理占用 {} tokens".format(detail["reasoning_tokens"]))
+        parts.append("completion_tokens={}".format(usage["completion_tokens"]))
+    return "；".join(parts)
+
+
+def generate_script_content(client, messages, model, temperature=0.3,
+                            max_tokens=None, timeout=120, on_retry=None):
+    """请求脚本正文 → (content, response)。
+
+    正文为空且判定为"预算被推理吃光"时，自动放大预算重试一次；仍为空则抛
+    ValueError，消息里带上成因（而不是让用户看到"发生未知错误"）。
+    """
+    budget = int(max_tokens or SCRIPT_MAX_TOKENS)
+    response = client.chat_completions(model=model, messages=messages,
+                                       temperature=temperature,
+                                       max_tokens=budget, timeout=timeout)
+    content = ((response.choices[0].message.content) or "").strip()
+    if content:
+        return content, response
+
+    reason = empty_output_reason(response)
+    truncated = (getattr(response, "finish_reason", "") == "length"
+                 or bool(getattr(response, "reasoning_content", "")))
+    if truncated:
+        bigger = budget * SCRIPT_RETRY_MULTIPLIER
+        if on_retry:
+            try:
+                on_retry(reason, bigger)
+            except Exception:
+                pass
+        response = client.chat_completions(model=model, messages=messages,
+                                           temperature=temperature,
+                                           max_tokens=bigger,
+                                           timeout=timeout + 60)
+        content = ((response.choices[0].message.content) or "").strip()
+        if content:
+            return content, response
+        reason = "{}；放大到 {} tokens 重试后仍为空".format(reason, bigger) if reason \
+            else "放大到 {} tokens 重试后仍为空".format(bigger)
+
+    raise ValueError(
+        "AI 没有返回正文{}。常见原因：推理模型把输出预算耗在了思考上，或提示词过长。"
+        "请重试，或在「设置 → AI」里改用非推理模型 / 缩短输入。".format(
+            "（{}）".format(reason) if reason else ""))
 
 
 # ── 统一模型注册表 ──

@@ -574,6 +574,7 @@ def open_ai_panel():
         def _generate_thread():
             try:
                 from ai_client import (create_client_active, resolve_model,
+                                       generate_script_content,
                                        APIError, APIAuthError, APIRateLimitError,
                                        APITimeoutError)
                 from templates import build_ai_prompt, normalize_ai_output
@@ -584,23 +585,29 @@ def open_ai_panel():
                 # Create AI client（跟随自定义提供商/模型配置）
                 client = create_client_active()
 
-                # Call AI API
-                response = client.chat_completions(
-                    model=resolve_model(),
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.3,
-                    max_tokens=2000,
-                    timeout=60
-                )
+                # 调用 + 空正文自动放宽预算重试 + 成因诊断
+                # （推理模型会把 max_tokens 烧在 reasoning_content 上，正文为空；
+                #   细节与实测数据见 ai_client.generate_script_content 的说明）
+                def _note_retry(reason, bigger):
+                    try:
+                        dlg.after(0, lambda: status_var.set(
+                            "模型思考占满输出预算，正以 {} tokens 重试…".format(bigger)))
+                    except Exception:
+                        pass
 
-                # Get generated content
-                raw_output = response.choices[0].message.content.strip()
+                raw_output, _resp = generate_script_content(
+                    client,
+                    messages=[{"role": "user", "content": prompt}],
+                    model=resolve_model(),
+                    on_retry=_note_retry)
 
                 # ✦ 关键修复：使用normalize_ai_output进行规范化处理
                 generated_script = normalize_ai_output(raw_output)
 
                 if not generated_script:
-                    raise ValueError("AI返回的内容为空或格式无效")
+                    raise ValueError(
+                        "AI 返回的内容无法解析为脚本表格"
+                        "（已收到 {} 字符，规范化后为空）".format(len(raw_output)))
 
                 # Display in result text
                 result_txt.delete("1.0", "end")

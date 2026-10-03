@@ -153,6 +153,9 @@ _config_schema = [
     # py_sandbox 沙箱内核（AST 预检 / 超时 / 审计 / AcrpaAPI / print 转发）。
     ("legacy_code_command", False,     bool),
     ("ui_scale", 1.0, float),   # 界面缩放 0.8-1.5
+    # 脚本编辑区「Excel 表格」独立字号增量 (Ctrl+滚轮 / Ctrl+± / Ctrl+0 复位)。
+    # 与 ui_scale 分开: 用户常想让表格比其它界面更密或更大, 且它是唯一的高频阅读区。
+    ("editor_zoom", 0, int),
     # ── 脚本市场 v2 (全部非敏感) ──
     # ⚠ token 不在此列：只进 Windows 凭据库 (复用 cred_write/cred_read/cred_delete)，
     #   与 api_key 同款安全策略，绝不写入 config.json、绝不写日志。

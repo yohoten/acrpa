@@ -1559,6 +1559,124 @@ tsx=tkinter.Scrollbar(tree_frame,orient="horizontal",command=tree.xview,
 tree.configure(yscrollcommand=tsy.set,xscrollcommand=tsx.set)
 tsy.grid(row=0,column=1,sticky="ns"); tsx.grid(row=1,column=0,sticky="ew")
 
+# ══════════════════════════════════════════════════════════════════════
+# 脚本编辑区缩放 (Ctrl+滚轮 / Ctrl+加号 / Ctrl+减号 / Ctrl+0 复位)
+#   为什么不直接改 "Treeview" 样式: 变量监视、时序、工作流列表共用它, 一起放大
+#   不是用户想要的。这里派生一个只给脚本表格用的样式, 并把倍率持久化到
+#   state.EDITOR_ZOOM (0 = 跟随全局 ui_scale)。
+# ══════════════════════════════════════════════════════════════════════
+_EDITOR_STYLE = "ScriptEditor.Treeview"
+_EDITOR_ZOOM_MIN, _EDITOR_ZOOM_MAX = -4, 12
+_editor_font = tkinter.font.Font(root=root, name="ACRPA_EDITOR_TABLE", exists=False,
+                                 family="Microsoft YaHei UI", size=10)
+
+
+def _editor_base_font():
+    """编辑区基准字体对象。
+
+    注意: utils.font(role) 返回的是**命名字体字符串**(给 Tk 用的), 不是 Font 对象,
+    直接 .cget() 会抛 AttributeError —— 而异常一旦被吞掉, 缩放就会静默失效
+    (本功能第一版正是这么坏的, 由 tools/_test_ui_zoom_shortcuts.py 的实机断言抓出)。
+    这里按 utils.init_fonts 的同一手法包装既有命名。
+    """
+    try:
+        return tkinter.font.Font(root=root, name=utils.font(utils.FONT_BODY), exists=True)
+    except Exception:
+        return None
+
+
+def _editor_base_size():
+    """编辑区基准字号 (跟随全局字号角色, ui_scale 改的就是它)。"""
+    f = _editor_base_font()
+    try:
+        return int(f.cget("size")) if f is not None else 10
+    except Exception:
+        return 10
+
+
+def _apply_editor_zoom(event=None):
+    """按 state.EDITOR_ZOOM 重算编辑区字体与行高 (幂等, 可反复调用)。"""
+    base = _editor_base_font()
+    try:
+        delta = int(getattr(state, "EDITOR_ZOOM", 0) or 0)
+        base_size = int(base.cget("size")) if base is not None else 10
+        size = max(6, min(40, base_size + delta))
+        family = base.cget("family") if base is not None else "Microsoft YaHei UI"
+        _editor_font.configure(family=family, size=size)
+        ttk.Style().configure(_EDITOR_STYLE, font=_editor_font,
+                              rowheight=max(16, int(size * 1.9)))
+        tree.configure(style=_EDITOR_STYLE)
+        return size
+    except Exception as e:
+        try:
+            log1("编辑区缩放应用失败: {}".format(e), "warning")
+        except Exception:
+            pass
+        return None
+
+
+def _editor_zoom_step(delta, silent=False):
+    """调整缩放倍率并落盘 → 'break' 供 Tk 绑定返回。"""
+    cur = int(getattr(state, "EDITOR_ZOOM", 0) or 0)
+    new = max(_EDITOR_ZOOM_MIN, min(_EDITOR_ZOOM_MAX, cur + delta))
+    if new != cur:
+        state.EDITOR_ZOOM = new
+        _apply_editor_zoom()
+        try:
+            state.save_config()
+        except Exception:
+            pass
+        if not silent:
+            try:
+                show_toast(root, "编辑区字号 {}{}".format("+" if new > 0 else "", new),
+                           "info", 1200)
+            except Exception:
+                pass
+    return "break"
+
+
+def _editor_zoom_reset(event=None):
+    state.EDITOR_ZOOM = 0
+    _apply_editor_zoom()
+    try:
+        state.save_config()
+    except Exception:
+        pass
+    try:
+        show_toast(root, "编辑区字号已复位", "info", 1200)
+    except Exception:
+        pass
+    return "break"
+
+
+def _widget_in_editor(widget):
+    """指针是否落在脚本编辑区内 (Ctrl+滚轮只在编辑区生效)。"""
+    try:
+        while widget is not None:
+            if widget in (tree, tree_frame):
+                return True
+            widget = widget.master
+    except Exception:
+        pass
+    return False
+
+
+def _editor_zoom_wheel(event):
+    try:
+        if not _widget_in_editor(root.winfo_containing(event.x_root, event.y_root)):
+            return None
+    except Exception:
+        return None
+    return _editor_zoom_step(1 if event.delta > 0 else -1)
+
+
+_apply_editor_zoom()
+tree.bind("<Control-MouseWheel>", _editor_zoom_wheel)
+tree.bind("<Control-plus>", lambda e: _editor_zoom_step(1))
+tree.bind("<Control-equal>", lambda e: _editor_zoom_step(1))   # =/+ 同键
+tree.bind("<Control-minus>", lambda e: _editor_zoom_step(-1))
+tree.bind("<Control-Key-0>", _editor_zoom_reset)
+
 # ── 颜色图例条 ──
 legend_frame = tkinter.Frame(tab_edit, bg=C["bg"])
 
@@ -1701,7 +1819,7 @@ _bind_row_hover(tree)
 # 走 utils 注册回调 (set_ui_scale 在重配字体后触发), 避免把私有名暴露给 settings_window。
 try:
     utils.register_ui_scale_hook(lambda: (_build_sel_bar(), _sync_sel_bars(tree),
-                                          _bind_minibar()))
+                                          _bind_minibar(), _apply_editor_zoom()))
 except Exception:
     pass
 # Breakpoint toggle on #0 column click
@@ -3160,12 +3278,13 @@ def _init_toolbar_buttons():
     _sep(toolbar_inner)
     _tbtn(toolbar_inner,"片段",_cmd_snippet,tip="插入/管理片段库 (离线可用)").pack(side="left",padx=_P)
     _tbtn(toolbar_inner,"新建",_cmd_new,C["ac"],"white",
-          tip="新建空白脚本").pack(side="left",padx=_P)
+          tip="新建空白脚本 (Ctrl+N)").pack(side="left",padx=_P)
     _tbtn(toolbar_inner,"打开",_cmd_open,C["ac"],"white",
-          tip="打开脚本文件 (.xls)").pack(side="left",padx=_P)
+          tip="打开脚本文件 (.xls) (Ctrl+O)").pack(side="left",padx=_P)
     _tbtn(toolbar_inner,"保存",_cmd_save,C["sc"],"white",
-          tip="保存当前脚本").pack(side="left",padx=_P)
-    _tbtn(toolbar_inner,"另存",_cmd_save_as,tip="另存为…").pack(side="left",padx=_P)
+          tip="保存当前脚本 (Ctrl+S)").pack(side="left",padx=_P)
+    _tbtn(toolbar_inner,"另存",_cmd_save_as,
+          tip="另存为… (Ctrl+Shift+S)").pack(side="left",padx=_P)
 
     # Group 3: AI 与实用工具
     _sep(toolbar_inner)
@@ -5511,6 +5630,48 @@ def _periodic():
 # Mini Bar 上下文注入 (整个界面此时已构建完毕; _refresh_theme / _load_pil /
 # ui_scale 钩子还会在运行期按需重新注入)
 _bind_minibar()
+
+# ══════════════════════════════════════════════════════════════════════
+# 通用快捷键 (窗口级)
+#   此前只有脚本表格绑了 Ctrl+C/V/Z/Y/D, 且必须表格获得焦点才有效; 保存 / 另存 /
+#   新建 / 打开 完全没有快捷键。这里统一提到窗口级, 但只在主窗口拥有焦点时执行,
+#   避免在设置、AI 生成等子窗口里误触发。
+# ══════════════════════════════════════════════════════════════════════
+def _main_window_focused():
+    try:
+        w = root.focus_get()
+        return w is None or w.winfo_toplevel() is root
+    except Exception:
+        return True
+
+
+def _hotkey(fn):
+    """包装成窗口级快捷键: 主窗口聚焦时才执行, 并阻止默认行为。"""
+    def _run(event=None):
+        if not _main_window_focused():
+            return None
+        try:
+            fn()
+        except Exception as e:
+            try:
+                log1("快捷键执行失败: {}".format(e), "error")
+            except Exception:
+                pass
+        return "break"
+    return _run
+
+
+for _seq, _fn in (
+    ("<Control-s>", _cmd_save),      # 保存
+    ("<Control-S>", _cmd_save_as),   # 另存为 (Tk: 大写 keysym 即 Shift 组合)
+    ("<Control-n>", _cmd_new),       # 新建
+    ("<Control-o>", _cmd_open),      # 打开
+):
+    try:
+        root.bind_all(_seq, _hotkey(_fn))
+    except Exception:
+        pass
+
 root.after(100,_periodic)
 
 # === 更新检查 (启动 3s 后静默检查一次) ──────────────────────────────

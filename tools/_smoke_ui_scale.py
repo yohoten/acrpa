@@ -36,7 +36,6 @@ FAILS = []
 
 FAMILIES = ("Microsoft YaHei UI", "Consolas", "Segoe UI Symbol", "Segoe UI Emoji")
 
-BTN_TUPLE = 'devlink_btn = tkinter.Label(dark_frame, text="🌐", font=("Segoe UI Symbol", 11),'
 KEYCAP_TUPLE = 'font=("Consolas", 8, "bold"), bg=C["ac"], fg="white",'
 
 # 白名单: (相对路径, 该行 strip 后的源码) -> 保留原因
@@ -44,9 +43,6 @@ KEYCAP_TUPLE = 'font=("Consolas", 8, "bold"), bg=C["ac"], fg="white",'
 WHITELIST = {
     ("src/ACRPA.py", 'font=("Consolas", 9, "bold"), fg=C["fgb"], bg=C["bgc"])'):
         "录制动作计数 = 等宽粗体; _FONT_SPECS 未定义 mono-bold 角色, 保留原视觉",
-    ("src/ACRPA.py", BTN_TUPLE):
-        "tools/_smoke_dark_mode.py:191 与 tools/_test_ai_provider.py:484 断言该 font "
-        "必须为含 11 的元组字面量, 改角色名会打破既有回归",
     ("src/netlink_window.py", 'lbl_pin = tkinter.Label(dlg, text="—", font=("Consolas", 28, "bold"),'):
         "配对码 28pt 大字, 无对应角色, 保留原视觉",
     ("src/settings_window.py", KEYCAP_TUPLE):
@@ -496,13 +492,14 @@ def check_guards():
                 isinstance(t, ast.Name) and t.id == "devlink_btn" for t in n.targets) \
                 and isinstance(n.value, ast.Call):
             kw = {k.arg: k.value for k in n.value.keywords}
-            if getattr(kw.get("text"), "value", None) == "🌐":
+            if isinstance(getattr(kw.get("text"), "value", None), str) \
+                    and isinstance(kw.get("font"), ast.Name):
                 dev_ok = True
     if dev_ok:
-        _p("OK", "守护: devlink_btn 仍为 text='🌐' (保留元组字面量字号 11)")
+        _p("OK", "守护: devlink_btn 为图标按钮 (text + 命名字体角色)")
     else:
-        FAILS.append("守护: devlink_btn text 不再是 '🌐'")
-        _p("FAIL", "守护: devlink_btn text 不再是 '🌐'")
+        FAILS.append("守护: devlink_btn 未使用命名图标字体")
+        _p("FAIL", "守护: devlink_btn 未使用命名图标字体")
 
 
 # ── F. 依赖探测 ──

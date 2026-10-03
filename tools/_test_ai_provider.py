@@ -483,13 +483,11 @@ def test_guards():
             kw = {k.arg: k.value for k in call.keywords}
             text_v = getattr(kw.get("text"), "value", None)
             font_v = kw.get("font")
-            size = None
-            if isinstance(font_v, ast.Tuple) and len(font_v.elts) >= 2 \
-                    and isinstance(font_v.elts[1], ast.Constant):
-                size = font_v.elts[1].value
-            if text_v == "🌐" and size == 11:
+            # v0.1.29-beta「UI 美化」起: 图标改由命名图标字体承载 (FONT_ICON_MD),
+            # 断言形态而非某个具体字形, 免得换个图标就假红。
+            if isinstance(text_v, str) and text_v.strip() and isinstance(font_v, ast.Name):
                 dev_ok = True
-    ok("devlink_btn 仍为地球图标(text=🌐) 且字号 11", dev_ok)
+    ok("devlink_btn 为图标按钮 (text 非空 + 命名字体角色)", dev_ok)
     ok("ACRPA.py 已无『地球图标+互联』旧文案", "🌐 互联" not in a_src)
 
 

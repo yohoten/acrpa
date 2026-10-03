@@ -82,6 +82,23 @@ def manifest_tag():
     return m.group(1) if m else ""
 
 
+def manifest_asset_name():
+    """VERSION 直链声明的附件名 (URL 最后一段)。
+
+    附件名必须与它【完全一致】, 否则客户端按清单拼出的直链就是 404 —— 这是发版
+    最容易踩的坑 (GitHub 还会把重名附件自动改名成 ACRPA-1.zip, 直链当场失效)。
+    旧实现把这个名字写死成 "ACRPA.zip", 于是发 EXE 直发件时会给出误导性告警,
+    而真正的不一致反而没被拦住。
+    """
+    try:
+        with open(VERSION_FILE, encoding="utf-8") as f:
+            text = f.read()
+    except Exception:
+        return ""
+    m = re.search(r"^https?://\S*/([^/\s]+)\s*$", text, re.M)
+    return m.group(1) if m else ""
+
+
 def read_body(tag, version):
     """Release 正文本地草稿 —— 先找 <tag>.md, 再找 v<版本号>.md; 都没有则退化为一句说明。"""
     for name in ("{}.md".format(tag), "v{}.md".format(version)):
@@ -251,6 +268,11 @@ def main():
                     help="已存在同名已发布 Release 时删除重建 (tag 与提交保留)")
     ap.add_argument("--keep-draft", action="store_true",
                     help="传完不发布, 留作草稿 (便于人工核对后再手动发布)")
+    ap.add_argument("--prerelease", action="store_true",
+                    help="以预发布(Pre-release)发布。beta 通道必须加: 客户端首选来源 "
+                         "/releases/latest 不含预发布, 而正式版会让 beta 用户被判定"
+                         "\"有新版本\"、却按错误的校验和去下载; 且本仓库 release 不可变, "
+                         "发出去就改不回来了。")
     ap.add_argument("--transport", choices=["auto", "urllib", "curl"], default="auto",
                     help="上传通道: auto=urllib 失败后自动改用 curl (缺省)")
     ap.add_argument("--timeout", type=int, default=3600,
@@ -273,14 +295,19 @@ def main():
     print("仓库   : {}".format(args.repo))
     print("tag    : {}".format(tag))
     print("发布包 : {} ({:.1f} MB)".format(name, size / (1024 * 1024)))
+    print("预发布 : {}".format("是 (Pre-release)" if args.prerelease else "否 (正式版)"))
     print("正文   : {}".format(os.path.relpath(body_path, BASE) if body_path
                               else "(无本地正文, 用占位说明)"))
 
-    # 附件名必须与 VERSION 首行直链的最后一段完全一致, 否则那条直链就是 404。
-    if name != "ACRPA.zip":
-        print("[WARN] 附件名为 {!r}, 而 VERSION 的直链指向 ACRPA.zip。".format(name),
-              file=sys.stderr)
-        print("       客户端会按 ACRPA.zip 拼直链, 名字不符即 404。", file=sys.stderr)
+    # 附件名必须与 VERSION 直链的最后一段完全一致, 否则那条直链就是 404。
+    expected_name = manifest_asset_name()
+    if expected_name and name != expected_name:
+        print("[FAIL] 附件名 {!r} 与 VERSION 直链末段 {!r} 不一致。".format(
+            name, expected_name), file=sys.stderr)
+        print("       客户端会按清单拼直链, 名字不符即 404。请把文件改名为 {!r},".format(
+            expected_name), file=sys.stderr)
+        print("       或用 --asset 指定正确路径后重跑。", file=sys.stderr)
+        return 1
 
     token, err = git_token()
     if not token:
@@ -335,7 +362,8 @@ def main():
 
     if exists:
         okp, rel2, whyp = api("PATCH", "/repos/{}/releases/{}".format(args.repo, rel["id"]),
-                              token, payload={"name": "ACRPA {}".format(tag), "body": body})
+                              token, payload={"name": "ACRPA {}".format(tag), "body": body,
+                                              "prerelease": bool(args.prerelease)})
         if okp:
             rel = rel2
             print("[OK] 草稿 Release {} 已存在, 正文已更新 (id={})".format(tag, rel["id"]))
@@ -344,7 +372,8 @@ def main():
     else:
         okc, rel2, whyc = api("POST", "/repos/{}/releases".format(args.repo), token,
                               payload={"tag_name": tag, "name": "ACRPA {}".format(tag),
-                                       "body": body, "draft": True, "prerelease": False})
+                                       "body": body, "draft": True,
+                                       "prerelease": bool(args.prerelease)})
         if not okc:
             print("[FAIL] 建草稿 Release 失败: {}".format(whyc), file=sys.stderr)
             return 1

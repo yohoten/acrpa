@@ -1,0 +1,57 @@
+name: CI
+
+# 历史背景: 本仓库此前没有任何 CI, 44 个自测脚本只能靠人记得去跑 ——
+# 于是 src/version_info.py 的 _FALLBACK_VERSION 悄悄漂了整整一个版本,
+# 直到有人手工执行才发现。这个工作流就是那条"必须自动跑"的兜底。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONIOENCODING: utf-8
+  PYTHONUTF8: "1"
+
+jobs:
+  core-tests:
+    name: 核心回归 (Windows / Python 3.9)
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+          cache: pip
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: 全量语法检查
+        run: python -m compileall -q src tools
+
+      - name: 版本号一致性 (含 version_info 回退值)
+        run: python tools/bump_version.py --verify
+
+      - name: 核心回归测试
+        # --safe 只跑不依赖 GUI 交互 / playwright / 真实网络的子集;
+        # 被排除的脚本会打印 SKIP 与原因, 不会静默漏跑。
+        run: python tools/run_tests.py --safe --timeout 180 --json ci-test-results.json
+
+      - name: 归档测试结果
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ci-test-results.json
+          if-no-files-found: ignore

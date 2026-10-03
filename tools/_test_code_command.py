@@ -185,7 +185,8 @@ try:
 
     rv = run_code("ok")
     check(rv is None, "b1 normal .txt executed -> returns None (got %r)" % (rv,))
-    check(logs_contain("✅ 执行了脚本") and logs_contain("result=3"),
+    # v0.1.29-beta 起日志级别统一为 ⓘ/✔/⚠/✘ 字形 (旧文案用的 ✅ 已退役)
+    check(logs_contain("✔ 执行了脚本") and logs_contain("result=3"),
           "b2 success log carries result=3")
 
     # ── c. print 经 log 回调转发（批次 1 对接）──

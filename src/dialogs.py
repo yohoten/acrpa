@@ -1365,7 +1365,7 @@ def show_update_dialog(force_check=False):
         else:
             btn_folder.grid()
             _say("安装包已下载并通过完整性校验。\n{}\n\n"
-                 "当前无法自动更新: {}\n请手动解压替换。".format(path, why), C["wn"])
+                 "当前无法自动更新: {}\n请手动替换主程序（zip 包解压后替换）。".format(path, why), C["wn"])
 
     # ── 应用并退出 ──
     def _apply():
@@ -1377,7 +1377,12 @@ def show_update_dialog(force_check=False):
                 "程序将立即退出并替换主程序, 随后自动重启。\n\n"
                 "更新包: {}\n\n继续吗?".format(os.path.basename(path)), parent=dlg):
             return
-        ok, why = updater.apply_update(path)
+        info = ui.get("info") or {}
+        ok, why = updater.apply_update(
+            path,
+            expected_version=info.get("latest") or "",
+            download_url=info.get("download_url") or "",
+            sha256=info.get("sha256") or "")
         if not ok:
             messagebox.showerror("无法启动更新", why, parent=dlg)
             return

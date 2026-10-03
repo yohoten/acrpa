@@ -238,6 +238,46 @@ def _open_urllib_stream(url, timeout, headers):
     return resp, int(resp.headers.get("Content-Length") or 0)
 
 
+def _pick_release_asset(assets):
+    """从 Release 的 assets[] 里挑一个可用附件 → (直链, 体积, sha256)。
+
+    挑选优先级: 约定的 `ACRPA.zip` → 任意 `.zip` → 任意 `.exe`。
+    只认 .zip 的旧实现会让「只发了便携 EXE 的 Release」被判定成"没有下载地址",
+    用户看到"有新版本"却始终下不动 —— 而本仓库确实发布过 EXE 直发件。
+
+    sha256 取 asset 的 `digest` 字段 (GitHub 对 Release 附件给出的
+    `sha256:<hex>`)。它描述的是【这个待下载的包】, 比本机 VERSION 里的校验和
+    (描述【已安装的那个包】) 权威, 也不受镜像/清单缓存影响。
+    """
+    def rank(asset):
+        name = str(asset.get("name") or "").lower()
+        if name == RELEASE_ASSET.lower():
+            return 0
+        if name.endswith(".zip"):
+            return 1
+        if name.endswith(".exe"):
+            return 2
+        return 9
+
+    best = None
+    for asset in assets or []:
+        r = rank(asset)
+        if r < 9 and (best is None or r < best[0]):
+            best = (r, asset)
+    if best is None:
+        return "", 0, ""
+
+    asset = best[1]
+    digest = str(asset.get("digest") or "").strip()
+    if digest.lower().startswith("sha256:"):
+        digest = digest.split(":", 1)[1]
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", digest or ""):
+        digest = ""
+    return (asset.get("browser_download_url", ""),
+            int(asset.get("size") or 0),
+            digest.lower())
+
+
 def _parse_release_api(payload, source):
     """解析 GitHub Releases API 响应 → info dict；失败返回 (None, 原因)。"""
     try:
@@ -248,18 +288,7 @@ def _parse_release_api(payload, source):
         return None, "响应缺少 tag_name"
 
     version = str(data["tag_name"]).strip().lstrip("vV")
-    url, size = "", 0
-    for asset in data.get("assets") or []:
-        if asset.get("name") == RELEASE_ASSET:
-            url = asset.get("browser_download_url", "")
-            size = int(asset.get("size") or 0)
-            break
-    if not url:
-        for asset in data.get("assets") or []:
-            if str(asset.get("name", "")).lower().endswith(".zip"):
-                url = asset.get("browser_download_url", "")
-                size = int(asset.get("size") or 0)
-                break
+    url, size, digest = _pick_release_asset(data.get("assets"))
 
     return {
         "latest": version,
@@ -267,7 +296,9 @@ def _parse_release_api(payload, source):
         "size": size,
         "notes_url": data.get("html_url", ""),
         "notes": data.get("body", "") or "",
-        "sha256": "",           # Release API 不提供校验和, 依赖清单行补充
+        # 附件 digest (权威) —— 取不到时留空, 由 check() 去远端清单里找同版本的
+        # sha256; 绝不能回填本机 VERSION 里的值 (那描述的是已安装的旧包)。
+        "sha256": digest,
         "source": source,
     }, ""
 
@@ -352,6 +383,28 @@ def _probe_sources(sources, parser, current, timeout, errors):
     return best
 
 
+def _manifest_matching(version, timeout, errors):
+    """在远端清单源里找【版本号与目标一致】的那一份 → info (取不到返回 None)。
+
+    用途: Release API 是首选来源, 但它不保证给出校验和 (旧版 API 无 digest 字段),
+    此时需要从清单里取【目标版本】自己的 sha256 与直链。
+    """
+    if not version:
+        return None
+    for source in _RAW_MANIFEST_SOURCES:
+        ok, text, err = _http_get(source, timeout)
+        if not ok:
+            errors.append("{} → {}".format(source, err))
+            continue
+        info, why = _parse_manifest(text, source)
+        if info is None:
+            errors.append("{} → {}".format(source, why))
+            continue
+        if compare_versions(info["latest"], version) == 0:
+            return info
+    return None
+
+
 def check(timeout=_TIMEOUT):
     """检查更新 → 结构化结果 dict (status: ok/no_update/network_error/bad_manifest)。"""
     errors = []
@@ -374,9 +427,19 @@ def check(timeout=_TIMEOUT):
     if info is None:
         return _empty_result("network_error", " | ".join(errors[:3]))
 
-    # 本地 VERSION 若显式配置了校验和, 即使来源是 Release API 也采纳
+    # 校验和来源: Release API 的 asset digest → 远端清单里【同版本】的 sha256。
+    # 绝不回填本机 VERSION 里的 sha256 —— 它描述的是【当前已安装的那个包】,
+    # 升级目标换版本后必然不符。旧实现直接回填, 使跨版本升级 100% 以
+    # "sha256 校验失败" 告终 (而下载明明是成功的)。
+    # 两处都取不到时保持为空 = 不校验哈希, 仍有体积 / 魔数 / 包内 VERSION 三重把关。
     if not info.get("sha256"):
-        info["sha256"] = get_sha256()
+        matched = _manifest_matching(info["latest"], timeout, errors)
+        if matched:
+            info["sha256"] = matched.get("sha256") or ""
+            if not info.get("download_url") and matched.get("download_url"):
+                info["download_url"] = matched["download_url"]
+            if not info.get("download_urls"):
+                info["download_urls"] = list(matched.get("download_urls") or [])
 
     result = _empty_result("no_update", "", info["source"])
     result.update({
@@ -585,6 +648,34 @@ def _verify_file(path, expect_sha256="", expect_size=0):
     return True, ""
 
 
+def _package_ext(url):
+    """从直链推断更新包扩展名 → '.zip' / '.exe' (认不出时按 .zip)。"""
+    path = str(url or "").split("?", 1)[0].split("#", 1)[0].lower()
+    for ext in (".zip", ".exe"):
+        if path.endswith(ext):
+            return ext
+    return ".zip"
+
+
+def _package_kind(path):
+    """按文件头判定更新包类型 → 'zip' / 'exe' / '' (空=无法识别)。
+
+    之所以要判类型: zip 需要解压取主程序, exe 是便携版直发件, 直接替换即可。
+    旧实现一律按 zip 处理, 拿到 exe 时会在 ExtractToDirectory 处抛异常, 而异常
+    被助手脚本 catch 后只写日志 —— 用户看到的是"更新完成但版本没变"。
+    """
+    try:
+        with open(path, "rb") as f:
+            head = f.read(4)
+    except Exception:
+        return ""
+    if head.startswith(b"PK"):
+        return "zip"
+    if head.startswith(b"MZ"):
+        return "exe"
+    return ""
+
+
 def download_package(info, dest_dir=None, progress=None, cancel=None,
                      timeout=30, filename=None):
     """下载更新包 → (ok, 路径或失败原因)。
@@ -599,13 +690,14 @@ def download_package(info, dest_dir=None, progress=None, cancel=None,
         return False, "无法创建下载目录: {}".format(e)
 
     version = (info or {}).get("latest") or VERSION
-    name = filename or "ACRPA_v{}.zip".format(version)
-    dest = os.path.join(target_dir, name)
-    part = dest + ".part"
-
     urls = candidate_download_urls(info)
     if not urls:
         return False, "没有可用的下载地址"
+
+    # 临时文件固定名; 最终文件名按【实际成功的那个源】决定扩展名 ——
+    # 本仓库两种形态都发过 (ACRPA.zip 与 ACRPA-vX.exe 直发件), 写死 .zip 会让
+    # 自更新助手拿着一个 exe 去解压。
+    part = os.path.join(target_dir, "ACRPA_v{}.part".format(version))
 
     errors = []
     for url in urls:
@@ -622,6 +714,8 @@ def download_package(info, dest_dir=None, progress=None, cancel=None,
                 except Exception:
                     pass
                 continue
+            name = filename or "ACRPA_v{}{}".format(version, _package_ext(url))
+            dest = os.path.join(target_dir, name)
             try:
                 os.replace(part, dest)
             except Exception as e:
@@ -697,17 +791,41 @@ def _download_one(url, part_path, progress, cancel, timeout,
 # 自更新助手脚本 (纯 ASCII, 全部路径经环境变量注入, 规避批处理中文编码问题)
 _APPLY_PS1 = r"""# ACRPA 自更新助手 — 由主程序生成, 运行完自动删除
 $ErrorActionPreference = 'Stop'
-$zip     = $env:ACRPA_ZIP
+$pkg     = $env:ACRPA_PKG
+$kind    = $env:ACRPA_KIND
 $stage   = $env:ACRPA_STAGE
 $target  = $env:ACRPA_TARGET
 $exeName = $env:ACRPA_EXENAME
 $expect  = $env:ACRPA_EXPECTVER
+$url     = $env:ACRPA_URL
+$sha     = $env:ACRPA_SHA
 $logPath = $env:ACRPA_LOG
 $waitPid = 0
 [void][int]::TryParse($env:ACRPA_PID, [ref]$waitPid)
 
 function Write-Log([string]$m) {
     try { "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $m" | Out-File -FilePath $logPath -Append -Encoding UTF8 } catch {}
+}
+
+function Write-Manifest([string]$version, [string]$u, [string]$s) {
+    # 必须写成【无 BOM】的 UTF-8: 主程序按 utf-8 解析 VERSION, BOM 会让首行
+    # 版本号比对失败 (表现为"更新成功但版本没变、反复提示同一个更新")。
+    $lines = @($version)
+    if ($u) { $lines += $u }
+    if ($s) { $lines += ('sha256:' + $s) }
+    $text  = ($lines -join "`r`n") + "`r`n"
+    $enc   = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText((Join-Path $target 'VERSION'), $text, $enc)
+}
+
+function Replace-Main([string]$srcExe) {
+    # 先落到 .new 再原子替换, 避免半截文件顶掉可运行的主程序
+    $dest = Join-Path $target $exeName
+    $tmp  = Join-Path $target ($exeName + '.new')
+    Copy-Item -LiteralPath $srcExe -Destination $tmp -Force
+    if ((Get-Item -LiteralPath $tmp).Length -lt 1MB) { throw 'staged exe too small' }
+    Move-Item -LiteralPath $tmp -Destination $dest -Force
+    Write-Log "main program replaced: $dest"
 }
 
 try {
@@ -718,49 +836,53 @@ try {
         Start-Sleep -Milliseconds 500
     }
 
-    if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
-    New-Item -ItemType Directory -Path $stage -Force | Out-Null
-    Write-Log "extracting $zip"
-    [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $stage)
+    if ($kind -eq 'exe') {
+        # 便携版直发件: 无需解压, 直接原子替换主程序; 同级 VERSION 必须同步,
+        # 否则 version_info 仍从旧 VERSION 读到旧版本号, 会反复提示同一个更新。
+        Replace-Main $pkg
+        if ($expect) { Write-Manifest $expect $url $sha }
+        Write-Log "exe package applied: $expect"
+    }
+    else {
+        if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
+        New-Item -ItemType Directory -Path $stage -Force | Out-Null
+        Write-Log "extracting $pkg"
+        [System.IO.Compression.ZipFile]::ExtractToDirectory($pkg, $stage)
 
-    $exe = Get-ChildItem -LiteralPath $stage -Recurse -File -Filter '*.exe' |
-           Where-Object { $_.Length -gt 1MB } |
-           Sort-Object Length -Descending | Select-Object -First 1
-    if (-not $exe) { throw 'package contains no executable over 1MB' }
-    $root = $exe.Directory.FullName
-    Write-Log "package root: $root"
+        $exe = Get-ChildItem -LiteralPath $stage -Recurse -File -Filter '*.exe' |
+               Where-Object { $_.Length -gt 1MB } |
+               Sort-Object Length -Descending | Select-Object -First 1
+        if (-not $exe) { throw 'package contains no executable over 1MB' }
+        $root = $exe.Directory.FullName
+        Write-Log "package root: $root"
 
-    if ($expect) {
-        $vf = Join-Path $root 'VERSION'
-        if (Test-Path -LiteralPath $vf) {
-            $got = (Get-Content -LiteralPath $vf -TotalCount 1).Trim()
-            if ($got -ne $expect) { throw "version mismatch: package=$got expected=$expect" }
-            Write-Log "version verified: $got"
-        } else {
-            # 包内未携带 VERSION: 不阻断 (下载阶段已完成 sha256/体积校验),
-            # 但留痕便于事后定位; 发布包建议由 tools/make_release.py 生成。
-            Write-Log "WARN: package has no VERSION, version check skipped"
+        if ($expect) {
+            $vf = Join-Path $root 'VERSION'
+            if (Test-Path -LiteralPath $vf) {
+                $got = (Get-Content -LiteralPath $vf -TotalCount 1).Trim()
+                if ($got -ne $expect) { throw "version mismatch: package=$got expected=$expect" }
+                Write-Log "version verified: $got"
+            } else {
+                # 包内未携带 VERSION: 不阻断 (下载阶段已完成 sha256/体积校验),
+                # 但留痕便于事后定位; 发布包建议由 tools/make_release.py 生成。
+                Write-Log "WARN: package has no VERSION, version check skipped"
+            }
+        }
+
+        # 先落到 .new 再原子替换, 避免半截文件顶掉可运行的主程序
+        Replace-Main $exe.FullName
+
+        # 只同步 VERSION, 其余资源 (模板/说明) 请下载完整包, 避免误删用户数据
+        $src_ver = Join-Path $root 'VERSION'
+        if (Test-Path -LiteralPath $src_ver) {
+            Copy-Item -LiteralPath $src_ver -Destination (Join-Path $target 'VERSION') -Force
+            Write-Log "VERSION synced"
         }
     }
 
-    # 先落到 .new 再原子替换, 避免半截文件顶掉可运行的主程序
-    $dest = Join-Path $target $exeName
-    $tmp  = Join-Path $target ($exeName + '.new')
-    Copy-Item -LiteralPath $exe.FullName -Destination $tmp -Force
-    if ((Get-Item -LiteralPath $tmp).Length -lt 1MB) { throw 'staged exe too small' }
-    Move-Item -LiteralPath $tmp -Destination $dest -Force
-    Write-Log "main program replaced"
-
-    # 只同步 VERSION, 其余资源 (模板/说明) 请下载完整包, 避免误删用户数据
-    $src_ver = Join-Path $root 'VERSION'
-    if (Test-Path -LiteralPath $src_ver) {
-        Copy-Item -LiteralPath $src_ver -Destination (Join-Path $target 'VERSION') -Force
-        Write-Log "VERSION synced"
-    }
-
-    Start-Process -FilePath $dest
-    Write-Log "restarted: $dest"
-    Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
+    Start-Process -FilePath (Join-Path $target $exeName)
+    Write-Log "restarted"
+    Remove-Item -LiteralPath $pkg -Force -ErrorAction SilentlyContinue
 } catch {
     Write-Log ("FAILED: " + $_.Exception.Message)
 } finally {
@@ -782,16 +904,31 @@ def can_self_update():
     return True, ""
 
 
-def apply_update(zip_path, restart=True):
+def apply_update(package_path, restart=True, expected_version="",
+                 download_url="", sha256=""):
     """启动自更新助手: 等待本进程退出 → 替换主程序与 VERSION → 重启。
+
+    支持两种更新包, 由文件头自动识别 (见 _package_kind):
+      · zip —— 完整发布包 (含 VERSION/资源), 解压后取最大的 exe 替换主程序,
+               并同步包内 VERSION;
+      · exe —— 便携版直发件, 直接原子替换主程序, 并按 expected_version 重写
+               同级 VERSION (否则程序仍自报旧版本, 会反复提示同一个更新)。
+
+    expected_version / download_url / sha256 由调用方 (更新窗口) 从更新清单传入,
+    仅用于 exe 包重写 VERSION; zip 包仍以包内 VERSION 为准。
 
     调用方在收到 (True, _) 后应尽快退出进程, 否则助手会等待到超时。
     """
     ok, why = can_self_update()
     if not ok:
         return False, why
-    if not os.path.exists(zip_path):
-        return False, "更新包不存在: {}".format(zip_path)
+    if not os.path.exists(package_path):
+        return False, "更新包不存在: {}".format(package_path)
+
+    kind = _package_kind(package_path)
+    if not kind:
+        return False, "更新包格式无法识别 (既不是 zip 也不是 exe): {}".format(
+            os.path.basename(package_path))
 
     app_dir = get_app_dir()
     updates_dir = os.path.join(app_dir, "updates")
@@ -809,11 +946,16 @@ def apply_update(zip_path, restart=True):
 
     env = dict(os.environ)
     env.update({
-        "ACRPA_ZIP": zip_path,
+        "ACRPA_PKG": package_path,
+        "ACRPA_KIND": kind,
         "ACRPA_STAGE": os.path.join(updates_dir, "stage"),
         "ACRPA_TARGET": app_dir,
         "ACRPA_EXENAME": os.path.basename(sys.executable),
-        "ACRPA_EXPECTVER": (get_expected_version(zip_path) or ""),
+        # zip 以包内 VERSION 为准; exe 没有旁挂清单, 用调用方给的期望版本
+        "ACRPA_EXPECTVER": (get_expected_version(package_path)
+                            or expected_version or ""),
+        "ACRPA_URL": download_url or "",
+        "ACRPA_SHA": (sha256 or "").lower(),
         "ACRPA_PID": str(os.getpid()),
         "ACRPA_LOG": os.path.join(updates_dir, "apply_update.log"),
     })

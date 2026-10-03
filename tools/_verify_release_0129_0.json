@@ -1,0 +1,31 @@
+{
+  "tag": "v0.1.29.0",
+  "manifest": {
+    "version": "0.1.29-beta",
+    "url": "https://github.com/yohoten/acrpa/releases/download/v0.1.29.0/ACRPA-v0.1.29-beta.exe",
+    "sha256": "0ffb41a18b6b55f44659068762bbddc8cc131af02ea70c76f5685ab1cffb98fd",
+    "tag": "v0.1.29.0",
+    "asset": "ACRPA-v0.1.29-beta.exe"
+  },
+  "ok": [
+    "VERSION 首行版本号: '0.1.29-beta'",
+    "VERSION 声明下载直链",
+    "VERSION 声明 sha256: 0ffb41a18b6b55f4…",
+    "从直链解析出 tag: 'v0.1.29.0'",
+    "本地 ACRPA-v0.1.29-beta.exe 存在且 sha256 相符 (14707763 bytes)",
+    "tag v0.1.29.0 → aaa10a7a71cf 是本地 HEAD 的祖先 (其后另有 1 个提交)",
+    "Release 已发布 (draft=False)",
+    "Release 为 Pre-release (符合 beta 通道)",
+    "附件体积相符: ACRPA-v0.1.29-beta.exe (14707763 bytes)",
+    "附件 digest 相符 (0ffb41a18b6b55f4…)",
+    "直链可下载且 sha256 相符 (14707763 bytes, 200 14707763)",
+    "cdn.jsdelivr.net → 0.1.29-beta",
+    "raw.githubusercontent.com → 0.1.29-beta",
+    "Gitee tag v0.1.29.0 已同步",
+    "Gitee main → 2ae52daf7c20 (与本地一致)"
+  ],
+  "warn": [
+    "gitee.com → 0.1.28-beta (本地为 0.1.29-beta)"
+  ],
+  "fail": []
+}

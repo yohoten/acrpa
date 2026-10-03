@@ -292,8 +292,8 @@ check("def themed" in read_text(os.path.join(SRC, "utils.py")),
       "o4 utils.themed still present")
 check("PROVIDER_PRESETS" in read_text(os.path.join(SRC, "ai_client.py")),
       "o5 ai_client.PROVIDER_PRESETS still present")
-check(('devlink_btn' in acrpa_text and '\U0001F310' in acrpa_text),
-      "o6 devlink_btn with globe emoji still present")
+check(('devlink_btn' in acrpa_text and 'FONT_ICON_MD' in acrpa_text),
+      "o6 devlink_btn uses the named icon font (globe emoji retired in v0.1.29-beta)")
 
 # ======================================================================
 # 旧插件兼容 (动态优先，无法 import engine 时静态断言)

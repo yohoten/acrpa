@@ -27,6 +27,8 @@ import sys
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VERSION_FILE = os.path.join(BASE, "VERSION")
 SRC_DIR = os.path.join(BASE, "src")
+README_FILE = os.path.join(BASE, "README.md")
+VERSION_INFO_FILE = os.path.join(SRC_DIR, "version_info.py")
 
 # 合法版本号: 主.次.修订 + 可选预发布后缀 (beta / -beta / rc1 等)
 _VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)([a-zA-Z0-9.\-]*)$")
@@ -117,6 +119,44 @@ def bump(current, part):
     return "{}.{}.{}{}".format(major, minor, patch, suffix)
 
 
+def read_fallback():
+    """读取 version_info.py 里的 _FALLBACK_VERSION (读不到返回空串)。"""
+    try:
+        with open(VERSION_INFO_FILE, encoding="utf-8") as f:
+            m = re.search(r"""(?m)^_FALLBACK_VERSION\s*=\s*["']([^"']*)["']""", f.read())
+        return m.group(1) if m else ""
+    except Exception:
+        return ""
+
+
+def sync_fallback(new_version):
+    """把 src/version_info.py 的 _FALLBACK_VERSION 同步为新版本号。
+
+    该值只在 VERSION 文件完全不可读时生效, 但一旦漂移就会让"全应用自报版本"
+    与真实版本不一致 —— 属于必须由工具保证、不能靠人记住的不变量。
+    (历史上正是它漂在 0.1.28-beta 而 VERSION 已是 0.1.29-beta。)
+    """
+    try:
+        with open(VERSION_INFO_FILE, encoding="utf-8") as f:
+            text = f.read()
+    except Exception as e:
+        print("[WARN] 读不到 version_info.py: {}".format(e))
+        return False
+    new_text, n = re.subn(
+        r"""(?m)^(_FALLBACK_VERSION\s*=\s*)["'][^"']*["']""",
+        lambda m: '{}"{}"'.format(m.group(1), new_version), text)
+    if n == 0:
+        print("[WARN] version_info.py 中未找到 _FALLBACK_VERSION, 请人工检查")
+        return False
+    if new_text == text:
+        print("[SKIP] version_info._FALLBACK_VERSION 已是 {}".format(new_version))
+        return False
+    with open(VERSION_INFO_FILE, "w", encoding="utf-8") as f:
+        f.write(new_text)
+    print("[OK] version_info._FALLBACK_VERSION → {}".format(new_version))
+    return True
+
+
 def verify(old_version):
     """扫描 src/ 下是否残留旧版本号的【字符串字面量】硬编码。
 
@@ -157,12 +197,19 @@ def main():
 
     if "--verify" in args:
         findings = verify(current)
+        fb = read_fallback()
+        if fb and current and fb != current:
+            print("[FAIL] version_info._FALLBACK_VERSION = {!r} 与 VERSION 首行 {!r} 不一致"
+                  .format(fb, current))
+            print("       回退值仅在 VERSION 不可读时生效, 漂移会让程序自报错误版本。")
+            print("       修复: python tools/bump_version.py {}".format(current))
+            return 1
         if findings:
             print("发现 {} 处旧版本号残留:".format(len(findings)))
             for fp, ln, txt in findings:
                 print("  {}:{}  {}".format(fp, ln, txt))
             return 1
-        print("[OK] 未发现旧版本号残留 (全部模块已从 version_info 读取)")
+        print("[OK] 未发现旧版本号残留; _FALLBACK_VERSION 与 VERSION 一致 ({})".format(current))
         return 0
 
     # ── 计算新版本号 ──
@@ -207,6 +254,8 @@ def main():
         print("[OK] 已同步: {}".format(", ".join(changed)))
     else:
         print("[SKIP] README 未发现需同步的版本标记")
+
+    sync_fallback(new_version)
 
     # 自动验证
     if current:

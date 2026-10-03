@@ -81,3 +81,14 @@ market_scripts/
 # 根目录散落的脚本下载残留（脚本模板应放 template/，该目录已纳管）
 /*.xls
 template/
+
+# 测试/冒烟运行产物 —— 每次执行都会被重写，本不该入库：
+#   · _smoke_result_phase2/*.out  由 *_smoke_*.py 写出的结论与输出
+#   · _ui_screenshots/*.png        由 _smoke_ui_introspect.py 截取的界面快照
+#   · _test_matrix_*.json          由 tools/run_tests.py --json 写出的结果
+# 此前它们是纳管的，于是"跑一遍测试 => 工作区变脏"，噪声混淆真正的改动。
+tools/_smoke_result_phase2/
+tools/_ui_screenshots/
+tools/_test_matrix_*.json
+# CI 归档用（由 .github/workflows/ci.yml 生成并作为 artifact 上传）
+ci-test-results.json

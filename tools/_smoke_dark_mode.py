@@ -188,7 +188,9 @@ def check_acrpa_cursor_and_button():
         FAILS.append("ACRPA.py 缺 insertbackground=")
         _p("FAIL", "ACRPA.py 缺 insertbackground=")
 
-    # C2. devlink_btn: text="🌐", font 字号 11
+    # C2. devlink_btn: 图标按钮 —— v0.1.29-beta「UI 美化」起, 图标改由命名图标
+    #     字体 (FONT_ICON_MD) 承载, 不再写死 emoji + ("Segoe UI Symbol", 11) 元组。
+    #     这里断言的是「形态」而不是某个具体字形, 避免换图标就假红。
     dev_ok = False
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign) and any(
@@ -199,17 +201,14 @@ def check_acrpa_cursor_and_button():
             kw = {k.arg: k.value for k in call.keywords}
             text_v = getattr(kw.get("text"), "value", None)
             font_v = kw.get("font")
-            size = None
-            if isinstance(font_v, ast.Tuple) and len(font_v.elts) >= 2 \
-                    and isinstance(font_v.elts[1], ast.Constant):
-                size = font_v.elts[1].value
-            if text_v == "🌐" and size == 11:
+            if isinstance(text_v, str) and text_v.strip() \
+                    and isinstance(font_v, ast.Name):
                 dev_ok = True
     if dev_ok:
-        _p("OK", "devlink_btn text='🌐' 且 font 字号 11")
+        _p("OK", "devlink_btn 为图标按钮 (text 非空 + 命名字体角色)")
     else:
-        FAILS.append("devlink_btn 未满足 text='🌐' + 字号 11")
-        _p("FAIL", "devlink_btn 未满足 text='🌐' + 字号 11")
+        FAILS.append("devlink_btn 未使用命名图标字体 (禁止回退到硬编码 emoji+元组字号)")
+        _p("FAIL", "devlink_btn 未使用命名图标字体")
 
     # C3. 旧文案已消失
     if "🌐 互联" not in a_src:

@@ -1,0 +1,46 @@
+{
+  "repo": "yohoten/acrpa",
+  "tag": "v0.1.29.0",
+  "asset_name": "ACRPA-v0.1.29-beta.exe",
+  "steps": {
+    "create": {
+      "ok": true,
+      "id": 402402598,
+      "draft": true,
+      "prerelease": true,
+      "html_url": "https://github.com/yohoten/acrpa/releases/tag/untagged-908fa3f4c51fae0f9314"
+    },
+    "upload": {
+      "ok": true,
+      "server_size": 14707763,
+      "local_size": 14707763
+    },
+    "publish": {
+      "ok": true
+    }
+  },
+  "asset": {
+    "stage": "D:\\CodingEmber\\ACRPA\\dist\\ACRPA-v0.1.29-beta.exe",
+    "size": 14707763,
+    "sha256": "0ffb41a18b6b55f44659068762bbddc8cc131af02ea70c76f5685ab1cffb98fd"
+  },
+  "body_len": 3870,
+  "state": "PUBLISHED",
+  "verify": {
+    "tag_name": "v0.1.29.0",
+    "draft": false,
+    "prerelease": true,
+    "immutable": true,
+    "html_url": "https://github.com/yohoten/acrpa/releases/tag/v0.1.29.0",
+    "assets": [
+      {
+        "name": "ACRPA-v0.1.29-beta.exe",
+        "size": 14707763,
+        "digest": "sha256:0ffb41a18b6b55f44659068762bbddc8cc131af02ea70c76f5685ab1cffb98fd",
+        "url": "https://github.com/yohoten/acrpa/releases/download/v0.1.29.0/ACRPA-v0.1.29-beta.exe"
+      }
+    ],
+    "size_match": true,
+    "digest_match": true
+  }
+}

@@ -474,8 +474,8 @@ class NetLinkWindow(object):
         self.lbl_pair.grid(row=0, column=1, sticky="e", padx=(8, 6))
         self.btn_pair_code = tkinter.Button(top, text="配对码", font=utils.FONT_BUTTON,
                                             bg=C["bgc"], fg=C["fgb"],
-                                            activebackground=C["acl"], relief="raised",
-                                            bd=2, cursor="hand2", padx=12, pady=3,
+                                            activebackground=C["acl"], relief="flat",
+                                            bd=1, cursor="hand2", padx=12, pady=3,
                                             command=self._on_pair_code)
         self.btn_pair_code.grid(row=0, column=2, sticky="e", padx=(0, 6))
         try:
@@ -486,7 +486,7 @@ class NetLinkWindow(object):
         self.btn_toggle = tkinter.Button(top, text="启动互联", font=utils.FONT_BUTTON,
                                          bg=C["ac"], fg="white",
                                          activebackground=C["ach"], activeforeground="white",
-                                         relief="raised", bd=2, cursor="hand2",
+                                         relief="flat", bd=1, cursor="hand2",
                                          padx=12, pady=3, command=self._on_toggle)
         self.btn_toggle.grid(row=0, column=3, sticky="e")
 
@@ -522,12 +522,12 @@ class NetLinkWindow(object):
                       relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"]).pack(
             side="left", padx=(0, 4))
         tkinter.Button(cfg, text="添加", font=utils.FONT_SMALL,
-                       bg=C["bgc"], fg=C["fgb"], relief="raised", bd=2,
+                       bg=C["bgc"], fg=C["fgb"], relief="flat", bd=1,
                        cursor="hand2", padx=8, pady=1,
                        command=self._on_add_peer).pack(side="left", padx=(0, 8))
         tkinter.Button(cfg, text="应用", font=utils.FONT_SMALL,
                        bg=C["ac"], fg="white", activebackground=C["ach"],
-                       activeforeground="white", relief="raised", bd=2,
+                       activeforeground="white", relief="flat", bd=1,
                        cursor="hand2", padx=10, pady=1,
                        command=self._on_apply).pack(side="left")
 
@@ -546,6 +546,8 @@ class NetLinkWindow(object):
                 ("latency", "延迟", 60), ("perm", "权限", 70)):
             self.tv.heading(cid, text=text)
             self.tv.column(cid, width=width, anchor="w")
+        # §4.5 降级: show="headings" 无 #0 列 → 选中行加粗 (整行 acl 底由 style.map)
+        utils.bind_sel_bold(self.tv)
         self.tv.grid(row=0, column=0, sticky="nsew")
         sb = ttk.Scrollbar(mid, orient="vertical", command=self.tv.yview)
         sb.grid(row=0, column=1, sticky="ns")
@@ -568,10 +570,10 @@ class NetLinkWindow(object):
         self.lbl_detail = tkinter.Label(det, text="未选择设备", font=utils.FONT_SMALL,
                                         bg=C["bg"], fg=C["fgm"], anchor="w")
         self.lbl_detail.grid(row=1, column=0, columnspan=2, sticky="w", pady=(2, 0))
-        self.btn_pair_peer = tkinter.Button(det, text="🔗 配对", font=utils.FONT_SMALL,
+        self.btn_pair_peer = tkinter.Button(det, text="⇄ 配对", font=utils.FONT_SMALL,
                                             bg=C["bgc"], fg=C["fgb"],
-                                            activebackground=C["acl"], relief="raised",
-                                            bd=2, cursor="hand2", padx=10, pady=2,
+                                            activebackground=C["acl"], relief="flat",
+                                            bd=1, cursor="hand2", padx=10, pady=2,
                                             state="disabled", command=self._on_pair_peer)
         self.btn_pair_peer.grid(row=0, column=2, rowspan=2, sticky="e", padx=(8, 0))
         try:
@@ -580,10 +582,10 @@ class NetLinkWindow(object):
         except Exception:
             pass
         # Phase3-1b: 查看远端脚本列表并可直接远程运行 (需 perm=script)
-        self.btn_remote_scripts = tkinter.Button(det, text="📂 远端脚本",
+        self.btn_remote_scripts = tkinter.Button(det, text="▭ 远端脚本",
                                                  font=utils.FONT_SMALL, bg=C["bgc"],
                                                  fg=C["fgb"], activebackground=C["acl"],
-                                                 relief="raised", bd=2, cursor="hand2",
+                                                 relief="flat", bd=1, cursor="hand2",
                                                  padx=10, pady=2, state="disabled",
                                                  command=self._on_remote_scripts)
         self.btn_remote_scripts.grid(row=0, column=3, rowspan=2, sticky="e", padx=(8, 0))
@@ -608,6 +610,8 @@ class NetLinkWindow(object):
                                  ("perm", "权限", 110), ("last", "最近连接", 140)):
             self.tv_paired.heading(cid, text=text)
             self.tv_paired.column(cid, width=width, anchor="w")
+        # §4.5 降级: show="headings" 无 #0 列 → 选中行加粗
+        utils.bind_sel_bold(self.tv_paired)
         self.tv_paired.grid(row=0, column=0, sticky="ew", padx=(6, 0), pady=(2, 0))
         psb = ttk.Scrollbar(self.lf_paired, orient="vertical",
                             command=self.tv_paired.yview)
@@ -630,15 +634,15 @@ class NetLinkWindow(object):
         self.btn_perm_apply = tkinter.Button(pctl, text="应用", font=utils.FONT_SMALL,
                                              bg=C["ac"], fg="white",
                                              activebackground=C["ach"],
-                                             activeforeground="white", relief="raised",
-                                             bd=2, cursor="hand2", padx=10, pady=1,
+                                             activeforeground="white", relief="flat",
+                                             bd=1, cursor="hand2", padx=10, pady=1,
                                              state="disabled", command=self._on_perm_apply)
         self.btn_perm_apply.pack(side="left", padx=(0, 6))
         self.btn_peer_remove = tkinter.Button(pctl, text="移除", font=utils.FONT_SMALL,
                                               bg=C["dg"], fg="white",
                                               activebackground=C["dg"],
-                                              activeforeground="white", relief="raised",
-                                              bd=2, cursor="hand2", padx=10, pady=1,
+                                              activeforeground="white", relief="flat",
+                                              bd=1, cursor="hand2", padx=10, pady=1,
                                               state="disabled", command=self._on_peer_remove)
         self.btn_peer_remove.pack(side="left")
 
@@ -663,7 +667,7 @@ class NetLinkWindow(object):
 
         def _mk_ctl(text, command):
             b = tkinter.Button(ctl, text=text, font=utils.FONT_BUTTON,
-                               bg=C["bgc"], fg=C["fgm"], relief="raised", bd=2,
+                               bg=C["bgc"], fg=C["fgm"], relief="flat", bd=1,
                                padx=10, pady=3, state="disabled", command=command)
             b.pack(side="left", padx=(0, 6))
             return b
@@ -672,8 +676,8 @@ class NetLinkWindow(object):
         self.btn_pause = _mk_ctl("[⏸ 暂停]", self._on_remote_pause)
         self.btn_stop = _mk_ctl("[⏹ 停止]", self._on_remote_stop)
         self.btn_script = _mk_ctl("[推脚本]", self._on_push_script)
-        # Phase4-1: [📷 截图]（需「允许操控」权限，control/script 均可）
-        self.btn_shot = _mk_ctl("[📷 截图]", self._on_remote_shot)
+        # Phase4-1: [◎ 截图]（需「允许操控」权限，control/script 均可）
+        self.btn_shot = _mk_ctl("[◎ 截图]", self._on_remote_shot)
         try:
             utils.attach_tooltip(self.btn_run, self._tip_run)
             utils.attach_tooltip(self.btn_pause, self._tip_pause)
@@ -683,10 +687,10 @@ class NetLinkWindow(object):
         except Exception:
             pass
 
-        self.btn_audit = tkinter.Button(ctl, text="[📜 审计日志]",
+        self.btn_audit = tkinter.Button(ctl, text="[≡ 审计日志]",
                                         font=utils.FONT_BUTTON, bg=C["bgc"],
                                         fg=C["fgb"], activebackground=C["acl"],
-                                        relief="raised", bd=2, cursor="hand2",
+                                        relief="flat", bd=1, cursor="hand2",
                                         padx=10, pady=3, command=self._on_audit)
         self.btn_audit.pack(side="left", padx=(12, 0))
         try:
@@ -694,11 +698,11 @@ class NetLinkWindow(object):
         except Exception:
             pass
 
-        # Phase4-2: [🌐 网页面板]（浏览器只读监控面板，默认关闭）
-        self.btn_web = tkinter.Button(ctl, text="[🌐 网页面板]",
+        # Phase4-2: [⊕ 网页面板]（浏览器只读监控面板，默认关闭）
+        self.btn_web = tkinter.Button(ctl, text="[⊕ 网页面板]",
                                       font=utils.FONT_BUTTON, bg=C["bgc"],
                                       fg=C["fgb"], activebackground=C["acl"],
-                                      relief="raised", bd=2, cursor="hand2",
+                                      relief="flat", bd=1, cursor="hand2",
                                       padx=10, pady=3, command=self._on_web_panel)
         self.btn_web.pack(side="left", padx=(12, 0))
         try:
@@ -718,6 +722,8 @@ class NetLinkWindow(object):
                                  ("cmd", "指令", 110), ("result", "结果", 380)):
             self.tv_cmd.heading(cid, text=text)
             self.tv_cmd.column(cid, width=width, anchor="w")
+        # §4.5 降级: show="headings" 无 #0 列 → 选中行加粗
+        utils.bind_sel_bold(self.tv_cmd)
         self.tv_cmd.grid(row=0, column=0, sticky="ew", padx=(6, 0), pady=(2, 0))
         csb = ttk.Scrollbar(self.lf_cmd, orient="vertical", command=self.tv_cmd.yview)
         csb.grid(row=0, column=1, sticky="ns", pady=(2, 0))
@@ -741,6 +747,8 @@ class NetLinkWindow(object):
                                  ("progress", "进度", 190), ("state", "状态", 230)):
             self.tv_xfer.heading(cid, text=text)
             self.tv_xfer.column(cid, width=width, anchor="w")
+        # §4.5 降级: show="headings" 无 #0 列 → 选中行加粗
+        utils.bind_sel_bold(self.tv_xfer)
         self.tv_xfer.grid(row=0, column=0, sticky="ew", padx=(6, 0), pady=(2, 0))
         xsb = ttk.Scrollbar(self.lf_xfer, orient="vertical", command=self.tv_xfer.yview)
         xsb.grid(row=0, column=1, sticky="ns", pady=(2, 0))
@@ -1262,7 +1270,7 @@ class NetLinkWindow(object):
             self.btn_stop.config(state=("normal" if s["stop_ok"] else "disabled"))
         except Exception:
             pass
-        # Phase3-2: [推脚本] 按「选中集合」门控（多选批量）；[📂 远端脚本] 仍按主选中
+        # Phase3-2: [推脚本] 按「选中集合」门控（多选批量）；[▭ 远端脚本] 仍按主选中
         s3 = self._script_state()
         try:
             self.btn_remote_scripts.config(
@@ -1274,7 +1282,7 @@ class NetLinkWindow(object):
                 state=("normal" if self._batch_script_state()[0] else "disabled"))
         except Exception:
             pass
-        # Phase4-1: [📷 截图]（需「允许操控」权限；防连点期间禁用）
+        # Phase4-1: [◎ 截图]（需「允许操控」权限；防连点期间禁用）
         try:
             self.btn_shot.config(
                 state=("normal" if self._shot_state()[0] else "disabled"))
@@ -1283,7 +1291,7 @@ class NetLinkWindow(object):
 
     # ── Phase4-1 远程截图 ────────────────────────────────────────────
     def _shot_state(self):
-        """[📷 截图] 可用性判定；返回 (ok, reason)。
+        """[◎ 截图] 可用性判定；返回 (ok, reason)。
 
         reason 仅在不可用时非空（互联未启动 / 未选择设备 / 未认证 /
         需「允许操控」权限（当前：<中文权限名>））；防连点期间返回 (False, "")。
@@ -1304,11 +1312,11 @@ class NetLinkWindow(object):
         return (True, "")
 
     def _tip_shot(self):
-        """[📷 截图] 动态悬停提示（可用时返回空串）。"""
+        """[◎ 截图] 动态悬停提示（可用时返回空串）。"""
         return self._shot_state()[1]
 
     def _on_remote_shot(self):
-        """[📷 截图]：请求目标设备截图，按钮进入 ≤3s 防连点禁用。"""
+        """[◎ 截图]：请求目标设备截图，按钮进入 ≤3s 防连点禁用。"""
         ok, reason = self._shot_state()
         if not ok:
             if reason:
@@ -1395,15 +1403,15 @@ class NetLinkWindow(object):
             self._shot_bar.grid(row=2, column=0, sticky="e", padx=10, pady=(0, 10))
             tkinter.Button(self._shot_bar, text="[刷新]", font=utils.FONT_BUTTON,
                            bg=C["bgc"], fg=C["fgb"], activebackground=C["acl"],
-                           relief="raised", bd=2, cursor="hand2", padx=10, pady=3,
+                           relief="flat", bd=1, cursor="hand2", padx=10, pady=3,
                            command=self._shot_refresh).pack(side="left", padx=(0, 6))
             tkinter.Button(self._shot_bar, text="[保存为…]", font=utils.FONT_BUTTON,
                            bg=C["bgc"], fg=C["fgb"], activebackground=C["acl"],
-                           relief="raised", bd=2, cursor="hand2", padx=10, pady=3,
+                           relief="flat", bd=1, cursor="hand2", padx=10, pady=3,
                            command=self._shot_save).pack(side="left", padx=(0, 6))
             tkinter.Button(self._shot_bar, text="[关闭]", font=utils.FONT_BUTTON,
                            bg=C["bgc"], fg=C["fgb"], activebackground=C["acl"],
-                           relief="raised", bd=2, cursor="hand2", padx=10, pady=3,
+                           relief="flat", bd=1, cursor="hand2", padx=10, pady=3,
                            command=self._close_shot_dialog).pack(side="left")
         else:
             try:
@@ -1474,7 +1482,7 @@ class NetLinkWindow(object):
                     self._shot_open_btn = tkinter.Button(
                         self._shot_bar, text="[打开文件]", font=utils.FONT_BUTTON,
                         bg=C["bgc"], fg=C["fgb"], activebackground=C["acl"],
-                        relief="raised", bd=2, cursor="hand2", padx=10, pady=3,
+                        relief="flat", bd=1, cursor="hand2", padx=10, pady=3,
                         command=self._shot_open_file)
                 self._shot_open_btn.pack(side="left", padx=(6, 0))
             elif self._shot_open_btn is not None:
@@ -1722,7 +1730,7 @@ class NetLinkWindow(object):
 
     # ── 审计日志（只读展示）───────────────────────────────────────────
     def _on_audit(self):
-        """[📜 审计日志]：读取 node.control.audit.tail(300) 只读展示。"""
+        """[≡ 审计日志]：读取 node.control.audit.tail(300) 只读展示。"""
         node = self._get_node()
         audit = None
         try:
@@ -1802,13 +1810,13 @@ class NetLinkWindow(object):
             bar = tkinter.Frame(dlg, bg=C["bg"])
             bar.grid(row=2, column=0, columnspan=2, sticky="e", padx=10, pady=(0, 10))
             tkinter.Button(bar, text="刷新", font=utils.FONT_BUTTON, bg=C["bgc"],
-                           fg=C["fgb"], activebackground=C["acl"], relief="raised",
-                           bd=2, cursor="hand2", padx=10, pady=3,
+                           fg=C["fgb"], activebackground=C["acl"], relief="flat",
+                           bd=1, cursor="hand2", padx=10, pady=3,
                            command=lambda: self._audit_refresh(dlg)).pack(
                 side="left", padx=(0, 6))
             tkinter.Button(bar, text="关闭", font=utils.FONT_BUTTON, bg=C["bgc"],
-                           fg=C["fgb"], activebackground=C["acl"], relief="raised",
-                           bd=2, cursor="hand2", padx=10, pady=3,
+                           fg=C["fgb"], activebackground=C["acl"], relief="flat",
+                           bd=1, cursor="hand2", padx=10, pady=3,
                            command=self._close_audit_dialog).pack(side="left")
         except Exception:
             pass
@@ -1925,18 +1933,18 @@ class NetLinkWindow(object):
             btns.pack(padx=14, pady=(0, 12))
             tkinter.Button(btns, text="生成/重新生成", font=utils.FONT_BUTTON,
                            bg=C["ac"], fg="white", activebackground=C["ach"],
-                           activeforeground="white", relief="raised", bd=2,
+                           activeforeground="white", relief="flat", bd=1,
                            cursor="hand2", padx=10, pady=3,
                            command=lambda: self._pair_generate(lbl_pin, lbl_left)).pack(
                 side="left", padx=(0, 6))
             tkinter.Button(btns, text="关闭配对", font=utils.FONT_BUTTON, bg=C["bgc"],
-                           fg=C["fgb"], activebackground=C["acl"], relief="raised",
-                           bd=2, cursor="hand2", padx=10, pady=3,
+                           fg=C["fgb"], activebackground=C["acl"], relief="flat",
+                           bd=1, cursor="hand2", padx=10, pady=3,
                            command=lambda: self._pair_close(lbl_pin, lbl_left)).pack(
                 side="left", padx=(0, 6))
             tkinter.Button(btns, text="关闭窗口", font=utils.FONT_BUTTON, bg=C["bgc"],
-                           fg=C["fgb"], activebackground=C["acl"], relief="raised",
-                           bd=2, cursor="hand2", padx=10, pady=3,
+                           fg=C["fgb"], activebackground=C["acl"], relief="flat",
+                           bd=1, cursor="hand2", padx=10, pady=3,
                            command=self._close_pair_dialog).pack(side="left")
             self._pair_tick(lbl_pin, lbl_left)
         except Exception:
@@ -2259,7 +2267,7 @@ class NetLinkWindow(object):
 
     # ── Phase3-1b 脚本分发 UI ───────────────────────────────────────
     def _script_state(self):
-        """[推脚本]/[📂 远端脚本] 可用性判定；返回 (ok, reason)。
+        """[推脚本]/[▭ 远端脚本] 可用性判定；返回 (ok, reason)。
 
         reason 仅在不可用时非空（互联未启动 / 未选择设备 / 未认证 /
         需「允许接收脚本」权限（当前：<中文权限名>））。
@@ -2278,7 +2286,7 @@ class NetLinkWindow(object):
         return (True, "")
 
     def _tip_script(self):
-        """[推脚本]/[📂 远端脚本] 动态悬停提示（可用时返回空串）。"""
+        """[推脚本]/[▭ 远端脚本] 动态悬停提示（可用时返回空串）。"""
         return self._script_state()[1]
 
     # ── Phase3-2 批量下发门控 ────────────────────────────────────────
@@ -2324,7 +2332,7 @@ class NetLinkWindow(object):
 
     # ── Phase4-2 浏览器只读监控面板（对话框）────────────────────────────
     def _on_web_panel(self):
-        """[🌐 网页面板]：打开启用/地址/令牌管理对话框。
+        """[⊕ 网页面板]：打开启用/地址/令牌管理对话框。
 
         默认只读；可选开启「有限控制」（仅 run / stop，需控制 PIN 解锁 +
         强制 HTTPS）。控制 PIN 的设置/重置在本对话框完成。
@@ -2370,7 +2378,7 @@ class NetLinkWindow(object):
         self._web_btn_toggle = tkinter.Button(dlg, text="启用",
             font=utils.FONT_BUTTON, bg=C["ac"], fg="white",
             activebackground=C["ach"], activeforeground="white",
-            relief="raised", bd=2, cursor="hand2", padx=12, pady=3,
+            relief="flat", bd=1, cursor="hand2", padx=12, pady=3,
             command=self._on_web_toggle)
         self._web_btn_toggle.grid(row=1, column=0, sticky="w", padx=12, pady=(0, 6))
 
@@ -2385,16 +2393,16 @@ class NetLinkWindow(object):
         btns = tkinter.Frame(dlg, bg=C["bg"])
         btns.grid(row=4, column=0, sticky="ew", padx=12, pady=(8, 4))
         tkinter.Button(btns, text="复制地址", font=utils.FONT_SMALL, bg=C["bgc"],
-            fg=C["fgb"], activebackground=C["acl"], relief="raised", bd=2,
+            fg=C["fgb"], activebackground=C["acl"], relief="flat", bd=1,
             cursor="hand2", padx=10, pady=1,
             command=self._on_web_copy).pack(side="left", padx=(0, 6))
         tkinter.Button(btns, text="在浏览器打开", font=utils.FONT_SMALL, bg=C["bgc"],
-            fg=C["fgb"], activebackground=C["acl"], relief="raised", bd=2,
+            fg=C["fgb"], activebackground=C["acl"], relief="flat", bd=1,
             cursor="hand2", padx=10, pady=1,
             command=self._on_web_open).pack(side="left", padx=(0, 6))
         tkinter.Button(btns, text="重新生成令牌", font=utils.FONT_SMALL, bg=C["dg"],
             fg="white", activebackground=C["dg"], activeforeground="white",
-            relief="raised", bd=2, cursor="hand2", padx=10, pady=1,
+            relief="flat", bd=1, cursor="hand2", padx=10, pady=1,
             command=self._on_web_rotate).pack(side="left")
 
         tkinter.Label(dlg,
@@ -2414,7 +2422,7 @@ class NetLinkWindow(object):
             command=self._on_web_control_toggle).pack(side="left", padx=(0, 8))
         self._web_pin_btn = tkinter.Button(ctl, text="设置/重置控制 PIN",
             font=utils.FONT_SMALL, bg=C["bgc"], fg=C["fgb"],
-            activebackground=C["acl"], relief="raised", bd=2, cursor="hand2",
+            activebackground=C["acl"], relief="flat", bd=1, cursor="hand2",
             padx=8, pady=1, command=self._on_web_pin_manage)
         self._web_pin_btn.pack(side="left")
 
@@ -2993,12 +3001,12 @@ class NetLinkWindow(object):
             btns.pack(padx=14, pady=(0, 12), anchor="e")
             tkinter.Button(btns, text="[开始传输]", font=utils.FONT_BUTTON,
                            bg=C["ac"], fg="white", activebackground=C["ach"],
-                           activeforeground="white", relief="raised", bd=2,
+                           activeforeground="white", relief="flat", bd=1,
                            cursor="hand2", padx=10, pady=3,
                            command=_on_ok).pack(side="left", padx=(0, 6))
             tkinter.Button(btns, text="[取消]", font=utils.FONT_BUTTON, bg=C["bgc"],
-                           fg=C["fgb"], activebackground=C["acl"], relief="raised",
-                           bd=2, cursor="hand2", padx=10, pady=3,
+                           fg=C["fgb"], activebackground=C["acl"], relief="flat",
+                           bd=1, cursor="hand2", padx=10, pady=3,
                            command=_on_cancel).pack(side="left")
             ent.focus_set()
             dlg.protocol("WM_DELETE_WINDOW", _on_cancel)
@@ -3194,7 +3202,7 @@ class NetLinkWindow(object):
 
     # ── 远端脚本对话框 ──────────────────────────────────────────────
     def _on_remote_scripts(self):
-        """[📂 远端脚本]：向选中设备请求脚本列表（结果经 TOPIC_TRANSFER 回来）。"""
+        """[▭ 远端脚本]：向选中设备请求脚本列表（结果经 TOPIC_TRANSFER 回来）。"""
         nid = self._sel
         ok, reason = self._script_state()
         if not ok:
@@ -3268,6 +3276,8 @@ class NetLinkWindow(object):
                                  ("mtime", "修改时间", 150), ("place", "位置", 90)):
             tv.heading(cid, text=text)
             tv.column(cid, width=width, anchor="w")
+        # §4.5 降级: show="headings" 无 #0 列 → 选中行加粗
+        utils.bind_sel_bold(tv)
         tv.grid(row=1, column=0, sticky="nsew", padx=(10, 0), pady=(0, 6))
         rsb = ttk.Scrollbar(dlg, orient="vertical", command=tv.yview)
         rsb.grid(row=1, column=1, sticky="ns", padx=(0, 10), pady=(0, 6))
@@ -3282,17 +3292,17 @@ class NetLinkWindow(object):
         self._rs_btn_run = tkinter.Button(bar, text="[▶ 远程运行选中]",
                                           font=utils.FONT_BUTTON, bg=C["ac"],
                                           fg="white", activebackground=C["ach"],
-                                          activeforeground="white", relief="raised",
-                                          bd=2, cursor="hand2", padx=10, pady=3,
+                                          activeforeground="white", relief="flat",
+                                          bd=1, cursor="hand2", padx=10, pady=3,
                                           command=self._on_rs_run)
         self._rs_btn_run.pack(side="left", padx=(0, 6))
         tkinter.Button(bar, text="[刷新]", font=utils.FONT_BUTTON, bg=C["bgc"],
-                       fg=C["fgb"], activebackground=C["acl"], relief="raised",
-                       bd=2, cursor="hand2", padx=10, pady=3,
+                       fg=C["fgb"], activebackground=C["acl"], relief="flat",
+                       bd=1, cursor="hand2", padx=10, pady=3,
                        command=self._on_rs_refresh).pack(side="left", padx=(0, 6))
         tkinter.Button(bar, text="[关闭]", font=utils.FONT_BUTTON, bg=C["bgc"],
-                       fg=C["fgb"], activebackground=C["acl"], relief="raised",
-                       bd=2, cursor="hand2", padx=10, pady=3,
+                       fg=C["fgb"], activebackground=C["acl"], relief="flat",
+                       bd=1, cursor="hand2", padx=10, pady=3,
                        command=self._close_rs_dialog).pack(side="left")
         return dlg
 

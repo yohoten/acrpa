@@ -64,6 +64,14 @@ _config_schema = [
     # OCR 增强 (PaddleOCR 可选后端)
     ("ocr_preferred_backend", "auto",   str),    # OCR后端偏好: auto/paddle/winrt/tesseract
     ("ocr_paddle_dir",        "",       str),    # PaddleOCR自定义模型目录(空=自动下载)
+    # OCR 原生 DLL 后端 (lib/paddle_ocr/PaddleOCR.dll) — 默认关闭 = 行为不变
+    ("paddle_dll_enabled",    False,    bool),   # 启用 PaddleOCR.dll 原生后端
+    ("paddle_dll_dir",        "",       str),    # 含 PaddleOCR.dll 的目录(空=lib/paddle_ocr)
+    ("paddle_dll_model_dir",  "",       str),    # 模型目录(需含 inference.json/pdiparams)
+    ("paddle_dll_proto_init", "json5",  str),    # 初始化原型 Initializejson(det,cls,rec,keys,json)
+    ("paddle_dll_proto_detect", "ptr_byte", str),  # 识别原型 DetectByte(enginePtr,字节流,长度)
+    ("paddle_dll_config",     "",       str),    # 参数 JSON 覆盖(字符串, 可空)
+    ("paddle_dll_license",    "",       str),    # libaddLicense 许可证串(可空)
     # 浏览器自动化 (Playwright 可选后端)
     ("browser_headless",      True,     bool),   # 浏览器无头模式(True=不显示窗口)
     ("browser_slow_mo",       0,        int),    # 浏览器操作慢放(ms, 0=最快)

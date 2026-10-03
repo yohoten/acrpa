@@ -683,7 +683,7 @@ def _create_mini_bar():
         btn = tkinter.Label(inner, text=text, font=FONT_BUTTON,
             fg="white", bg=color, padx=7, pady=_MB_BTN_PADY, anchor="center",
             activebackground=_darken(color), activeforeground="white",
-            cursor="hand2", relief="raised", bd=_MB_BTN_BD)
+            cursor="hand2", relief="flat", bd=_MB_BTN_BD)
         btn.bind("<Button-1>", lambda e, c=_invoke: c())
         _mb_bind_hover(btn)
         return btn
@@ -699,7 +699,7 @@ def _create_mini_bar():
         font=FONT_BUTTON, fg=C["ac"], bg=C["acl"],
         padx=7, pady=_MB_BTN_PADY, cursor="hand2", anchor="center",
         activebackground=C["ac"], activeforeground="white",
-        relief="raised", bd=_MB_BTN_BD)
+        relief="flat", bd=_MB_BTN_BD)
     _mb_bind_hover(mb_expand)
 
     def _expand(event=None):
@@ -1656,7 +1656,11 @@ def _exit_for_update():
 
 # === Layout - compact spacing ──
 root.columnconfigure(0,weight=1)
-root.rowconfigure(0,weight=0); root.rowconfigure(1,weight=1); root.rowconfigure(2,weight=0)
+# ① 标题栏 / ② 执行控制工具栏(常驻) / ③ 主区(内容 + 底部日志) / ⑦ 状态栏
+root.rowconfigure(0,weight=0)
+root.rowconfigure(1,weight=0)
+root.rowconfigure(2,weight=1)
+root.rowconfigure(3,weight=0)
 PAD = {"padx":6,"pady":3}; PI = {"padx":6,"pady":2}
 
 # Title bar - compact design
@@ -1761,7 +1765,8 @@ def _show_pin_tip(event):
     _tip_win.wm_overrideredirect(True)
     _tip_win.wm_geometry("+{}+{}".format(event.x_root + 12, event.y_root - 8))
     tkinter.Label(_tip_win, text="取消置顶" if pin_pinned else "置顶窗口",
-        font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"], relief="solid", bd=1, padx=6, pady=2).pack()
+        font=FONT_SMALL, bg=C["tooltip_bg"], fg=C["fgb"], relief="flat", bd=0,
+        highlightthickness=1, highlightbackground=C["tooltip_border"], padx=6, pady=2).pack()
 pin_btn.bind("<Enter>", _show_pin_tip)
 
 # 折叠按钮 — 将主窗口折叠为 Mini Bar
@@ -1777,15 +1782,16 @@ def _show_fold_tip(event):
     _tip_win.wm_overrideredirect(True)
     _tip_win.wm_geometry("+{}+{}".format(event.x_root+12, event.y_root-8))
     tkinter.Label(_tip_win, text="折叠为 Mini Bar" if not state.folded else "展开完整窗口",
-        font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"], relief="solid", bd=1, padx=6, pady=2).pack()
+        font=FONT_SMALL, bg=C["tooltip_bg"], fg=C["fgb"], relief="flat", bd=0,
+        highlightthickness=1, highlightbackground=C["tooltip_border"], padx=6, pady=2).pack()
 fold_btn.bind("<Enter>", _show_fold_tip)
 
 dark_btn = tkinter.Label(dark_frame,text="◑" if state.DARK_MODE else "◐",
     font=FONT_ICON_LG,fg=C["fgm"],bg=C["bg"],cursor="hand2")
 dark_btn.pack(side="left")
 
-# Accent separator below title bar
-tkinter.Frame(title_bar, bg=C["ac"], height=2).grid(row=1, column=0, columnspan=2, sticky="ew", pady=(5,0))
+# 标题栏底部 1px 发丝线 (§4.1: 1px 发丝线替代原 2px 强调条)
+tkinter.Frame(title_bar, bg=C["bd"], height=1).grid(row=1, column=0, columnspan=2, sticky="ew", pady=(5,0))
 
 # Simple tooltip for dark mode toggle
 _tip_win = None
@@ -1796,7 +1802,8 @@ def _show_tip(event):
     _tip_win.wm_overrideredirect(True)
     _tip_win.wm_geometry("+{}+{}".format(event.x_root+12, event.y_root-8))
     tkinter.Label(_tip_win, text="切换暗色模式" if not state.DARK_MODE else "切换亮色模式",
-        font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"], relief="solid", bd=1, padx=6, pady=2).pack()
+        font=FONT_SMALL, bg=C["tooltip_bg"], fg=C["fgb"], relief="flat", bd=0,
+        highlightthickness=1, highlightbackground=C["tooltip_border"], padx=6, pady=2).pack()
 def _hide_tip(event):
     global _tip_win
     if _tip_win: _tip_win.destroy(); _tip_win = None
@@ -1817,7 +1824,8 @@ def _show_settings_tip(event):
     _tip_win.wm_overrideredirect(True)
     _tip_win.wm_geometry("+{}+{}".format(event.x_root + 12, event.y_root - 8))
     tkinter.Label(_tip_win, text="打开设置窗口",
-        font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"], relief="solid", bd=1, padx=6, pady=2).pack()
+        font=FONT_SMALL, bg=C["tooltip_bg"], fg=C["fgb"], relief="flat", bd=0,
+        highlightthickness=1, highlightbackground=C["tooltip_border"], padx=6, pady=2).pack()
 settings_btn.bind("<Enter>", _show_settings_tip)
 settings_btn.bind("<Leave>", _hide_tip)
 
@@ -1833,12 +1841,13 @@ def _show_help_tip(event):
     _tip_win.wm_overrideredirect(True)
     _tip_win.wm_geometry("+{}+{}".format(event.x_root + 12, event.y_root - 8))
     tkinter.Label(_tip_win, text="帮助 / 使用说明",
-        font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"], relief="solid", bd=1, padx=6, pady=2).pack()
+        font=FONT_SMALL, bg=C["tooltip_bg"], fg=C["fgb"], relief="flat", bd=0,
+        highlightthickness=1, highlightbackground=C["tooltip_border"], padx=6, pady=2).pack()
 help_btn.bind("<Enter>", _show_help_tip)
 help_btn.bind("<Leave>", _hide_tip)
 
 # 互联按钮 — 打开「设备互联」独立窗口 (与设置按钮同级样式)
-devlink_btn = tkinter.Label(dark_frame, text="🌐", font=("Segoe UI Symbol", 11),
+devlink_btn = tkinter.Label(dark_frame, text="⊕", font=FONT_ICON_MD,
     fg=C["fgm"], bg=C["bg"], cursor="hand2", padx=2)
 devlink_btn.pack(side="left", padx=(0, 2))
 devlink_btn.bind("<Button-1>", lambda e: open_devlink())
@@ -1849,7 +1858,8 @@ def _show_devlink_tip(event):
     _tip_win.wm_overrideredirect(True)
     _tip_win.wm_geometry("+{}+{}".format(event.x_root + 12, event.y_root - 8))
     tkinter.Label(_tip_win, text="设备互联",
-        font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"], relief="solid", bd=1, padx=6, pady=2).pack()
+        font=FONT_SMALL, bg=C["tooltip_bg"], fg=C["fgb"], relief="flat", bd=0,
+        highlightthickness=1, highlightbackground=C["tooltip_border"], padx=6, pady=2).pack()
 devlink_btn.bind("<Enter>", _show_devlink_tip)
 devlink_btn.bind("<Leave>", _hide_tip)
 # 语义色分组: 组内任一键在旧/当前主题下的取值命中按钮底色 → 归入该语义组。
@@ -1989,17 +1999,31 @@ def _refresh_theme():
     scroll.configure(bg=C["bd"], activebackground=C["fgm"], troughcolor=C["logbg"])
     # D3: 日志区 tag 前景随主题刷新 (旧实现仅建窗时设一次, 切换后 tag 文字仍是旧色)
     try:
-        rz.tag_configure("info", foreground=C["fgb"])
+        rz.tag_configure("info", foreground=C["log_info"])
         rz.tag_configure("success", foreground=C["sc"])
         rz.tag_configure("warning", foreground=C["wn"])
         rz.tag_configure("error", foreground=C["dg"])
+        # §4.6 左缘色条 / 行 zebra / 搜索命中 随主题刷新
+        rz.tag_configure("cbar_info", foreground=C["log_info"])
+        rz.tag_configure("cbar_success", foreground=C["log_success"])
+        rz.tag_configure("cbar_warning", foreground=C["log_warn"])
+        rz.tag_configure("cbar_error", foreground=C["log_error"])
+        rz.tag_configure("lzebra", background=C["zebra"])
+        rz.tag_configure("search_hit", background=C["search_hit_bg"])
     except Exception:
         pass
     # D3: 脚本树 tag 随主题刷新 (写死的 #FEF3C7 → 主题色 C["hlbg"])
+    # §4.5: zebra 用 C["zebra"] (acl 专属于选中态, 不得再用于斑马纹)
     try:
-        tree.tag_configure("even", background=C["acl"])
+        tree.tag_configure("even", background=C["zebra"])
         tree.tag_configure("running", background=C["hlbg"])
         tree.tag_configure("breakpoint", foreground=C["dg"])
+    except Exception:
+        pass
+    # §4.5 主题/DPI 变更后重建选中左缘 2px 色条并重刷
+    try:
+        _build_sel_bar()
+        _sync_sel_bars(tree)
     except Exception:
         pass
 
@@ -2015,7 +2039,7 @@ def _refresh_theme():
     progress_bar.configure(style="Exec.Horizontal.TProgressbar")
 
     # Update all tab frames
-    for widget in [tab_edit, tab_exec, tab_workflow]:
+    for widget in [tab_edit, tab_workflow]:
         widget.configure(bg=C["bg"])
 
     # 同步设置窗口颜色 (独立窗口使用自己的 C 引用; 传入旧快照供语义色判定)
@@ -2071,9 +2095,19 @@ def toggle_dark():
 
 dark_btn.bind("<Button-1>", lambda e: toggle_dark())
 
+# ③ 主区: 垂直 PanedWindow —— 上 pane 内容(notebook) / 下 pane 常驻日志面板
+# (tkinter grid 无可拖 sash, 「可拖 + minsize + 一键收起」的原生正解即 PanedWindow)
+main_paned = tkinter.PanedWindow(root, orient="vertical",
+    bg=C["bd"], sashwidth=utils.sp(4), sashrelief="raised",
+    opaqueresize=True, bd=0)
+main_paned.grid(row=2,column=0,sticky="nsew",padx=8,pady=(0,3))
+
+# 底部日志面板容器 (稍后作为 pane#1 加入)
+bottom_dock = tkinter.Frame(main_paned, bg=C["bg"])
+
 # Notebook - compact padding
-notebook = ttk.Notebook(root)
-notebook.grid(row=1,column=0,sticky="nsew",padx=8,pady=(0,3))
+notebook = ttk.Notebook(main_paned)
+main_paned.add(notebook, minsize=200, stretch="always")
 
 # ======================================================================
 # TAB 1: 编辑
@@ -2188,9 +2222,127 @@ for label, color in _LEGEND_ITEMS:
         fg=C["fgm"], bg=C["bg"]).pack(side="left")
 
 # tree double-click binding is set after _edit_cell is defined below
-tree.tag_configure("even", background=C["acl"])
+tree.tag_configure("even", background=C["zebra"])   # §4.5 斑马纹 (不再用 acl)
 tree.tag_configure("running", background=C["hlbg"])   # 主题色 (旧为写死 #FEF3C7)
 tree.tag_configure("breakpoint", foreground=themed("dg"))
+
+# ── §4.5 选中左缘 2px 强调条 (主方案: #0 树列 per-item image) ──
+#   ttk Treeview 无 per-row 边框能力, 故在 #0 列每项挂 2px 宽 ac 竖条贴图;
+#   #0 列 minwidth=32 可容纳「2px 图 + 行号文本」, 且不干扰 #0 断点点击。
+_bar_ac = None
+
+
+def _build_sel_bar():
+    """构造 2px 宽 x row_h 高的 ac 竖条 PhotoImage (随主题/DPI 变更重建)。"""
+    global _bar_ac
+    try:
+        h = int(utils.TOKENS.get("row_h", 22))
+    except Exception:
+        h = 22
+    try:
+        img = tkinter.PhotoImage(width=2, height=h)
+        img.put(C["ac"], to=(0, 0, 2, h))
+        _bar_ac = img
+    except Exception:
+        _bar_ac = None
+
+
+def _sel_bar(tree_, item, on):
+    try:
+        tree_.item(item, image=(_bar_ac if (on and _bar_ac is not None) else ""))
+    except Exception:
+        pass
+
+
+def _sync_sel_bars(tree_):
+    """重刷选中左缘色条, 并对选中行移除 row_hover (确保 selected 不被冲淡)。"""
+    try:
+        for it in tree_.get_children(""):
+            _sel_bar(tree_, it, False)
+        for it in tree_.selection():
+            _sel_bar(tree_, it, True)
+            tgs = tuple(t for t in tree_.item(it, "tags") if t != "rowhover")
+            tree_.item(it, tags=tgs)
+    except Exception:
+        pass
+
+
+def _bind_sel_bar(tree_):
+    def _on(_e=None):
+        _sync_sel_bars(tree_)
+    tree_.bind("<<TreeviewSelect>>", _on, add=True)
+
+
+# ── §4.5/§4.9.2 row_hover: ttk 无内建行 hover, 自绑 <Motion>/<Leave> item tag ──
+def _bind_row_hover(tree_):
+    try:
+        tree_.tag_configure("rowhover", background=C["row_hover"])
+    except Exception:
+        pass
+    st = {"cur": ""}
+
+    def _clear():
+        it = st.get("cur")
+        if it:
+            try:
+                tgs = tuple(t for t in tree_.item(it, "tags") if t != "rowhover")
+                tree_.item(it, tags=tgs)
+            except Exception:
+                pass
+            st["cur"] = ""
+
+    def _motion(e):
+        try:
+            it = tree_.identify_row(e.y)
+        except Exception:
+            it = ""
+        if it == st.get("cur"):
+            return
+        _clear()
+        if it and it not in tree_.selection():
+            try:
+                tgs = tree_.item(it, "tags")
+                tree_.item(it, tags=tuple(tgs) + ("rowhover",))
+                st["cur"] = it
+            except Exception:
+                pass
+
+    tree_.bind("<Motion>", _motion, add=True)
+    tree_.bind("<Leave>", lambda e: _clear(), add=True)
+
+
+# ── §4.5 show="headings" 树 (无 #0 列) 降级: 选中整行 acl 底 + 加粗 ──
+def _bind_sel_bold(tree_):
+    """对无 #0 列的树: 选中行加粗 (整行 acl 底由 utils.apply_theme 的 style.map 提供)。"""
+    try:
+        tree_.tag_configure("selbold", font=FONT_SMALL_BOLD)
+    except Exception:
+        pass
+
+    def _on(_e=None):
+        try:
+            for it in tree_.get_children(""):
+                tgs = tuple(t for t in tree_.item(it, "tags") if t != "selbold")
+                tree_.item(it, tags=tgs)
+            for it in tree_.selection():
+                tgs = tree_.item(it, "tags")
+                if "selbold" not in tgs:
+                    tree_.item(it, tags=tuple(tgs) + ("selbold",))
+        except Exception:
+            pass
+
+    tree_.bind("<<TreeviewSelect>>", _on, add=True)
+
+
+_build_sel_bar()
+_bind_sel_bar(tree)
+_bind_row_hover(tree)
+# C5: 缩放档位切换后重建选中左缘条 PhotoImage (高度按 row_h) 并重刷, 与 _refresh_theme 同做法。
+# 走 utils 注册回调 (set_ui_scale 在重配字体后触发), 避免把私有名暴露给 settings_window。
+try:
+    utils.register_ui_scale_hook(lambda: (_build_sel_bar(), _sync_sel_bars(tree)))
+except Exception:
+    pass
 # Breakpoint toggle on #0 column click
 def _toggle_breakpoint(event):
     region = tree.identify_region(event.x, event.y)
@@ -2742,7 +2894,7 @@ def _ask_insert_mode(n_existing):
                           ("替换全部", C["dg"], "replace"),
                           ("取消", C["bgc"], None)):
         tkinter.Button(bar, text=_txt, font=FONT_BUTTON, bg=_bg,
-            fg=("white" if _bg != C["bgc"] else C["fgb"]), relief="raised", bd=3,
+            fg=("white" if _bg != C["bgc"] else C["fgb"]), relief="flat", bd=1,
             padx=10, pady=3, cursor="hand2",
             command=lambda v=_v: _pick(v)).pack(side="left", padx=4)
     win.update_idletasks()
@@ -2842,13 +2994,13 @@ def _manage_snippet_dirs(on_changed=None):
             try: os.startfile(lb.get(s[0]))
             except Exception: pass
     tkinter.Button(bar, text="添加目录…", font=FONT_BUTTON, bg=C["ac"], fg="white",
-        relief="raised", bd=3, padx=10, pady=3, cursor="hand2", command=_add).pack(side="left", padx=(0, 6))
+        relief="flat", bd=1, padx=10, pady=3, cursor="hand2", command=_add).pack(side="left", padx=(0, 6))
     tkinter.Button(bar, text="移除选中", font=FONT_BUTTON, bg=C["dg"], fg="white",
-        relief="raised", bd=3, padx=10, pady=3, cursor="hand2", command=_remove).pack(side="left", padx=(0, 6))
+        relief="flat", bd=1, padx=10, pady=3, cursor="hand2", command=_remove).pack(side="left", padx=(0, 6))
     tkinter.Button(bar, text="打开目录", font=FONT_BUTTON, bg=C["bgc"], fg=C["fgb"],
-        relief="raised", bd=3, padx=10, pady=3, cursor="hand2", command=_open).pack(side="left")
+        relief="flat", bd=1, padx=10, pady=3, cursor="hand2", command=_open).pack(side="left")
     tkinter.Button(bar, text="关闭", font=FONT_BUTTON, bg=C["bgc"], fg=C["fgb"],
-        relief="raised", bd=3, padx=10, pady=3, cursor="hand2", command=win.destroy).pack(side="right")
+        relief="flat", bd=1, padx=10, pady=3, cursor="hand2", command=win.destroy).pack(side="right")
 
 
 def _cmd_snippet():
@@ -2880,6 +3032,8 @@ def _cmd_snippet():
     mid.columnconfigure(0, weight=1); mid.rowconfigure(0, weight=1)
     stree = ttk.Treeview(mid, columns=("name", "src", "rows"), show="headings", selectmode="browse")
     stree.heading("name", text="片段"); stree.column("name", width=150, anchor="w")
+    # §4.5 show="headings" 降级: 选中整行 acl 底 + 加粗 (无 #0 列不可挂左缘条)
+    _bind_sel_bold(stree); _bind_row_hover(stree)
     stree.heading("src", text="来源"); stree.column("src", width=54, anchor="center")
     stree.heading("rows", text="行"); stree.column("rows", width=40, anchor="center")
     stree.grid(row=0, column=0, sticky="nsew")
@@ -2990,13 +3144,13 @@ def _cmd_snippet():
     btm = tkinter.Frame(dlg, bg=C["bgc"]); btm.grid(row=2, column=0, sticky="ew", padx=10, pady=(0, 8))
     tkinter.Label(btm, text="选中后点「插入」；占位符需改为实际值", font=FONT_SMALL,
         bg=C["bgc"], fg=C["fgm"]).pack(side="left")
-    tkinter.Button(btm, text="插入", font=FONT_BUTTON, bg=C["sc"], fg="white", relief="raised",
-        bd=3, padx=12, pady=3, cursor="hand2", command=_do_insert).pack(side="right", padx=(6, 0))
-    tkinter.Button(btm, text="存为片段", font=FONT_BUTTON, bg=C["ac"], fg="white", relief="raised",
-        bd=3, padx=10, pady=3, cursor="hand2",
+    tkinter.Button(btm, text="插入", font=FONT_BUTTON, bg=C["sc"], fg="white", relief="flat",
+        bd=1, padx=12, pady=3, cursor="hand2", command=_do_insert).pack(side="right", padx=(6, 0))
+    tkinter.Button(btm, text="存为片段", font=FONT_BUTTON, bg=C["ac"], fg="white", relief="flat",
+        bd=1, padx=10, pady=3, cursor="hand2",
         command=lambda: _save_selection_as_snippet(default_category=_cur_cat())).pack(side="right", padx=(6, 0))
-    tkinter.Button(btm, text="管理目录…", font=FONT_BUTTON, bg=C["bgc"], fg=C["fgb"], relief="raised",
-        bd=3, padx=10, pady=3, cursor="hand2", command=_do_manage).pack(side="right", padx=(6, 0))
+    tkinter.Button(btm, text="管理目录…", font=FONT_BUTTON, bg=C["bgc"], fg=C["fgb"], relief="flat",
+        bd=1, padx=10, pady=3, cursor="hand2", command=_do_manage).pack(side="right", padx=(6, 0))
 
     cat_box.bind("<<ListboxSelect>>", _on_cat)
     stree.bind("<<TreeviewSelect>>", _on_sel)
@@ -3285,6 +3439,8 @@ def _show_variables_window():
     # Create treeview for variables
     var_tree = ttk.Treeview(list_frame, columns=("name", "value"), show="headings")
     var_tree.heading("name", text="变量名")
+    # §4.5 show="headings" 降级: 选中整行 acl 底 + 加粗
+    _bind_sel_bold(var_tree); _bind_row_hover(var_tree)
     var_tree.heading("value", text="值")
     var_tree.column("name", width=180, minwidth=100)
     var_tree.column("value", width=350, minwidth=150)
@@ -3448,6 +3604,8 @@ def _show_variables_window():
     # Timing treeview
     timing_tree = ttk.Treeview(timing_frame, columns=("row", "cmd", "time", "status"),
         show="headings")
+    # §4.5 show="headings" 降级: 选中整行 acl 底 + 加粗
+    _bind_sel_bold(timing_tree); _bind_row_hover(timing_tree)
     timing_tree.heading("row", text="行")
     timing_tree.heading("cmd", text="命令")
     timing_tree.heading("time", text="耗时")
@@ -3586,18 +3744,40 @@ def _market_on_install(xls_path):
 def _tbtn(parent, text, cmd, bg_c=None, fg_c=None, tip=None):
     """脚本编辑工具栏按钮工厂: 与「执行控制」运行控制条同规格。
 
-    字体 FONT_BUTTON (Microsoft YaHei UI 9pt bold)、内边距 padx=sp(8)/pady=sp(2)、
-    relief=raised bd=3 —— 与执行控制四键 (▶/⏸/⏭/■) 视觉完全一致。
+    字体 FONT_BUTTON (Microsoft YaHei UI 9pt bold)、内边距 padx=sp(8)/pady=sp(2)。
+    §3.2/§4.8 扁平化: 取消旧 `bd=3` 浮雕, 改 `bd=0` + 1px highlight 发丝描边
+    (合法边框集合 {bd=0, bd=1, 1px highlightthickness});
+    hover 不再仅 `_darken()` 变暗, 次级改「底色 caption_hover + 描边 border_strong」双变化 (§4.9.2)。
     """
     if bg_c is None: bg_c = C["bgc"]
     if fg_c is None: fg_c = C["fgb"]
-    abg = C["acl"] if bg_c in ("white", "#ffffff", C["bgc"]) else _darken(bg_c)
+    neutral = bg_c in ("white", "#ffffff", C["bgc"], C["surface_alt"])
+    if neutral:
+        abg = C["caption_hover"]
+    elif bg_c == C["ac"]:
+        abg = C["ach"]          # primary hover 强调实心 (§4.9.2)
+    else:
+        abg = _darken(bg_c)
     b = tkinter.Button(parent, text=text, font=FONT_BUTTON, bg=bg_c, fg=fg_c,
-        activebackground=abg, activeforeground=fg_c, relief="raised", bd=3,
+        activebackground=abg, activeforeground=fg_c, relief="flat", bd=0,
+        highlightthickness=1, highlightbackground=C["bd"],
+        highlightcolor=C["focus"], takefocus=True,
         cursor="hand2", padx=utils.sp(8), pady=utils.sp(2), command=cmd)
     if tip:
         try: utils.attach_tooltip(b, tip)
         except Exception: pass
+
+    # hover 双变化 (D3, §4.9.2): <Enter> 同时改「底色 + 描边」(非仅变暗);
+    #   必须后于 tooltip 绑定 (add="+"; tooltip 的 <Enter>/<Leave> 未用 add)。
+    hbd = C["border_strong"] if neutral else abg
+    def _on_enter(_e):
+        try: b.configure(bg=abg, highlightbackground=hbd)
+        except Exception: pass
+    def _on_leave(_e):
+        try: b.configure(bg=bg_c, highlightbackground=C["bd"])
+        except Exception: pass
+    b.bind("<Enter>", _on_enter, add="+")
+    b.bind("<Leave>", _on_leave, add="+")
     return b
 
 
@@ -3748,19 +3928,18 @@ def _screenshot_tool():
 
 
 # ======================================================================
-# TAB 2: 执行控制 — 三段式布局 (① 运行控制条 / ② 执行仪表盘 / ③ 运行日志)
-# 设计: docs/执行控制tab设计方案.md
+# ② 执行控制工具栏 (常驻 · 两 Tab 共用) —— 由原「执行控制」Tab 降级而来
+#   运行控制条 → root row1 常驻;  运行日志 → 底部常驻面板(bottom_dock, 见 §⑥)
+# 设计: docs/底部常驻日志面板重构设计方案.md
 # ======================================================================
-tab_exec = tkinter.Frame(notebook,bg=C["bg"])
-notebook.add(tab_exec,text="  执行控制  ")
-tab_exec.columnconfigure(0,weight=1)
-tab_exec.rowconfigure(0,weight=0)   # ① 运行控制条
-tab_exec.rowconfigure(1,weight=1)   # ③ 运行日志 (② 仪表盘已并入底部状态栏)
+exec_bar = tkinter.Frame(root,bg=C["bg"])
+exec_bar.grid(row=1,column=0,sticky="ew",padx=8,pady=(0,2))
+exec_bar.columnconfigure(0,weight=1)
 
 # ──────────────────────────────────────────────────────────────────────
 # ① 运行控制条 (Run Control Bar): 脚本 / 次数 / 四键同组 / 调试入口
 # ──────────────────────────────────────────────────────────────────────
-card_run = create_card(tab_exec)
+card_run = create_card(exec_bar)
 card_run.grid(row=0,column=0,sticky="ew",**PAD)
 card_run.columnconfigure(0,weight=1)
 
@@ -3808,6 +3987,30 @@ def _run_on_wheel(event):
         run_canvas.xview_scroll(-1, "units")
     else:
         run_canvas.xview_scroll(1, "units")
+
+# ── ▶/■ 上下文分派: 按当前激活 Tab 决定运行脚本还是工作流 ──
+# Tab 顺序: 0=脚本编辑, 1=工作流 (执行控制已升级为常驻工具栏, 不占 Tab)
+def _shared_run(event=None):
+    try:
+        idx = notebook.index(notebook.select())
+    except Exception:
+        idx = 0
+    if idx == 1:
+        try: _wf_run()
+        except Exception as e: log1("工作流启动失败: {}".format(e), "error")
+    else:
+        main_run()
+
+def _shared_stop(event=None):
+    try:
+        idx = notebook.index(notebook.select())
+    except Exception:
+        idx = 0
+    if idx == 1:
+        try: _wf_stop()
+        except Exception as e: log1("工作流停止失败: {}".format(e), "error")
+    else:
+        stop_execution()
 
 def _tip_with_hotkey(label, attr):
     """生成「标签 (快捷键: X)」提示; 未配置快捷键时只显示标签。"""
@@ -3870,7 +4073,7 @@ _script_switcher.bind("<<ComboboxSelected>>", _on_script_switched)
 _update_recent_scripts()
 
 tkinter.Button(run_bar,text="选择脚本",font=FONT_BUTTON,bg=C["ac"],fg="white",
-    activebackground=C["ach"],activeforeground="white",relief="raised",bd=3,
+    activebackground=C["ach"],activeforeground="white",relief="flat",bd=1,
     cursor="hand2",padx=8,pady=2,command=select_script).pack(side="left",padx=(0,4))
 
 # 次数: 可编辑 + 预设 + 自定义
@@ -3930,12 +4133,12 @@ tkinter.Frame(run_bar, bg=C["bd"], width=utils.sp(2), height=utils.sp(22)).pack(
 # (尺寸走 utils.sp 令牌; 四键文字统一黑色, 与「运行」对齐)
 btn_run=tkinter.Button(run_bar,text="▶ 运行",font=FONT_BUTTON,bg=C["sc"],fg="black",
     activebackground=_darken(C["sc"]),activeforeground="black",disabledforeground="black",
-    relief="raised",bd=3,
-    cursor="hand2",padx=utils.sp(8),pady=utils.sp(2),command=main_run)
+    relief="flat",bd=1,
+    cursor="hand2",padx=utils.sp(8),pady=utils.sp(2),command=_shared_run)
 btn_run.pack(side="left",padx=2)
 btn_pause=tkinter.Button(run_bar,text="⏸ 暂停",font=FONT_BUTTON,bg=C["wn"],fg="black",
     activebackground=_darken(C["wn"]),activeforeground="black",disabledforeground="black",
-    relief="raised",bd=3,
+    relief="flat",bd=1,
     cursor="hand2",padx=utils.sp(8),pady=utils.sp(2),command=toggle_pause)
 btn_pause.pack(side="left",padx=2)
 def _step_once():
@@ -3953,13 +4156,13 @@ def _step_once():
 
 btn_step=tkinter.Button(run_bar,text="⏭ 单步",font=FONT_BUTTON,bg=C["ac"],fg="black",
     activebackground=C["ach"],activeforeground="black",disabledforeground="black",
-    relief="raised",bd=3,
+    relief="flat",bd=1,
     cursor="hand2",padx=utils.sp(8),pady=utils.sp(2),command=_step_once)
 btn_step.pack(side="left",padx=2)
 btn_stop=tkinter.Button(run_bar,text="■ 停止",font=FONT_BUTTON,bg=C["dg"],fg="black",
     activebackground=_darken(C["dg"]),activeforeground="black",disabledforeground="black",
-    relief="raised",bd=3,
-    cursor="hand2",padx=utils.sp(8),pady=utils.sp(2),command=stop_execution)
+    relief="flat",bd=1,
+    cursor="hand2",padx=utils.sp(8),pady=utils.sp(2),command=_shared_stop)
 btn_stop.pack(side="left",padx=2)
 
 # 四键 tooltip (含用户配置快捷键); 单步右键 = 单步模式开关 (调试态内聚)
@@ -3978,11 +4181,11 @@ tkinter.Frame(run_bar, bg=C["bd"], width=utils.sp(2), height=utils.sp(22)).pack(
 
 # 调试 / 变量入口 (调试态统一归此; 脚本编辑工具栏已移除该组, 避免两处状态不同步)
 btn_debug_exec=tkinter.Button(run_bar,text="⚑ 调试",font=FONT_BUTTON,bg=C["bgc"],fg=C["fgb"],
-    activebackground=C["acl"],activeforeground=C["fgb"],relief="raised",bd=3,
+    activebackground=C["acl"],activeforeground=C["fgb"],relief="flat",bd=1,
     cursor="hand2",padx=utils.sp(8),pady=utils.sp(2),command=_toggle_debug_mode)
 btn_debug_exec.pack(side="left",padx=2)
 btn_vars_exec=tkinter.Button(run_bar,text="☰ 变量",font=FONT_BUTTON,bg=C["bgc"],fg=C["fgb"],
-    activebackground=C["acl"],activeforeground=C["fgb"],relief="raised",bd=3,
+    activebackground=C["acl"],activeforeground=C["fgb"],relief="flat",bd=1,
     cursor="hand2",padx=utils.sp(8),pady=utils.sp(2),command=_show_variables_window)
 btn_vars_exec.pack(side="left",padx=2)
 btn_debug_mode = btn_debug_exec   # 供 _toggle_debug_mode 高亮
@@ -3996,9 +4199,9 @@ except Exception:
 # ② 执行仪表盘已并入底部状态栏 (dash_info 控制信息 + progress_bar 进度条)
 # ──────────────────────────────────────────────────────────────────────
 
-# ③ 运行日志 - compact layout
-card_log = create_card(tab_exec)
-card_log.grid(row=1,column=0,sticky="nsew",**PAD)
+# ⑥ 底部常驻日志面板 (两 Tab 共用) —— 原「执行控制」Tab 的日志卡, 换父到 bottom_dock
+card_log = create_card(bottom_dock)
+card_log.pack(fill="both",expand=True,padx=6,pady=(0,4))
 card_log.columnconfigure(0,weight=1); card_log.rowconfigure(2,weight=1)
 
 lh=tkinter.Frame(card_log,bg=C["bgc"]); lh.grid(row=0,column=0,sticky="ew",**PI)
@@ -4010,6 +4213,46 @@ tkinter.Checkbutton(lh,text="自动滚动",variable=log_auto_scroll,font=FONT_SM
     fg=C["fgm"],bg=C["bgc"],activebackground=C["bgc"],activeforeground=C["fgb"],
     selectcolor=C["ebg"],bd=0,highlightthickness=0,
     command=lambda: _log_autoscroll_changed()).grid(row=0,column=1,sticky="e")
+
+# ── 日志面板一键收起/展开 + 拖高 (PanedWindow pane, 默认 160 / min 60) ──
+_log_dock_state = {"visible": True, "h": 160}
+
+def _toggle_log_dock(event=None):
+    """收起/展开底部常驻日志面板 (记忆收起前高度)。"""
+    try:
+        if _log_dock_state["visible"]:
+            try: _log_dock_state["h"] = bottom_dock.winfo_height() or 160
+            except Exception: pass
+            main_paned.forget(bottom_dock)
+            _log_dock_state["visible"] = False
+        else:
+            main_paned.add(bottom_dock, minsize=60,
+                           height=_log_dock_state["h"], stretch="never")
+            _log_dock_state["visible"] = True
+        try:
+            log_dock_toggle_btn.config(
+                text=("▾ 日志" if _log_dock_state["visible"] else "▸ 日志"))
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+def _on_log_sash_release(event=None):
+    """拖动 sash 后记忆日志面板高度。"""
+    try:
+        if _log_dock_state["visible"]:
+            _log_dock_state["h"] = max(60, bottom_dock.winfo_height())
+    except Exception:
+        pass
+main_paned.bind("<ButtonRelease-1>", _on_log_sash_release)
+
+_log_collapse_btn = tkinter.Button(lh,text="▾ 收起",font=FONT_SMALL,bg=C["bgc"],fg=C["fgb"],
+    activebackground=C["acl"],relief="flat",bd=1,cursor="hand2",padx=6,pady=1,
+    command=_toggle_log_dock)
+_log_collapse_btn.grid(row=0,column=2,sticky="e",padx=(4,0))
+
+# 将日志 Dock 作为 pane#1 加入 (默认高 160, 最小 60)
+main_paned.add(bottom_dock, minsize=60, height=160, stretch="never")
 
 # ③ 日志工具条: 级别过滤 / 关键字搜索 / 清空 / 导出
 lt=tkinter.Frame(card_log,bg=C["bgc"]); lt.grid(row=1,column=0,sticky="ew",padx=6,pady=(0,2))
@@ -4026,16 +4269,16 @@ _log_search_entry = tkinter.Entry(lt,textvariable=log_search_var,font=FONT_SMALL
 _log_search_entry.pack(side="left",padx=(2,2))
 _log_search_entry.bind("<Return>", lambda e: _log_search_next(reset=True))
 tkinter.Button(lt,text="搜索",font=FONT_SMALL,bg=C["bgc"],fg=C["fgb"],
-    activebackground=C["acl"],relief="raised",bd=2,cursor="hand2",padx=6,pady=1,
+    activebackground=C["acl"],relief="flat",bd=1,cursor="hand2",padx=6,pady=1,
     command=lambda: _log_search_next(reset=True)).pack(side="left",padx=2)
 tkinter.Button(lt,text="下一个",font=FONT_SMALL,bg=C["bgc"],fg=C["fgb"],
-    activebackground=C["acl"],relief="raised",bd=2,cursor="hand2",padx=6,pady=1,
+    activebackground=C["acl"],relief="flat",bd=1,cursor="hand2",padx=6,pady=1,
     command=lambda: _log_search_next(reset=False)).pack(side="left",padx=2)
 tkinter.Button(lt,text="导出",font=FONT_SMALL,bg=C["ac"],fg="white",
-    activebackground=C["ach"],relief="raised",bd=2,cursor="hand2",padx=6,pady=1,
+    activebackground=C["ach"],relief="flat",bd=1,cursor="hand2",padx=6,pady=1,
     command=lambda: _log_export_view()).pack(side="right",padx=2)
 tkinter.Button(lt,text="清空",font=FONT_SMALL,bg=C["bgc"],fg=C["fgb"],
-    activebackground=C["acl"],relief="raised",bd=2,cursor="hand2",padx=6,pady=1,
+    activebackground=C["acl"],relief="flat",bd=1,cursor="hand2",padx=6,pady=1,
     command=lambda: _log_clear_view()).pack(side="right",padx=2)
 
 log_frame = tkinter.Frame(card_log,bg=C["logbg"])
@@ -4051,12 +4294,22 @@ scroll=tkinter.Scrollbar(log_frame,width=6,relief="flat",elementborderwidth=0,
 scroll.grid(row=0,column=1,sticky="ns")
 
 scroll.config(command=rz.yview); rz.config(yscrollcommand=scroll.set)
-rz.tag_configure("info",foreground=C["fgb"])
+rz.tag_configure("info",foreground=C["log_info"])
 rz.tag_configure("success",foreground=C["sc"])
 rz.tag_configure("warning",foreground=C["wn"])
 rz.tag_configure("error",foreground=C["dg"])
+# §4.6 级别左缘 2px 色条: 行首字形 ▌(U+258C) + cbar_<tag> 颜色 tag
+#   (tkinter Text 无 per-row 边框, 按文档 §4.6 以行首窄形字符承载色条)
+_CBAR_LEVEL_COLOR = {
+    "cbar_info": C["log_info"], "cbar_success": C["log_success"],
+    "cbar_warning": C["log_warn"], "cbar_error": C["log_error"],
+}
+for _ctag, _ccol in _CBAR_LEVEL_COLOR.items():
+    rz.tag_configure(_ctag, foreground=_ccol)
+rz.tag_configure("lzebra", background=C["zebra"])   # §4.6 行 zebra 极淡
 # ③ 日志工具条: 搜索高亮 + 级别过滤隐藏 (elide 在旧 Tk 上可能不支持, 容错降级)
-rz.tag_configure("search_hit",background="#FFEB3B",foreground="#000000")
+#   §4.6 命中色改 token (删除硬编码 #FFEB3B); 1px ac 描边受 Tk Text tag 能力限制降级为底色高亮
+rz.tag_configure("search_hit",background=C["search_hit_bg"],foreground=C["fgt"])
 try:
     rz.tag_configure("lf_hide",elide=True)
 except Exception:
@@ -4151,7 +4404,52 @@ def _log_line_tag(line_no):
     for t in _LOG_LEVEL_TAGS:
         if t in names:
             return t
+    # 行首字形 ▌ 覆盖了级别 tag 起点时, 由 cbar_<tag> 反推级别 (§4.6)
+    for _ct, _lv in _CBAR_LEVEL_OF.items():
+        if _ct in names:
+            return _lv
     return ""
+
+
+# §4.6 左缘 2px 色条: 级别 tag ↔ cbar_<tag> ↔ 行首字形 ▌
+_CBAR_LEVEL_OF = {"info": "cbar_info", "success": "cbar_success",
+                  "warning": "cbar_warning", "error": "cbar_error"}
+_cbar_state = {"done": 0}
+
+
+def _log_apply_cbar():
+    """为新增日志行: 行首插入 ▌ 并上 cbar_<tag> 色, 偶行加极淡 zebra (§4.6)。
+
+    机制: tkinter Text 无 per-row 边框, 故按文档 §4.6 以「行首窄形字符 ▌(U+258C)
+    + cbar_<tag> 颜色 tag」承载左缘 2px 色条; 级别由 tag 判定 (§2.5)。
+    D1 幂等: **逐行处理成功后立即推进** _cbar_state["done"], 并以「行首已含 ▌」二次
+    防重 —— 旧实现仅在整循环结束后赋值, 一旦中途抛错 (异常被外层吞掉) 会重入并对
+    已插过 ▌ 的行再次插入, 造成色条重复。
+    """
+    try:
+        total = int(float(rz.index("end-1c")))
+    except Exception:
+        return
+    for i in range(_cbar_state["done"] + 1, total + 1):
+        try:
+            line = rz.get("{}.0".format(i), "{}.end".format(i))
+            # 幂等: 行首已含 ▌ → 本行已处理过, 直接推进而不重复插入
+            if line.startswith("▌"):
+                _cbar_state["done"] = i
+                continue
+            # Text 末尾隐含空行: 跳过且不推进, 留待有内容后再处理
+            if line == "":
+                continue
+            lv = _log_line_tag(i)
+            ctag = _CBAR_LEVEL_OF.get(lv, "cbar_info")
+            rz.insert("{}.0".format(i), "▌")
+            rz.tag_add(ctag, "{}.0".format(i), "{}.1".format(i))
+            if i % 2 == 0:
+                rz.tag_add("lzebra", "{}.1".format(i), "{}.end".format(i))
+            _cbar_state["done"] = i
+        except Exception:
+            # 单行失败: 保留 done 于上一成功行; 下次以「行首▌」判定避免重复
+            continue
 
 
 def _log_apply_filter(full=False):
@@ -4213,6 +4511,7 @@ def _log_clear_view():
     try:
         rz.delete("1.0", "end")
         _logfilter["applied"] = 0
+        _cbar_state["done"] = 0
         rz.tag_remove("search_hit", "1.0", "end")
     except Exception:
         pass
@@ -4300,7 +4599,7 @@ def _start_recording():
 # TAB 4: 工作流
 # ======================================================================
 tab_workflow = tkinter.Frame(notebook, bg=C["bg"])
-notebook.add(tab_workflow, text="  工作流  ")   # 第3个Tab
+notebook.add(tab_workflow, text="  工作流  ")   # 第2个Tab (执行控制已升级为常驻工具栏)
 # 设置已分离为独立窗口 (settings_window.open_settings_window)，不再占用 Tab
 tab_workflow.columnconfigure(0, weight=1)
 tab_workflow.rowconfigure(0, weight=0)
@@ -4385,10 +4684,7 @@ _tbtn(wf_toolbar, "+ 变量", lambda: _wf_add_step("variable"),
 _tbtn(wf_toolbar, "+ 循环", lambda: _wf_add_step("loop"),
       tip="添加循环块").pack(side="left", padx=_wfp)
 _sep(wf_toolbar)
-_tbtn(wf_toolbar, "运行", lambda: _wf_run(), C["sc"], "white",
-      tip="运行工作流").pack(side="left", padx=_wfp)
-_tbtn(wf_toolbar, "停止", lambda: _wf_stop(), C["dg"], "white",
-      tip="停止工作流").pack(side="left", padx=_wfp)
+# 「运行 / 停止」已移除: 由 ② 执行控制工具栏 (root row1) 按当前 Tab 分派承接
 _sep(wf_toolbar)
 # 执行控制: 循环次数 + 无限最长
 tkinter.Label(wf_toolbar, text="循环:", font=FONT_SMALL, bg=C["bg"], fg=C["fgm"]).pack(side="left", padx=(0, 2))
@@ -4450,7 +4746,7 @@ wf_lib_frame.columnconfigure(0, weight=1)
 wf_lib_frame.rowconfigure(2, weight=1)
 
 # 操作库标题
-tkinter.Label(wf_lib_frame, text="📚 操作库", font=FONT_TITLE,
+tkinter.Label(wf_lib_frame, text="⊞ 操作库", font=FONT_TITLE,
     bg=C["bgc"], fg=C["fgt"]).grid(row=0, column=0, sticky="ew", padx=8, pady=(6, 2))
 
 # 搜索框
@@ -4533,8 +4829,8 @@ _wf_data = {"name": "未命名工作流", "steps": []}
 _wf_file = None
 
 TYPE_LABELS = {"script": "- 脚本", "parallel": "|| 并行", "condition": "? 条件",
-               "wait": "~ 等待", "loop": "⟳ 循环", "command": "⚡ 命令",
-               "variable": "📌 变量", "log": "💬 日志"}
+               "wait": "~ 等待", "loop": "↻ 循环", "command": "↯ 命令",
+               "variable": "✚ 变量", "log": "✉ 日志"}
 
 # ── 流程图颜色配置 ──
 _FLOW_COLORS = {
@@ -4547,8 +4843,8 @@ _FLOW_COLORS = {
     "variable":  "#0EA5E9",  # 天蓝
     "log":       "#64748B",  # 深灰
 }
-_FLOW_ICONS = {"script": "[>]", "parallel": "⫼", "condition": "◇", "wait": "⏳",
-               "loop": "⟳", "command": "⚡", "variable": "📌", "log": "💬"}
+_FLOW_ICONS = {"script": "[>]", "parallel": "⫼", "condition": "◇", "wait": "⧗",
+               "loop": "↻", "command": "↯", "variable": "✚", "log": "✉"}
 _NODE_W = 200
 _NODE_H = 36
 _NODE_GAP = 56
@@ -4653,7 +4949,7 @@ def _wf_populate_library(filter_text=""):
                 continue
         else:
             visible = actions
-        cat_id = wf_lib_tree.insert("", "end", text="📁 {}".format(category), open=True)
+        cat_id = wf_lib_tree.insert("", "end", text="▫ {}".format(category), open=True)
         for act in visible:
             iid = "{}_{}".format(category, act)
             wf_lib_tree.insert(cat_id, "end", iid=iid, text="  {}".format(act))
@@ -4809,7 +5105,7 @@ def _wf_render_flowchart(*args):
             detail = "{} #{}".format(detail, comment[:8])
         # 禁用节点前缀
         if disabled:
-            display = "⚪ {} #{} | {} (禁用)".format(icon, i + 1, detail)
+            display = "○ {} #{} | {} (禁用)".format(icon, i + 1, detail)
         else:
             display = "{} {} #{} | {}".format(icon, label, i + 1, detail)
 
@@ -4973,7 +5269,7 @@ def _wf_refresh_tree():
         if comment:
             detail = "#{} {}".format(comment, detail)
         if disabled:
-            label = "⚪ " + label
+            label = "○ " + label
         tag = "step_{}".format(i)
         wf_tree.insert("", "end", text=str(i + 1), values=(label, detail), tags=(tag,))
         wf_tree.tag_configure(tag, foreground=C["fgm"] if disabled else C["fgb"])
@@ -5598,6 +5894,8 @@ def _wf_open_variable_manager():
     lf.pack(fill="both", expand=True, padx=10, pady=4)
     var_tree = ttk.Treeview(lf, columns=("name", "value"), show="headings", height=8)
     var_tree.heading("name", text="变量名")
+    # §4.5 show="headings" 降级: 选中整行 acl 底 + 加粗
+    _bind_sel_bold(var_tree); _bind_row_hover(var_tree)
     var_tree.heading("value", text="值")
     var_tree.column("name", width=150)
     var_tree.column("value", width=200)
@@ -5705,7 +6003,7 @@ state._on_recording_done = _on_recording_done
 # ======================================================================
 _DASH_EMPTY = "尚未运行 · 选择脚本后点击运行"
 status_bar = tkinter.Frame(root,bg=C["bg"])
-status_bar.grid(row=2,column=0,sticky="ew",padx=10,pady=(3,6))
+status_bar.grid(row=3,column=0,sticky="ew",padx=10,pady=(3,6))
 status_bar.columnconfigure(2,weight=1)
 status_text = tkinter.Label(status_bar,text="就绪 — 请选择脚本文件开始",
     font=FONT_SMALL,fg=C["fgm"],bg=C["bg"],anchor="w")
@@ -5725,6 +6023,12 @@ progress_bar=ttk.Progressbar(status_bar,mode="determinate",
     style="Exec.Horizontal.TProgressbar")
 progress_bar.grid(row=0,column=2,sticky="ew")
 
+# 底部日志面板展开入口 (收起后仍可见, 常驻状态栏右侧)
+log_dock_toggle_btn = tkinter.Label(status_bar,text="▾ 日志",font=FONT_SMALL,
+    fg=C["fgm"],bg=C["bg"],cursor="hand2")
+log_dock_toggle_btn.grid(row=0,column=3,sticky="e",padx=(8,0))
+log_dock_toggle_btn.bind("<Button-1>", lambda e: _toggle_log_dock())
+
 # ======================================================================
 # Periodic Updates
 # ======================================================================
@@ -5735,10 +6039,13 @@ def _periodic():
     if log_auto_scroll.get():
         try: _tlog.flush(root)
         except Exception: return
+        _log_apply_cbar()
     else:
         _prev_y = rz.yview()
         try: _tlog.flush(root)
         except Exception: return
+        try: _log_apply_cbar()
+        except Exception: pass
         try: rz.yview_moveto(_prev_y[0])
         except Exception: pass
     # ③ 级别过滤生效时, 增量隐藏新增的不匹配行
@@ -5767,7 +6074,13 @@ def _periodic():
         else:
             rows_count = len(state._editor_rows) if state._editor_rows else 0
             mod_mark = " *" if state._editor_modified else ""
-            ai_status = "[AI]" if state.API_KEY else ""
+            # [AI] 徽标口径与守卫一致（凭据库优先）：延迟 import 避免潜在循环依赖
+            try:
+                from ai_client import has_ai_key as _ai_has_key
+                _ai_ok = bool(_ai_has_key())
+            except Exception:
+                _ai_ok = bool(state.API_KEY)
+            ai_status = "[AI]" if _ai_ok else ""
             status_text.config(text=" 就绪{}{}  |  {} 行  |  请选择脚本文件开始".format(
                 mod_mark, " "+ai_status if ai_status else "", rows_count), fg=C["fgm"])
             status_dot.config(text="● 就绪",fg=C["fgm"])

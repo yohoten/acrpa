@@ -5,7 +5,10 @@ Supports multiple backends (auto-detected in priority order):
 1. PaddleOCR (paddleocr)     — Best accuracy, pip install paddlepaddle paddleocr (~250MB)
 2. Windows OCR (winrt)       — Windows 10/11 built-in, zero extra install
 3. Tesseract (pytesseract)   — Cross-platform, requires Tesseract-OCR install
-4. Fallback: clear error message guiding installation
+4. PaddleOCR.dll (原生, 可选) — lib/paddle_ocr/PaddleOCR.dll 原生 C 接口封装。
+                                需自备 4 个原生依赖 + 模型目录，默认关闭
+                                (state.PADDLE_DLL_ENABLED)，见 src/paddle_dll.py
+5. Fallback: clear error message guiding installation
 
 Commands provided:
 - 识别文字: OCR a screen region, save result to variable
@@ -109,7 +112,7 @@ def _get_paddle_ocr():
 def _detect_backend():
     """Auto-detect the best available OCR backend. Called once on first use.
     
-    Priority: PaddleOCR > Windows OCR (winrt) > Tesseract > None
+    Priority: PaddleOCR(pip) > PaddleOCR.dll(可选) > Windows OCR > Tesseract > None
     Respects state.OCR_PREFERRED_BACKEND if set.
     """
     global _ocr_backend, _backend_name, _detect_done
@@ -121,20 +124,15 @@ def _detect_backend():
     preferred = getattr(state, 'OCR_PREFERRED_BACKEND', 'auto') if hasattr(state, 'OCR_PREFERRED_BACKEND') else 'auto'
 
     # ── Try backends in priority order ──
-    backends_to_try = []
-    if preferred == 'paddle':
-        backends_to_try = ['paddle', 'winrt', 'tesseract']
-    elif preferred == 'winrt':
-        backends_to_try = ['winrt', 'paddle', 'tesseract']
-    elif preferred == 'tesseract':
-        backends_to_try = ['tesseract', 'paddle', 'winrt']
-    else:
-        # auto: PaddleOCR first (best accuracy)
-        backends_to_try = ['paddle', 'winrt', 'tesseract']
+    # ── 候选顺序（paddle_dll 仅在开关打开时参与，默认与旧版一致）──
+    backends_to_try = _backend_order(preferred)
 
     for backend in backends_to_try:
         if backend == 'paddle':
             if _try_paddle_backend():
+                return True
+        elif backend == 'paddle_dll':
+            if _try_paddle_dll_backend():
                 return True
         elif backend == 'winrt':
             if _try_winrt_backend():
@@ -167,6 +165,53 @@ def _try_paddle_backend():
             return True
     except Exception as e:
         log1("PaddleOCR 后端检测失败: {}".format(e), "warning")
+    return False
+
+
+def _paddle_dll_enabled():
+    """PaddleOCR.dll 原生后端是否启用（默认关闭 → 行为与历史版本一致）。"""
+    try:
+        return bool(getattr(state, 'PADDLE_DLL_ENABLED', False))
+    except Exception:
+        return False
+
+
+def _backend_order(preferred):
+    """按偏好生成候选后端顺序。
+
+    仅当 state.PADDLE_DLL_ENABLED 打开时 paddle_dll 才进入候选，
+    因此默认配置下的优先级与旧版完全一致。
+    """
+    table = {
+        'paddle':     ['paddle', 'paddle_dll', 'winrt', 'tesseract'],
+        'paddle_dll': ['paddle_dll', 'paddle', 'winrt', 'tesseract'],
+        'winrt':      ['winrt', 'paddle', 'paddle_dll', 'tesseract'],
+        'tesseract':  ['tesseract', 'paddle', 'paddle_dll', 'winrt'],
+    }
+    order = list(table.get(preferred or 'auto', table['paddle']))
+    if not _paddle_dll_enabled():
+        order = [b for b in order if b != 'paddle_dll']
+    return order
+
+
+def _try_paddle_dll_backend():
+    """尝试启用 PaddleOCR.dll 原生后端（依赖/模型缺失时静默回退）。"""
+    global _ocr_backend, _backend_name, _detect_done
+    if not _paddle_dll_enabled():
+        return False
+    try:
+        import paddle_dll
+        engine = paddle_dll.get_engine()
+        if engine is None:
+            log1("PaddleOCR.dll 后端不可用，已回退其它后端（设置→OCR『DLL 自检』可看原因）", "warning")
+            return False
+        _ocr_backend = "paddle_dll"
+        _backend_name = engine.backend_name
+        _detect_done = True
+        log1("OCR后端: {}".format(_backend_name), "info")
+        return True
+    except Exception as e:
+        log1("PaddleOCR.dll 后端检测失败: {}".format(e), "warning")
     return False
 
 
@@ -224,6 +269,12 @@ def ocr_reset_backend():
     _detect_done = False
     _paddle_ocr = None
     _paddle_available = None
+    # 原生 DLL 后端同样需要释放（设置变更后重新加载）
+    try:
+        import paddle_dll
+        paddle_dll.reset()
+    except Exception:
+        pass
 
 
 # ======================================================================
@@ -247,6 +298,8 @@ def _ocr_read_text(image_path, language="ch"):
     try:
         if _ocr_backend == "paddle":
             return _ocr_paddle(image_path)
+        elif _ocr_backend == "paddle_dll":
+            return _ocr_paddle_dll(image_path)
         elif _ocr_backend == "winrt":
             return _ocr_winrt(image_path, "chi_sim+eng")
         elif _ocr_backend == "tesseract":
@@ -315,6 +368,42 @@ def _ocr_paddle_with_positions(image_path):
                     "center": (cx, cy),
                 })
     return items
+
+
+# ======================================================================
+# PaddleOCR.dll 原生后端 (lib/paddle_ocr/PaddleOCR.dll，默认关闭)
+# ======================================================================
+
+def _ocr_paddle_dll(image_path):
+    """OCR via native PaddleOCR.dll. Returns recognized text, or None."""
+    try:
+        import paddle_dll
+        engine = paddle_dll.get_engine()
+        if engine is None:
+            return None
+        return engine.read_text(image_path)
+    except Exception as e:
+        log1("PaddleOCR.dll 识别失败: {}".format(e), "error")
+        return None
+
+
+def _ocr_paddle_dll_with_positions(image_path):
+    """OCR via native PaddleOCR.dll, returning text with bbox positions.
+
+    输出结构与 _ocr_paddle_with_positions 保持一致，便于定位逻辑复用。
+    """
+    try:
+        import paddle_dll
+        engine = paddle_dll.get_engine()
+        if engine is None:
+            return None
+        items = engine.read_positions(image_path)
+        if items is None:
+            return None
+        return [i for i in items if i.get("text") and i.get("center")]
+    except Exception as e:
+        log1("PaddleOCR.dll 定位失败: {}".format(e), "error")
+        return None
 
 
 # ======================================================================
@@ -451,8 +540,8 @@ def ocr_find_text_position(target_text, region=None, confidence=0.7):
     else:
         left, top, width, height = region[0], region[1], region[2], region[3]
 
-    # ── PaddleOCR: use precise bounding box positions ──
-    if _ocr_backend == "paddle":
+    # ── PaddleOCR / PaddleOCR.dll: use precise bounding box positions ──
+    if _ocr_backend in ("paddle", "paddle_dll"):
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         tmp_dir = os.path.join(os.path.dirname(state.CONFIG_PATH), "screenshots")
         os.makedirs(tmp_dir, exist_ok=True)
@@ -464,9 +553,12 @@ def ocr_find_text_position(target_text, region=None, confidence=0.7):
             else:
                 pa.screenshot(tmp_path)
 
-            items = _ocr_paddle_with_positions(tmp_path)
+            if _ocr_backend == "paddle_dll":
+                items = _ocr_paddle_dll_with_positions(tmp_path)
+            else:
+                items = _ocr_paddle_with_positions(tmp_path)
             if items is None:
-                return None  # PaddleOCR init failed
+                return None  # OCR 引擎初始化失败
 
             # Find best matching text, adjusted for region offset
             best_item = None

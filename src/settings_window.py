@@ -5,7 +5,7 @@ open_settings_window() 创建独立 Toplevel，包含全部设置卡片:
 基础执行 / AI 增强 / 定时调度 / 日志 / 系统 / 快速操作 / 高级设置
 
 统一即时保存模型: 所有设置控件改动即自动保存 (600ms 防抖)，
-无需手动点 ✓；系统卡 (自启/托盘/Mini Bar) 保持即时生效。
+无需手动点 ✔；系统卡 (自启/托盘/Mini Bar) 保持即时生效。
 卡片标题栏右侧角标反馈保存状态。
 
 依赖注入设计:
@@ -22,7 +22,8 @@ import state
 import utils
 import scheduler as sched
 from utils import (_btn, _darken, create_card, log1, show_toast, attach_tooltip,
-                   FONT_SMALL_BOLD, FONT_TINY, FONT_ICON)
+                   FONT_SMALL_BOLD, FONT_TINY, FONT_ICON, FONT_ICON_MD,
+                   ctrl_h, sp)
 
 # ── 依赖注入 (由 ACRPA.py 在启动时调用 init_ctx 填充) ──
 root = None              # 主窗口
@@ -43,6 +44,7 @@ _sched_next_label = None # 定时调度「下次执行」标签 (打开设置窗
 _debounce_after = {}     # card_key -> after id
 _apply_map = {}          # card_key -> apply 函数 (保存时调用, 写 state)
 _saved_badges = {}       # card_key -> 卡标题栏「自动保存」角标 Label
+_last_error = {}         # card_key -> 最近一次保存失败原因 (角标可点击查看/重试)
 
 # ── P0 左侧导航栏 ──
 _nav_cards = []          # [(key, icon, label, card_widget), ...] — 注册顺序即显示顺序
@@ -181,7 +183,7 @@ def refresh_theme(prev=None):
                 elif cls == "Listbox":
                     # D5: 列表控件 (旧实现遗漏)
                     w.configure(bg=C["ebg"], fg=C["fgb"],
-                        selectbackground=C["ac"], selectforeground="white")
+                        selectbackground=C["acl"], selectforeground=C["fgt"])
                 elif cls == "Spinbox":
                     # D5: 数值框 (旧实现遗漏)
                     w.configure(bg=C["ebg"], fg=C["fgb"],
@@ -195,7 +197,7 @@ def refresh_theme(prev=None):
                 elif cls == "Menu":
                     # D5: 下拉/右键菜单 (旧实现遗漏)
                     w.configure(bg=C["bgc"], fg=C["fgb"],
-                        activebackground=C["ac"], activeforeground="white",
+                        activebackground=C["acl"], activeforeground=C["fgt"],
                         disabledforeground=C["fgm"])
             except Exception:
                 pass
@@ -242,28 +244,60 @@ def _auto_save(card_key, debounce_ms=600):
 
 
 def _do_save(card_key):
-    """执行该卡 apply 函数 → 保存配置 (触发 state.on_config_change 监听器) → 角标反馈。"""
+    """执行该卡 apply 函数 → 保存配置 (触发 state.on_config_change 监听器) → 角标反馈。
+
+    失败必须可见: 角标切换为「⚠ 保存失败 (点击查看)」并可重试，
+    避免 apply 抛异常时静默丢配置（旧实现只写日志, 用户以为已保存）。
+    """
     try:
         fn = _apply_map.get(card_key)
         if fn:
             fn()
         state.save_config()
+        _last_error.pop(card_key, None)
         _flash_saved(card_key)
     except Exception as e:
-        log1("保存设置失败: {}".format(e), "error")
+        _last_error[card_key] = "{}: {}".format(type(e).__name__, e)
+        log1("保存设置失败 [{}]: {}".format(card_key, e), "error")
+        _flash_failed(card_key)
 
 
 def _flash_saved(card_key):
-    """角标 1.2s 显示「✓ 已保存」后恢复「自动保存」。"""
+    """角标 1.2s 显示「✔ 已保存」后恢复「自动保存」。"""
     badge = _saved_badges.get(card_key)
     if badge is None or not badge.winfo_exists():
         return
     try:
-        badge.configure(text="✓ 已保存", fg=C["sc"],
+        badge.configure(text="✔ 已保存", fg=C["sc"],
             font=FONT_SMALL_BOLD)
+        try:
+            badge.unbind("<Button-1>")
+        except Exception:
+            pass
         _win.after(1200, lambda: _reset_badge(badge))
     except Exception:
         pass
+
+
+def _flash_failed(card_key):
+    """角标切「⚠ 保存失败 (点击查看)」并保持, 直到该卡保存成功。"""
+    badge = _saved_badges.get(card_key)
+    if badge is None or not badge.winfo_exists():
+        return
+    try:
+        badge.configure(text="⚠ 保存失败 (点击查看)", fg=C["dg"],
+            font=FONT_SMALL_BOLD)
+        badge.bind("<Button-1>", lambda _e, k=card_key: _show_save_error(k))
+    except Exception:
+        pass
+
+
+def _show_save_error(card_key):
+    """查看某卡最近一次保存失败原因, 可一键重试。"""
+    reason = _last_error.get(card_key) or "未知原因"
+    if messagebox.askretrycancel("保存失败",
+            "这组设置未能保存：\n\n{}\n\n点「重试」立即重试；点「取消」可在修改后自动重试。".format(reason)):
+        _do_save(card_key)
 
 
 def _reset_badge(badge):
@@ -287,7 +321,7 @@ def _make_badge(card_key, title_frame):
     """创建卡标题栏右侧「自动保存」角标 (供 _flash_saved 反馈)。"""
     badge = tkinter.Label(title_frame, text="自动保存",
         font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"])
-    badge.grid(row=0, column=1, sticky="e", padx=(4, 0))
+    badge.grid(row=0, column=2, sticky="e", padx=(sp("gap_tight"), 0))
     _saved_badges[card_key] = badge
     return badge
 
@@ -338,16 +372,21 @@ def _make_collapsible_card(parent, title, icon):
     card.columnconfigure(0, weight=1)
 
     title_frame = tkinter.Frame(card, bg=C["bgc"])
-    title_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=(6, 2))
-    title_frame.columnconfigure(0, weight=1)
+    title_frame.grid(row=0, column=0, sticky="ew",
+        padx=sp("card_pad"), pady=(sp("sp_xs"), sp("sp_xs")))
+    title_frame.columnconfigure(1, weight=1)
 
-    tkinter.Label(title_frame, text="{} {}".format(icon, title),
-        font=FONT_TITLE,
-        bg=C["bgc"], fg=C["fgt"]).grid(row=0, column=0, sticky="w")
+    # 图标用统一图标字体 (Segoe UI Symbol 单色字形), 与标题正文分离 (§3.1/§3.2)
+    tkinter.Label(title_frame, text=icon, font=FONT_ICON_MD,
+        bg=C["bgc"], fg=C["fgt"]).grid(row=0, column=0, sticky="w",
+        padx=(0, sp("gap_tight")))
+
+    tkinter.Label(title_frame, text=title, font=FONT_TITLE,
+        bg=C["bgc"], fg=C["fgt"]).grid(row=0, column=1, sticky="w")
 
     arrow = tkinter.Label(title_frame, text="▼", font=FONT_ICON,
         bg=C["bgc"], fg=C["fgm"], cursor="hand2")
-    arrow.grid(row=0, column=2, sticky="e", padx=(4, 0))
+    arrow.grid(row=0, column=3, sticky="e", padx=(sp("gap_tight"), 0))
 
     content = tkinter.Frame(card, bg=C["bgc"])
     content.grid(row=1, column=0, sticky="ew")
@@ -369,17 +408,18 @@ def _make_collapsible_card(parent, title, icon):
 
 _NAV_ITEMS = [
     # (key, icon, label) — 声明式导航注册
-    ("exec",     "⚙️", "基础执行"),
-    ("ai",       "🤖", "AI 增强"),
-    ("sched",    "⏰", "定时调度"),
-    ("record",   "📹", "录制设置"),
-    ("log",      "📋", "日志"),
-    ("system",   "💻", "系统"),
-    ("quick",    "⚡", "快速操作"),
-    ("advanced", "🔧", "高级设置"),
-    ("netlink",  "🌐", "网络互联"),
-    ("python",   "🐍", "Python 扩展"),
-    ("market",   "🛒", "脚本市场"),
+    # icon 一律为 Segoe UI Symbol 单色字形 (docs/UI美化设计方案.md §3.1)
+    ("exec",     "⚙", "基础执行"),
+    ("ai",       "✦", "AI 增强"),
+    ("sched",    "⏱", "定时调度"),
+    ("record",   "◉", "录制设置"),
+    ("log",      "▤", "日志"),
+    ("system",   "▢", "系统"),
+    ("quick",    "↯", "快速操作"),
+    ("advanced", "⚒", "高级设置"),
+    ("netlink",  "⊕", "网络互联"),
+    ("python",   "§", "Python 扩展"),
+    ("market",   "⛁", "脚本市场"),
 ]
 
 
@@ -395,12 +435,12 @@ def _on_nav_click(key):
     if _nav_canvas is None:
         return
 
-    # 更新导航高亮
+    # 更新导航高亮 (选中用 acl 底 + 加粗, 避免大面高饱和填充; §2.4)
     _nav_active_key = key
     for k, lbl in _nav_labels.items():
         try:
             if k == key:
-                lbl.configure(bg=C["ac"], fg="white",
+                lbl.configure(bg=C["acl"], fg=C["fgt"],
                     font=FONT_BUTTON)
             else:
                 lbl.configure(bg=C["bg"], fg=C["fgm"],
@@ -470,25 +510,29 @@ def open_settings_window():
     tkinter.Label(nav_panel, text="设置导航", font=FONT_TITLE,
         bg=C["bg"], fg=C["fgt"]).grid(row=0, column=0, sticky="ew",
         padx=8, pady=(10, 6))
-    tkinter.Frame(nav_panel, bg=C["bd"], height=1).grid(
-        row=1, column=0, sticky="ew", padx=6, pady=(0, 6))
+    tkinter.Frame(nav_panel, bg=C["bd"], height=sp("hairline")).grid(
+        row=1, column=0, sticky="ew", padx=sp("gap_tight"), pady=(0, sp("sp_xs")))
 
     _nav_items_frame = tkinter.Frame(nav_panel, bg=C["bg"])
     _nav_items_frame.grid(row=2, column=0, sticky="nsew")
     _nav_items_frame.columnconfigure(0, weight=1)
     nav_panel.rowconfigure(2, weight=1)
 
-    # 预创建导航项
+    # 预创建导航项 (行高统一取 ctrl_h("ctrl_h_lg"); hover 用 row_hover, §4.9.1/§4.9.2)
     _nav_row_idx = 0
     for key, icon, label_text in _NAV_ITEMS:
+        _nav_items_frame.rowconfigure(_nav_row_idx, minsize=ctrl_h("ctrl_h_lg"))
         nav_lbl = tkinter.Label(_nav_items_frame,
             text="  {}  {}".format(icon, label_text),
             font=FONT_BODY, bg=C["bg"], fg=C["fgm"],
-            anchor="w", padx=8, pady=5, cursor="hand2")
-        nav_lbl.grid(row=_nav_row_idx, column=0, sticky="ew", padx=4, pady=1)
+            anchor="w", padx=sp("sp_sm"), pady=sp("sp_xs"), cursor="hand2",
+            takefocus=True, highlightthickness=sp("focus_w"),
+            highlightbackground=C["bg"], highlightcolor=C["focus"])
+        nav_lbl.grid(row=_nav_row_idx, column=0, sticky="ew",
+            padx=sp("gap_tight"), pady=sp("hairline"))
         nav_lbl.bind("<Button-1>", lambda e, k=key: _on_nav_click(k))
         nav_lbl.bind("<Enter>", lambda e, l=nav_lbl, k=key:
-            l.configure(bg=C["acl"]) if _nav_active_key != k else None)
+            l.configure(bg=C["row_hover"]) if _nav_active_key != k else None)
         nav_lbl.bind("<Leave>", lambda e, l=nav_lbl, k=key:
             l.configure(bg=C["bg"]) if _nav_active_key != k else None)
         _nav_labels[key] = nav_lbl
@@ -523,8 +567,7 @@ def open_settings_window():
     nav_panel.bind("<MouseWheel>", _on_wheel)
     _nav_items_frame.bind("<MouseWheel>", _on_wheel)
 
-    PAD = {"padx": 8, "pady": 5}
-    PAD = {"padx": 8, "pady": 5}
+    PAD = {"padx": sp("sp_sm"), "pady": sp("sp_xs")}
 
     # ── 分卡保存 handlers (即时保存框架调用, 保留原逻辑) ──
     def _apply_exec_settings():
@@ -556,6 +599,13 @@ def open_settings_window():
         """
         pid = _label_to_id.get(_prov_var.get(), "") or (getattr(state, "AI_PROVIDER", "") or "")
         state.AI_PROVIDER = pid
+        # 提供商变更后无条件失效 has_ai_key 缓存：否则切换到「无已存 key 的 provider」
+        # 且未输入新 key 时，缓存会残留旧 provider 的 True（守卫放行但请求 401）。
+        if _aic is not None:
+            try:
+                _aic.refresh_key_cache()
+            except Exception:
+                pass
         state.AI_MODEL = api_model_var.get().strip()
         state.AI_BASE_URL = api_base_var.get().strip()
         key = api_key_var.get().strip()
@@ -569,6 +619,12 @@ def open_settings_window():
             else:
                 # provider 为空 → 回退旧路径（save_config 会写入凭据库 ACRPA/api_key）
                 state.API_KEY = key
+            # 密钥变更后刷新 has_ai_key 缓存，避免守卫读取到过期结果
+            if _aic is not None:
+                try:
+                    _aic.refresh_key_cache()
+                except Exception:
+                    pass
             # 清空 Entry 显示值，避免明文常驻 UI／被误存（仅在有输入时清一次，防止反复触发）
             try:
                 api_key_var.set("")
@@ -582,7 +638,12 @@ def open_settings_window():
             state.API_MODEL = state.AI_MODEL
         state.AI_SMART_RETRY = ai_smart_retry_var.get()
         state.AI_ANOMALY_DETECT = ai_anomaly_var.get()
-        if state.AI_ANOMALY_DETECT and (state.API_KEY or pid):
+        # 异常检测启用条件与真实可用性一致（凭据库优先，state.API_KEY 回退）
+        try:
+            _key_ok = bool(_aic.has_ai_key()) if _aic is not None else bool(state.API_KEY)
+        except Exception:
+            _key_ok = bool(state.API_KEY)
+        if state.AI_ANOMALY_DETECT and _key_ok:
             try:
                 from ai_enhance import anomaly_detector
                 anomaly_detector.enable()
@@ -633,28 +694,50 @@ def open_settings_window():
 
     # 高级设置下拉选项 ↔ state 存储值映射（单一来源，UI 与保存共用）
     _REC_MODE_MAP = {"绝对坐标": "absolute", "相对窗口": "relative"}
-    _OCR_BACKEND_MAP = {"自动": "auto", "PaddleOCR": "paddle", "Windows OCR": "winrt", "Tesseract": "tesseract"}
+    _OCR_BACKEND_MAP = {"自动": "auto", "PaddleOCR": "paddle",
+                        "PaddleOCR.dll": "paddle_dll",
+                        "Windows OCR": "winrt", "Tesseract": "tesseract"}
+
+    def _int_or(var, fallback, lo=None, hi=None):
+        """取整数; 非法或越界 → 回退 fallback, 绝不抛异常。
+
+        旧实现用 try/except 包住整块赋值, 一旦某项非法会连带跳过后续所有赋值
+        (且有三项被误写进 except 分支 → 永远不落盘)。
+        """
+        try:
+            v = int(str(var.get()).strip())
+        except (TypeError, ValueError):
+            return fallback
+        if lo is not None and v < lo:
+            return fallback
+        if hi is not None and v > hi:
+            return fallback
+        return v
 
     def _apply_advanced_settings():
-        """保存「高级设置」卡配置（运行时由对应模块按需读取）。"""
-        try:
-            state.MAX_EXECUTION_MINUTES = int(max_minutes_var.get())
-        except ValueError:
-            state.MAX_EXECUTION_MINUTES = int(max_minutes_var.get())
-            state.BOUND_WINDOW_TITLE = bound_window_var.get().strip()
-            state.STOP_ON_ERROR = stop_on_error_var.get()
-            state.OCR_PREFERRED_BACKEND = _OCR_BACKEND_MAP.get(ocr_backend_var.get(), "auto")
+        """保存「高级设置」卡配置（运行时由对应模块按需读取）。
+
+        所有赋值平铺: 任一项非法都不影响其它项落盘; 越界值回退到既有值。
+        """
+        state.MAX_EXECUTION_MINUTES = _int_or(max_minutes_var, state.MAX_EXECUTION_MINUTES, 0, 1440)
+        state.BOUND_WINDOW_TITLE = bound_window_var.get().strip()
+        state.STOP_ON_ERROR = bool(stop_on_error_var.get())
+        state.OCR_PREFERRED_BACKEND = _OCR_BACKEND_MAP.get(ocr_backend_var.get(), "auto")
         state.OCR_PADDLE_DIR = ocr_paddle_var.get().strip()
-        state.BROWSER_HEADLESS = browser_headless_var.get()
-        try:
-            state.BROWSER_SLOW_MO = int(browser_slowmo_var.get())
-        except ValueError:
-            state.BROWSER_SLOW_MO = 0; browser_slowmo_var.set("0")
-        try:
-            state.SCHED_POLL_INTERVAL = int(sched_poll_var.get())
-        except ValueError:
-            state.SCHED_POLL_INTERVAL = 30; sched_poll_var.set("30")
+        state.OCR_PRELOAD = bool(ocr_preload_var.get())
+        state.OCR_THREADS = _int_or(ocr_threads_var, 8, 1, 32)
+        state.BROWSER_HEADLESS = bool(browser_headless_var.get())
+        state.BROWSER_SLOW_MO = _int_or(browser_slowmo_var, 0, 0, 5000)
+        state.SCHED_POLL_INTERVAL = _int_or(sched_poll_var, 30, 5, 600)
         state.DD_DLL_PATH = dd_dll_path_var.get().strip()
+        # PaddleOCR.dll 原生后端（默认关闭；依赖/模型缺失时自动回退其它后端）
+        state.PADDLE_DLL_ENABLED = bool(paddle_dll_enabled_var.get())
+        state.PADDLE_DLL_DIR = paddle_dll_dir_var.get().strip()
+        state.PADDLE_DLL_MODEL_DIR = paddle_dll_model_dir_var.get().strip()
+        state.PADDLE_DLL_PROTO_INIT = paddle_dll_proto_init_var.get().strip() or "json5"
+        state.PADDLE_DLL_PROTO_DETECT = paddle_dll_proto_detect_var.get().strip() or "ptr_byte"
+        state.PADDLE_DLL_CONFIG = paddle_dll_config_var.get().strip()
+        state.PADDLE_DLL_LICENSE = paddle_dll_license_var.get().strip()
 
     def _export_log():
         import datetime
@@ -671,9 +754,9 @@ def open_settings_window():
     _apply_map["advanced"] = _apply_advanced_settings
 
     # ======================================================================
-    # ⚙️ 基础执行 card
+    # ⚙ 基础执行 card
     # ======================================================================
-    card_exec, exec_content, exec_title, _ = _make_collapsible_card(_inner, "基础执行", "⚙️")
+    card_exec, exec_content, exec_title, _ = _make_collapsible_card(_inner, "基础执行", "⚙")
     card_exec.grid(row=0, column=0, sticky="ew", **PAD)
     _make_badge("exec", exec_title)
     _register_nav_card("exec", card_exec)
@@ -731,18 +814,18 @@ def open_settings_window():
         _mode_row += 1
 
     # DD 驱动信息按钮
-    dd_info_btn = tkinter.Label(mode_frame, text="  ℹ️ DD 驱动详情", font=FONT_TINY,
+    dd_info_btn = tkinter.Label(mode_frame, text="  ⓘ DD 驱动详情", font=FONT_TINY,
         fg=C["ac"], bg=C["bgc"], cursor="hand2")
     dd_info_btn.grid(row=_mode_row, column=0, sticky="w", pady=(2, 4))
 
     def _show_dd_info(event):
         messagebox.showinfo("DD 驱动信息",
             "DD 驱动说明:\n\n"
-            "✅ 优势:\n"
+            "✔ 优势:\n"
             "• 输入速度提升 3-5 倍\n"
             "• 支持后台窗口操作\n"
             "• 难以被反自动化检测\n\n"
-            "⚠️ 注意:\n"
+            "⚠ 注意:\n"
             "• 需要以管理员身份运行\n"
             "• 仅支持 Windows 系统\n"
             "• 加载失败会自动回退到 PyAutoGUI")
@@ -785,7 +868,7 @@ def open_settings_window():
         )
         messagebox.showinfo("故障保护说明", info)
 
-    failsafe_info_btn = tkinter.Label(failsafe_frame, text="ℹ️", font=FONT_ICON,
+    failsafe_info_btn = tkinter.Label(failsafe_frame, text="ⓘ", font=FONT_ICON,
         fg=C["ac"], bg=C["bgc"], cursor="hand2")
     failsafe_info_btn.pack(side="left")
     failsafe_info_btn.bind("<Button-1>", _show_failsafe_info)
@@ -795,9 +878,9 @@ def open_settings_window():
         input_mode_var, app_protect_var, check_update_var, failsafe_var))
 
     # ======================================================================
-    # 🤖 AI 增强 card
+    # ✦ AI 增强 card
     # ======================================================================
-    card_ai, ai_content, ai_title, _ = _make_collapsible_card(_inner, "AI 增强", "🤖")
+    card_ai, ai_content, ai_title, _ = _make_collapsible_card(_inner, "AI 增强", "✦")
     card_ai.grid(row=1, column=0, sticky="ew", **PAD)
     _make_badge("ai", ai_title)
     _register_nav_card("ai", card_ai)
@@ -837,7 +920,7 @@ def open_settings_window():
         )
         messagebox.showinfo("AI 增强功能", info)
 
-    ai_info_btn = tkinter.Label(ai_frame, text="ℹ️", font=FONT_ICON,
+    ai_info_btn = tkinter.Label(ai_frame, text="ⓘ", font=FONT_ICON,
         fg=C["ac"], bg=C["bgc"], cursor="hand2")
     ai_info_btn.pack(side="left")
     ai_info_btn.bind("<Button-1>", _show_ai_info)
@@ -1126,6 +1209,13 @@ def open_settings_window():
             ai_test_result.config(text="", fg=C["fgm"])
         except Exception:
             pass
+        # 切换提供商时同步刷新密钥缓存，保持缓存与 resolve_api_key() 口径一致
+        # （provider 落库仍在保存路径 _apply_ai_settings，这里做「切换即刷新」的防御）
+        if _aic is not None:
+            try:
+                _aic.refresh_key_cache()
+            except Exception:
+                pass
         _on_provider_change._prev = pid
 
     _on_provider_change._prev = _init_pid
@@ -1136,9 +1226,9 @@ def open_settings_window():
         ai_smart_retry_var, ai_anomaly_var))
 
     # ======================================================================
-    # ⏰ 定时调度 card
+    # ⏱ 定时调度 card
     # ======================================================================
-    card_sched, sched_content, sched_title, _ = _make_collapsible_card(_inner, "定时调度", "⏰")
+    card_sched, sched_content, sched_title, _ = _make_collapsible_card(_inner, "定时调度", "⏱")
     card_sched.grid(row=2, column=0, sticky="ew", **PAD)
     _make_badge("sched", sched_title)
     _register_nav_card("sched", card_sched)
@@ -1229,9 +1319,9 @@ def open_settings_window():
         _sched_minute_var, _sched_repeat_var) + tuple(_sched_weekday_vars))
 
     # ======================================================================
-    # 📹 录制设置 card (P1-4)
+    # ◉ 录制设置 card (P1-4)
     # ======================================================================
-    card_record, rec_content, rec_title, _ = _make_collapsible_card(_inner, "录制设置", "📹")
+    card_record, rec_content, rec_title, _ = _make_collapsible_card(_inner, "录制设置", "◉")
     card_record.grid(row=3, column=0, sticky="ew", **PAD)
     _make_badge("record", rec_title)
     _register_nav_card("record", card_record)
@@ -1311,9 +1401,9 @@ def open_settings_window():
     _apply_map["record"] = _apply_record_settings
 
     # ======================================================================
-    # 📋 日志 card
+    # ▤ 日志 card
     # ======================================================================
-    card_log_cfg, log_content, log_title, _ = _make_collapsible_card(_inner, "日志", "📋")
+    card_log_cfg, log_content, log_title, _ = _make_collapsible_card(_inner, "日志", "▤")
     card_log_cfg.grid(row=4, column=0, sticky="ew", **PAD)
     _make_badge("log", log_title)
     _register_nav_card("log", card_log_cfg)
@@ -1359,9 +1449,9 @@ def open_settings_window():
     _track_card_vars("log", (log_save_var, log_level_var, log_retention_var))
 
     # ======================================================================
-    # 💻 系统 card
+    # ▢ 系统 card
     # ======================================================================
-    card_system, sys_content, sys_title, _ = _make_collapsible_card(_inner, "系统", "💻")
+    card_system, sys_content, sys_title, _ = _make_collapsible_card(_inner, "系统", "▢")
     card_system.grid(row=5, column=0, sticky="ew", **PAD)
     _make_badge("system", sys_title)
     _register_nav_card("system", card_system)
@@ -1634,8 +1724,8 @@ def open_settings_window():
             row=0, column=ci, sticky="w", padx=(0, 2))
 
     # 分隔线
-    tkinter.Frame(hotkey_table, bg=C["bd"], height=1).grid(
-        row=1, column=0, columnspan=3, sticky="ew", pady=2)
+    tkinter.Frame(hotkey_table, bg=C["bd"], height=sp("hairline")).grid(
+        row=1, column=0, columnspan=3, sticky="ew", pady=sp("hairline"))
 
     # 快捷键行
     hotkey_vars = {}  # 保存 var 引用供后续绑定
@@ -1684,9 +1774,9 @@ def open_settings_window():
                                 ui_scale_var))
 
     # ======================================================================
-    # ⚡ 快速操作 card (P2-7/P2-9)
+    # ↯ 快速操作 card (P2-7/P2-9)
     # ======================================================================
-    card_quick, quick_content, quick_title, _ = _make_collapsible_card(_inner, "快速操作", "⚡")
+    card_quick, quick_content, quick_title, _ = _make_collapsible_card(_inner, "快速操作", "↯")
     card_quick.grid(row=6, column=0, sticky="ew", **PAD)
     _register_nav_card("quick", card_quick)
     quick_content.columnconfigure(0, weight=1)
@@ -1743,16 +1833,16 @@ def open_settings_window():
         C["wn"], "white", tip="恢复当前页设置为默认值").pack(side="left")
 
     # ======================================================================
-    # 🔧 高级设置 card (可折叠: 执行 / 录制 / OCR / 浏览器 / 定时 / DD)
+    # ⚒ 高级设置 card (可折叠: 执行 / 录制 / OCR / 浏览器 / 定时 / DD)
     # ======================================================================
-    card_advanced, adv_content, adv_title, _ = _make_collapsible_card(_inner, "高级设置", "🔧")
+    card_advanced, adv_content, adv_title, _ = _make_collapsible_card(_inner, "高级设置", "⚒")
     card_advanced.grid(row=7, column=0, sticky="ew", **PAD)
     _make_badge("advanced", adv_title)
     _register_nav_card("advanced", card_advanced)
 
-    # === 执行增强行：最大执行时间 + 绑定窗口 ===
+    # === 行0：执行时限（数值） ===
     adv_exec_frame = tkinter.Frame(adv_content, bg=C["bgc"])
-    adv_exec_frame.grid(row=0, column=0, sticky="ew", padx=8, pady=2)
+    adv_exec_frame.grid(row=0, column=0, sticky="ew", padx=8, pady=(2, 1))
     max_minutes_var = tkinter.StringVar(value=str(state.MAX_EXECUTION_MINUTES))
     tkinter.Label(adv_exec_frame, text="最大执行:", font=FONT_BODY,
         fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0,4))
@@ -1760,33 +1850,37 @@ def open_settings_window():
         font=FONT_BODY, bg=C["ebg"], fg=C["fgb"],
         relief="solid", bd=1), max_minutes_var, "最大执行时间", 0, int, 0, 1440, card_key="advanced")
     max_minutes_spin.pack(side="left", padx=(0,4))
-    tkinter.Label(adv_exec_frame, text="分钟 (0=不限)", font=FONT_SMALL,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0,12))
-    tkinter.Label(adv_exec_frame, text="到达时限后自动停止", font=FONT_TINY,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 12))
-    bound_window_var = tkinter.StringVar(value=state.BOUND_WINDOW_TITLE)
-    tkinter.Label(adv_exec_frame, text="绑定窗口:", font=FONT_BODY,
-        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0,4))
-    tkinter.Entry(adv_exec_frame, textvariable=bound_window_var, width=16,
-        font=FONT_BODY, bg=C["ebg"], fg=C["fgb"],
-        relief="solid", bd=1).pack(side="left")
+    tkinter.Label(adv_exec_frame, text="分钟 (0=不限，到达时限后自动停止)", font=FONT_SMALL,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left")
 
-    # === 出错处理行 ===
+    # === 行1：绑定窗口（文本） ===
+    adv_bind_frame = tkinter.Frame(adv_content, bg=C["bgc"])
+    adv_bind_frame.grid(row=1, column=0, sticky="ew", padx=8, pady=1)
+    tkinter.Label(adv_bind_frame, text="绑定窗口:", font=FONT_BODY,
+        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0,4))
+    bound_window_var = tkinter.StringVar(value=state.BOUND_WINDOW_TITLE)
+    tkinter.Entry(adv_bind_frame, textvariable=bound_window_var, width=26,
+        font=FONT_SMALL, bg=C["ebg"], fg=C["fgb"],
+        relief="solid", bd=1).pack(side="left", padx=(0,4))
+    tkinter.Label(adv_bind_frame, text="(标题包含即匹配，空=不绑定)", font=FONT_SMALL,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left")
+
+    # === 行2：出错处理（开关） ===
     adv_opt_frame = tkinter.Frame(adv_content, bg=C["bgc"])
-    adv_opt_frame.grid(row=1, column=0, sticky="ew", padx=8, pady=2)
+    adv_opt_frame.grid(row=2, column=0, sticky="ew", padx=8, pady=(1, 2))
     stop_on_error_var = tkinter.BooleanVar(value=state.STOP_ON_ERROR)
     ttk.Checkbutton(adv_opt_frame, text="出错立即停止", variable=stop_on_error_var).pack(side="left")
 
     # === OCR 后端行 (P1-5 增强) ===
     adv_ocr_frame = tkinter.Frame(adv_content, bg=C["bgc"])
-    adv_ocr_frame.grid(row=2, column=0, sticky="ew", padx=8, pady=2)
+    adv_ocr_frame.grid(row=3, column=0, sticky="ew", padx=8, pady=(2, 1))
     tkinter.Label(adv_ocr_frame, text="OCR后端:", font=FONT_BODY,
         fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0,4))
     _backend_label = {v: k for k, v in _OCR_BACKEND_MAP.items()}
     ocr_backend_var = tkinter.StringVar(value=_backend_label.get(state.OCR_PREFERRED_BACKEND, "自动"))
     ttk.Combobox(adv_ocr_frame, textvariable=ocr_backend_var,
-        values=("自动", "PaddleOCR", "Windows OCR", "Tesseract"),
-        state="readonly", width=11).pack(side="left", padx=(0,8))
+        values=("自动", "PaddleOCR", "PaddleOCR.dll", "Windows OCR", "Tesseract"),
+        state="readonly", width=13).pack(side="left", padx=(0,8))
     tkinter.Label(adv_ocr_frame, text="Paddle模型目录:", font=FONT_BODY,
         fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0,4))
     ocr_paddle_var = tkinter.StringVar(value=state.OCR_PADDLE_DIR)
@@ -1798,60 +1892,177 @@ def open_settings_window():
         C["ac"], "white", tip="选择 PaddleOCR 模型目录")
     _ocr_browse_btn.pack(side="left")
 
-    # OCR 增强 (P1-5): 状态 + 预热 + 线程数 + 重载
+    # === 行4：OCR 状态（只读状态行 + 动作，不参与保存） ===
     ocr_status_frame = tkinter.Frame(adv_content, bg=C["bgc"])
-    ocr_status_frame.grid(row=3, column=0, sticky="ew", padx=8, pady=2)
-    ocr_status_var = tkinter.StringVar(value="未初始化")
+    ocr_status_frame.grid(row=4, column=0, sticky="ew", padx=8, pady=1)
+    ocr_status_var = tkinter.StringVar(value="检测中…")
     tkinter.Label(ocr_status_frame, text="OCR 状态:", font=FONT_SMALL,
         fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 6))
     tkinter.Label(ocr_status_frame, textvariable=ocr_status_var, font=FONT_SMALL,
-        fg=C["sc"], bg=C["bgc"]).pack(side="left", padx=(0, 8))
-    def _reload_ocr():
-        try:
-            from ocr_backend import get_ocr_engine
-            get_ocr_engine(force_reload=True)
-            ocr_status_var.set("已重载")
-            log1("OCR 引擎已重载")
-            show_toast(root, "OCR 引擎已重载", "success")
-        except Exception as e:
-            ocr_status_var.set("重载失败")
-            log1("OCR 重载失败: {}".format(e), "error")
-    _btn(ocr_status_frame, "应用并重载", _reload_ocr, C["ac"], "white",
-        tip="重新加载 OCR 引擎").pack(side="left", padx=(0, 8))
+        fg=C["sc"], bg=C["bgc"], wraplength=330,
+        justify="left").pack(side="left", padx=(0, 8))
 
-    # OCR 预热 + 线程数
+    def _refresh_ocr_status():
+        """显示真实后端状态（ocr_backend.ocr_get_backend_info），不可用时说明原因。
+
+        旧实现调用 ocr_backend.get_ocr_engine（该函数并不存在）→ 永远走 except，
+        界面恒显示"未初始化/未安装"。
+
+        注意: ocr_get_backend_info() 会触发后端惰性探测（pip 版 PaddleOCR 需加载
+        模型，可能耗时数秒），因此放到后台线程执行，结果再回主线程刷新文本，
+        避免打开设置窗口时卡顿。
+        """
+        ocr_status_var.set("检测中…")
+
+        def _probe():
+            try:
+                from ocr_backend import ocr_get_backend_info
+                info = ocr_get_backend_info() or {}
+                if info.get("available"):
+                    text = "● 已就绪: {}".format(
+                        info.get("name") or info.get("backend") or "未知后端")
+                else:
+                    text = ("○ 无可用后端（pip 版 PaddleOCR / Windows OCR / "
+                            "Tesseract 均未就绪）")
+            except Exception as e:
+                text = "状态检测失败: {}".format(e)
+            try:
+                _win.after(0, lambda: ocr_status_var.set(text))
+            except Exception:
+                pass
+
+        try:
+            threading.Thread(target=_probe, daemon=True).start()
+        except Exception:
+            _probe()
+
+    def _reload_ocr():
+        """重置后端探测，使 OCR 后端/模型目录/线程等改动立即参与下次识别。"""
+        try:
+            from ocr_backend import ocr_reset_backend
+            ocr_reset_backend()
+            log1("OCR 后端已重置（下次识别按新设置重新探测）")
+            show_toast(root, "OCR 后端已重置", "success")
+        except Exception as e:
+            log1("OCR 后端重置失败: {}".format(e), "error")
+            show_toast(root, "OCR 后端重置失败: {}".format(e), "error")
+        _refresh_ocr_status()
+
+    _btn(ocr_status_frame, "刷新状态", _refresh_ocr_status, C["ac"], "white",
+        tip="重新检测当前可用的 OCR 后端").pack(side="left", padx=(0, 6))
+    _btn(ocr_status_frame, "应用并重载", _reload_ocr, C["ac"], "white",
+        tip="清空已缓存的 OCR 引擎，下次识别按新设置重新加载").pack(side="left")
+
+    # === 行5：OCR 预热 + CPU 线程（数值/开关） ===
+    ocr_pref_frame = tkinter.Frame(adv_content, bg=C["bgc"])
+    ocr_pref_frame.grid(row=5, column=0, sticky="ew", padx=8, pady=(1, 2))
     ocr_preload_var = tkinter.BooleanVar(value=getattr(state, 'OCR_PRELOAD', False))
-    ttk.Checkbutton(ocr_status_frame, text="启动时预热", variable=ocr_preload_var).pack(side="left", padx=(0, 12))
-    tkinter.Label(ocr_status_frame, text="CPU线程:", font=FONT_SMALL,
+    ttk.Checkbutton(ocr_pref_frame, text="启动时预热", variable=ocr_preload_var).pack(side="left", padx=(0, 12))
+    tkinter.Label(ocr_pref_frame, text="CPU线程:", font=FONT_SMALL,
         fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
     ocr_threads_var = tkinter.StringVar(value=str(getattr(state, 'OCR_THREADS', 8)))
-    ocr_threads_spin = _validate_number(tkinter.Spinbox(ocr_status_frame, textvariable=ocr_threads_var,
+    ocr_threads_spin = _validate_number(tkinter.Spinbox(ocr_pref_frame, textvariable=ocr_threads_var,
         from_=1, to=32, width=4, font=FONT_SMALL,
         bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1), ocr_threads_var,
         "OCR 线程数", 8, int, 1, 32, card_key="advanced")
-    ocr_threads_spin.pack(side="left")
+    ocr_threads_spin.pack(side="left", padx=(0,4))
+    tkinter.Label(ocr_pref_frame, text="(1-32，pip 版与 DLL 后端共用)", font=FONT_TINY,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left")
 
-    # OCR 状态自动检测
-    def _detect_ocr_status():
+    # === 行8：PaddleOCR.dll 开关 + 自检（结论就地显示，不再弹模态） ===
+    adv_pdll_frame = tkinter.Frame(adv_content, bg=C["bgc"])
+    adv_pdll_frame.grid(row=8, column=0, sticky="ew", padx=8, pady=(4, 1))
+    paddle_dll_enabled_var = tkinter.BooleanVar(
+        value=bool(getattr(state, "PADDLE_DLL_ENABLED", False)))
+    ttk.Checkbutton(adv_pdll_frame, text="启用 PaddleOCR.dll",
+        variable=paddle_dll_enabled_var).pack(side="left", padx=(0,8))
+    pdll_status_var = tkinter.StringVar(value="未自检")
+
+    def _check_paddle_dll():
+        """就地自检: 显示结论并重置后端探测，使新设置立即参与下次识别。"""
         try:
-            from ocr_backend import get_ocr_engine
-            engine = get_ocr_engine()
-            if engine:
-                backend_name = getattr(engine, 'backend_name', '自动')
-                ocr_status_var.set("已就绪 ({})".format(backend_name))
-            else:
-                ocr_status_var.set("未初始化")
-        except Exception:
-            ocr_status_var.set("未安装")
-    _win.after(500, _detect_ocr_status)
-    def _apply_ocr_extra():
-        state.OCR_PRELOAD = ocr_preload_var.get()
-        try: state.OCR_THREADS = int(ocr_threads_var.get())
-        except ValueError: state.OCR_THREADS = 8
+            import paddle_dll
+            report = paddle_dll.format_diagnosis()
+            log1(report)
+            try:
+                from ocr_backend import ocr_reset_backend
+                ocr_reset_backend()
+            except Exception:
+                pass
+            lines = [ln.strip() for ln in report.splitlines() if ln.strip()]
+            pdll_status_var.set((lines[-1][:80] if lines else "自检完成"))
+            _refresh_ocr_status()
+        except Exception as e:
+            pdll_status_var.set("自检失败: {}".format(e))
+    _btn(adv_pdll_frame, "DLL 自检", _check_paddle_dll, C["ac"], "white",
+        tip="检查 DLL/依赖/模型是否就绪(依赖不全时不可调用)").pack(side="left", padx=(0,8))
+    tkinter.Label(adv_pdll_frame, textvariable=pdll_status_var, font=FONT_TINY,
+        fg=C["fgm"], bg=C["bgc"], wraplength=320,
+        justify="left").pack(side="left")
+
+    # === 行9：PaddleOCR.dll 路径（目录类） ===
+    adv_pdll_path = tkinter.Frame(adv_content, bg=C["bgc"])
+    adv_pdll_path.grid(row=9, column=0, sticky="ew", padx=8, pady=1)
+    tkinter.Label(adv_pdll_path, text="DLL目录:", font=FONT_BODY,
+        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0,4))
+    paddle_dll_dir_var = tkinter.StringVar(value=getattr(state, "PADDLE_DLL_DIR", ""))
+    tkinter.Entry(adv_pdll_path, textvariable=paddle_dll_dir_var, width=18,
+        font=FONT_SMALL, bg=C["ebg"], fg=C["fgb"],
+        relief="solid", bd=1).pack(side="left", padx=(0,4))
+    _pdll_dir_btn = _btn(adv_pdll_path, "浏览", lambda: paddle_dll_dir_var.set(filedialog.askdirectory(
+        title="选择含 PaddleOCR.dll 的目录", initialdir=APP_ROOT) or paddle_dll_dir_var.get()),
+        C["ac"], "white", tip="包含 PaddleOCR.dll 与 4 个依赖 DLL 的纯英文路径目录(空=lib/paddle_ocr)")
+    _pdll_dir_btn.pack(side="left", padx=(0,8))
+    tkinter.Label(adv_pdll_path, text="模型目录:", font=FONT_BODY,
+        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0,4))
+    paddle_dll_model_dir_var = tkinter.StringVar(value=getattr(state, "PADDLE_DLL_MODEL_DIR", ""))
+    tkinter.Entry(adv_pdll_path, textvariable=paddle_dll_model_dir_var, width=18,
+        font=FONT_SMALL, bg=C["ebg"], fg=C["fgb"],
+        relief="solid", bd=1).pack(side="left", padx=(0,4))
+    _pdll_model_btn = _btn(adv_pdll_path, "浏览", lambda: paddle_dll_model_dir_var.set(filedialog.askdirectory(
+        title="选择模型目录 (含 inference.json + inference.pdiparams)",
+        initialdir=paddle_dll_dir_var.get() or APP_ROOT) or paddle_dll_model_dir_var.get()),
+        C["ac"], "white", tip="模型集合目录(如 inference/)，空=在 DLL 目录下自动查找")
+    _pdll_model_btn.pack(side="left")
+
+    # === 行10：PaddleOCR.dll 高级参数（JSON / 授权 / 调用原型） ===
+    adv_pdll_adv = tkinter.Frame(adv_content, bg=C["bgc"])
+    adv_pdll_adv.grid(row=10, column=0, sticky="ew", padx=8, pady=(1, 2))
+    tkinter.Label(adv_pdll_adv, text="推理参数:", font=FONT_BODY,
+        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0,4))
+    paddle_dll_config_var = tkinter.StringVar(value=getattr(state, "PADDLE_DLL_CONFIG", ""))
+    tkinter.Entry(adv_pdll_adv, textvariable=paddle_dll_config_var, width=20,
+        font=FONT_TINY, bg=C["ebg"], fg=C["fgb"],
+        relief="solid", bd=1).pack(side="left", padx=(0,4))
+    tkinter.Label(adv_pdll_adv, text="JSON(空=用自带)", font=FONT_TINY,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0,10))
+    tkinter.Label(adv_pdll_adv, text="授权串:", font=FONT_BODY,
+        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0,4))
+    paddle_dll_license_var = tkinter.StringVar(value=getattr(state, "PADDLE_DLL_LICENSE", ""))
+    tkinter.Entry(adv_pdll_adv, textvariable=paddle_dll_license_var, width=10, show="*",
+        font=FONT_TINY, bg=C["ebg"], fg=C["fgb"],
+        relief="solid", bd=1).pack(side="left", padx=(0,10))
+    tkinter.Label(adv_pdll_adv, text="调用原型:", font=FONT_BODY,
+        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0,4))
+    paddle_dll_proto_init_var = tkinter.StringVar(
+        value=getattr(state, "PADDLE_DLL_PROTO_INIT", "json5"))
+    tkinter.Entry(adv_pdll_adv, textvariable=paddle_dll_proto_init_var, width=8,
+        font=FONT_TINY, bg=C["ebg"], fg=C["fgb"],
+        relief="solid", bd=1).pack(side="left", padx=(0,2))
+    tkinter.Label(adv_pdll_adv, text="/", font=FONT_TINY,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left")
+    paddle_dll_proto_detect_var = tkinter.StringVar(
+        value=getattr(state, "PADDLE_DLL_PROTO_DETECT", "ptr_byte"))
+    tkinter.Entry(adv_pdll_adv, textvariable=paddle_dll_proto_detect_var, width=9,
+        font=FONT_TINY, bg=C["ebg"], fg=C["fgb"],
+        relief="solid", bd=1).pack(side="left")
+
+    # OCR 状态首次检测放到窗口显示后执行（避免打开时阻塞）
+    _win.after(500, _refresh_ocr_status)
 
     # === 浏览器行 ===
     adv_br_frame = tkinter.Frame(adv_content, bg=C["bgc"])
-    adv_br_frame.grid(row=4, column=0, sticky="ew", padx=8, pady=2)
+    adv_br_frame.grid(row=6, column=0, sticky="ew", padx=8, pady=(4, 1))
     browser_headless_var = tkinter.BooleanVar(value=state.BROWSER_HEADLESS)
     ttk.Checkbutton(adv_br_frame, text="浏览器无头模式", variable=browser_headless_var).pack(side="left", padx=(0,16))
     tkinter.Label(adv_br_frame, text="慢放:", font=FONT_BODY,
@@ -1867,7 +2078,7 @@ def open_settings_window():
 
     # === 定时轮询 + DD DLL 行 ===
     adv_sys_frame = tkinter.Frame(adv_content, bg=C["bgc"])
-    adv_sys_frame.grid(row=5, column=0, sticky="ew", padx=8, pady=(2,2))
+    adv_sys_frame.grid(row=7, column=0, sticky="ew", padx=8, pady=(1, 2))
     tkinter.Label(adv_sys_frame, text="调度轮询:", font=FONT_BODY,
         fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0,4))
     sched_poll_var = tkinter.StringVar(value=str(state.SCHED_POLL_INTERVAL))
@@ -1891,19 +2102,23 @@ def open_settings_window():
     _dd_browse_btn.pack(side="left")
 
     tkinter.Label(adv_content,
-        text="提示：部分高级设置（浏览器/OCR/DD 后端、绑定窗口）保存后将在下次启动或执行对应功能时生效",
-        font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"]).grid(
-        row=6, column=0, sticky="w", padx=10, pady=(0,6))
+        text="提示：以上设置大多在下次识别/启动时生效；卡片角标显示「✔ 已保存」表示已落盘，"
+             "若显示「⚠ 保存失败」可点击查看原因并重试",
+        font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"], wraplength=560,
+        justify="left").grid(row=11, column=0, sticky="w", padx=10, pady=(2, 6))
 
     # 绑定防抖保存 (高级设置卡)
     _track_card_vars("advanced", (max_minutes_var, bound_window_var, stop_on_error_var,
         ocr_backend_var, ocr_paddle_var, ocr_preload_var, ocr_threads_var,
-        browser_headless_var, browser_slowmo_var, sched_poll_var, dd_dll_path_var))
+        browser_headless_var, browser_slowmo_var, sched_poll_var, dd_dll_path_var,
+        paddle_dll_enabled_var, paddle_dll_dir_var, paddle_dll_model_dir_var,
+        paddle_dll_config_var, paddle_dll_license_var,
+        paddle_dll_proto_init_var, paddle_dll_proto_detect_var))
 
     # ======================================================================
-    # 🌐 网络互联 card (NetLink 多设备互联)
+    # ⊕ 网络互联 card (NetLink 多设备互联)
     # ======================================================================
-    card_netlink, nl_content, nl_title, _ = _make_collapsible_card(_inner, "网络互联", "🌐")
+    card_netlink, nl_content, nl_title, _ = _make_collapsible_card(_inner, "网络互联", "⊕")
     card_netlink.grid(row=8, column=0, sticky="ew", **PAD)
     _make_badge("netlink", nl_title)
     _register_nav_card("netlink", card_netlink)
@@ -2286,9 +2501,9 @@ def open_settings_window():
         nl_web_confirm_control_var, nl_web_allow_remote_var))
 
     # ======================================================================
-    # 🐍 Python 扩展 card
+    # § Python 扩展 card
     # ======================================================================
-    card_python, py_content, py_title, _ = _make_collapsible_card(_inner, "Python 扩展", "🐍")
+    card_python, py_content, py_title, _ = _make_collapsible_card(_inner, "Python 扩展", "§")
     card_python.grid(row=9, column=0, sticky="ew", **PAD)
     _make_badge("python", py_title)
     _register_nav_card("python", card_python)
@@ -2394,9 +2609,9 @@ def open_settings_window():
     _track_card_vars("python", (py_perm_var, py_full_var, py_timeout_var))
 
     # ======================================================================
-    # 🛒 脚本市场 账号卡 (批次3 v2 — 账号状态 / 登录 / 注销 / 市场选项)
+    # ⛁ 脚本市场 账号卡 (批次3 v2 — 账号状态 / 登录 / 注销 / 市场选项)
     # ======================================================================
-    card_market, mk_content, mk_title, _ = _make_collapsible_card(_inner, "脚本市场", "🛒")
+    card_market, mk_content, mk_title, _ = _make_collapsible_card(_inner, "脚本市场", "⛁")
     card_market.grid(row=10, column=0, sticky="ew", **PAD)
     _make_badge("market", mk_title)
     _register_nav_card("market", card_market)

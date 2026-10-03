@@ -19,7 +19,7 @@ from tkinter import ttk, filedialog, messagebox
 import state
 from engine import engine
 from utils import (_btn, _darken, log1, show_toast, attach_tooltip, themed,
-                   FONT_LOG, FONT_TINY)
+                   bind_sel_bold, FONT_LOG, FONT_TINY)
 
 # ── 依赖注入上下文 (由 ACRPA.py 在启动时调用 init_ctx 填充) ──
 root = None              # 主窗口
@@ -210,7 +210,7 @@ def _show_help_dialog_legacy():
                 else:
                     log1("无法打开使用说明（无网络且本地无文件）", "warning")
         _doc_btn = tkinter.Button(btn_row, text="打开使用说明", font=FONT_SMALL, bg=C["ac"], fg="white",
-            relief="raised", bd=3, cursor="hand2", padx=12, pady=3,
+            relief="flat", bd=1, cursor="hand2", padx=12, pady=3,
             activebackground=C["ach"], activeforeground="white",
             command=_open_doc_online)
         _doc_btn.pack(side="left", padx=(0,4))
@@ -228,13 +228,13 @@ def _show_help_dialog_legacy():
                 else:
                     log1("无法打开 README（无网络且本地无文件）", "warning")
         _readme_btn = tkinter.Button(btn_row, text="查看 README", font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"],
-            relief="raised", bd=3, cursor="hand2", padx=12, pady=3,
+            relief="flat", bd=1, cursor="hand2", padx=12, pady=3,
             activebackground=C["acl"], activeforeground=C["fgb"],
             command=_open_readme)
         _readme_btn.pack(side="left", padx=(0,4))
         attach_tooltip(_readme_btn, "打开在线 README（离线时回退本地文件）")
         tkinter.Button(btn_row, text="关闭", font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"],
-            relief="raised", bd=3, cursor="hand2", padx=12, pady=3,
+            relief="flat", bd=1, cursor="hand2", padx=12, pady=3,
             activebackground=C["acl"], activeforeground=C["fgb"],
             command=dlg.destroy).pack(side="left")
 
@@ -339,7 +339,9 @@ def open_version_history():
     vh_tree.column("version", width=60, anchor="center")
     vh_tree.column("time", width=160)
     vh_tree.column("rows", width=60, anchor="center")
-    vh_tree.column("comment", width=150)
+    vh_tree.column("comment", width=150, anchor="center")
+    # §4.5 降级: show="headings" 无 #0 列 → 选中行加粗 (整行 acl 底由 style.map 提供)
+    bind_sel_bold(vh_tree)
 
     vh_sy = tkinter.Scrollbar(vh_list_frame, orient="vertical", command=vh_tree.yview,
         width=8, relief="flat", bg=C["bd"], troughcolor=C["bgc"])
@@ -487,7 +489,7 @@ def open_ai_panel():
 
     for i, name in enumerate(example_names):
         btn = tkinter.Button(btn_frame, text=name, font=FONT_TINY,
-            bg=C["bgc"], fg=C["ac"], relief="raised", bd=2, cursor="hand2",
+            bg=C["bgc"], fg=C["ac"], relief="flat", bd=1, cursor="hand2",
             activebackground=C["acl"], activeforeground=C["ach"],
             command=lambda n=name: _set_quick_example(AI_QUICK_PROMPTS[n]))
         btn.grid(row=0, column=i, padx=2, sticky="w")
@@ -527,7 +529,7 @@ def open_ai_panel():
     # Generate button
     gen_btn = tkinter.Button(button_frame, text="▶ 生成脚本",
         font=FONT_BUTTON, bg=C["ac"], fg="white",
-        relief="raised", bd=3, padx=16, pady=4, cursor="hand2",
+        relief="flat", bd=1, padx=16, pady=4, cursor="hand2",
         activebackground=C["ach"], activeforeground="white")
     gen_btn.grid(row=0, column=0, padx=(0, 6))
     attach_tooltip(gen_btn, "根据描述生成脚本 (Ctrl+Enter)")
@@ -539,7 +541,7 @@ def open_ai_panel():
     # Insert button
     insert_btn = tkinter.Button(button_frame, text="↓ 插入表格",
         font=FONT_BUTTON, bg=C["sc"], fg="white",
-        relief="raised", bd=3, padx=16, pady=4, cursor="hand2",
+        relief="flat", bd=1, padx=16, pady=4, cursor="hand2",
         activebackground=_darken(C["sc"]), activeforeground="white")
     insert_btn.grid(row=0, column=2, padx=3)
     attach_tooltip(insert_btn, "将生成的脚本插入编辑器表格")
@@ -547,7 +549,7 @@ def open_ai_panel():
     # Cancel button
     cancel_btn = tkinter.Button(button_frame, text="取消",
         font=FONT_BUTTON, bg=C["bgc"], fg=C["fgb"],
-        relief="raised", bd=3, padx=16, pady=4, cursor="hand2",
+        relief="flat", bd=1, padx=16, pady=4, cursor="hand2",
         activebackground=_darken(C["bgc"]), activeforeground=C["fgb"],
         highlightbackground=C["bd"], highlightthickness=1,
         command=dlg.destroy)
@@ -594,7 +596,7 @@ def open_ai_panel():
                 # Get generated content
                 raw_output = response.choices[0].message.content.strip()
 
-                # ✨ 关键修复：使用normalize_ai_output进行规范化处理
+                # ✦ 关键修复：使用normalize_ai_output进行规范化处理
                 generated_script = normalize_ai_output(raw_output)
 
                 if not generated_script:
@@ -611,7 +613,7 @@ def open_ai_panel():
                 def _safe_gen_ok():
                     try: progress_bar.stop()
                     except Exception: pass
-                    status_var.set("✓ 生成成功 ({} 字符)".format(len(generated_script)))
+                    status_var.set("✔ 生成成功 ({} 字符)".format(len(generated_script)))
                     gen_btn.config(state="normal")
                 dlg.after(0, _safe_gen_ok)
 
@@ -619,7 +621,7 @@ def open_ai_panel():
                 def _safe_auth(err=e):
                     try: progress_bar.stop()
                     except Exception: pass
-                    status_var.set("✗ 认证失败: {}".format(err))
+                    status_var.set("✘ 认证失败: {}".format(err))
                     gen_btn.config(state="normal")
                     messagebox.showwarning("认证失败", str(err))
                 dlg.after(0, _safe_auth)
@@ -627,7 +629,7 @@ def open_ai_panel():
                 def _safe_rate(err=e):
                     try: progress_bar.stop()
                     except Exception: pass
-                    status_var.set("✗ 频率超限: {}".format(err))
+                    status_var.set("✘ 频率超限: {}".format(err))
                     gen_btn.config(state="normal")
                     messagebox.showwarning("请求频率超限", str(err))
                 dlg.after(0, _safe_rate)
@@ -635,7 +637,7 @@ def open_ai_panel():
                 def _safe_timeout(err=e):
                     try: progress_bar.stop()
                     except Exception: pass
-                    status_var.set("✗ 请求超时: {}".format(err))
+                    status_var.set("✘ 请求超时: {}".format(err))
                     gen_btn.config(state="normal")
                     messagebox.showwarning("请求超时", str(err))
                 dlg.after(0, _safe_timeout)
@@ -643,7 +645,7 @@ def open_ai_panel():
                 def _safe_api(err=e):
                     try: progress_bar.stop()
                     except Exception: pass
-                    status_var.set("✗ API 错误: {}".format(err))
+                    status_var.set("✘ API 错误: {}".format(err))
                     gen_btn.config(state="normal")
                     messagebox.showerror("API 错误", str(err))
                 dlg.after(0, _safe_api)
@@ -651,7 +653,7 @@ def open_ai_panel():
                 def _safe_exc(err=e):
                     try: progress_bar.stop()
                     except Exception: pass
-                    status_var.set("✗ 生成失败: {}".format(err))
+                    status_var.set("✘ 生成失败: {}".format(err))
                     gen_btn.config(state="normal")
                     messagebox.showerror("生成失败", "发生未知错误:\n{}".format(err))
                 dlg.after(0, _safe_exc)
@@ -720,10 +722,10 @@ def open_ai_panel():
                     state._editor_rows.append(ScriptData(cmd_type, args))
                     imported_count += 1
                 else:
-                    log1("⚠️  跳过未知命令: {}".format(cmd_type), "warning")
+                    log1("⚠  跳过未知命令: {}".format(cmd_type), "warning")
                     skipped_count += 1
             # Show success message
-            msg = "✓ 已导入 {} 条命令".format(imported_count)
+            msg = "✔ 已导入 {} 条命令".format(imported_count)
             if skipped_count > 0:
                 msg += " (跳过 {} 条)".format(skipped_count)
 
@@ -759,8 +761,13 @@ def open_ai_panel():
 # ======================================================================
 def open_ai_debug_dialog():
     """Open AI natural language debugging dialog."""
-    if not state.API_KEY:
-        messagebox.showwarning("需要 API Key", "AI 调试功能需要在设置中配置 API Key")
+    try:
+        from ai_client import has_ai_key
+        _has_key = has_ai_key()
+    except Exception:
+        _has_key = bool(state.API_KEY)
+    if not _has_key:
+        messagebox.showwarning("需要 API Key", "AI 调试功能未配置可用的 AI 密钥（请在设置中配置提供商与密钥）")
         return
 
     dlg = tkinter.Toplevel(root)
@@ -811,7 +818,7 @@ def open_ai_debug_dialog():
 
     ask_btn = tkinter.Button(input_frame, text="▶ 提问",
         font=FONT_BUTTON, bg=C["ac"], fg="white",
-        relief="raised", bd=3, padx=12, pady=2, cursor="hand2")
+        relief="flat", bd=1, padx=12, pady=2, cursor="hand2")
     ask_btn.grid(row=0, column=1)
     attach_tooltip(ask_btn, "提交问题给 AI 分析执行日志")
 
@@ -854,7 +861,7 @@ def open_ai_debug_dialog():
         ask_btn.config(state="disabled")
         answer_txt.config(state="normal")
         answer_txt.delete("1.0", "end")
-        answer_txt.insert("1.0", "⏳ 正在分析执行数据和日志，请稍候...\n")
+        answer_txt.insert("1.0", "⧗ 正在分析执行数据和日志，请稍候...\n")
         answer_txt.config(state="disabled")
 
         def _ask_thread():
@@ -878,17 +885,17 @@ def open_ai_debug_dialog():
                     answer_txt.delete("1.0", "end")
                     if result:
                         answer_txt.insert("1.0", result)
-                        status_var.set("✓ 分析完成")
+                        status_var.set("✔ 分析完成")
                     else:
                         answer_txt.insert("1.0", "AI 分析未返回结果，请检查 API Key 和网络连接")
-                        status_var.set("✗ 分析失败")
+                        status_var.set("✘ 分析失败")
                     answer_txt.config(state="disabled")
                 dlg.after(0, _on_result)
             except Exception as e:
                 def _on_error(err=str(e)):
                     progress.stop()
                     ask_btn.config(state="normal")
-                    status_var.set("✗ 出错: {}".format(err))
+                    status_var.set("✘ 出错: {}".format(err))
                 dlg.after(0, _on_error)
 
         threading.Thread(target=_ask_thread, daemon=True).start()
@@ -907,12 +914,12 @@ def open_ai_debug_dialog():
     btn_frame = tkinter.Frame(dlg, bg=C["bgc"])
     btn_frame.grid(row=6, column=0, sticky="ew", padx=12, pady=(0, 12))
     _copy_btn = tkinter.Button(btn_frame, text="复制回答", font=FONT_BUTTON,
-        bg=C["bgc"], fg=C["fgb"], relief="raised", bd=3, padx=12, pady=3,
+        bg=C["bgc"], fg=C["fgb"], relief="flat", bd=1, padx=12, pady=3,
         command=_copy_answer)
     _copy_btn.pack(side="left")
     attach_tooltip(_copy_btn, "复制 AI 回答到剪贴板")
     tkinter.Button(btn_frame, text="关闭", font=FONT_BUTTON,
-        bg=C["dg"], fg="white", relief="raised", bd=3, padx=16, pady=3,
+        bg=C["dg"], fg="white", relief="flat", bd=1, padx=16, pady=3,
         command=dlg.destroy).pack(side="right")
 
     dlg.bind("<Escape>", lambda e: dlg.destroy())
@@ -1032,6 +1039,8 @@ def open_sched_manager():
         ("period", "周期", 60), ("next_run", "下次执行", 140),
         ("last_run", "上次执行", 140), ("enabled", "启用", 45)]:
         mgr_tree.heading(c, text=t); mgr_tree.column(c, width=w, minwidth=40)
+    # §4.5 降级: show="headings" 无 #0 列 → 选中行加粗
+    bind_sel_bold(mgr_tree)
     msy = tkinter.Scrollbar(list_f, orient="vertical", command=mgr_tree.yview,
         width=8, relief="flat", bg=C["bd"], troughcolor=C["bgc"])
     mgr_tree.configure(yscrollcommand=msy.set)
@@ -1046,7 +1055,7 @@ def open_sched_manager():
             lr = sched_module._task_last_runs.get(tid, "--")
             pl = {"daily":"每天","interval":"间隔","weekly":"每周","once":"一次"}.get(
                 task.get("period_type",""), task.get("period_type",""))
-            en = "✓" if task.get("enabled", True) else "✗"
+            en = "✔" if task.get("enabled", True) else "✘"
             vals = (task.get("name",""), os.path.basename(task.get("script","")),
                     pl, nr, lr, en)
             tag = "en" if task.get("enabled", True) else "dis"
@@ -1114,6 +1123,8 @@ def open_sched_manager():
         log_tree.tag_configure("ok", foreground=C["sc"])
         log_tree.tag_configure("fail", foreground=C["dg"])
         log_tree.tag_configure("info", foreground=C["ac"])
+        # §4.5 降级: show="headings" 无 #0 列 → 选中行加粗
+        bind_sel_bold(log_tree)
 
         def _log_refresh():
             for item in log_tree.get_children():
@@ -1250,12 +1261,12 @@ def show_update_dialog(force_check=False):
     btn_retry = _mk("重新检查", lambda: _start_check(force=True),
                     tip="忽略本次结果重新请求更新清单")
     btn_retry.grid(row=0, column=0, padx=(0, 8)); btn_retry.grid_remove()
-    btn_download = _mk("⬇ 下载更新", lambda: _start_download(), C["ac"], "white",
+    btn_download = _mk("↓ 下载更新", lambda: _start_download(), C["ac"], "white",
                        tip="下载到 updates/ 并校验完整性")
     btn_download.grid(row=0, column=1, padx=(0, 8)); btn_download.grid_remove()
     btn_page = _mk("打开下载页", lambda: _open(releases_page))
     btn_page.grid(row=0, column=2, padx=(0, 8)); btn_page.grid_remove()
-    btn_restart = _mk("🚀 立即重启更新", lambda: _apply(), C["sc"], "white",
+    btn_restart = _mk("↻ 立即重启更新", lambda: _apply(), C["sc"], "white",
                       tip="退出程序 → 替换主程序与 VERSION → 自动重启")
     btn_restart.grid(row=0, column=3, padx=(0, 8)); btn_restart.grid_remove()
     btn_folder = _mk("打开所在文件夹", lambda: _open_folder())
@@ -1312,7 +1323,7 @@ def show_update_dialog(force_check=False):
         ui["downloading"] = True
         prog.configure(value=0)
         prog.grid()
-        btn_download.config(text="⬇ 下载中…", state="disabled")
+        btn_download.config(text="↓ 下载中…", state="disabled")
         _say("正在连接下载源…")
 
         def _worker():
@@ -1335,7 +1346,7 @@ def show_update_dialog(force_check=False):
 
     def _on_fail(reason):
         prog.grid_remove()
-        btn_download.config(text="⬇ 重试下载", state="normal")
+        btn_download.config(text="↓ 重试下载", state="normal")
         _say("下载失败: {}".format(reason), C["dg"])
 
     def _on_ok(path):

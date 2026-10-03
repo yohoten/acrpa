@@ -270,13 +270,13 @@ class _HelpWindow(object):
 
         self._close_btn = tkinter.Button(
             self._bar_frame, text="关闭", font=self.f_small, bg=C["bgc"],
-            fg=C["fgb"], relief="raised", bd=3, cursor="hand2",
+            fg=C["fgb"], relief="flat", bd=1, cursor="hand2",
             padx=scaled(12), pady=scaled(3), activebackground=C["acl"],
             activeforeground=C["fgb"], command=self._on_close)
         self._close_btn.pack(side="right")
         self._copy_btn = tkinter.Button(
             self._bar_frame, text="复制本章", font=self.f_small, bg=C["ac"],
-            fg="white", relief="raised", bd=3, cursor="hand2",
+            fg="white", relief="flat", bd=1, cursor="hand2",
             padx=scaled(12), pady=scaled(3), activebackground=C["ach"],
             activeforeground="white", command=self._copy_current)
         self._copy_btn.pack(side="right", padx=(0, scaled(6)))

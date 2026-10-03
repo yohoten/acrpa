@@ -995,14 +995,14 @@ class ExecutionEngine:
             dd_success = dd.type_text(text, mode=dd_mode)
             
             if dd_success:
-                log1("✅ 使用DD驱动写入({}模式): {}".format(dd_mode, text[:30] + "..." if len(text) > 30 else text))
+                log1("✔ 使用DD驱动写入({}模式): {}".format(dd_mode, text[:30] + "..." if len(text) > 30 else text))
                 return
         
         # Fallback to PyAutoGUI
         if not dd_success:
             pa = get_pyautogui()
             pa.typewrite(text, interval=interval)
-            log1("⌨️ 使用PyAutoGUI写入: {}".format(text[:30] + "..." if len(text) > 30 else text))
+            log1("⌨ 使用PyAutoGUI写入: {}".format(text[:30] + "..." if len(text) > 30 else text))
 
     def _wait(self, row, z):
         raw_val = str(row[1].value) if row[1].value else "1.0"
@@ -1161,7 +1161,7 @@ class ExecutionEngine:
             with open(cp, encoding="utf-8") as f:
                 code = f.read()
         except Exception as e:
-            log1("❌ 代码执行失败 {}: {}".format(cp, e), "error")
+            log1("✘ 代码执行失败 {}: {}".format(cp, e), "error")
             return False
 
         # ── 过渡开关：回退旧的受限内建 exec 路径（兼容存量脚本）──
@@ -1203,15 +1203,15 @@ class ExecutionEngine:
         res = py_sandbox.run(code, perm, timeout=timeout, api=api,
                              audit="file", row=self._current_row(), log=log1)
         if res.get("ok"):
-            log1("✅ 执行了脚本: {} result={}".format(cp, res.get("result")))
+            log1("✔ 执行了脚本: {} result={}".format(cp, res.get("result")))
             return None
-        log1("❌ 代码执行失败 {}: {}".format(cp, res.get("error")), "error")
+        log1("✘ 代码执行失败 {}: {}".format(cp, res.get("error")), "error")
         return False
 
     def _exec_legacy(self, cp, code):
         """legacy_code_command=True 时的旧「受限内建」执行路径（仅过渡兼容）。
 
-        ⚠️ safe_globals 白名单可被 dunder 链完全绕过，且无 AST 预检 / 无超时 /
+        ⚠ safe_globals 白名单可被 dunder 链完全绕过，且无 AST 预检 / 无超时 /
         无审计 / 无 API 注入。默认（legacy_code_command=False）走 py_sandbox 统一
         沙箱，不进入此分支。失败返回 False（与 _exec 失败语义一致，不再 raise）。
         """
@@ -1227,10 +1227,10 @@ class ExecutionEngine:
         safe_locals = {}
         try:
             exec(code, safe_globals, safe_locals)
-            log1("✅ 执行了脚本(legacy): {}".format(cp))
+            log1("✔ 执行了脚本(legacy): {}".format(cp))
             return None
         except Exception as e:
-            log1("❌ 代码执行失败 {}: {}".format(cp, e), "error")
+            log1("✘ 代码执行失败 {}: {}".format(cp, e), "error")
             return False
 
     def _current_row(self):

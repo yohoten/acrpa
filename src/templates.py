@@ -236,8 +236,8 @@ def build_ai_prompt(user_description):
 
 ### 核心规则（必须遵守）
 1. **空值表示**：所有未使用的参数位置必须写入 `None`（首字母大写，不带引号）
-   ✅ 正确：`等待,2,None,None,None,None,None,None,None,None`
-   ❌ 错误：`等待,2,,,,,,` 或 `等待,2,"","",""`
+   ✔ 正确：`等待,2,None,None,None,None,None,None,None,None`
+   ✘ 错误：`等待,2,,,,,,` 或 `等待,2,"","",""`
 
 2. **参数数量**：每行必须恰好有10个字段（命令 + 9个参数），即末尾有9个逗号分隔的None
    - 命令字段后跟9个逗号分隔的值，即使全部为None

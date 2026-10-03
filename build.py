@@ -28,7 +28,7 @@ _7Z_PATHS = [
 _PROJECT_MODULES = [
     "state", "scriptdata", "templates", "utils", "commands",
     "engine", "recorder", "scheduler", "updater",
-    "marketplace", "ocr_backend", "dd_backend", "safe_eval",
+    "marketplace", "ocr_backend", "dd_backend", "paddle_dll", "safe_eval",
     "netlink_window",
     # Python 扩展 (自定义代码沙箱 + AcrpaAPI)
     "acrpa_api", "py_sandbox",
@@ -80,6 +80,23 @@ EXTRA_DATAS = [
 DD_DRIVER_DIR = os.path.join(BASE, "lib", "dd_driver")
 if os.path.isdir(DD_DRIVER_DIR):
     EXTRA_DATAS.append(os.path.join(DD_DRIVER_DIR, "dd63330.dll"))
+
+# ── PaddleOCR.dll 原生后端（可选）──
+# 仅当 lib/paddle_ocr 集齐 DLL + 4 个原生依赖时才随包分发：
+# 依赖不全的裸 DLL 无法加载（ctypes 报 module not found），只会白占体积。
+PADDLE_DLL_DIR = os.path.join(BASE, "lib", "paddle_ocr")
+_PADDLE_DLL_REQUIRED = (
+    "PaddleOCR.dll", "paddle_inference.dll", "tbb12.dll",
+    "yaml-cpp.dll", "opencv_world470.dll",
+)
+
+
+def paddle_dll_packable():
+    """lib/paddle_ocr 是否已具备可运行条件（DLL + 全部原生依赖）。"""
+    if not os.path.isdir(PADDLE_DLL_DIR):
+        return False
+    return all(os.path.isfile(os.path.join(PADDLE_DLL_DIR, f))
+               for f in _PADDLE_DLL_REQUIRED)
 
 # ======================================================================
 # EXCLUDE — 激进排除以最小化体积 (每项标注预估节省)
@@ -243,6 +260,14 @@ def build(onefile=True, console=False, clean_first=False):
     PLUGINS_SRC = os.path.join(SRC, "plugins")
     if os.path.isdir(PLUGINS_SRC):
         cmd += ["--add-data", "{}{}src{}plugins".format(PLUGINS_SRC, os.pathsep, os.sep)]
+    # PaddleOCR.dll 原生后端: 依赖齐全才打包（保持 <15MB 目标）
+    if paddle_dll_packable():
+        cmd += ["--add-data", "{}{}lib{}paddle_ocr".format(PADDLE_DLL_DIR, os.pathsep, os.sep)]
+        print("[PACK] 纳入 lib/paddle_ocr (PaddleOCR.dll 原生后端)")
+    elif os.path.isdir(PADDLE_DLL_DIR):
+        print("[SKIP] lib/paddle_ocr 依赖不全，未打包（缺 {}）".format(
+            ", ".join(f for f in _PADDLE_DLL_REQUIRED
+                      if not os.path.isfile(os.path.join(PADDLE_DLL_DIR, f)))))
     for fp in EXTRA_DATAS:
         if os.path.exists(fp):
             cmd += ["--add-data", "{}{}.".format(fp, os.pathsep)]

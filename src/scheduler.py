@@ -416,7 +416,7 @@ def _refresh_task_tree():
             tid = task["id"]
             nr = _task_next_runs.get(tid, "--")
             lr = _task_last_runs.get(tid, "--")
-            enabled = "✓" if task.get("enabled", True) else "✗"
+            enabled = "✔" if task.get("enabled", True) else "✘"
             # 时间段显示
             slots = task.get("time_slots", [])
             slots_str = ", ".join("{}-{}".format(s, e) for s, e in slots) if slots else "全天"

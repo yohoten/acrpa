@@ -5,7 +5,7 @@
 把操作步骤写进一张 Excel 表格（或用「录制」跑一遍），剩下的交给电脑 —— 图像识别定位、窗口管理、OCR、浏览器自动化、工作流编排、NetLink 多机互联、定时任务与本地 AI 增强全部内置。单文件便携版，免安装，双击即用。
 
 - 项目主页：[`index.html`](index.html) · English：[`index.en.html`](index.en.html)
-- 下载：[GitHub Release](https://github.com/yohoten/acrpa/releases/tag/v0.1.29-beta) · [Gitee 发行版](https://gitee.com/yohoten/ACRPA/releases)
+- 下载：[GitHub Release](https://github.com/yohoten/acrpa/releases/tag/v0.1.29.0) · [Gitee 发行版](https://gitee.com/yohoten/ACRPA/releases)
 
 ![ACRPA 脚本编辑主界面](img/image1.png)
 
@@ -62,12 +62,12 @@
 
 | 渠道 | 链接 |
 | --- | --- |
-| GitHub（推荐） | [Release 页面](https://github.com/yohoten/acrpa/releases/tag/v0.1.29-beta) · 资产直链 [`ACRPA-v0.1.29-beta.exe`](https://github.com/yohoten/acrpa/releases/download/v0.1.29-beta/ACRPA-v0.1.29-beta.exe) |
-| Gitee | [发行版列表页](https://gitee.com/yohoten/ACRPA/releases)（附件陆续补充，可先使用 GitHub 下载） |
+| GitHub（推荐） | [Release 页面](https://github.com/yohoten/acrpa/releases/tag/v0.1.29.0) · 资产直链 [`ACRPA-v0.1.29-beta.exe`](https://github.com/yohoten/acrpa/releases/download/v0.1.29.0/ACRPA-v0.1.29-beta.exe) |
+| Gitee | [发行版列表页](https://gitee.com/yohoten/ACRPA/releases)（本轮已同步代码与 tag `v0.1.29.0`，Release 附件暂未上传，请先用 GitHub 下载） |
 
-**文件名与大小**：`ACRPA-v0.1.29-beta.exe` —— 14,680,412 字节（14.0 MiB / 14.68 MB），便携版，双击即用。
+**文件名与大小**：`ACRPA-v0.1.29-beta.exe` —— 14,707,763 字节（14.03 MiB / 14.71 MB），便携版，双击即用。
 
-**SHA-256**：`f57f1687452affaf2acccb13b67cdf810e28e6ed319eaf1cf37994dd3e283790`
+**SHA-256**：`0ffb41a18b6b55f44659068762bbddc8cc131af02ea70c76f5685ab1cffb98fd`
 
 校验命令：
 
@@ -82,6 +82,19 @@ Get-FileHash .\ACRPA-v0.1.29-beta.exe -Algorithm SHA256
 ### 本版更新摘要（v0.1.29-beta）
 
 完整说明见 [`docs/releases/v0.1.29-beta.md`](docs/releases/v0.1.29-beta.md)。
+
+> **发布口径**：应用版本号仍为 `0.1.29-beta`；因仓库启用了 immutable release，`v0.1.29-beta` 这个 tag 已被上一轮发布过的空 Release 永久占用而不可复用，故本次发布 tag 为 **`v0.1.29.0`**（GitHub Release 以 Pre-release 形式发布，下载直链以 [`VERSION`](VERSION) 声明为准）。本次附件为 **2026-10-03 重新构建**的产物，程序内自报版本已修正为 `0.1.29-beta`（不再出现 v0.1.28-beta 时期的自报错配）。
+
+**本次构建新增（2026-10-03）**
+
+1. **界面美化**：色板与设计令牌扩充，ttk 按钮统一为扁平 + 1px 描边 + 键盘焦点环 + hover 双变化；树形列表新增选中左缘 2px 强调条与行 hover；`show="headings"` 列表降级为整行加粗；日志新增级别徽标（ⓘ / ✔ / ⚠ / ✘）；UI 缩放切换后样式与图标自动重建。
+2. **底部常驻日志面板 + 常驻执行控制工具栏**：日志面板从「执行控制」Tab 迁移到底部常驻（两个 Tab 共用），支持一键收起 / 展开与拖高（默认 160 px、最小 60 px）；▶ 运行 / ■ 停止 按钮按当前激活 Tab 自动分派脚本或工作流。
+3. **设置窗口优化（P0）**：保存失败自动定位并高亮出错卡片；新增「高级设置」可折叠卡片（执行 / 录制 / OCR / 浏览器 / 定时 / DD）；新增 OCR 真实状态行与「刷新状态 / 重置后端」；数值项越界自动回退默认值。
+4. **PaddleOCR.dll 原生 OCR 后端（可选，默认关闭）**：新增 `src/paddle_dll.py`（ctypes 封装 `PaddleOCR.dll` 导出），DLL 目录 / 模型目录 / 调用原型 / 许可证均可配，初始化与推理先在子进程预检以隔离崩溃；依赖或模型缺失时静默回退，默认配置行为与旧版一致。打包侧仅在 `lib/paddle_ocr` 集齐原生依赖时才随包分发。
+5. **AI 与稳定性修复**：AI 密钥可用性统一为单一真源 `has_ai_key()`（带缓存失效），未配置密钥时给出明确提示；AI 生成脚本统一经 `normalize_ai_output` 规范化并区分「生成成功 / 认证失败」；DD 驱动与 PyAutoGUI 输入、代码执行日志细化，DLL 缺失或加载失败给出明确回退提示。
+6. **文档与截图**：新增 UI 美化、设置窗口优化、底部常驻日志面板、PaddleOCR.dll 使用说明四篇文档；更新首页截图（`img/image1.png`、`img/image3.png`、`img/image5.png`）。
+
+**v0.1.29-beta 基线（上一发布附件所含功能）**
 
 **一、NetLink 多设备互联（新增，纯标准库零新增依赖）**
 

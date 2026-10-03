@@ -69,7 +69,7 @@ class DDBackend:
             dll_path = self._find_dd_dll()
 
         if not dll_path:
-            log1("⚠️ DD驱动DLL未找到，将使用PyAutoGUI后端", "warning")
+            log1("⚠ DD驱动DLL未找到，将使用PyAutoGUI后端", "warning")
             return
 
         try:
@@ -84,12 +84,12 @@ class DDBackend:
             result = self.dd_dll.DD_btn(0)
             if result == 1:
                 self.enabled = True
-                log1("✅ DD驱动初始化成功 (内核级输入后端已启用)", "success")
+                log1("✔ DD驱动初始化成功 (内核级输入后端已启用)", "success")
             else:
-                log1("⚠️ DD驱动初始化失败，回退到PyAutoGUI", "warning")
+                log1("⚠ DD驱动初始化失败，回退到PyAutoGUI", "warning")
 
         except Exception as e:
-            log1(f"⚠️ DD驱动加载错误: {e}，回退到PyAutoGUI", "warning")
+            log1(f"⚠ DD驱动加载错误: {e}，回退到PyAutoGUI", "warning")
             self.enabled = False
 
     def _find_dd_dll(self) -> Optional[str]:

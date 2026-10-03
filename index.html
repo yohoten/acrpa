@@ -1845,14 +1845,15 @@
      效果；如需 SEO 精确，请在发版时另行维护站点侧的静态快照。
      两个语言页面各自维护一份单一源，互不共享。 */
   var ACRPA_RELEASE = {
-    version: "0.1.28-beta",      // 唯一权威字面量：展示用版本号（可含预发布后缀）
-    date: "2026-10-01",          // 发布日期
+    version: "0.1.29-beta",      // 唯一权威字面量：展示用版本号（可含预发布后缀）
+    date: "2026-10-03",          // 发布日期
+    tag: "v0.1.29.0",            // 显式覆盖：本仓库 release 不可变，v0.1.29-beta 的 tag 已被占用
     ghUser: "yohoten",
     ghRepo: "acrpa"
   };
-  // tag 与附件名由 version 派生，避免同一版本号在本文件重复出现
-  ACRPA_RELEASE.tag = "v" + ACRPA_RELEASE.version;                  // GitHub Release tag
-  ACRPA_RELEASE.asset = "ACRPA-v" + ACRPA_RELEASE.version + ".exe"; // Release 附件名
+  // tag 与附件名由 version 派生（可用上面的 tag 覆盖），避免同一版本号在本文件重复出现
+  ACRPA_RELEASE.tag = ACRPA_RELEASE.tag || ("v" + ACRPA_RELEASE.version); // GitHub Release tag
+  ACRPA_RELEASE.asset = "ACRPA-v" + ACRPA_RELEASE.version + ".exe";       // Release 附件名
 
   // —— 渲染版本号 / 日期 / 下载直链 ——
   (function(){

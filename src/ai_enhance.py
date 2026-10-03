@@ -63,6 +63,15 @@ def _get_ai_client():
         return None
 
 
+def _has_ai_key():
+    """是否已配置可用 AI 密钥（与 ai_client.has_ai_key 同口径；延迟导入避免环）。"""
+    try:
+        from ai_client import has_ai_key
+        return has_ai_key()
+    except Exception:
+        return bool(state.API_KEY)
+
+
 def _call_ai(messages, temperature=0.3, max_tokens=2000, timeout=90):
     """通用 AI 调用封装"""
     client = _get_ai_client()
@@ -89,7 +98,7 @@ def _call_vision(prompt, screenshot_base64=None, temperature=0.3, max_tokens=200
         if not resolve_api_key():
             return None
     except Exception:
-        if not state.API_KEY:
+        if not _has_ai_key():
             return None
 
     messages = []
@@ -262,7 +271,7 @@ def ai_smart_retry(cmd_type, cmd_args, error_msg, script_dir, attempt, max_attem
     Returns:
         dict 或 None: {"action": "retry/modify/skip", "modified_args": [...], "reason": "..."}
     """
-    if not state.API_KEY:
+    if not _has_ai_key():
         return None
 
     log1("AI 智能重试分析: {} (尝试 {}/{})".format(cmd_type, attempt, max_attempts))
@@ -355,11 +364,11 @@ class AIAnomalyDetector:
 
     @property
     def enabled(self):
-        return self._enabled and bool(state.API_KEY)
+        return self._enabled and _has_ai_key()
 
     def enable(self):
-        if not state.API_KEY:
-            log1("AI 异常检测需要配置 API Key", "warning")
+        if not _has_ai_key():
+            log1("AI 异常检测需要配置可用的 AI 密钥", "warning")
             return False
         self._enabled = True
         self._history.clear()
@@ -413,7 +422,7 @@ class AIAnomalyDetector:
         """AI 深度分析执行异常"""
         summary_lines = ["最近 {} 条命令执行记录:".format(len(recent))]
         for r in recent:
-            status = "✗" if not r["success"] else "✓"
+            status = "✘" if not r["success"] else "✔"
             summary_lines.append("  {} 行{} {} {}ms".format(
                 status, r["row"], r["cmd"], r["elapsed_ms"]))
 
@@ -488,8 +497,8 @@ def ai_optimize_script(exec_timings, variables_snapshot=None):
     if not exec_timings:
         return "没有可用的执行数据"
 
-    if not state.API_KEY:
-        return "需要配置 API Key 才能使用 AI 优化功能"
+    if not _has_ai_key():
+        return "未配置可用的 AI 密钥（请在设置中配置提供商与密钥），无法使用 AI 优化功能"
 
     log1("AI 流程优化分析: {} 条执行记录...".format(len(exec_timings)))
 
@@ -506,7 +515,7 @@ def ai_optimize_script(exec_timings, variables_snapshot=None):
         success = tdata.get("success", True)
         total_time += elapsed
         lines.append("行{}: {} {:.2f}s {}".format(
-            row_num, cmd, elapsed, "✓" if success else "✗"))
+            row_num, cmd, elapsed, "✔" if success else "✘"))
         slowest.append((row_num, cmd, elapsed))
         if not success:
             failures.append((row_num, cmd))
@@ -547,7 +556,7 @@ def ai_optimize_script(exec_timings, variables_snapshot=None):
         len(sorted_rows), total_time,
         ", ".join("行{} {}".format(r, c) for r, c in failures) if failures else "无",
         "\n".join("  - 行{}: {} ({:.1f}s)".format(r, c, e) for r, c, e in slowest),
-        "\n".join("  - 行{}: {} ✗".format(r, c) for r, c in failures) if failures else "无",
+        "\n".join("  - 行{}: {} ✘".format(r, c) for r, c in failures) if failures else "无",
         "\n".join(lines),
     )
 
@@ -576,8 +585,8 @@ def ai_debug_explain(question, exec_timings=None, log_buffer=None, variables=Non
     Returns:
         str: AI 分析结果
     """
-    if not state.API_KEY:
-        return "需要配置 API Key 才能使用 AI 调试功能"
+    if not _has_ai_key():
+        return "未配置可用的 AI 密钥（请在设置中配置提供商与密钥），无法使用 AI 调试功能"
 
     log1("AI 自然语言调试: '{}'".format(question))
 
@@ -588,7 +597,7 @@ def ai_debug_explain(question, exec_timings=None, log_buffer=None, variables=Non
         sorted_rows = sorted(exec_timings.items(), key=lambda x: x[0])
         context_parts.append("## 执行记录")
         for row_num, tdata in sorted_rows:
-            status = "✓" if tdata.get("success", True) else "✗"
+            status = "✔" if tdata.get("success", True) else "✘"
             context_parts.append("行{}: {} ({:.2f}s) {}".format(
                 row_num, tdata.get("cmd", "?"), tdata.get("elapsed", 0), status))
 

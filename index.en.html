@@ -1848,14 +1848,15 @@
      snapshot on the site side at release time.
      The two language pages each keep their own single source and do not share. */
   var ACRPA_RELEASE = {
-    version: "0.1.28-beta",      // SINGLE source of truth: version for display (may include a pre-release suffix)
-    date: "2026-10-01",          // release date
+    version: "0.1.29-beta",      // SINGLE source of truth: version for display (may include a pre-release suffix)
+    date: "2026-10-03",          // release date
+    tag: "v0.1.29.0",            // explicit override: releases are immutable here, the v0.1.29-beta tag is taken
     ghUser: "yohoten",
     ghRepo: "acrpa"
   };
-  // tag and asset filename derive from version, avoiding a repeated version literal
-  ACRPA_RELEASE.tag = "v" + ACRPA_RELEASE.version;                  // GitHub Release tag
-  ACRPA_RELEASE.asset = "ACRPA-v" + ACRPA_RELEASE.version + ".exe"; // Release asset filename
+  // tag and asset filename derive from version (overridable by the tag above)
+  ACRPA_RELEASE.tag = ACRPA_RELEASE.tag || ("v" + ACRPA_RELEASE.version); // GitHub Release tag
+  ACRPA_RELEASE.asset = "ACRPA-v" + ACRPA_RELEASE.version + ".exe";       // Release asset filename
 
   // —— render version / date / download link ——
   (function(){

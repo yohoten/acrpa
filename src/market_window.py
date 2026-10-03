@@ -57,7 +57,7 @@ CATEGORIES = ("全部", "办公", "财务", "系统", "其他")
 # 分类 → 主题色 token (设计 §3.3 分类色条)
 _CATEGORY_TOKEN = {"办公": "ac", "财务": "wn", "系统": "fgm", "其他": "bd"}
 # 分类 → 默认图标 (无 icon 字段时的占位)
-_CATEGORY_EMOJI = {"办公": "📄", "财务": "💰", "系统": "⚙", "其他": "🧩"}
+_CATEGORY_EMOJI = {"办公": "☰", "财务": "¥", "系统": "⚙", "其他": "▩"}
 
 # 强调底色按钮上的文字色 (与既有工具栏按钮同款写法，非 hex 硬编码)
 _ON_ACCENT = "white"
@@ -81,11 +81,11 @@ def _category_color(category):
 
 
 def _category_icon(info):
-    """卡片图标：优先 info.icon，缺省回退分类 emoji。"""
+    """卡片图标：优先 info.icon，缺省回退分类图标。"""
     icon = (getattr(info, "icon", "") or "").strip()
     if icon:
         return icon
-    return _CATEGORY_EMOJI.get(getattr(info, "category", ""), "🧩")
+    return _CATEGORY_EMOJI.get(getattr(info, "category", ""), "▩")
 
 
 def _star_text(rating):

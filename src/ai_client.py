@@ -400,14 +400,45 @@ def resolve_api_key():
     return getattr(state, "API_KEY", "") or ""
 
 
+# ── 是否已配置可用密钥的单一真源（带轻量缓存，避免热路径重复读取凭据库）──
+_has_key_cache = None  # None=未缓存；True/False=已缓存结果
+
+
+def _invalidate_key_cache():
+    """使 has_ai_key 的缓存失效（密钥/提供商变更后调用）。"""
+    global _has_key_cache
+    _has_key_cache = None
+
+
+def refresh_key_cache():
+    """外部主动刷新 has_ai_key 缓存，下次调用将重新探测密钥可用性。"""
+    _invalidate_key_cache()
+
+
+def has_ai_key():
+    """是否已配置可用 AI 密钥（与 resolve_api_key 同口径：凭据库优先，state.API_KEY 回退）。
+
+    结果经模块级 _has_key_cache 缓存；set_provider_key/clear_provider_key 会自动失效，
+    亦可调用 refresh_key_cache() 手动刷新。缓存目的在于：当守卫被反复评估时（例如
+    执行引擎每次判定是否启用 AI 能力）避免重复读取 Windows 凭据库。
+    """
+    global _has_key_cache
+    if _has_key_cache is None:
+        _has_key_cache = bool(resolve_api_key())
+    return _has_key_cache
+
+
 def set_provider_key(pid, key):
     """把某提供商的密钥写入 Windows 凭据库；失败/空返回 False，不抛。"""
     if not pid or not key:
         return False
     try:
-        return bool(state.cred_write(_key_target(pid), key))
+        ok = bool(state.cred_write(_key_target(pid), key))
     except Exception:
         return False
+    if ok:
+        _invalidate_key_cache()
+    return ok
 
 
 def get_provider_key(pid):
@@ -428,6 +459,7 @@ def clear_provider_key(pid):
         state.cred_delete(_key_target(pid))
     except Exception:
         pass
+    _invalidate_key_cache()
 
 
 def create_client_active():

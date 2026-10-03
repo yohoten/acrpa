@@ -23,6 +23,9 @@ _config_schema = [
     ("app_protect",     True,           bool),
     ("check_update",    True,           bool),
     ("use_dd_driver",   False,          bool),
+    # DD 内核驱动的 DLL 哈希固定（可选）：非空时加载前强制校验，不符即拒绝加载。
+    # 留空 = 只做"安装目录内 + PE 头 + 体积"静态预检（见 dd_backend._preflight）。
+    ("dd_dll_sha256",   "",             str),
     ("dd_dll_path",     "",             str),
     ("sched_enabled",   False,          bool),
     ("sched_hour",      9,              int),

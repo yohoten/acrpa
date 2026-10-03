@@ -12,6 +12,8 @@ Note: Image recognition uses Pillow backend (not OpenCV) to reduce package size.
       Performance is slightly slower (~150-200ms vs ~100ms) but sufficient for RPA tasks.
 """
 import os, time, datetime, re
+import collections
+import threading
 import state
 from utils import _safe_get, log1
 import commands
@@ -160,6 +162,19 @@ _cv2_checked = False
 _cv2_ok = False
 _cv2_hint_logged = False
 
+def _make_point(x, y):
+    """构造带 .x / .y 的坐标对象。
+
+    缓存命中时必须返回与 pyautogui 同形的对象 —— 调用方 (engine._image_search_loop、
+    acrpa_api.find_image) 按 loc.x / loc.y 取值。pyautogui 未装载时退化为同名
+    namedtuple, 属性访问语义一致。
+    """
+    try:
+        return get_pyautogui().Point(x, y)
+    except Exception:
+        return _Point(int(x), int(y))
+
+
 def _has_cv2():
     """Return True if OpenCV is importable (needed for confidence matching)."""
     global _cv2_checked, _cv2_ok
@@ -207,12 +222,34 @@ def get_dd_backend():
     return _dd_backend
 
 
+_dd_gate_hint_logged = False
+
+
+def dd_allowed():
+    """按用户设置判断是否允许启用 DD 内核驱动 → (allowed, reason)。
+
+    策略的**唯一实现**在 dd_backend.dd_allowed（避免两处各判一套而漂移）；
+    这里只是给引擎内部一个免 import 的入口。
+    """
+    try:
+        from dd_backend import dd_allowed as _allowed
+        return _allowed()
+    except Exception as e:
+        return False, "策略模块不可用, 保守起见不加载内核驱动: {}".format(e)
+
+
 # P0 Optimization #3: Image location cache with LRU eviction
-# Format: {image_path: (x, y, timestamp)}
+# 键: (img_path, confidence, region, grayscale) —— 必须含全部影响定位结果的参数。
+#     旧实现只用 img_path, 于是"全屏找到 A"会污染"区域限定找 A"的结果 (反之亦然),
+#     在轮询场景里表现为"明明限制了区域却点到别处"。
+# 值: (x, y, timestamp)
+# 线程安全: 执行线程与 NetLink 远端执行可能并发调用, 读写一律走 _cache_lock。
+_Point = collections.namedtuple("_Point", "x y")
 _image_cache = {}
 _CACHE_TTL = 5.0       # Cache validity in seconds
 _CACHE_MAX = 50         # Maximum cache entries (LRU eviction)
-_CACHE_ORDER = []       # LRU access order list
+_CACHE_ORDER = []       # LRU access order list (存缓存键)
+_cache_lock = threading.Lock()
 
 
 # P1 Enhancement: Event-driven variable watcher
@@ -826,29 +863,56 @@ class ExecutionEngine:
             time.sleep(0.05)
         return True
 
-    def _find_cached(self, img_path, confidence, region=None, grayscale=True):
+    @staticmethod
+    def _cache_key(img_path, confidence, region, grayscale):
+        """定位结果的缓存键: 必须包含全部会改变结果的输入。
+
+        region 传入的是 list/tuple, 统一成 tuple 才能作键; confidence 归一到 4 位小数,
+        避免 0.9600000001 与 0.96 被当成两次不同的查找白占缓存。
         """
-        Find image with LRU-caching support (max {} entries).
+        try:
+            conf = round(float(confidence), 4)
+        except Exception:
+            conf = 0.96
+        try:
+            reg = tuple(region) if region else None
+        except Exception:
+            reg = None
+        return (str(img_path), conf, reg, bool(grayscale))
+
+    def _find_cached(self, img_path, confidence, region=None, grayscale=True):
+        """Find image with LRU-caching support (max {} entries).
+
         Returns pyautogui Point object (with .x/.y attributes) or None.
         """.format(_CACHE_MAX)
         now = time.time()
-        
+        key = self._cache_key(img_path, confidence, region, grayscale)
+
         # Check cache first
-        if img_path in _image_cache:
-            x, y, ts = _image_cache[img_path]
-            if now - ts < _CACHE_TTL:
-                # LRU: move to end (most recently used)
-                if img_path in _CACHE_ORDER:
-                    _CACHE_ORDER.remove(img_path)
-                _CACHE_ORDER.append(img_path)
-                log1("使用缓存位置: {} ({:.0f}ms)".format(img_path, (now - ts) * 1000))
-                return (x, y)
-            else:
-                # Cache expired, remove it
-                del _image_cache[img_path]
-                if img_path in _CACHE_ORDER:
-                    _CACHE_ORDER.remove(img_path)
-        
+        cached = None
+        with _cache_lock:
+            hit = _image_cache.get(key)
+            if hit is not None:
+                if now - hit[2] < _CACHE_TTL:
+                    x, y, ts = hit
+                    # LRU: move to end (most recently used)
+                    if key in _CACHE_ORDER:
+                        _CACHE_ORDER.remove(key)
+                    _CACHE_ORDER.append(key)
+                    cached = (x, y, ts)
+                else:
+                    # Cache expired, remove it
+                    del _image_cache[key]
+                    if key in _CACHE_ORDER:
+                        _CACHE_ORDER.remove(key)
+        if cached is not None:
+            log1("使用缓存位置: {} ({:.0f}ms)".format(img_path, (now - cached[2]) * 1000))
+            # 必须返回与 pyautogui 同形的对象: 调用方按 loc.x / loc.y 取值,
+            # 旧实现 return (x, y) 会让缓存命中直接抛
+            # AttributeError: 'tuple' object has no attribute 'x'
+            # (找图/区域找图/点图/区域点图 四条命令在 TTL 内重复搜索必崩)。
+            return _make_point(cached[0], cached[1])
+
         # Not in cache or expired, perform actual search
         pa = get_pyautogui()
         if _has_cv2():
@@ -864,17 +928,20 @@ class ExecutionEngine:
                      "安装 opencv-python 可启用相似度匹配", "warning")
             loc = pa.locateCenterOnScreen(img_path,
                                          region=region, grayscale=grayscale)
-        
+
         if loc:
-            # LRU eviction: if cache is full, remove oldest entry
-            if len(_image_cache) >= _CACHE_MAX:
-                oldest = _CACHE_ORDER.pop(0) if _CACHE_ORDER else None
-                if oldest and oldest in _image_cache:
-                    del _image_cache[oldest]
-            # Update cache
-            _image_cache[img_path] = (loc.x, loc.y, now)
-            _CACHE_ORDER.append(img_path)
-        
+            with _cache_lock:
+                # LRU eviction: if cache is full, remove oldest entry
+                if len(_image_cache) >= _CACHE_MAX:
+                    oldest = _CACHE_ORDER.pop(0) if _CACHE_ORDER else None
+                    if oldest is not None:
+                        _image_cache.pop(oldest, None)
+                # Update cache (同一键先摘掉旧位置, 避免 LRU 表里出现重复键)
+                if key in _CACHE_ORDER:
+                    _CACHE_ORDER.remove(key)
+                _image_cache[key] = (loc.x, loc.y, now)
+                _CACHE_ORDER.append(key)
+
         return loc
 
     def _image_search_loop(self, row, z, action="hover", region=False,
@@ -1015,18 +1082,30 @@ class ExecutionEngine:
             mode = "auto"
         
         # Try DD backend first if enabled and mode allows
-        dd = get_dd_backend()
+        # 门禁: 只有用户显式启用 (use_dd_driver=True 或 input_mode=dd) 才允许加载/使用
+        # 内核驱动; 关闭时连 DLL 都不去碰 (dd_backend 侧同样有一层兜底)。
+        dd = None
         dd_success = False
-        
-        if dd and dd.enabled and mode in ["auto", "direct"]:
-            # Use DD driver for faster input
-            dd_mode = "auto" if mode == "auto" else mode
-            dd_success = dd.type_text(text, mode=dd_mode)
-            
-            if dd_success:
-                log1("✔ 使用DD驱动写入({}模式): {}".format(dd_mode, text[:30] + "..." if len(text) > 30 else text))
-                return
-        
+        if mode in ["auto", "direct"]:
+            allowed, why_dd = dd_allowed()
+            if allowed:
+                dd = get_dd_backend()
+                if dd and dd.enabled:
+                    dd_mode = "auto" if mode == "auto" else mode
+                    dd_success = dd.type_text(text, mode=dd_mode)
+                    if dd_success:
+                        log1("✔ 使用DD驱动写入({}模式): {}".format(
+                            dd_mode, text[:30] + "..." if len(text) > 30 else text))
+                        return
+                elif dd is not None:
+                    reason = getattr(dd, "disabled_reason", "") or "未启用或不可用"
+                    log1("DD驱动不可用({}), 本次写入回退 PyAutoGUI".format(reason), "warning")
+            else:
+                global _dd_gate_hint_logged
+                if not _dd_gate_hint_logged:
+                    _dd_gate_hint_logged = True
+                    log1("未启用 DD 内核驱动, 写入使用 PyAutoGUI ({})".format(why_dd))
+
         # Fallback to PyAutoGUI
         if not dd_success:
             pa = get_pyautogui()

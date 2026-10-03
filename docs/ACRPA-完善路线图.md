@@ -593,4 +593,50 @@ UI 层 7 个文件全量通读（`ACRPA.py`、`settings_window.py`、`dialogs.py
 |---|---|
 | `d205d81` | 更新链路 sha256/exe 修复、测试 runner + CI、6 条陈旧断言修正 |
 | `9555be6` | 命令参数 schema、ACRPA.py 拆分第一阶段（Mini Bar 出模块） |
-| 本次 | AI 生成失败修复、编辑区缩放、通用快捷键、本文档增量与勘误 |
+| `c10d747` | AI 生成失败修复、编辑区缩放、通用快捷键、§11 增量与勘误 |
+| 本次 | **P0-1 找图缓存**、**P0-2 DD 驱动门禁**（阶段一前两条） |
+
+---
+
+## 12. 阶段一进展：P0-1 / P0-2 已修复（2026-10-03 深夜批次）
+
+### 12.1 P0-1 找图缓存 —— 类型 / 键 / 锁
+
+| 缺陷 | 修法 |
+|---|---|
+| 缓存命中 `return (x, y)`，调用方按 `.x/.y` 取值 → 命中必崩 | 新增 `_make_point()`，返回 `pyautogui.Point`；pyautogui 不可用时退化为同名 namedtuple（属性语义一致） |
+| 缓存键只有 `img_path` → 区域/精度/灰度互相污染 | 键改为 `(img_path, confidence, region, grayscale)`，confidence 归一化到 4 位小数、region 归一化为 tuple |
+| `_image_cache` / `_CACHE_ORDER` 无锁，执行线程与 NetLink 远端执行可并发 | 新增 `_cache_lock`，命中/写入/淘汰全部临界区化；写入路径去重，避免 LRU 表堆积重复键 |
+
+**回归**：`tools/_test_p0_cache_dd.py` C1–C6（含"命中不再触发真实找图"、"四种参数各成一条缓存"、
+"TTL 过期重查"、"LRU 上限 50"、"8 线程 × 200 次并发无异常且键不串"）。
+
+### 12.2 P0-2 DD 内核驱动门禁
+
+| 缺陷 | 修法 |
+|---|---|
+| `engine._write` 无条件 `get_dd_backend()`，`INPUT_MODE`/`USE_DD_DRIVER` 引擎零读取 → 用户关掉的内核驱动仍在加载使用 | 策略唯一实现 `dd_backend.dd_allowed()`（`use_dd_driver=True` 或 `input_mode=dd` 才允许）；`_write` 先过门禁，未启用时**连 DLL 都不碰**；未启用提示只打一次 |
+| `get_dd_backend()` 一次调用就搜索并 `LoadLibrary` | 新增 `allow_load=False` 通道：未启用时返回 `enabled=False` 的实例并给出 `disabled_reason`，不触发任何加载副作用 |
+| `_find_dd_dll` 把 `os.getcwd()` 纳入搜索 → DLL 植入面 | 搜索路径仅保留安装目录（`lib/dd_driver` 与包根）；安装目录外的 DLL 除非用户显式指定，否则**拒绝加载**（显式指定也会告警留痕） |
+| 加载前无完整性校验 | 新增 `_preflight()` 静态预检：存在性 + PE 头 + 体积下限 + 安装目录约束 + 可选 `dd_dll_sha256` 固定（新配置键，留空即只做前三项） |
+
+**有意偏离路线图的建议**：路线图建议照搬 `paddle_dll` 的**子进程预加载**来隔离崩溃。这里**没有**采用 ——
+DD 是内核驱动，加载会安装/启动系统服务，在临时子进程里试跑可能留下副作用，二次加载语义也不明。
+改为**无副作用的静态预检**（同上表末行）。如果后续确有必要做进程隔离，应连同"驱动服务如何卸载"一起设计。
+
+**回归**：同文件 D1–D9（门禁四种组合、DD 失败必须回退不丢字、未启用时连搜索都不做、
+`getcwd` 已从搜索路径移除、哈希不符/非 PE/过小/目录外四类拒绝）。
+`acrpa_api.type_text` 走的是同一条 `engine._write`，因此 Python 扩展路径同样受门禁约束。
+
+### 12.3 阶段一剩余项
+
+| 项 | 状态 |
+|---|---|
+| P0-1 找图缓存类型 + 键 + 锁 | ✅ 本次完成 |
+| P0-2 DD 驱动门禁接线 | ✅ 本次完成 |
+| P0-3 版本比较统一（`script_package.version_tuple` 预发布 → `(0,0,0)`） | ⬜ 待做（§11.4 已更正其影响面） |
+| P0-4 引擎测试接入 CI | ⬜ 待做（判定方式仍按文件名前缀） |
+| P0-5 停止语义强化（`_chk()` 返回值被丢弃） | ⬜ 待做 |
+| P0-6 脚本保存原子化（无 `os.replace` / 无备份） | ⬜ 待做 |
+| P0-7 失效设置项（`recording_stop_hotkey` / `ocr_preload` / `market_auto_check_update`） | ⬜ 待做（`input_mode`/`use_dd_driver` 已随 P0-2 生效） |
+| 安全 #3 配对暴破限流、#6 下载文件名净化 | ⬜ 待做 |

@@ -22,6 +22,7 @@ Note: Requires dd.54900.dll in project directory and admin privileges.
 
 import os
 import ctypes
+import hashlib
 from typing import Optional
 from utils import log1
 
@@ -54,23 +55,40 @@ class DDBackend:
         "middle_up": 32,
     }
 
-    def __init__(self, dll_path: str = None):
+    def __init__(self, dll_path: str = None, allow_load: bool = True):
         """
         Initialize DD Backend
 
         Args:
             dll_path: Path to dd.XXXXX.dll file. If None, searches common locations.
+            allow_load: False 时完全不碰 DLL（用户未启用内核驱动），只置 enabled=False。
         """
         self.enabled = False
         self.dd_dll = None
+        self.dll_path = ""
+        self.disabled_reason = ""
 
+        if not allow_load:
+            self.disabled_reason = "用户未启用 DD 内核驱动"
+            return
+
+        explicit = bool(dll_path)
         # Auto-detect DLL path
         if dll_path is None:
             dll_path = self._find_dd_dll()
 
         if not dll_path:
             log1("⚠ DD驱动DLL未找到，将使用PyAutoGUI后端", "warning")
+            self.disabled_reason = "未找到 DLL"
             return
+
+        ok, why = self._preflight(dll_path, explicit=explicit)
+        if not ok:
+            log1("⚠ DD驱动未通过加载前预检, 不加载: {}".format(why), "error")
+            self.disabled_reason = why
+            return
+        self.dll_path = dll_path
+        log1("[o] DD驱动预检通过: {} ({})".format(os.path.basename(dll_path), why))
 
         try:
             # Load DD driver DLL
@@ -87,10 +105,56 @@ class DDBackend:
                 log1("✔ DD驱动初始化成功 (内核级输入后端已启用)", "success")
             else:
                 log1("⚠ DD驱动初始化失败，回退到PyAutoGUI", "warning")
+                self.disabled_reason = "驱动初始化返回 {}".format(result)
 
         except Exception as e:
             log1(f"⚠ DD驱动加载错误: {e}，回退到PyAutoGUI", "warning")
             self.enabled = False
+            self.disabled_reason = "加载异常: {}".format(e)
+
+    def _preflight(self, path: str, explicit: bool = False):
+        """加载前的**静态**预检（不加载 DLL）→ (ok, 说明)。
+
+        为什么不是"子进程预加载"（paddle_dll 的做法）：DD 是**内核驱动**，加载会安装/
+        启动系统服务；在临时子进程里试跑可能留下副作用，且二次加载语义不明。这里只做
+        无副作用的校验：文件存在 / PE 头 / 体积下限 / 安装目录约束 / 可选 sha256 固定。
+        """
+        try:
+            import state as _state
+        except Exception:
+            _state = None
+        try:
+            if not os.path.isfile(path):
+                return False, "文件不存在: {}".format(path)
+            if os.path.getsize(path) < 4096:
+                return False, "文件过小({} 字节), 疑似占位或损坏".format(os.path.getsize(path))
+            with open(path, "rb") as f:
+                if f.read(2) != b"MZ":
+                    return False, "不是有效的 PE 文件 (缺少 MZ 头)"
+
+            install_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+            inside = os.path.abspath(path).lower().startswith(install_root.lower())
+            if not inside:
+                if explicit:
+                    # 用户显式指定的路径予以尊重, 但必须留痕 (可审计)
+                    log1("⚠ DD驱动 DLL 位于安装目录之外, 请确认来源可信: {}".format(path),
+                         "warning")
+                else:
+                    return False, "DLL 不在安装目录内, 拒绝加载 (防 DLL 植入)"
+
+            digest = _sha256_file(path)
+            expect = ""
+            if _state is not None:
+                expect = str(getattr(_state, "DD_DLL_SHA256", "") or "").strip().lower()
+            if expect:
+                if digest != expect:
+                    return False, "sha256 与配置不符 (期望 {}… 实际 {}…)".format(
+                        expect[:12], digest[:12])
+                return True, "sha256 校验通过 ({})".format(digest[:12] + "…")
+            return True, "sha256 {}… (如需固定, 把该值写入设置里的 dd_dll_sha256)".format(
+                digest[:12])
+        except Exception as e:
+            return False, "预检异常: {}".format(e)
 
     def _find_dd_dll(self) -> Optional[str]:
         """
@@ -99,12 +163,13 @@ class DDBackend:
         Returns:
             DLL path if found, None otherwise
         """
-        # Search paths in order of preference
+        # 只在安装目录周边搜索。
+        # 旧实现把 os.getcwd() 也纳入搜索 —— 那意味着"脚本目录里放一个同名
+        # dd63330.dll" 就会被加载执行, 属于典型的 DLL 植入面, 已移除。
+        base = os.path.dirname(os.path.abspath(__file__))
         search_paths = [
-            os.path.join(os.path.dirname(__file__), "..", "lib", "dd_driver"),
-            os.path.join(os.path.dirname(__file__), ".."),
-            os.path.join(os.getcwd(), "lib", "dd_driver"),
-            os.getcwd(),
+            os.path.join(base, "..", "lib", "dd_driver"),
+            os.path.join(base, ".."),
         ]
 
         # Common DLL filenames (include dd63330.dll shipped in lib/dd_driver)
@@ -362,22 +427,58 @@ class DDBackend:
 _dd_instance: Optional[DDBackend] = None
 
 
-def get_dd_backend() -> DDBackend:
-    """
-    Get or create DD Backend singleton instance
+def _sha256_file(path: str) -> str:
+    """文件 sha256 (十六进制小写); 读失败返回空串。"""
+    try:
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for blk in iter(lambda: f.read(1 << 20), b""):
+                h.update(blk)
+        return h.hexdigest()
+    except Exception:
+        return ""
 
-    Returns:
-        DDBackend instance
+
+def dd_allowed():
+    """按用户设置判断是否允许启用 DD 内核驱动 → (allowed, reason)。
+
+    这是**唯一**的策略判定点: engine 与任何未来调用方都应走这里, 避免各处各判一套。
+    DD 是内核态驱动, 加载有系统级副作用, 因此默认（配置缺省）就是不允许。
+    """
+    try:
+        import state
+        mode = str(getattr(state, "INPUT_MODE", "") or "").strip().lower()
+        flag = bool(getattr(state, "USE_DD_DRIVER", False))
+    except Exception as e:
+        return False, "读取配置失败, 保守起见不加载内核驱动: {}".format(e)
+    if flag:
+        return True, "use_dd_driver=True"
+    if mode == "dd":
+        return True, "input_mode=dd"
+    return False, "input_mode={!r}, use_dd_driver={}".format(mode, flag)
+
+
+def get_dd_backend(force: bool = False) -> DDBackend:
+    """Get or create DD Backend singleton instance.
+
+    force=False（缺省）时先过用户设置门禁: 未启用则**完全不碰 DLL**, 直接返回一个
+    enabled=False 的实例（内核驱动的加载本身就有副作用, 不能被"顺手初始化"触发）。
     """
     global _dd_instance
     if _dd_instance is None:
-        # 优先使用用户在设置页「高级设置」中配置的 DLL 路径
-        try:
-            import state
-            dll = getattr(state, "DD_DLL_PATH", "") or None
-        except Exception:
-            dll = None
-        _dd_instance = DDBackend(dll_path=dll)
+        allowed, reason = dd_allowed()
+        if not allowed and not force:
+            log1("DD 内核驱动未启用, 跳过加载 ({})".format(reason))
+            _dd_instance = DDBackend(allow_load=False)
+            _dd_instance.disabled_reason = reason
+        else:
+            # 优先使用用户在设置页「高级设置」中配置的 DLL 路径
+            try:
+                import state
+                dll = getattr(state, "DD_DLL_PATH", "") or None
+            except Exception:
+                dll = None
+            _dd_instance = DDBackend(dll_path=dll)
     return _dd_instance
 
 

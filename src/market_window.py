@@ -124,6 +124,61 @@ def _toast(parent, msg, kind="info"):
 
 
 # ══════════════════════════════════════════════════════════════════════
+# 已装脚本更新自检 (P0-7 接线: state.MARKET_AUTO_CHECK_UPDATE)
+# ══════════════════════════════════════════════════════════════════════
+
+def _installed_local_versions(save_dir):
+    """扫描市场安装目录 → {script_id: local_version}。
+
+    本地版本来源: <market_install_root>/<id>/manifest.json —— 即
+    marketplace._download_and_install_package 的包模式安装落点
+    (script_package.unpack 会把 manifest.json 一并写入安装目录)。
+    读不到清单 / 取不到 id 或 version 的目录一律跳过, 绝不误报。
+    旧单文件安装 (平铺 .xls, 无 manifest) 无法取版本 → 跳过 (限制见模块说明)。
+    """
+    result = {}
+    try:
+        root = mkt.market_install_root(save_dir)
+    except Exception:
+        return result
+    try:
+        names = os.listdir(root)
+    except Exception:
+        return result
+    for name in names:
+        try:
+            d = os.path.join(root, name)
+            if not os.path.isdir(d):
+                continue
+            mf = os.path.join(d, script_package.MANIFEST_NAME)
+            if not os.path.exists(mf):
+                continue
+            with open(mf, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                continue
+            sid = str(data.get("id") or name or "").strip()
+            ver = str(data.get("version") or "").strip()
+            if sid and ver:
+                result[sid] = ver
+        except Exception:
+            continue
+    return result
+
+
+def _collect_updates(save_dir):
+    """对已装脚本逐个问远端是否有新版本 → 可更新 id 列表 (失败静默)。"""
+    out = []
+    for sid, ver in _installed_local_versions(save_dir).items():
+        try:
+            if mkt.check_update(sid, ver):
+                out.append(sid)
+        except Exception:
+            continue
+    return out
+
+
+# ══════════════════════════════════════════════════════════════════════
 # 市场窗口
 # ══════════════════════════════════════════════════════════════════════
 
@@ -464,6 +519,43 @@ class MarketWindow:
         self._all_scripts = list(scripts or [])
         self._build_tag_menu()
         self.rebuild()
+        self._maybe_auto_check_update()
+
+    # ────────────────────────────────────────────────────────────────
+    # 已装脚本更新自检 (后台, 从简呈现)
+    # ────────────────────────────────────────────────────────────────
+    def _maybe_auto_check_update(self):
+        """按 state.MARKET_AUTO_CHECK_UPDATE 在后台查已装脚本更新。
+
+        全程 daemon 线程, 绝不阻塞主线程; 无网络/无已装脚本/异常均静默。
+        结果呈现从简: log1 记录 + 状态栏一行提示 (不新增 UI)。
+        """
+        try:
+            if not getattr(state, "MARKET_AUTO_CHECK_UPDATE", True):
+                return
+        except Exception:
+            return
+
+        def work():
+            try:
+                updates = _collect_updates(self._save_dir())
+            except Exception:
+                updates = []
+            if not updates:
+                return
+            try:
+                log1("脚本市场: {} 个已装脚本可更新".format(len(updates)))
+            except Exception:
+                pass
+            if not self._alive:
+                return
+            msg = "{} 个已装脚本可更新".format(len(updates))
+            try:
+                self.dlg.after(0, lambda: self.status_var.set(msg))
+            except Exception:
+                pass
+
+        threading.Thread(target=work, daemon=True).start()
 
     def _use_builtin(self):
         """错误态下的离线回退：直接载入内置脚本库。"""

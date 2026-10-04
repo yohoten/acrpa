@@ -229,6 +229,87 @@ def unit_peer_store():
           list(getattr(state, "NETLINK_PEERS", []) or []) == saved)
 
 
+# ── 新增：IP + 全局维度限流（闭合 HEAD §7 #3「换 socket 无限暴破」缺口）──
+def rate_limit_tests(A, pin, port):
+    """用例 13/14：多 socket 同 IP 累计触发限流 + 成功配对清零。
+
+    证明：旧实现失败计数仅按 conn 计、断开即清零，攻击者换一个 socket
+    即可无限次猜 6 位 PIN；现由 AuthManager 的 IP/全局维度独立兜底，
+    即使全新连接在锁定期也直接 AUTH_FAIL（reason=locked），不下发
+    challenge、不消耗 nonce。
+    """
+    auth = A._auth
+    ip = "127.0.0.1"
+    per_ip = security.MAX_AUTH_FAILS_PER_IP
+
+    # 隔离手段：清空既有用例可能累计的限流状态（同一进程共用 127.0.0.1）
+    reset = getattr(auth, "reset_rate_limit", None)
+    if callable(reset):
+        reset()
+    # 保证配对窗口仍开启（提供可校验的 PIN/salt）
+    if not A._pair.active:
+        A.open_pair_window()
+
+    # ── 用例 13：5 个「不同 socket」各 1 次错误 PIN（每连接未达 per-conn 上限，
+    #            连接不被关闭）→ 累计触发 IP 维度锁定 ──
+    for _i in range(per_ip):
+        ci = connect(port)
+        do_pair(ci, pin, wrong=True)
+        ci.close()
+    st13 = auth.lock_state(ip)
+    check("13a. 同 IP 经 {} 个不同 socket 各 1 次错误 PIN → IP 锁定生效".format(per_ip),
+          st13.get("locked") is True and int(st13.get("retry_after", 0)) > 0,
+          "state={}".format(st13))
+
+    # 换「全新 socket」提交配对：旧 per-conn 计数对新连接不适用，但 IP 维度拦下
+    c13 = connect(port)
+    c13.send(make_msg(T_AUTH, {"mode": "pair", "node_id": CLI_ID,
+                               "fingerprint": CLI_FP, "name": CLI_NAME}))
+    m13 = c13.wait_any((T_AUTH_CHALLENGE, T_AUTH_FAIL), 2.0)
+    r13 = str((((m13 or {}).get("data") or {}).get("reason")) or "")
+    check("13b. 换新 socket 仍被限流 → AUTH_FAIL(reason 含 locked)，不下发 challenge",
+          m13 is not None and m13.get("t") == T_AUTH_FAIL
+          and m13.get("t") != T_AUTH_CHALLENGE and "locked" in r13,
+          "resp={} reason={!r}".format((m13 or {}).get("t"), r13))
+
+    # 锁定期即使携带 proof，也在入口被拦（reason=locked 而非 bad nonce）
+    # —— 证明拦截发生在「消费 nonce」之前，即锁定期不消耗 nonce。
+    c13b = connect(port)
+    ts13 = int(time.time())
+    c13b.send(make_msg(T_AUTH, {"nonce": security.new_nonce(),
+                                "proof": "0" * 64, "ts": ts13}))
+    m13b = c13b.wait(T_AUTH_FAIL, 2.0)
+    r13b = str((((m13b or {}).get("data") or {}).get("reason")) or "")
+    check("13c. 锁定期 proof 请求入口被拦(reason=locked)，未消耗 nonce",
+          m13b is not None and "locked" in r13b and "nonce" not in r13b,
+          "reason={!r}".format(r13b))
+    c13.close()
+    c13b.close()
+
+    # 复位，避免影响后续用例
+    if callable(reset):
+        reset()
+
+    # ── 用例 14：少量失败（未达阈值）后成功配对 → 该 IP 计数清零 ──
+    c14 = connect(port)
+    do_pair(c14, pin, wrong=True)      # IP fails = 1
+    do_pair(c14, pin, wrong=True)      # IP fails = 2
+    before14 = int(auth._fails_by_ip.get(ip, 0))
+    resp14, _, _ = do_pair(c14, pin)   # 正确 PIN
+    check("14a. 少量失败后正确 PIN → AUTH_OK",
+          resp14 is not None and resp14.get("t") == T_AUTH_OK,
+          "resp={}".format((resp14 or {}).get("t")))
+    after14 = int(auth._fails_by_ip.get(ip, 0))
+    check("14b. 成功配对后该 IP 失败计数清零",
+          before14 >= 1 and after14 == 0,
+          "before={} after={}".format(before14, after14))
+    check("14c. 成功配对后该 IP 未被误锁",
+          auth.lock_state(ip).get("locked") is False)
+    c14.close()
+    if callable(reset):
+        reset()
+
+
 # ── config.json 扫描 ──────────────────────────────────────────────────────
 def scan_config_text():
     path = state.CONFIG_PATH
@@ -458,6 +539,9 @@ def main():
         saw_disconnect = c9.closed(2.0)
         check("9. 连续 5 次错误 PIN → 连接被 A 主动关闭", saw_disconnect)
         c9.close()
+
+        # ── 新增断言 13/14：IP + 全局维度限流（换 socket 不可绕过）+ 成功清零 ──
+        rate_limit_tests(A, pin, A_TCP)
 
         # ── 断言 10：require_auth=False 兼容 ──
         state.NETLINK_REQUIRE_AUTH = False

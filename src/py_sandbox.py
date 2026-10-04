@@ -22,7 +22,8 @@
     PERM_SANDBOX / PERM_TRUSTED / PERM_FULL / VALID_PERMS
     FORBIDDEN_CALLS / FORBIDDEN_ATTR_CALLS / FORBIDDEN_ATTR_PREFIX / SANDBOX_BUILTINS
     precheck(code, perm=PERM_SANDBOX) -> (bool, str)
-    run(code, perm=PERM_SANDBOX, timeout=None, api=None, audit=None, row=0, log=None) -> dict
+    run(code, perm=PERM_SANDBOX, timeout=None, api=None, audit=None, row=0, log=None,
+        should_stop=None) -> dict
     audit_path() -> str
     audit_write(record) -> None
     make_record(code, perm, row, elapsed, ok, error, timed_out, source) -> dict
@@ -46,6 +47,16 @@ PERM_SANDBOX = "sandbox"
 PERM_TRUSTED = "trusted"
 PERM_FULL = "full"
 VALID_PERMS = (PERM_SANDBOX, PERM_TRUSTED, PERM_FULL)
+
+
+class SandboxAbort(Exception):
+    """用户请求停止（state.quit2）时用于中断沙箱内执行。
+
+    由 run(should_stop=...) 传入的回调在沙箱可控检查点（行级 tracer / 执行前后）
+    触发时抛出；由 _exec_inprocess 捕获并置 result["aborted"]=True，交由上层
+    engine 转为优雅停止（AbortSignal），而不是被当作执行失败。
+    """
+    pass
 
 # ── 预检黑名单 ──
 # §1.1：format / format_map 原先在 SANDBOX_BUILTINS 白名单里，可通过
@@ -176,8 +187,9 @@ def precheck(code, perm=PERM_SANDBOX):
 # ======================================================================
 # 执行
 # ======================================================================
-def run(code, perm=PERM_SANDBOX, timeout=None, api=None, audit=None, row=0, log=None):
-    """执行代码。返回 {ok,result,raw_result,error,elapsed,perm,timed_out}，绝不抛异常。
+def run(code, perm=PERM_SANDBOX, timeout=None, api=None, audit=None, row=0, log=None,
+        should_stop=None):
+    """执行代码。返回 {ok,result,raw_result,error,elapsed,perm,timed_out,aborted}，绝不抛异常。
 
     api    : 暴露给脚本的 acrpa 对象（AcrpaAPI 实例），可为 None。
     audit  : 审计来源标记：字符串（"excel"/"plugin"/"hook"/"console"）或可调用对象
@@ -186,6 +198,10 @@ def run(code, perm=PERM_SANDBOX, timeout=None, api=None, audit=None, row=0, log=
     log    : §1.5 可注入日志回调 log(msg, level="info")，用于转发脚本 print /
              子进程日志；缺省依次退化 utils.log1 → sys.stderr → 安全 no-op
              （py_sandbox 不硬依赖 GUI）。
+    should_stop : 可选停止回调（如 lambda: state.quit2）。返回真时在沙箱可控检查点
+             中断执行：执行前直接判定为 aborted；执行中由行级 tracer 抛 SandboxAbort
+             （结果置 aborted=True）。残留限制：已进入的 C 层阻塞（time.sleep 等）
+             仍无法即时中断，仅在其返回后的下一字节码边界生效。
 
     返回字典保持既有字段语义；raw_result 为加性字段（P1 §2.1 写回变量用，本批次
     不强制消费）。
@@ -203,7 +219,21 @@ def run(code, perm=PERM_SANDBOX, timeout=None, api=None, audit=None, row=0, log=
 
     t0 = time.time()
     result = {"ok": False, "result": None, "raw_result": None, "error": "",
-              "elapsed": 0.0, "perm": perm, "timed_out": False}
+              "elapsed": 0.0, "perm": perm, "timed_out": False, "aborted": False}
+
+    stop_fn = should_stop if callable(should_stop) else None
+
+    # 执行前检查点：已请求停止则直接判定为 aborted，不进入用户代码。
+    if stop_fn is not None:
+        try:
+            if stop_fn():
+                result["aborted"] = True
+                result["error"] = "aborted: user requested stop"
+                result["elapsed"] = round(time.time() - t0, 4)
+                _emit_audit(audit, code, perm, row, result)
+                return result
+        except Exception:
+            pass
 
     try:
         ok, reason = precheck(code, perm)
@@ -212,7 +242,7 @@ def run(code, perm=PERM_SANDBOX, timeout=None, api=None, audit=None, row=0, log=
         elif perm == PERM_FULL:
             _exec_full(code, timeout, result, log)
         else:
-            _exec_inprocess(code, perm, timeout, api, result, log)
+            _exec_inprocess(code, perm, timeout, api, result, log, stop_fn)
     except Exception as e:  # 兜底：任何未预期异常都必须被吞掉
         result["error"] = "%s: %s" % (type(e).__name__, e)
 
@@ -225,8 +255,12 @@ def _real_builtins():
     return builtins
 
 
-def _make_tracer(deadline, step=_TRACE_STEP):
-    """构造 sys.settrace 用的行级时间检查 trace 函数。超时 raise TimeoutError。"""
+def _make_tracer(deadline, step=_TRACE_STEP, should_stop=None):
+    """构造 sys.settrace 用的行级检查 trace 函数。
+
+    超时 raise TimeoutError；should_stop() 返回真时 raise SandboxAbort（用户停止）。
+    should_stop 回调内部异常一律吞掉，绝不因回调问题影响代码执行。
+    """
     counter = [0]
 
     def _tracer(frame, event, arg):
@@ -234,6 +268,14 @@ def _make_tracer(deadline, step=_TRACE_STEP):
             counter[0] += 1
             if counter[0] >= step:
                 counter[0] = 0
+                if should_stop is not None:
+                    try:
+                        if should_stop():
+                            raise SandboxAbort("user requested stop")
+                    except SandboxAbort:
+                        raise
+                    except Exception:
+                        pass
                 if time.time() > deadline:
                     raise TimeoutError("code timeout")
         return _tracer
@@ -389,7 +431,7 @@ def _stop_watchdog(stop):
         pass
 
 
-def _exec_inprocess(code, perm, timeout, api, result, log=None):
+def _exec_inprocess(code, perm, timeout, api, result, log=None, should_stop=None):
     """sandbox / trusted 在当前进程内执行（单一命名空间）。
 
     BUG-04 加固：保留 sys.settrace 行级检查作为兜底，同时叠加
@@ -408,7 +450,7 @@ def _exec_inprocess(code, perm, timeout, api, result, log=None):
 
     compiled = _compile_units(code)
     deadline = time.time() + timeout
-    tracer = _make_tracer(deadline)
+    tracer = _make_tracer(deadline, should_stop=should_stop)
     ident = threading.get_ident()
     state = {"exec_done": False}
 
@@ -423,6 +465,11 @@ def _exec_inprocess(code, perm, timeout, api, result, log=None):
     watchdog_stop = _start_watchdog(deadline, ident, state)
     try:
         exec(compiled, ns)
+    except SandboxAbort:
+        # 用户在沙箱执行期间请求停止：非失败，交由上层优雅收尾。
+        result["aborted"] = True
+        result["error"] = "aborted: user requested stop"
+        return
     except TimeoutError as e:
         result["timed_out"] = True
         result["error"] = "TimeoutError: %s" % (str(e) or "code timeout")

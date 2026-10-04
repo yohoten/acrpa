@@ -32,6 +32,7 @@ import urllib.request
 
 import requests
 
+import utils
 from version_info import (
     VERSION,
     RELEASE_ASSET,
@@ -81,64 +82,25 @@ _lock = threading.Lock()
 
 
 # ══════════════════════════════════════════════════════════════════════
-# 版本比较
+# 版本比较 (P0-3: 权威实现已下沉至 utils, 此处仅保留同名的委托壳,
+# 函数名 / 返回值 / 边界语义与修改前逐一等价, 调用方无需改动)
 # ══════════════════════════════════════════════════════════════════════
 
 def _parse_version(text):
-    """解析版本号 → (数值元组, 是否预发布, 预发布键)；无法解析返回 None。"""
-    raw = str(text or "").strip().lstrip("vV")
-    if not raw:
-        return None
+    """解析版本号 → (数值元组, 是否预发布, 预发布键)；无法解析返回 None。
 
-    core, sep, pre = raw.partition("-")
-    if not sep:
-        # 兼容 0.1.26beta / 0.1.26_rc1 等写法
-        i = 0
-        while i < len(core) and (core[i].isdigit() or core[i] == "."):
-            i += 1
-        core, pre = core[:i], core[i:].lstrip("._-")
-    else:
-        pre = pre.lstrip("._-")
-
-    parts = [p for p in core.split(".") if p != ""]
-    if not parts:
-        return None
-    try:
-        nums = tuple(int(p) for p in parts)
-    except ValueError:
-        return None
-
-    # 预发布键: 数字段按数值比较, 字母段按字典序; 打标签避免混合类型比较报错
-    key = tuple((0, int(p)) if p.isdigit() else (1, p.lower())
-                for p in pre.replace("-", ".").replace("_", ".").split(".")
-                if p)
-    return nums, bool(pre), key
+    委托 utils.parse_version (唯一真源)。
+    """
+    return utils.parse_version(text)
 
 
 def compare_versions(current, latest):
     """比较两个版本号 → -1 (current 更旧) / 0 (相同) / 1 (current 更新)。
 
     无法解析任一侧时返回 0, 由调用方决定如何处理 (不擅自判定为新版本)。
+    委托 utils.compare_versions (唯一真源)。
     """
-    a = _parse_version(current)
-    b = _parse_version(latest)
-    if a is None or b is None:
-        return 0
-
-    na, pb_a, key_a = a
-    nb, pb_b, key_b = b
-    width = max(len(na), len(nb))
-    na = na + (0,) * (width - len(na))
-    nb = nb + (0,) * (width - len(nb))
-
-    if na != nb:
-        return -1 if na < nb else 1
-    # 数值相同: 正式版 > 预发布版 (1.0.0 > 1.0.0-rc1)
-    if pb_a != pb_b:
-        return 1 if pb_b else -1
-    if key_a != key_b:
-        return -1 if key_a < key_b else 1
-    return 0
+    return utils.compare_versions(current, latest)
 
 
 def _compare_versions(current, latest):

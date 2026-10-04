@@ -152,6 +152,37 @@ def _detect_backend():
     return False
 
 
+def preload():
+    """启动时预热 OCR 后端 (P0-7 接线: state.OCR_PRELOAD)。
+
+    供 ACRPA 启动流程在 daemon 后台线程中调用: 提前完成后端探测
+    (_detect_backend) 并尽力建好 PaddleOCR 单例 (_get_paddle_ocr, 由探测内部
+    触发), 使首次「识别文字」无需再等模型加载。
+
+    约定: 本函数**绝不抛出** —— 任何失败都静默兜底 (仅记日志)。
+    Returns:
+        bool: True=已有可用后端, False=不可用或预热失败。
+    """
+    try:
+        ok = bool(_detect_backend())
+        if not ok:
+            return False
+        # 探测优先命中 paddle 时其单例已建; 其它后端再补一次更充分的尝试。
+        try:
+            if _paddle_ocr is None and _check_paddle_available():
+                _get_paddle_ocr()
+        except Exception:
+            pass
+        log1("OCR 预热完成: {}".format(_backend_name or "已就绪"), "info")
+        return True
+    except Exception as e:
+        try:
+            log1("OCR 预热失败 (已忽略): {}".format(e), "warning")
+        except Exception:
+            pass
+        return False
+
+
 def _try_paddle_backend():
     global _ocr_backend, _backend_name, _detect_done
     if not _check_paddle_available():

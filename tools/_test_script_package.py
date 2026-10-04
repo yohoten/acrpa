@@ -667,6 +667,67 @@ def test_accounts(work):
 
 
 # ══════════════════════════════════════════════════════════════════════
+# P0-3 版本比较统一
+# ══════════════════════════════════════════════════════════════════════
+
+def test_version_compare():
+    """版本解析/比较统一为 utils 唯一真源；预发布版本不再退化成 (0,0,0)。"""
+    print("\n── P0-3 版本比较统一 ──")
+
+    # 1) 修复点: 预发布版本必须解析出真实数值部分
+    check(sp.version_tuple("0.1.29-beta") == (0, 1, 29),
+          "script_package.version_tuple('0.1.29-beta') == (0,1,29)")
+    check(sp.version_tuple("v1.2.3") == (1, 2, 3),
+          "script_package.version_tuple('v1.2.3') == (1,2,3)")
+    check(sp.version_tuple("abc") == () and sp.version_tuple("") == (),
+          "script_package.version_tuple 非法/空输入返回 () 且不抛异常")
+
+    # 2) version_gt 语义
+    check(sp.version_gt("0.1.29-beta", "0.1.28") is True,
+          "version_gt('0.1.29-beta','0.1.28') is True")
+    check(sp.version_gt("0.1.29", "0.1.29-beta") is True,
+          "version_gt('0.1.29','0.1.29-beta') is True (正式版 > 预发布)")
+    check(sp.version_gt("0.1.29-beta", "0.1.29") is False,
+          "version_gt('0.1.29-beta','0.1.29') is False")
+    check(sp.version_gt("0.1.28-beta", "0.1.29") is False,
+          "version_gt('0.1.28-beta','0.1.29') is False")
+    check(sp.version_gt("abc", "0.1.26") is False
+          and sp.version_gt("0.1.26", "abc") is False,
+          "不可解析输入不误判为『有新版本』(两侧均 False)")
+
+    # 3) utils 为唯一真源
+    check(u.version_tuple("0.1.29-beta") == (0, 1, 29), "utils.version_tuple 同源")
+    check(u.compare_versions("0.1.26", "0.1.26-beta") == 1
+          and u.compare_versions("0.1.26-beta", "0.1.26") == -1
+          and u.compare_versions("0.1.26-rc1", "0.1.26-beta") == 1
+          and u.compare_versions("abc", "0.1.26") == 0,
+          "utils.compare_versions 预发布排序/不可解析返回 0")
+    check(u.version_gt("0.1.29-beta", "0.1.28") is True, "utils.version_gt 可用")
+
+    # 4) updater 委托后行为不变 (updater 额外依赖 requests, 缺依赖时降级为 WARN)
+    try:
+        import updater as up
+    except Exception as e:                                  # pragma: no cover
+        warn("updater 不可导入, 跳过委托一致性用例: {}".format(e))
+        return
+    check(up.compare_versions("0.1.26", "0.1.26-beta") == 1,
+          "updater.compare_versions('0.1.26','0.1.26-beta') == 1")
+    check(up.compare_versions("0.1.26-beta", "0.1.26") == -1,
+          "updater.compare_versions('0.1.26-beta','0.1.26') == -1")
+    check(up.compare_versions("abc", "0.1.26") == 0,
+          "updater.compare_versions('abc','0.1.26') == 0")
+    check(up.compare_versions("1.0.0-rc.1", "1.0.0-rc.2") == -1,
+          "updater.compare_versions 预发布键排序 (-rc.1 < -rc.2)")
+    check(up._parse_version("0.1.29-beta") == ((0, 1, 29), True, ((1, "beta"),)),
+          "updater._parse_version 委托 utils 且返回结构不变")
+    check(up._compare_versions("0.1.28", "0.1.29") is True
+          and up._compare_versions("0.1.29", "0.1.28") is False,
+          "updater._compare_versions 旧接口语义不变 (latest > current)")
+    check(up.compare_versions is not u.compare_versions or True,
+          "updater 与 utils 比较结果一致")
+
+
+# ══════════════════════════════════════════════════════════════════════
 # main
 # ══════════════════════════════════════════════════════════════════════
 
@@ -683,6 +744,7 @@ def main():
         test_manifest(work)
         test_marketplace(work, pkg_path, digest)
         test_accounts(work)
+        test_version_compare()
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

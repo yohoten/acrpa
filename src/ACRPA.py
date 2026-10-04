@@ -2272,25 +2272,26 @@ def _cmd_save():
                     arg_value = sd.args[j] if j < len(sd.args) else ""
                     ws.write(i, j+1, arg_value)
             
-            wb.save(fp)
+            # P0-6 原子写: 同目录 .tmp → 备份旧文件为 .bak → os.replace 原子替换
+            utils.atomic_save(fp, lambda tmp: wb.save(tmp), backup=True)
             state.filename=fp; state.has_script=True
             state._editor_modified=False
             script_name_var.set(os.path.basename(fp))
             edit_file_label.config(text=os.path.basename(fp))
             log1("脚本已保存: {}".format(fp))
-            # ── 自动保存版本快照 ──
+            # ── 版本快照: 文件成功落盘后记录, 保证版本库与磁盘内容一致 ──
             try:
                 from version_manager import get_version_manager
                 vm = get_version_manager()
                 vm.save_version(fp, state._editor_rows, "保存")
-            except Exception:
-                pass
+            except Exception as e:
+                log1("版本快照失败: {}".format(e), "error")
             from utils import show_toast
             show_toast(root, "✓ 脚本已保存 ({} 行)".format(len(state._editor_rows)), "success")
         except ImportError:
             messagebox.showerror("错误","需要安装 xlwt: pip install xlwt")
         except Exception as e:
-            messagebox.showerror("保存失败",str(e))
+            messagebox.showerror("保存失败","{}\n(原子写入失败, 原文件未受影响)".format(e))
             from utils import show_toast
             show_toast(root, "保存失败: {}".format(e), "error")
 
@@ -2314,22 +2315,23 @@ def _cmd_save_as():
                 ws.write(i, 0, sd.cmd_type)
                 for j in range(9):
                     ws.write(i, j+1, sd.args[j] if j < len(sd.args) else "")
-            wb.save(fp)
+            # P0-6 原子写: 同目录 .tmp → 备份旧文件为 .bak → os.replace 原子替换
+            utils.atomic_save(fp, lambda tmp: wb.save(tmp), backup=True)
             state.filename=fp; state.has_script=True
             state._editor_modified=False
             script_name_var.set(os.path.basename(fp))
             edit_file_label.config(text=os.path.basename(fp))
             log1("脚本另存为: {}".format(fp))
-            from utils import show_toast
-            show_toast(root, "已另存为: {}".format(os.path.basename(fp)), "success")
+            # ── 版本快照: 文件成功落盘后记录, 保证版本库与磁盘内容一致 ──
             try:
                 from version_manager import get_version_manager
                 get_version_manager().save_version(fp, state._editor_rows, "另存为")
-            except Exception:
-                pass
+            except Exception as e:
+                log1("版本快照失败: {}".format(e), "error")
+            from utils import show_toast
+            show_toast(root, "已另存为: {}".format(os.path.basename(fp)), "success")
         except Exception as e:
-            messagebox.showerror("另存为失败",str(e))
-
+            messagebox.showerror("另存为失败","{}\n(原子写入失败, 原文件未受影响)".format(e))
 
 # ── 版本历史管理 ──
 # 版本历史对话框已移至 dialogs.open_version_history
@@ -5725,10 +5727,31 @@ def _check_update(status=None):
 status_text.bind("<Button-1>", lambda e: show_update_dialog())
 root.after(3000, _check_update)
 
+# === OCR 预热 (P0-7 接线: state.OCR_PRELOAD) ===
+# 仅当用户开启「启动时后台预热 OCR 引擎」时, 用 daemon 线程预检测后端/建 PaddleOCR
+# 单例, 让首次「识别文字」不再等 1~3 秒。绝不阻塞 Tk 主循环: 不在此处同步 import
+# paddleocr, 重型初始化全部落在 ocr_backend.preload() 的后台线程里; 失败仅记日志。
+try:
+    if getattr(state, "OCR_PRELOAD", False):
+        import ocr_backend as _ocr_backend_mod
+
+        def _ocr_preload_work():
+            try:
+                _ocr_backend_mod.preload()
+            except Exception as e:
+                log1("OCR 预热异常 (已忽略): {}".format(e), "warning")
+
+        threading.Thread(target=_ocr_preload_work, daemon=True).start()
+except Exception as e:
+    log1("OCR 预热启动失败 (不影响使用): {}".format(e), "warning")
+
 # === Config-driven global hotkeys (run/pause/stop) ===
 # 启用 state.on_config_change 机制: 配置保存后自动重建快捷键映射、同步 engine 参数、刷新主题
 _HOTKEY_ACTIONS = {}   # {action: (mods_set, vk)} — 由 _rebuild_hotkey_specs() 重建
 _hotkey_prev = {}      # 边沿检测: {action: bool}，避免按住时重复触发
+# 「停止录制」热键 (P0-7 接线): 同款解析 + 独立边沿检测状态
+_RECORD_STOP_SPEC = None   # (mods_set, vk) 或 None(未配置/解析失败)
+_recstop_prev = False      # 边沿检测: 避免按住时每 200ms 重复触发
 
 
 def _parse_hotkey_spec(spec):
@@ -5762,8 +5785,12 @@ def _parse_hotkey_spec(spec):
 
 
 def _rebuild_hotkey_specs():
-    """根据 state 中的 HOTKEY_* 配置重建快捷键映射表（配置变更时调用）。"""
-    global _HOTKEY_ACTIONS, _hotkey_prev
+    """根据 state 中的 HOTKEY_* / RECORDING_STOP_HOTKEY 配置重建快捷键映射表。
+
+    配置变更时调用 (见 _on_config_changed)。解析失败/为空一律得到 None，
+    调用方据此退回「仅硬编码热键」，绝不抛异常。
+    """
+    global _HOTKEY_ACTIONS, _hotkey_prev, _RECORD_STOP_SPEC, _recstop_prev
     _HOTKEY_ACTIONS = {
         action: _parse_hotkey_spec(getattr(state, key, ""))
         for action, key in (("run", "HOTKEY_RUN"), ("pause", "HOTKEY_PAUSE"),
@@ -5771,6 +5798,9 @@ def _rebuild_hotkey_specs():
     }
     _HOTKEY_ACTIONS = {k: v for k, v in _HOTKEY_ACTIONS.items() if v}
     _hotkey_prev = {k: False for k in _HOTKEY_ACTIONS}
+    # 用户配置的「停止录制」热键 (默认 Ctrl+Alt+F12)；None = 不参与判定
+    _RECORD_STOP_SPEC = _parse_hotkey_spec(getattr(state, "RECORDING_STOP_HOTKEY", ""))
+    _recstop_prev = False
 
 
 _hotkey_executors = {
@@ -5811,7 +5841,8 @@ def _on_config_changed(data, changed):
             engine.retry = state.RETRY_MAX
         if "retry_interval" in changed:
             engine.retry_interval = state.RETRY_INTERVAL
-        if any(k in changed for k in ("hotkey_run", "hotkey_pause", "hotkey_stop")):
+        if any(k in changed for k in ("hotkey_run", "hotkey_pause", "hotkey_stop",
+                                      "recording_stop_hotkey")):
             _rebuild_hotkey_specs()
             log1("全局快捷键配置已更新")
     except Exception as e:
@@ -5820,15 +5851,17 @@ def _on_config_changed(data, changed):
 
 state.on_config_change(_on_config_changed, keys=(
     "dark_mode", "retry_max", "retry_interval",
-    "hotkey_run", "hotkey_pause", "hotkey_stop"))
+    "hotkey_run", "hotkey_pause", "hotkey_stop",
+    "recording_stop_hotkey"))
 _rebuild_hotkey_specs()
 
 
 # === Global hotkey polling (lightweight: poll keyboard state via ctypes) ===
 def _hotkey_poll():
+    global _recstop_prev
     if state._closing: return
     try:
-        # 固定录制停止热键: Ctrl+Shift+Q / Ctrl+Shift+S
+        # 固定录制停止热键: Ctrl+Shift+Q / Ctrl+Shift+S (行为保留，不做回归)
         ctrl = ctypes.windll.user32.GetAsyncKeyState(0x11) & 0x8000
         shift = ctypes.windll.user32.GetAsyncKeyState(0x10) & 0x8000
         q = ctypes.windll.user32.GetAsyncKeyState(0x51) & 0x8000
@@ -5836,6 +5869,21 @@ def _hotkey_poll():
         if state.recording and ctrl and shift and (q or s):
             state.record_stop = True
             log1("热键: 停止录制")
+
+        # 用户配置的停止录制热键 (state.RECORDING_STOP_HOTKEY, P0-7 接线)。
+        # 复用 _parse_hotkey_spec 的解析结果与同款边沿检测, 按住不重复触发;
+        # 解析失败/为空时 _RECORD_STOP_SPEC 为 None → 仅走上面的硬编码热键。
+        rnow = False
+        if _RECORD_STOP_SPEC:
+            rmods, rvk = _RECORD_STOP_SPEC
+            rbase = all(ctypes.windll.user32.GetAsyncKeyState(m) & 0x8000
+                        for m in rmods)
+            rnow = bool(rbase and
+                        (ctypes.windll.user32.GetAsyncKeyState(rvk) & 0x8000))
+            if rnow and not _recstop_prev and state.recording:
+                state.record_stop = True
+                log1("热键: 停止录制 (配置热键)")
+        _recstop_prev = rnow
 
         # 用户配置的全局快捷键 (边沿检测)
         for action, (mods, vk) in _HOTKEY_ACTIONS.items():

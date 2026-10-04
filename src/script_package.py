@@ -29,6 +29,7 @@ import hashlib
 import zipfile
 import posixpath
 
+import utils
 from utils import log1
 
 
@@ -71,20 +72,22 @@ def compute_sha256(path):
 
 
 def version_tuple(value):
-    """语义化版本 → (major, minor, patch) 整数元组；非法输入按 0 补齐。"""
-    try:
-        parts = str(value).strip().lstrip("vV").split(".")
-        nums = [int(p) for p in parts if p != ""]
-    except Exception:
-        nums = []
-    while len(nums) < 3:
-        nums.append(0)
-    return tuple(nums[:3])
+    """语义化版本 → 数值元组 (major, minor, patch, ...)。
+
+    P0-3: 委托 utils.version_tuple (唯一真源)。预发布后缀被正确剥离 ——
+    "0.1.29-beta" → (0, 1, 29) (旧实现会因 int("29-beta") 抛异常退化成 (0, 0, 0))。
+    无法解析 / 空输入返回 (), 且不抛异常。
+    """
+    return utils.version_tuple(value)
 
 
 def version_gt(a, b):
-    """版本 a > b 返回 True。"""
-    return version_tuple(a) > version_tuple(b)
+    """版本 a > b 返回 True。
+
+    P0-3: 委托 utils.version_gt (唯一真源)。任一侧不可解析时返回 False,
+    不会把无法解析的输入误判为「远端/A 侧更新」。
+    """
+    return utils.version_gt(a, b)
 
 
 def _utc_now_iso():

@@ -71,7 +71,7 @@ import time
 import json
 import collections
 import state
-from utils import log1
+from utils import log1, safe_filename
 
 # ======================================================================
 # Lazy Playwright singleton (unchanged semantics)
@@ -977,16 +977,38 @@ def _download_dir(override=""):
     return d
 
 
+def _is_inside_dir(path, out_dir):
+    """判断 path 是否落在 out_dir 之内（按真实绝对路径比较，防目录穿越）。"""
+    try:
+        root = os.path.abspath(out_dir)
+        target = os.path.abspath(path)
+    except Exception:
+        return False
+    return target == root or target.startswith(root + os.sep)
+
+
 def _download_target_path(out_dir, filename, overwrite=True):
-    """计算落盘路径（overwrite=False 时自动避让重名）（纯函数）。"""
-    name = str(filename or "download")
+    """计算落盘路径（overwrite=False 时自动避让重名）（纯函数）。
+
+    安全项 #6「浏览器下载文件名净化」: `filename` 来自远端
+    `download.suggested_filename`（Content-Disposition，不可信），
+    必须先经 `utils.safe_filename` 净化为**单段文件名**再 join；
+    随后再复核最终路径确实落在 out_dir 之内（防御性兜底）。
+    """
+    name = safe_filename(filename, "download")
     fp = os.path.join(out_dir, name)
+    # 防御性兜底: 理论上 safe_filename 已保证不含分隔符，此处二次确认。
+    if not _is_inside_dir(fp, out_dir):
+        name = safe_filename("download", "download")
+        fp = os.path.join(out_dir, name)
     if overwrite or not os.path.exists(fp):
         return fp
     base, ext = os.path.splitext(name)
     i = 1
     while True:
         cand = os.path.join(out_dir, "{}_{}{}".format(base, i, ext))
+        if not _is_inside_dir(cand, out_dir):
+            return fp
         if not os.path.exists(cand):
             return cand
         i += 1

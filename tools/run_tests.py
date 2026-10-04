@@ -40,14 +40,25 @@ TOOLS = os.path.join(BASE, "tools")
 # 键 = 排除原因(也是 SKIP 时打印的说明), 值 = 判定函数
 GUI_PREFIXES = ("_smoke_",)
 
+# 「_smoke_」前缀默认视为需要真实窗口会话而跳过;
+# 但以下脚本实测不创建任何窗口(只 import state/engine/scriptdata),
+# 应作为核心子集在 --safe 下运行(P0-4: 引擎控制流测试必须进 CI)。
+SAFE_HEADLESS_SMOKE = frozenset({
+    "_smoke_engine.py",
+})
+
 
 def _why_not_safe(name):
     """返回排除原因; None 表示属于核心子集。
 
-    只排除 GUI 冒烟: 它们要创建真实 Tk 窗口, 在 CI 的服务会话里通常起不来。
+    默认排除 GUI 冒烟: 它们要创建真实 Tk 窗口, 在 CI 的服务会话里通常起不来。
+    例外是 SAFE_HEADLESS_SMOKE 白名单 —— 这些 _smoke_ 脚本实测无窗口依赖,
+    先放行纳入 CI, 以免引擎控制流等核心回归被前缀规则误伤跳过。
     其余脚本 (含 NetLink 的 2node/e2e/webui) 均为 localhost 自包含用例, 实测
     每个 1-14 秒跑完, 因此纳入 CI —— 这些恰恰是最有价值的回归网。
     """
+    if name in SAFE_HEADLESS_SMOKE:
+        return None
     if name.startswith(GUI_PREFIXES):
         return "GUI 冒烟: 需要真实窗口会话 (本机全量回归时用 --all)"
     if name.startswith("_test_browser_"):

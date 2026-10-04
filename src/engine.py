@@ -20,6 +20,16 @@ import commands
 from safe_eval import safe_eval_condition, safe_eval_math, EvalError
 
 
+class AbortSignal(Exception):
+    """用户请求停止(quit2)时抛出, 用于中断正在执行的长命令。
+
+    由 ExecutionEngine._chk() 在 quit2 置位时抛出; 经 execute() / _handle_if /
+    _handle_loop 逐层 re-raise, 最终由 execute_script 顶层捕获并作为「优雅停止」
+    (而非失败) 收尾。ai_enhance 等外部模块可经 engine.AbortSignal 引用。
+    """
+    pass
+
+
 # ── Python 扩展: handler 签名自适应 + Tier3 脚本钩子注册表 ──
 # handler 调用约定: 旧插件为 h(row, script_dir)；支持 acrpa API 的新 handler 可为
 # h(row, script_dir, api)。此处用 inspect 判定参数个数，而非 try/except 回退，
@@ -419,7 +429,12 @@ class ExecutionEngine:
                 self.call_stack.push('if', i+1, condition=condition, result=result)
                 
                 # Evaluate condition and skip to matching 否则 or 结束如果
-                i = self._handle_if(rows, i, script_dir)
+                try:
+                    i = self._handle_if(rows, i, script_dir)
+                except AbortSignal:
+                    # 优雅停止：非失败，越过剩余脚本（不弹错、不置 _script_failed）。
+                    self.call_stack.pop()
+                    break
                 
                 self.call_stack.pop()
                 if self._script_failed and getattr(state, 'STOP_ON_ERROR', True):
@@ -455,7 +470,11 @@ class ExecutionEngine:
                                    max_iterations=max_iterations,
                                    iteration=0)
                 
-                i = self._handle_loop(rows, i, script_dir)
+                try:
+                    i = self._handle_loop(rows, i, script_dir)
+                except AbortSignal:
+                    self.call_stack.pop()
+                    break
                 
                 self.call_stack.pop()
                 if self._script_failed and getattr(state, 'STOP_ON_ERROR', True):
@@ -470,7 +489,11 @@ class ExecutionEngine:
             else:
                 # Regular command execution with timing (debugger enhancement)
                 _t0 = time.time()
-                result = self.execute(row, script_dir)
+                try:
+                    result = self.execute(row, script_dir)
+                except AbortSignal:
+                    # 长命令被「停止」中断 → 优雅结束脚本（不视为命令失败）。
+                    break
                 _elapsed = time.time() - _t0
                 
                 # Debugger enhancement: record execution timing
@@ -515,6 +538,8 @@ class ExecutionEngine:
                         break
 
         if not _nested:
+            if state.quit2:
+                log1("用户请求停止，脚本执行已中断", "info")
             # Tier3 脚本级钩子（脚本结束）。同上：仅单脚本场景触发，工作流不触发。
             _run_script_hooks("after", rows, script_dir)
 
@@ -799,6 +824,9 @@ class ExecutionEngine:
                     last_error = "命令返回失败"
                 else:
                     break
+            except AbortSignal:
+                # 用户请求停止：绝不当作命令失败重试，直接向上传播实现中断。
+                raise
             except Exception as e:
                 last_error = str(e)
                 if attempt < self.retry:
@@ -838,8 +866,12 @@ class ExecutionEngine:
                             success = _invoke_handler(h, adapted_row, script_dir) is not False
                             if success:
                                 log1("AI 智能重试成功!")
+                        except AbortSignal:
+                            raise
                         except Exception as e:
                             last_error = str(e)
+                except AbortSignal:
+                    raise
                 except Exception:
                     pass  # AI 增强失败不影响主流程
 
@@ -857,9 +889,18 @@ class ExecutionEngine:
         return ExecutionResult(False, "command_failed", last_error or "命令执行失败", attempts)
 
     def _chk(self):
-        if state.quit2: return False
+        """停止/暂停检查点：quit2 置位时抛 AbortSignal（中断长命令），否则返回 True。
+
+        改动前返回 False 的返回值在 36 个调用点全部被丢弃，导致「停止」无法打断
+        正在执行的长命令（找图超时/等待/沙箱等），只能等回到行间或循环迭代检查点。
+        改为抛 AbortSignal 后，所有既有裸 self._chk() 调用点自动成为中断点，无需逐处改造。
+        保留暂停自旋阻塞语义（pause_event clear 时阻塞，直到 set 或 quit2）。
+        """
+        if state.quit2:
+            raise AbortSignal()
         while not state.pause_event.is_set():
-            if state.quit2: return False
+            if state.quit2:
+                raise AbortSignal()
             time.sleep(0.05)
         return True
 
@@ -1218,6 +1259,16 @@ class ExecutionEngine:
         pa.dragRel(dx, dy, duration=duration)
         log1("从{}相对移动{},{}".format(current_pos, dx, dy))
 
+    def _abort_if_requested(self, res):
+        """沙箱报告 aborted 时抛出 AbortSignal（供 _exec/_python 共用）。
+
+        单独成方法而不在 _exec 内直接 raise：_exec 约定「失败返回 False 且绝不抛
+        异常」（避免引擎重试造成副作用重复）。此处抛出的不是失败而是用户停止信号，
+        由 execute_script 顶层捕获并优雅收尾。
+        """
+        if isinstance(res, dict) and res.get("aborted"):
+            raise AbortSignal()
+
     def _exec(self, row, z):
         """代码 — 执行脚本目录下的 .txt Python 脚本（§1.2 统一走沙箱内核）。
 
@@ -1308,8 +1359,12 @@ class ExecutionEngine:
             api = None
 
         # run() 内部会再次 precheck 并自行写审计（source="file"）
+        # should_stop：沙箱执行期间用户点「停止」时可中断（行级 tracer 检查点）。
         res = py_sandbox.run(code, perm, timeout=timeout, api=api,
-                             audit="file", row=self._current_row(), log=log1)
+                             audit="file", row=self._current_row(), log=log1,
+                             should_stop=lambda: state.quit2)
+        # 用户请求停止 → 转为 AbortSignal（见 _abort_if_requested），顶层优雅收尾。
+        self._abort_if_requested(res)
         if res.get("ok"):
             log1("✔ 执行了脚本: {} result={}".format(cp, res.get("result")))
             return None
@@ -1417,7 +1472,10 @@ class ExecutionEngine:
             api = None
 
         res = py_sandbox.run(code, perm, timeout=timeout, api=api,
-                             audit="excel", row=self._current_row(), log=log1)
+                             audit="excel", row=self._current_row(), log=log1,
+                             should_stop=lambda: state.quit2)
+        # 用户请求停止 → 转为 AbortSignal（见 _abort_if_requested），顶层优雅收尾。
+        self._abort_if_requested(res)
         if res.get("ok"):
             log1("Python 执行成功 [{}] {:.3f}s result={}".format(
                 perm, res.get("elapsed", 0.0), res.get("result")))
@@ -1667,9 +1725,9 @@ class ExecutionEngine:
         found = False
         
         while time.time() - start_time < timeout:
-            if state.quit2:
-                break
-            
+            # 统一停止/暂停检查点：quit2 → AbortSignal（中断等待），pause clear → 阻塞
+            self._chk()
+
             hwnd = self._find_window_by_pattern(title_pattern)
             found = (hwnd != 0)
             

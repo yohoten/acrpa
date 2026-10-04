@@ -40,6 +40,13 @@ NONCE_TTL = 60          # 秒
 MAX_AUTH_FAILS = 5
 PROOF_MAX_SKEW = 60     # 秒
 
+# ── 配对认证防暴力（IP 维度 + 全局，独立于控制 PIN 的 _pin_*）──────────
+# 阈值/退避风格与控制 PIN（MAX_PIN_FAILS/LOCK_BASE/LOCK_CAP）对齐。
+MAX_AUTH_FAILS_PER_IP = 5       # 同一 IP 失败阈值，达到后按指数退避锁定
+MAX_AUTH_FAILS_GLOBAL = 20      # 全局失败阈值（跨 IP，抵御换源分布式暴破）
+AUTH_LOCK_BASE = 300            # 首次锁定秒数
+AUTH_LOCK_CAP = 3600            # 锁定上限（1h）
+
 VALID_PERMS = ("observe", "control", "script")
 PERM_LABELS = {"observe": "仅观察", "control": "允许操控", "script": "允许接收脚本"}
 
@@ -187,6 +194,25 @@ def _control_pin_audit(cmd, result, detail, actor="web-panel", remote=""):
 
 
 _control_pin_audit_log = None
+
+
+# 配对认证审计单例（惰性创建；与 _control_pin_audit 并存，互不干扰）
+_pair_audit_log = None
+
+
+def _pair_audit(cmd, result, detail, remote=""):
+    """写配对认证相关审计（复用 AuditLog 单点落盘；失败静默，绝不抛）。
+
+    仅记录 reason / IP 等非敏感信息，绝不写入 PIN / proof / salt。
+    """
+    try:
+        global _pair_audit_log
+        if _pair_audit_log is None:
+            from .audit import AuditLog
+            _pair_audit_log = AuditLog()
+        _pair_audit_log.write("netlink-peer", cmd, {}, result, detail, remote)
+    except Exception:
+        pass
 
 
 def _load_control_pin_record():
@@ -671,7 +697,12 @@ class AuthManager(object):
         self._nonce = NonceStore()
         self._authed = {}    # {conn: fingerprint}
         self._pending = {}   # {conn: {"mode","node_id","fingerprint","name","salt","need"}}
-        self._fails = {}     # {conn: count}
+        self._fails = {}     # {conn: count}  —— 既有 per-conn 维度（保持不变）
+        # ── 防暴力（IP 维度 + 全局；全部由 self._lock 保护）──
+        self._fails_by_ip = {}        # {ip: fail_count}
+        self._lock_until_by_ip = {}   # {ip: unlock_ts}
+        self._fails_global = 0        # 全局失败累计
+        self._lock_until_global = 0.0 # 全局解锁时间戳
 
     # ── 配置 ──
     @property
@@ -705,6 +736,100 @@ class AuthManager(object):
         except Exception:
             return None
 
+    # ── 防暴力限流（IP 维度 + 全局；全部由 self._lock 保护）──
+    @staticmethod
+    def _peer_ip(conn):
+        """安全取对端 IP；取不到返回 "?"（不抛）。"""
+        try:
+            pa = getattr(conn, "peer_addr", None)
+            if pa and len(pa) >= 1 and pa[0]:
+                return str(pa[0])
+        except Exception:
+            pass
+        return "?"
+
+    def _lock_state_now(self, ip=None, now=None):
+        """(locked:bool, retry_after:int) —— 综合 IP 与全局锁定，无副作用。"""
+        now = time.time() if now is None else now
+        try:
+            with self._lock:
+                until = float(self._lock_until_global)
+                if ip:
+                    until = max(until, float(self._lock_until_by_ip.get(ip, 0.0)))
+        except Exception:
+            return False, 0
+        if until > now:
+            return True, int(until - now) + 1
+        return False, 0
+
+    def lock_state(self, ip=None):
+        """当前锁定态快照：{"locked":bool,"retry_after":int}（供 UI / 测试）。"""
+        try:
+            locked, retry = self._lock_state_now(ip)
+            return {"locked": bool(locked), "retry_after": int(retry)}
+        except Exception:
+            return {"locked": False, "retry_after": 0}
+
+    def _note_fail(self, ip):
+        """记一次失败：累加 IP 与全局计数；超阈值按指数退避置锁定（封顶）。"""
+        try:
+            now = time.time()
+            with self._lock:
+                if ip:
+                    n = int(self._fails_by_ip.get(ip, 0)) + 1
+                    self._fails_by_ip[ip] = n
+                    if n >= MAX_AUTH_FAILS_PER_IP:
+                        delay = min(
+                            AUTH_LOCK_BASE * (2 ** (n - MAX_AUTH_FAILS_PER_IP)),
+                            AUTH_LOCK_CAP)
+                        self._lock_until_by_ip[ip] = now + delay
+                self._fails_global += 1
+                g = int(self._fails_global)
+                if g >= MAX_AUTH_FAILS_GLOBAL:
+                    delay = min(
+                        AUTH_LOCK_BASE * (2 ** (g - MAX_AUTH_FAILS_GLOBAL)),
+                        AUTH_LOCK_CAP)
+                    self._lock_until_global = now + delay
+        except Exception as e:
+            _nl_log("auth fail counter error: {}".format(e), "WARN")
+
+    def _note_success(self, ip):
+        """成功配对后清零该 IP 的失败计数/锁定，并复位全局计数。
+
+        复位全局计数是防误伤的必要补充：全局计数若只增不减，运行期累计
+        达阈值后会把后续任意一次失败都判为「全局锁定」，形成永久性 DoS。
+        """
+        try:
+            with self._lock:
+                if ip:
+                    self._fails_by_ip.pop(ip, None)
+                    self._lock_until_by_ip.pop(ip, None)
+                self._fails_global = 0
+                self._lock_until_global = 0.0
+        except Exception:
+            pass
+
+    def reset_rate_limit(self):
+        """清空全部 IP/全局失败计数与锁定（重开配对窗口 / 管理解锁 / 测试复位）。"""
+        try:
+            with self._lock:
+                self._fails_by_ip.clear()
+                self._lock_until_by_ip.clear()
+                self._fails_global = 0
+                self._lock_until_global = 0.0
+            return True
+        except Exception:
+            return False
+
+    def _reject_if_locked(self, conn):
+        """锁定期入口拦截：直接回 AUTH_FAIL，不下发 challenge、不消耗 nonce。"""
+        ip = self._peer_ip(conn)
+        locked, retry = self._lock_state_now(ip)
+        if locked:
+            self._fail(conn, "locked: too many attempts, retry_after={}s".format(retry))
+            return True
+        return False
+
     # ── 主入口 ──
     def on_auth(self, conn, msg):
         """处理 T_AUTH：无 proof → 发挑战；有 proof → 校验并回 OK/FAIL。"""
@@ -721,6 +846,8 @@ class AuthManager(object):
             _nl_log("auth on_auth error: {}".format(e), "ERROR")
 
     def _challenge(self, conn, data):
+        if self._reject_if_locked(conn):
+            return
         mode = str(data.get("mode") or "pair")
         node_id = str(data.get("node_id") or "")
         name = str(data.get("name") or "")
@@ -743,6 +870,8 @@ class AuthManager(object):
             "nonce": nonce, "need": need, "salt": salt, "ts": int(time.time())}))
 
     def _verify(self, conn, data):
+        if self._reject_if_locked(conn):
+            return
         nonce = str(data.get("nonce") or "")
         proof = str(data.get("proof") or "")
         ts = data.get("ts")
@@ -785,6 +914,7 @@ class AuthManager(object):
             self._authed[conn] = fingerprint
             self._fails.pop(conn, None)
             self._pending.pop(conn, None)
+        self._note_success(self._peer_ip(conn))
         info = self._node.info if self._node is not None else {}
         self._node.send(conn, make_msg(T_AUTH_OK, {
             "perm": perm, "server_node_id": info.get("node_id", ""),
@@ -792,12 +922,23 @@ class AuthManager(object):
             "secret_stored": bool(secret_stored)}))
 
     def _fail(self, conn, reason):
-        """回 AUTH_FAIL；失败计数达上限则告警并断开连接。"""
+        """回 AUTH_FAIL；失败计数达上限则告警并断开连接。
+
+        除保留既有 per-conn 计数外，叠加「IP 维度 + 全局」计数与锁定，
+        并把该次失败写入审计（只记 reason / IP，绝不记 PIN / proof / salt）。
+        """
         try:
             self._node.send(conn, _fail_msg(reason))
+            ip = self._peer_ip(conn)
             with self._lock:
                 n = self._fails.get(conn, 0) + 1
                 self._fails[conn] = n
+            self._note_fail(ip)
+            locked, retry = self._lock_state_now(ip)
+            _pair_audit("NETLINK_AUTH_FAIL", "err",
+                        "reason={} locked={} retry_after={}".format(
+                            str(reason or ""), bool(locked), int(retry)),
+                        remote=ip)
             if n >= MAX_AUTH_FAILS:
                 try:
                     self._node.bus.publish(_TOPIC_STATUS, {

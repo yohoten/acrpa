@@ -7,6 +7,8 @@ engine 逻辑回归冒烟测试 — 验证 if/loop 块执行与变量作用域�
 """
 import os
 import sys
+import time
+import threading
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -18,7 +20,7 @@ SRC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
 sys.path.insert(0, SRC)
 
 import state  # noqa: E402
-from engine import engine  # noqa: E402
+from engine import engine, AbortSignal  # noqa: E402
 from scriptdata import ScriptData  # noqa: E402
 
 _FAILURES = []
@@ -162,6 +164,86 @@ def test_break_loop():
            "after={}".format(engine.variables.get("after")))
 
 
+# ── 测试8: 停止语义(P0-5) — _chk() 在 quit2 时抛 AbortSignal ──
+def test_chk_raises_abort_signal():
+    # 空闲态：_chk() 仍返回 True（保持原有可读语义）
+    state.quit2 = False
+    state.pause_event.set()
+    try:
+        ret = engine._chk()
+        _check("_chk() 正常时返回 True", ret is True, "ret={!r}".format(ret))
+    except AbortSignal:
+        _check("_chk() 正常时返回 True", False, "意外抛出 AbortSignal")
+
+    # quit2 置位：_chk() 必须抛 AbortSignal（而非返回 False）
+    raised = False
+    state.quit2 = True
+    try:
+        engine._chk()
+    except AbortSignal:
+        raised = True
+    finally:
+        state.quit2 = False
+        state.pause_event.set()
+    _check("_chk() 在 quit2 时抛 AbortSignal", raised)
+
+
+# ── 测试9: 停止语义(P0-5) — 长命令执行中置 quit2 被打断, 后续命令不执行 ──
+def test_abort_interrupts_long_command():
+    state.quit2 = False
+    state.pause_event.set()
+    engine.variables.clear()
+    engine._script_failed = False
+
+    rows = [
+        ScriptData("等待", ["30"]),               # 长命令(应被中断)
+        ScriptData("设置变量", ["after", "1"]),   # 不该被执行
+    ]
+
+    def _stop_soon():
+        time.sleep(0.4)
+        state.quit2 = True
+
+    th = threading.Thread(target=_stop_soon, daemon=True)
+    t0 = time.time()
+    th.start()
+    try:
+        engine.execute_script(rows, os.getcwd())
+    finally:
+        elapsed = time.time() - t0
+        state.quit2 = False
+        state.pause_event.set()
+
+    _check("长命令被中断(耗时远小于30s)", elapsed < 5.0,
+           "elapsed={:.2f}s".format(elapsed))
+    _check("中断后后续命令未执行", "after" not in engine.variables,
+           "after={}".format(engine.variables.get("after")))
+    _check("中断不算脚本失败(_script_failed 未置位)", engine._script_failed is False,
+           "_script_failed={}".format(engine._script_failed))
+
+
+# ── 测试10: 停止语义(P0-5) — quit2 前置为真时立即停止且不执行任何命令 ──
+def test_abort_before_start():
+    state.quit2 = False
+    state.pause_event.set()
+    engine.variables.clear()
+    engine._script_failed = False
+    rows = [
+        ScriptData("设置变量", ["ran", "1"]),
+        ScriptData("设置变量", ["after", "1"]),
+    ]
+    state.quit2 = True
+    try:
+        engine.execute_script(rows, os.getcwd())
+    finally:
+        state.quit2 = False
+        state.pause_event.set()
+    _check("quit2 前置时首条命令未执行", "ran" not in engine.variables,
+           "ran={}".format(engine.variables.get("ran")))
+    _check("quit2 前置时脚本不被标记失败", engine._script_failed is False,
+           "_script_failed={}".format(engine._script_failed))
+
+
 if __name__ == "__main__":
     print("engine 逻辑回归冒烟测试")
     print("-" * 40)
@@ -172,6 +254,12 @@ if __name__ == "__main__":
     test_if_true_inside_loop()
     test_nested_loop()
     test_break_loop()
+    test_chk_raises_abort_signal()
+    test_abort_interrupts_long_command()
+    test_abort_before_start()
+    # 兜底恢复：避免污染后续测试/CI 的全局状态
+    state.quit2 = False
+    state.pause_event.set()
     print("-" * 40)
     if _FAILURES:
         print("失败 {} 项: {}".format(len(_FAILURES), ", ".join(_FAILURES)))

@@ -230,6 +230,11 @@ class MarketWindow:
     def _build_ui(self):
         dlg = tkinter.Toplevel(self.parent)
         self.dlg = dlg
+        try:    # 声明自管换肤: 通用 walk 不再跨入, 由本类 retheme() 负责
+            from ui import theme as _ui_theme
+            _ui_theme.claim_window(dlg, "market_window")
+        except Exception:
+            pass
         dlg.title("脚本市场 — ACRPA")
         dlg.geometry("{}x{}+{}+{}".format(
             tk_px(660), tk_px(560), tk_px(340), tk_px(80)))

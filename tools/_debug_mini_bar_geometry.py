@@ -334,6 +334,8 @@ def main():
     state.load_config = lambda: None
     try:
         import ACRPA
+        import app
+        app.build()   # 入口拆分后: import ACRPA 不再建窗, 需显式构建
     finally:
         state.load_config = _orig_load
     import utils

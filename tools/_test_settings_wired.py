@@ -64,7 +64,12 @@ def _read(path):
 
 
 def _consumer_files():
-    """→ [(相对名, 绝对路径)]: src/ 下的 .py, 排除 state.py / settings_window.py。"""
+    """→ [(相对名, 绝对路径)]: src/ 下的 .py, 排除 UI 写入面。
+
+    排除 state.py (schema 默认值) / settings_window.py (薄壳) 与整棵
+    src/ui/settings/ 包 (阶段二第 4 项: 设置卡迁入后仍只是 UI 写入, 若计入会掩盖
+    「死设置」判定 → 检查强度不降)。
+    """
     out = []
     for dirpath, dirnames, filenames in os.walk(SRC):
         dirnames[:] = [d for d in dirnames if not d.startswith("__pycache__")]
@@ -74,7 +79,10 @@ def _consumer_files():
             if name in _CONSUMER_EXCLUDE:
                 continue
             rel = os.path.relpath(os.path.join(dirpath, name), ROOT)
-            out.append((rel.replace("\\", "/"), os.path.join(dirpath, name)))
+            relposix = rel.replace("\\", "/")
+            if relposix.startswith("src/ui/settings/"):
+                continue
+            out.append((relposix, os.path.join(dirpath, name)))
     return out
 
 

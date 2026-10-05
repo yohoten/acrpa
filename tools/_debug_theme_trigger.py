@@ -44,6 +44,8 @@ def main():
     print("=== save_config -> _refresh_theme 触发收窄实测 ===")
     try:
         import ACRPA
+        import app
+        app.build()   # 入口拆分后: import ACRPA 不再建窗, 需显式构建
         import state
     except Exception as e:
         _p("WARN", "ACRPA 导入失败 ({}), 无法实测".format(e))

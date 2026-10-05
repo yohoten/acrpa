@@ -302,29 +302,25 @@ def validate_meta(meta, existing_ids=None):
 
 
 def check_script_commands(script_path):
-    """读取 .xls（行0表头跳过、行1标题、行2+ 命令列）核验命令均已注册。
+    """读取脚本（.xls/.xlsx/.acrpas）命令列，核验命令均已注册。
 
-    返回未注册命令名列表（去重）；无法读取 / 缺 xlrd 依赖 → 返回 []（不阻断）。
+    解析统一委托 script_io.iter_commands（唯一实现）。返回未注册命令名列表
+    （去重）；无法读取 / 缺依赖 → 返回 []（不阻断上传）。
     """
     try:
-        import xlrd
+        import script_io
         from commands import list_names
     except Exception:
         return []
     if not script_path or not os.path.exists(script_path):
         return []
     try:
-        book = xlrd.open_workbook(script_path)
-        sheet = book.sheet_by_index(0)
+        names = script_io.iter_commands(script_path)
     except Exception:
         return []
     known = set(list_names())
     unknown = []
-    for r in range(2, sheet.nrows):
-        try:
-            name = str(sheet.cell_value(r, 0)).strip()
-        except Exception:
-            continue
+    for name in names:
         if name and name not in known and name not in unknown:
             unknown.append(name)
     return unknown

@@ -114,11 +114,14 @@ def main():
              and n.func.id == "_bind_minibar"]
     check(len(calls) >= 3,
           "_bind_minibar() 至少 3 处调用 (启动/主题/PIL/缩放), 实际 {}".format(len(calls)))
-    top_level_call = any(
-        isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)
-        and isinstance(n.value.func, ast.Name) and n.value.func.id == "_bind_minibar"
+    # 入口拆分 (§9 阶段二第1项) 后, 「启动时调用」随 GUI 构建收进 build_app() 内,
+    # 不再是模块级 Expr 语句 —— 断言改为「build_app() 内调用过一次」。
+    startup_call = any(
+        isinstance(n, ast.FunctionDef) and n.name == "build_app"
+        and any(isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
+                and c.func.id == "_bind_minibar" for c in ast.walk(n))
         for n in atree.body)
-    check(top_level_call, "启动时 (模块级) 调用过一次 _bind_minibar()")
+    check(startup_call, "启动时 (build_app 内) 调用过一次 _bind_minibar()")
     check("_bind_minibar()" in acrpa and "_refresh_theme" in acrpa,
           "ACRPA 定义了 _bind_minibar 并接入主题刷新")
     check("import mini_bar" in acrpa and "import ACRPA" not in mini,

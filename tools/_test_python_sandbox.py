@@ -240,7 +240,10 @@ check(not missing, "m2 safe builtins present (missing=%r)" % (missing,))
 engine_text = read_text(os.path.join(SRC, "engine.py"))
 commands_text = read_text(os.path.join(SRC, "commands.py"))
 state_text = read_text(os.path.join(SRC, "state.py"))
-settings_text = read_text(os.path.join(SRC, "settings_window.py"))
+# 阶段二第 4 项: Python 卡迁至 src/ui/settings/cards/python.py, apply 由
+# src/ui/settings/window.py 逐卡注册 (定位更新, 强度不降)。
+settings_text = read_text(os.path.join(SRC, "ui", "settings", "cards", "python.py"))
+settings_window_text = read_text(os.path.join(SRC, "ui", "settings", "window.py"))
 
 check("def _python(" in engine_text, "n1 engine.py has Python handler")
 check("py_sandbox.precheck" in engine_text, "n2 engine.py calls py_sandbox.precheck")
@@ -250,9 +253,10 @@ check('register("代码"' in commands_text, "n5 commands.py still registers 代�
 check('"python_default_perm"' in state_text, "n6 state.py has python_default_perm")
 check('"python_full_enabled"' in state_text, "n7 state.py has python_full_enabled")
 check('"python_timeout"' in state_text, "n8 state.py has python_timeout")
-check("Python 扩展" in settings_text, "n9 settings_window.py has Python card")
-check('_apply_map["python"]' in settings_text, "n10 settings_window has python apply_map")
-check('_track_card_vars("python"' in settings_text, "n11 settings_window tracks python vars")
+check("Python 扩展" in settings_text, "n9 python 卡 has Python card")
+check('"python"' in settings_window_text and "_apply_map[" in settings_window_text,
+      "n10 settings 窗口 has python apply_map (逐卡注册)")
+check('_track_card_vars("python"' in settings_text, "n11 python 卡 tracks python vars")
 
 # ======================================================================
 # o. 守护断言（未改动竞品模块）

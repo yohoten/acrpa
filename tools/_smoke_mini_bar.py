@@ -87,35 +87,42 @@ def check_state():
 
 
 def check_settings():
-    """B. settings_window.py 系统卡统一收口。"""
-    tree = _parse("src/settings_window.py")
+    """B. 系统卡统一收口 (阶段二第 4 项: 卡片迁至 src/ui/settings/cards/system.py)。
+
+    定位随之更新, 检查强度不降: 仍断言「系统卡有整卡 apply + 注册进 _apply_map("system")
+    + _track_card_vars("system", ...)」。
+    """
+    tree = _parse("src/ui/settings/cards/system.py")
     funcs = {n.name for n in _iter_funcs(tree)}
 
-    if "_apply_system_settings" in funcs:
-        _p("OK", "settings_window 存在 _apply_system_settings")
+    if "build" in funcs and "apply" in funcs:
+        _p("OK", "system 卡导出 build/apply (原 _apply_system_settings)")
     else:
-        FAILS.append("缺 _apply_system_settings")
-        _p("FAIL", "settings_window 缺 _apply_system_settings")
+        FAILS.append("缺 system 卡 build/apply")
+        _p("FAIL", "system 卡缺 build/apply")
 
-    # _apply_map["system"] = _apply_system_settings
-    mapped = False
     tracked = False
     for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            for t in node.targets:
-                if isinstance(t, ast.Subscript):
-                    if (isinstance(t.value, ast.Name) and t.value.id == "_apply_map"
-                            and isinstance(t.slice, ast.Constant)
-                            and t.slice.value == "system"):
-                        mapped = True
         if isinstance(node, ast.Call):
             f = node.func
             if isinstance(f, ast.Name) and f.id == "_track_card_vars":
                 if node.args and isinstance(node.args[0], ast.Constant) \
                         and node.args[0].value == "system":
                     tracked = True
+
+    # _apply_map["system"] 注册: 现由 ui.settings.window 的逐卡注册循环承担
+    wtree = _parse("src/ui/settings/window.py")
+    wsrc = _read("src/ui/settings/window.py")
+    mapped = False
+    for node in ast.walk(wtree):
+        if isinstance(node, ast.Assign):
+            for t in node.targets:
+                if isinstance(t, ast.Subscript) and isinstance(t.value, ast.Name) \
+                        and t.value.id == "_apply_map":
+                    mapped = True
+    mapped = mapped and '"system"' in wsrc
     if mapped:
-        _p("OK", '_apply_map 注册了 "system"')
+        _p("OK", '_apply_map 注册了 "system" (window 逐卡注册)')
     else:
         FAILS.append('_apply_map 未注册 "system"')
         _p("FAIL", '_apply_map 未注册 "system"')

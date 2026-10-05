@@ -39,10 +39,27 @@ ADV_KEYS = (
 )
 
 
+def _settings_sources():
+    """设置窗口全部源码: 薄壳 src/settings_window.py + src/ui/settings/ 包 (阶段二第 4 项拆分后)。"""
+    files = [os.path.join(_SRC, "settings_window.py")]
+    pkg = os.path.join(_SRC, "ui", "settings")
+    if os.path.isdir(pkg):
+        for dp, _dirs, fs in os.walk(pkg):
+            for fn in fs:
+                if fn.endswith(".py"):
+                    files.append(os.path.join(dp, fn))
+    return files
+
+
 def _scan_colors():
-    """从 settings_window 源码扫描所有 C["key"] 用法，凑出完整颜色键集。"""
-    with open(os.path.join(_SRC, "settings_window.py"), encoding="utf-8") as fh:
-        src = fh.read()
+    """从设置窗口全部源码扫描所有 C["key"] 用法，凑出完整颜色键集。"""
+    src = ""
+    for fp in _settings_sources():
+        try:
+            with open(fp, encoding="utf-8") as fh:
+                src += fh.read() + "\n"
+        except Exception:
+            pass
     keys = sorted(set(re.findall(r'C\["([A-Za-z0-9_]+)"\]', src)))
     base = {
         "bgc": "#f4f4f4", "fgb": "#111111", "fgm": "#666666", "ebg": "#ffffff",
@@ -114,9 +131,11 @@ def main():
         # 新增 UI 字段确实被绑定（旧实现根本没有这些控件）
         check("P0-4 新 UI 生效: proto_detect",
               getattr(state, "PADDLE_DLL_PROTO_DETECT", "") == expected.get("PADDLE_DLL_PROTO_DETECT"))
+        # 高级设置卡已迁至 src/ui/settings/cards/advanced.py (阶段二第 4 项), 定位随之更新
         check("P0-4 新 UI 生效: license 字段存在",
-              "paddle_dll_license_var" in open(os.path.join(_SRC, "settings_window.py"),
-                                               encoding="utf-8").read())
+              "paddle_dll_license_var" in open(
+                  os.path.join(_SRC, "ui", "settings", "cards", "advanced.py"),
+                  encoding="utf-8").read())
 
         # ── P0-3: apply 抛异常 → 记录失败原因（供角标点击查看/重试） ──
         def _boom():

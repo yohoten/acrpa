@@ -250,6 +250,13 @@ HELP_GEOMETRY = ""       # 帮助窗口几何 (如 "900x640+200+120"，空=默�
 HELP_MAXIMIZED = False   # 帮助窗口是否最大化 (启动恢复)
 HELP_MODAL = False       # 帮助窗口是否模态 (False=非模态, 可边看边操作)
 
+# ── 运行前校验 (路线图 阶段二第 7 项) ──
+# 运行时开关, **不** 进 _config_schema (避免扩大持久化/schema 面):
+# False (默认) = main_run 只把校验问题记日志 + 非阻断 toast, 绝不打断启动 ——
+# 这是保证「定时任务/托盘/热键复用 main_run」零行为变化的关键。
+# True = 发现 error 时弹一次 messagebox.askyesno, 选否则中止本次运行。
+VALIDATE_BEFORE_RUN = False
+
 # ── Debugger state ──
 debug_mode = False          # 调试模式开关
 step_mode = False           # 单步执行模式

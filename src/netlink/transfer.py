@@ -39,12 +39,13 @@ except Exception:          # 极端环境下 state 不可用时降级（路径�
 CHUNK_RAW = 64 * 1024                 # 每块原始字节数（base64 后约 85KB < MAX_FRAME_BYTES）
 MAX_SCRIPT_BYTES = 32 * 1024 * 1024   # 单脚本上限 32MB
 RECV_SUBDIR = "received"              # 接收子目录名
-ALLOWED_EXT = (".xls", ".xlsx", ".json")
+ALLOWED_EXT = (".xls", ".xlsx", ".json", ".acrpas")
 
 TOPIC_TRANSFER = "netlink.transfer"   # 进度/列表事件主题
 
 # 合法脚本名：根下 "a.xls" 或接收目录 "received/b.xlsx"（仅此一种斜杠前缀）
-_NAME_RE = re.compile(r"^(received/)?[^/\\:*?\"<>|]+\.(xls|xlsx|json)$")
+# 扩展名含 .acrpas（阶段二第 5 项新增一等脚本格式）。
+_NAME_RE = re.compile(r"^(received/)?[^/\\:*?\"<>|]+\.(xls|xlsx|json|acrpas)$")
 
 
 # ── 路径工具 ─────────────────────────────────────────────────────────────

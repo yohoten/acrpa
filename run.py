@@ -56,8 +56,8 @@ if __name__ == "__main__":
         cleanup_and_exit(1)
 
     try:
-        from ACRPA import root
-        root.mainloop()
+        import app
+        app.main()
     except KeyboardInterrupt:
         print("\n程序已退出")
         cleanup_and_exit(0)

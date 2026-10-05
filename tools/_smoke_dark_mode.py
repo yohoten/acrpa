@@ -156,22 +156,35 @@ def check_hardcoded_colors():
         FAILS.append("scheduler.py 仍含硬编码: {}".format(s_hits))
         _p("FAIL", "scheduler.py 仍含硬编码: {}".format(s_hits))
 
-    # B3. ACRPA.py: #9CA3AF 仅允许保留在 _FLOW_COLORS 图形色板内
+    # B3. 流程图色板 _FLOW_COLORS 已随工作流 Tab 迁至 src/ui/workflow_view.py
+    #     (阶段二第 3 项第 3 步): #9CA3AF 仅允许保留在该模块 _FLOW_COLORS 图形色板内,
+    #     且 ACRPA.py 不再散落任何 #9CA3AF 硬编码 (语义不变, 定位更新)。
     a_src = _read("src/ACRPA.py")
-    i0 = a_src.find("_FLOW_COLORS = {")
-    i1 = a_src.find("}", i0) if i0 != -1 else -1
+    try:
+        wv_src = _read("src/ui/workflow_view.py")
+    except Exception:
+        wv_src = ""
+    i0 = wv_src.find("_FLOW_COLORS = {")
+    i1 = wv_src.find("}", i0) if i0 != -1 else -1
     stray = None
-    pos = a_src.find("#9CA3AF")
+    pos = wv_src.find("#9CA3AF")
     while pos != -1:
         if not (i0 != -1 and i0 < pos < i1):
             stray = pos
             break
-        pos = a_src.find("#9CA3AF", pos + 1)
-    if stray is None:
-        _p("OK", "ACRPA.py 的 #9CA3AF 仅保留在 _FLOW_COLORS 图形色板内 (刻意固定)")
+        pos = wv_src.find("#9CA3AF", pos + 1)
+    if "#9CA3AF" in a_src:
+        FAILS.append("ACRPA.py 仍含 #9CA3AF (应随 _FLOW_COLORS 迁至 ui/workflow_view.py)")
+        _p("FAIL", "ACRPA.py 仍含 #9CA3AF 硬编码 (流程图色板应已迁出)")
+    elif i0 == -1:
+        FAILS.append("ui/workflow_view.py 缺 _FLOW_COLORS 图形色板")
+        _p("FAIL", "ui/workflow_view.py 缺 _FLOW_COLORS 图形色板")
+    elif stray is not None:
+        FAILS.append("ui/workflow_view.py 在 _FLOW_COLORS 之外仍含 #9CA3AF")
+        _p("FAIL", "ui/workflow_view.py 在 _FLOW_COLORS 之外仍含 #9CA3AF")
     else:
-        FAILS.append("ACRPA.py 在 _FLOW_COLORS 之外仍含 #9CA3AF")
-        _p("FAIL", "ACRPA.py 在 _FLOW_COLORS 之外仍含 #9CA3AF")
+        _p("OK", "流程图色板 _FLOW_COLORS 位于 ui/workflow_view.py, "
+                 "#9CA3AF 仅在其内 (刻意固定), ACRPA.py 无散落硬编码")
 
     # B4. 三文件各自含 themed( , 合计 ≥ 3
     c_d = _themed_count("src/dialogs.py")
@@ -191,12 +204,18 @@ def check_acrpa_cursor_and_button():
     a_src = _read("src/ACRPA.py")
     tree = _parse("src/ACRPA.py")
 
-    # C1. 存在 insertbackground=
-    if "insertbackground=" in a_src:
-        _p("OK", "ACRPA.py 存在 insertbackground= (光标色随主题)")
+    # C1. 存在 insertbackground= —— 阶段二第 3 项第 1 步起: 日志面板已迁至
+    #     src/ui/log_dock.py, 故「日志 Text 光标色随主题」的定位随之更新。
+    #     检查强度不降: 仍要求**日志 Text 创建处**带 insertbackground=。
+    try:
+        ld_src = _read("src/ui/log_dock.py")
+    except Exception:
+        ld_src = ""
+    if "insertbackground=" in a_src and "insertbackground=" in ld_src:
+        _p("OK", "ACRPA.py / ui/log_dock.py 均存在 insertbackground= (光标色随主题)")
     else:
-        FAILS.append("ACRPA.py 缺 insertbackground=")
-        _p("FAIL", "ACRPA.py 缺 insertbackground=")
+        FAILS.append("缺 insertbackground= (ACRPA.py / ui/log_dock.py)")
+        _p("FAIL", "缺 insertbackground= (ACRPA.py / ui/log_dock.py)")
 
     # C2. devlink_btn: 图标按钮 —— v0.1.29-beta「UI 美化」起, 图标改由命名图标
     #     字体 (FONT_ICON_MD) 承载, 不再写死 emoji + ("Segoe UI Symbol", 11) 元组。
@@ -300,11 +319,15 @@ def check_theme_refresh_regressions():
         return
 
     # G1. dialogs 颜色表重同步
-    if "dialogs.C = C" in seg:
-        _p("OK", "G1 _refresh_theme 同步 dialogs.C (D1)")
+    #     阶段二第 2 项 (ui/theme.py + ThemeBus) 起: 改为「一次 publish → dialogs 订阅回调
+    #     同步自身色表」, 检查强度不降 —— 既要求广播入口存在, 又要求旧具名扇出已清除。
+    d_src = _read("src/dialogs.py")
+    if "ui_theme.publish(" in seg and "dialogs.C = C" not in seg \
+            and "_ui_theme.subscribe(refresh_theme)" in d_src:
+        _p("OK", "G1 _refresh_theme 一次 publish, dialogs 订阅回调同步色表 (D1)")
     else:
-        FAILS.append("G1 _refresh_theme 未同步 dialogs.C")
-        _p("FAIL", "G1 _refresh_theme 未同步 dialogs.C (D1)")
+        FAILS.append("G1 _refresh_theme 未走 ThemeBus 广播 (或仍残留 dialogs.C = C 扇出)")
+        _p("FAIL", "G1 _refresh_theme 未改为 ThemeBus 广播 + dialogs 订阅 (D1)")
 
     # G2. 不得再读取/写入 C["old_*"]
     old_names = ("old_sc", "old_dg", "old_wn", "old_ac")
@@ -365,15 +388,25 @@ def check_theme_refresh_regressions():
         FAILS.append("G4 ACRPA.py 仍将 #FEF3C7 作为颜色值使用")
         _p("FAIL", "G4 ACRPA.py 仍将 #FEF3C7 作为颜色值使用")
 
-    # G5. _refresh_theme 内重刷日志区 / 脚本树 tag
-    has_log_tag = 'tag_configure("error"' in seg and 'tag_configure("success"' in seg
+    # G5. 日志区 tag 随主题重配 + 脚本树 tag 重刷 (D3)
+    #     阶段二第 3 项第 1 步起: 日志面板整体迁至 src/ui/log_dock.py, 日志 tag 重配
+    #     由其 ThemeBus 订阅回调 refresh_theme 承担 —— 定位随之更新。
+    #     检查强度不降: 仍断言「日志 tag 随主题重配」这一语义 (且必须经订阅驱动),
+    #     只把归属从 _refresh_theme 段换到新模块; 脚本树 tag 仍须留在 _refresh_theme 段。
+    try:
+        ld_src = _read("src/ui/log_dock.py")
+    except Exception:
+        ld_src = ""
+    has_log_tag = ('tag_configure("error"' in ld_src
+                   and 'tag_configure("success"' in ld_src
+                   and "subscribe(refresh_theme)" in ld_src)
     has_tree_tag = 'tag_configure("running"' in seg
     if has_log_tag and has_tree_tag:
-        _p("OK", "G5 _refresh_theme 重刷日志区 + 脚本树 tag (D3)")
+        _p("OK", "G5 日志区 tag 由 log_dock 订阅回调重配 + 脚本树 tag 由 _refresh_theme 重刷 (D3)")
     else:
-        FAILS.append("G5 _refresh_theme 缺 tag 重刷 (log={} tree={})".format(
+        FAILS.append("G5 tag 重刷缺失 (log_dock={} tree={})".format(
             has_log_tag, has_tree_tag))
-        _p("FAIL", "G5 _refresh_theme 缺 tag 重刷 (log={} tree={})".format(
+        _p("FAIL", "G5 tag 重刷缺失 (log_dock={} tree={})".format(
             has_log_tag, has_tree_tag))
 
     # G6. settings_window.refresh_theme 接受 prev
@@ -384,21 +417,28 @@ def check_theme_refresh_regressions():
         FAILS.append("G6 settings_window.refresh_theme 未接受 prev 旧快照")
         _p("FAIL", "G6 settings_window.refresh_theme 未接受 prev 旧快照")
 
-    # G7. netlink_window 主题刷新入口 + ACRPA 调用
+    # G7. netlink_window 主题刷新入口 + 经 ThemeBus 适配器接入
+    #     阶段二第 2 项起不再在 _refresh_theme 内具名调用, 改为 _subscribe_theme_bus()
+    #     注册的适配器 (_theme_sync_netlink) 调用 —— 下面同时断言「仍被调用」与「已注册」,
+    #     并断言旧具名扇出已清除 (强度不降)。
     n_src = _read("src/netlink_window.py")
-    if "def refresh_theme" in n_src and "netlink_window.refresh_theme()" in seg:
-        _p("OK", "G7 netlink_window.refresh_theme 存在且被 _refresh_theme 调用 (D4)")
+    if "def refresh_theme" in n_src and "netlink_window.refresh_theme()" in a_src \
+            and "ui_theme.subscribe(_fn)" in a_src \
+            and "netlink_window.refresh_theme()" not in seg:
+        _p("OK", "G7 netlink_window.refresh_theme 存在且经 ThemeBus 适配器接入 (D4)")
     else:
-        FAILS.append("G7 netlink_window 主题刷新入口缺失或未接入")
-        _p("FAIL", "G7 netlink_window 主题刷新入口缺失或未接入")
+        FAILS.append("G7 netlink_window 主题刷新入口缺失或未接入 ThemeBus")
+        _p("FAIL", "G7 netlink_window 主题刷新入口缺失或未接入 ThemeBus")
 
-    # G8. utils._colors 提供 hlbg
+    # G8. ui.theme.colors 提供 hlbg (阶段二第 2 项: 色板实现迁至 src/ui/theme.py;
+    #     utils._colors 保留为兼容委托, 故两处任一含定义即算通过, 且必须两处都在)
     u_src = _read("src/utils.py")
-    if "hlbg=" in u_src.replace(" ", ""):
-        _p("OK", "G8 utils._colors 提供 hlbg 主题键")
+    t_src = _read("src/ui/theme.py")
+    if "hlbg=" in t_src.replace(" ", "") and "def _colors" in u_src:
+        _p("OK", "G8 ui.theme.colors 提供 hlbg 主题键 (utils._colors 委托)")
     else:
-        FAILS.append("G8 utils._colors 缺 hlbg 主题键")
-        _p("FAIL", "G8 utils._colors 缺 hlbg 主题键")
+        FAILS.append("G8 主题色板缺 hlbg 键或 utils._colors 委托丢失")
+        _p("FAIL", "G8 主题色板缺 hlbg 键或 utils._colors 委托丢失")
 
     # G9. _walk 覆盖 Menu / Checkbutton / Radiobutton (主窗 + settings)
     if '"Menu"' in seg and '"Checkbutton", "Radiobutton"' in seg:
@@ -406,8 +446,15 @@ def check_theme_refresh_regressions():
     else:
         FAILS.append("G9 ACRPA._walk 覆盖不全 (Menu/Checkbutton/Radiobutton)")
         _p("FAIL", "G9 ACRPA._walk 覆盖不全 (Menu/Checkbutton/Radiobutton)")
-    if '"Menu"' in s_src and '"Canvas"' in s_src and '"Listbox"' in s_src \
-            and '"Spinbox"' in s_src:
+    # 阶段二第 4 项: 设置窗口 refresh_theme._walk 实现迁至 src/ui/settings/window.py
+    # (src/settings_window.py 退化为薄壳, refresh_theme 仅转发)。定位随之更新,
+    # 检查强度不降: 仍断言「设置窗口 _walk 覆盖 Menu/Canvas/Listbox/Spinbox」。
+    try:
+        sw_src = _read("src/ui/settings/window.py")
+    except Exception:
+        sw_src = ""
+    if '"Menu"' in sw_src and '"Canvas"' in sw_src and '"Listbox"' in sw_src \
+            and '"Spinbox"' in sw_src:
         _p("OK", "G9b settings._walk 覆盖 Menu/Canvas/Listbox/Spinbox (D5)")
     else:
         FAILS.append("G9b settings._walk 覆盖不全")

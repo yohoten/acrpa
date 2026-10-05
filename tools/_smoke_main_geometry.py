@@ -118,6 +118,8 @@ elif mode == "compact":
     state.COMPACT_MODE = True
 
 import ACRPA
+import app
+app.build()   # 入口拆分后: import ACRPA 不再建窗, 需显式构建
 root = ACRPA.root
 try:
     root.update_idletasks()

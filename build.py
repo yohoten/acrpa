@@ -26,7 +26,7 @@ _7Z_PATHS = [
 
 # ── 项目模块 (全部纳入) ──
 _PROJECT_MODULES = [
-    "state", "scriptdata", "templates", "utils", "commands",
+    "app", "state", "scriptdata", "templates", "utils", "commands",
     "engine", "recorder", "scheduler", "updater",
     "marketplace", "ocr_backend", "dd_backend", "paddle_dll", "safe_eval",
     "netlink_window",

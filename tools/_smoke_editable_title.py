@@ -66,6 +66,8 @@ def main():
 
     emit("[IMPORT] import ACRPA ...")
     import ACRPA
+    import app
+    app.build()   # 入口拆分后: import ACRPA 不再建窗, 需显式构建
     import state as state_mod
 
     root = ACRPA.root
@@ -240,6 +242,7 @@ def main():
             "sys.path.insert(0, r'{root}');"
             "sys.path.insert(0, r'{src}');"
             "import ACRPA;"
+            "import app;app.build();"
             "print('CHILD_TITLE=' + str(ACRPA.title_lbl.cget('text')));"
             "print('CHILD_SESSION=' + str(ACRPA._title_text_session));"
             "sys.stdout.flush();"

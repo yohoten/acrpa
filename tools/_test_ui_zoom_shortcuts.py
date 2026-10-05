@@ -94,6 +94,12 @@ import os, sys
 sys.path.insert(0, os.path.join(r"{base}", "src"))
 sys.path.insert(0, r"{base}")
 import ACRPA, state, utils, tkinter
+import app
+app.build()   # 入口拆分后: import ACRPA 不再建窗, 需显式构建 (app.py 薄入口)
+# 隔离: 本用例会写 state.EDITOR_ZOOM 并落盘 (save_config), 若上次运行把倍率留在了
+# 上限 12, 再次运行 "+3" 会被钳制成 no-op 而误判失败。这里先强制回到基准态。
+state.EDITOR_ZOOM = 0
+ACRPA._apply_editor_zoom()
 try:
     before = int(ACRPA._editor_font.cget("size"))
     base = int(ACRPA._editor_base_size())
@@ -115,6 +121,10 @@ try:
           % (before, base, after, zoom_saved, reset, low, high, style_font, ctrl_s, has_guard, tree_style))
     sys.stdout.flush()
 finally:
+    try:
+        ACRPA._editor_zoom_reset()   # 还原 EDITOR_ZOOM=0, 不污染用户 config.json
+    except Exception:
+        pass
     os._exit(0)   # 必须显式 flush: os._exit 不走 atexit, 管道下缓冲会丢输出
 '''.format(base=BASE.replace("\\", "/"))
 

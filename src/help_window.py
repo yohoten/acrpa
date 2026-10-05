@@ -227,6 +227,11 @@ class _HelpWindow(object):
         C = self.colors
         win = tkinter.Toplevel(self.root)
         self.win = win
+        try:    # 声明自管换肤: 通用 walk 不再跨入, 由本类 _apply_theme 负责
+            from ui import theme as _ui_theme
+            _ui_theme.claim_window(win, "help_window")
+        except Exception:
+            pass
         win.title("帮助 — A/C RPA")
         try:
             win.configure(bg=C["bgc"])

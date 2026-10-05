@@ -135,25 +135,16 @@ def delete_user_snippet(name):
 # ── xls 片段文件加载 ──────────────────────────────────────────────────
 
 def _load_xls_rows(path):
+    """读取片段脚本行（.xls/.xlsx/.acrpas）；缺依赖 / 读取失败 → 返回 []。
+
+    解析统一委托 script_io.load_script（唯一实现）。
+    """
     try:
-        import xlrd
+        import script_io
     except Exception:
         return []
     try:
-        from scriptdata import ScriptData
-        wb = xlrd.open_workbook(path)
-        s1 = wb.sheet_by_index(0)
-        rows = []
-        for i in range(2, s1.nrows):          # 跳过 2 行表头
-            vals = s1.row_values(i)
-            if not vals or not vals[0]:
-                continue
-            args = ["" if v is None else str(v) for v in vals[1:10]]
-            while len(args) < 9:
-                args.append("")
-            rows.append(ScriptData(str(vals[0]), args))
-        wb.release_resources()
-        return rows
+        return script_io.load_script(path)
     except Exception:
         return []
 

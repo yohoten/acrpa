@@ -1,4 +1,6 @@
 """ScriptData — the data model for a single automation script row."""
+import uuid
+
 import commands
 
 
@@ -6,13 +8,22 @@ class ScriptData:
     COMMANDS = commands.list_names()
     COLUMNS = ["命令类型"]+["参数{}".format(i) for i in range(1,10)]
 
-    def __init__(self, cmd_type="", args=None):
+    @staticmethod
+    def new_id():
+        """生成一个非空且（实践上）唯一的行标识 (8 位十六进制 uuid)。"""
+        return uuid.uuid4().hex[:8]
+
+    def __init__(self, cmd_type="", args=None, id=None):
         self.cmd_type = cmd_type if cmd_type else ""
         # Handle None values in args - convert to empty string for display
         if args is None:
             self.args = [""]*9
         else:
             self.args = ["" if arg is None else str(arg) for arg in args]
+        # 稳定行标识: 不进 to_tuple (保持 10 列 UI 契约), 仅供行身份追踪 /
+        # .acrpas 往返 / 撤销快照 (copy.deepcopy 兼容) 使用。
+        # 旧调用方不传 id → 自动生成; 空/None 亦回退为自动生成。
+        self.id = id or ScriptData.new_id()
 
     @classmethod
     def from_xlrd_row(cls, row):

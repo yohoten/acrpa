@@ -416,7 +416,9 @@ def test_client_factory():
 # ══════════════════════════════════════════════════════════════════════════
 
 def test_settings_window_ast():
-    src = _read("src/settings_window.py")
+    # 阶段二第 4 项: AI 卡迁至 src/ui/settings/cards/ai.py; apply 由
+    # src/ui/settings/window.py 逐卡注册 (定位更新, 检查强度不降)。
+    src = _read("src/ui/settings/cards/ai.py")
     ok("AI 卡含 提供商 Combobox",
        "_prov_combo = ttk.Combobox(" in src and "提供商" in src)
     ok("AI 卡含 模型 Entry",
@@ -425,11 +427,13 @@ def test_settings_window_ast():
        "api_base_entry = tkinter.Entry(" in src)
     ok("AI 卡含 [测试连接] 按钮", 'text="测试连接"' in src)
     ok("AI 卡含 [添加自定义提供商] 按钮", 'text="添加自定义提供商"' in src)
-    ok("_apply_map[\"ai\"] 仍注册",
-       '_apply_map["ai"] = _apply_ai_settings' in src)
+    ok("ai 卡导出 build/apply", "def build(" in src and "def apply(" in src)
     ok('_track_card_vars("ai" 存在', '_track_card_vars("ai"' in src)
-    ok("_apply_ai_settings 调用 set_provider_key",
-       "set_provider_key" in src and "def _apply_ai_settings" in src)
+    ok("ai 卡 apply 调用 set_provider_key", "set_provider_key" in src)
+    # 原 `_apply_map["ai"] = _apply_ai_settings`: 窗口逐卡注册表登记 ai (强度不降)
+    wsrc = _read("src/ui/settings/window.py")
+    ok('window 逐卡注册 _apply_map (含 "ai")',
+       "_apply_map[" in wsrc and '"ai"' in wsrc)
 
 
 # ══════════════════════════════════════════════════════════════════════════

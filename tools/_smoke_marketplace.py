@@ -265,6 +265,8 @@ def check_dynamic():
 
     _p("INFO", "导入 ACRPA (真实主程序)…")
     import ACRPA
+    import app
+    app.build()   # 入口拆分后: import ACRPA 不再建窗, 需显式构建
 
     root = ACRPA.root
     try:

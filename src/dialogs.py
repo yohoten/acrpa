@@ -20,6 +20,8 @@ import state
 from engine import engine
 from utils import (_btn, _darken, log1, show_toast, attach_tooltip, themed,
                    bind_sel_bold, FONT_LOG, FONT_TINY)
+# UI 基础层 (阶段二第 2 项): 语义角色登记 + 换肤事件总线订阅
+from ui import theme as _ui_theme
 
 # ── 依赖注入上下文 (由 ACRPA.py 在启动时调用 init_ctx 填充) ──
 root = None              # 主窗口
@@ -37,6 +39,8 @@ _exit_for_update = None       # 退出主程序回调 (自更新替换主程序�
 _PIL_loaded = False
 Image = None
 ImageTk = None
+
+_prev_colors = None    # 上次换肤时的主题快照 (ThemeBus 未显式传 prev 时的兜底)
 
 
 def init_ctx(root_win=None, colors=None, fonts=None, app_root="", res_dir="",
@@ -57,6 +61,106 @@ def init_ctx(root_win=None, colors=None, fonts=None, app_root="", res_dir="",
     _main_run = main_run
     _tlog = tlog
     _exit_for_update = exit_for_update
+    # 阶段二第 2 项: 订阅 ThemeBus —— 主题切换由 _refresh_theme 一次 publish 触发,
+    # 本模块不再被 ACRPA 具名同步 (原先的 `dialogs.C = C` 扇出已删除)。
+    _ui_theme.subscribe(refresh_theme)
+
+
+def _retheme_window(win, prev, palette):
+    """递归把已打开的弹窗重刷为当前主题 (语义角色优先, 与主窗 _walk 同口径)。
+
+    Label/Button 颜色一律取「控件创建时登记的语义角色」(ui.theme.get_role),
+    不做中文文案嗅探, 也不按旧颜色值反推语义组。
+    """
+    def _walk(p):
+        for w in p.winfo_children():
+            try:
+                cls = w.winfo_class()
+                if cls in ("Frame", "TFrame"):
+                    if int(w.cget("highlightthickness")) > 0:
+                        w.configure(bg=palette["bgc"], highlightbackground=palette["bd"])
+                    else:
+                        w.configure(bg=palette["bg"])
+                elif cls in ("Label", "TLabel"):
+                    w.configure(bg=str(p.cget("bg")),
+                                fg=palette.get(_ui_theme.get_role(w) or "", palette["fgm"]))
+                elif cls == "Text":
+                    w.configure(bg=palette["logbg"], fg=palette["logfg"],
+                                insertbackground=palette["fgt"],
+                                selectbackground=palette["acl"],
+                                selectforeground=palette["fgt"])
+                elif cls == "Scrollbar":
+                    w.configure(bg=palette["bd"], activebackground=palette["fgm"],
+                                troughcolor=palette["logbg"])
+                elif cls == "Button":
+                    _role = _ui_theme.get_role(w)
+                    if _role:
+                        w.configure(bg=palette.get(_role, palette["bgc"]))
+                    else:
+                        w.configure(bg=palette["bgc"], fg=palette["fgb"],
+                                    activebackground=palette["acl"],
+                                    highlightbackground=palette["bd"])
+                elif cls == "Entry":
+                    w.configure(bg=palette["ebg"], fg=palette["fgb"],
+                                insertbackground=palette["fgt"])
+                elif cls == "Combobox":
+                    w.configure(background=palette["bgc"], fieldbackground=palette["bgc"],
+                                foreground=palette["fgb"])
+                elif cls == "Canvas":
+                    w.configure(bg=palette["bg"])
+                elif cls == "Listbox":
+                    w.configure(bg=palette["ebg"], fg=palette["fgb"],
+                                selectbackground=palette["ac"], selectforeground="white")
+                elif cls == "Spinbox":
+                    w.configure(bg=palette["ebg"], fg=palette["fgb"],
+                                buttonbackground=palette["bgc"],
+                                insertbackground=palette["fgt"])
+                elif cls in ("Checkbutton", "Radiobutton"):
+                    _pbg = str(p.cget("bg"))
+                    w.configure(bg=_pbg, fg=palette["fgb"], activebackground=_pbg,
+                                activeforeground=palette["fgt"],
+                                selectcolor=palette["bgc"],
+                                highlightbackground=palette["bd"])
+                elif cls == "Menu":
+                    w.configure(bg=palette["bgc"], fg=palette["fgb"],
+                                activebackground=palette["ac"], activeforeground="white",
+                                disabledforeground=palette["fgm"])
+            except Exception:
+                pass
+            _walk(w)
+
+    try:
+        _walk(win)
+    except Exception:
+        pass
+
+
+def refresh_theme(dark=None, colors=None, prev=None):
+    """ThemeBus 订阅回调: 同步模块色表 + 重刷已打开的弹窗 (真实生效)。
+
+    · 同步 `C` —— 之后新开的弹窗直接用当前主题色;
+    · 对 root 下**未声明自管换肤**的 Toplevel 逐个递归重刷 —— 已打开的弹窗即时换肤
+      (设置/互联/帮助/市场/Mini Bar 等自管窗口由各自模块的订阅回调处理, 此处跳过)。
+    参数签名与 `ui.theme.publish(dark, colors, prev)` 对齐。
+    """
+    global C, _prev_colors
+    if isinstance(colors, dict):
+        C = colors
+    if not isinstance(C, dict):
+        return
+    if not isinstance(prev, dict):
+        prev = _prev_colors if isinstance(_prev_colors, dict) else {}
+    if root is not None:
+        try:
+            for w in root.winfo_children():
+                if w.winfo_class() != "Toplevel":
+                    continue
+                if _ui_theme.is_claimed(w):
+                    continue
+                _retheme_window(w, prev, C)
+        except Exception:
+            pass
+    _prev_colors = dict(C)
 
 
 def _load_pil():
@@ -213,6 +317,7 @@ def _show_help_dialog_legacy():
             relief="flat", bd=1, cursor="hand2", padx=12, pady=3,
             activebackground=C["ach"], activeforeground="white",
             command=_open_doc_online)
+        _ui_theme.set_role(_doc_btn, "ac")   # 语义角色登记 (换肤按角色回填)
         _doc_btn.pack(side="left", padx=(0,4))
         attach_tooltip(_doc_btn, "打开在线使用说明（离线时回退本地文件）")
         # README: 优先打开在线 URL (打包后本地文件不存在且渲染美观)，
@@ -415,8 +520,8 @@ def open_version_history():
             command=dd.destroy).grid(row=1, column=0, pady=8)
         dd.bind("<Escape>", lambda e: dd.destroy())
 
-    _btn(vh_btn_frame, "回退到此版本", _vh_restore, C["wn"], "white").pack(side="left", padx=2)
-    _btn(vh_btn_frame, "对比差异", _vh_diff, C["ac"], "white").pack(side="left", padx=2)
+    _btn(vh_btn_frame, "回退到此版本", _vh_restore, "wn", "white").pack(side="left", padx=2)
+    _btn(vh_btn_frame, "对比差异", _vh_diff, "ac", "white").pack(side="left", padx=2)
     _btn(vh_btn_frame, "刷新", _vh_refresh, C["bgc"], C["fgb"]).pack(side="left", padx=2)
     tkinter.Label(vh_btn_frame, text="提示: 每次保存自动创建版本快照",
         font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"]).pack(side="right")
@@ -531,6 +636,7 @@ def open_ai_panel():
         font=FONT_BUTTON, bg=C["ac"], fg="white",
         relief="flat", bd=1, padx=16, pady=4, cursor="hand2",
         activebackground=C["ach"], activeforeground="white")
+    _ui_theme.set_role(gen_btn, "ac")
     gen_btn.grid(row=0, column=0, padx=(0, 6))
     attach_tooltip(gen_btn, "根据描述生成脚本 (Ctrl+Enter)")
 
@@ -543,6 +649,7 @@ def open_ai_panel():
         font=FONT_BUTTON, bg=C["sc"], fg="white",
         relief="flat", bd=1, padx=16, pady=4, cursor="hand2",
         activebackground=_darken(C["sc"]), activeforeground="white")
+    _ui_theme.set_role(insert_btn, "sc")
     insert_btn.grid(row=0, column=2, padx=3)
     attach_tooltip(insert_btn, "将生成的脚本插入编辑器表格")
 
@@ -826,6 +933,7 @@ def open_ai_debug_dialog():
     ask_btn = tkinter.Button(input_frame, text="▶ 提问",
         font=FONT_BUTTON, bg=C["ac"], fg="white",
         relief="flat", bd=1, padx=12, pady=2, cursor="hand2")
+    _ui_theme.set_role(ask_btn, "ac")
     ask_btn.grid(row=0, column=1)
     attach_tooltip(ask_btn, "提交问题给 AI 分析执行日志")
 
@@ -925,9 +1033,9 @@ def open_ai_debug_dialog():
         command=_copy_answer)
     _copy_btn.pack(side="left")
     attach_tooltip(_copy_btn, "复制 AI 回答到剪贴板")
-    tkinter.Button(btn_frame, text="关闭", font=FONT_BUTTON,
+    _ui_theme.roled(tkinter.Button(btn_frame, text="关闭", font=FONT_BUTTON,
         bg=C["dg"], fg="white", relief="flat", bd=1, padx=16, pady=3,
-        command=dlg.destroy).pack(side="right")
+        command=dlg.destroy), "dg").pack(side="right")
 
     dlg.bind("<Escape>", lambda e: dlg.destroy())
 
@@ -980,8 +1088,9 @@ def open_sched_manager():
             bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1).pack(side="left")
         _browse_btn = tkinter.Button(f2, text="浏览", font=FONT_SMALL, bg=C["ac"], fg="white",
             command=lambda: sv.set(filedialog.askopenfilename(
-                title="选择脚本", filetypes=[('Excel', '*.xls *.xlsx')],
+                title="选择脚本", filetypes=[('Excel', '*.xls *.xlsx'), ('ACRPA 脚本', '*.acrpas')],
                 initialdir=APP_ROOT) or sv.get()))
+        _ui_theme.set_role(_browse_btn, "ac")
         _browse_btn.pack(side="left", padx=4)
         attach_tooltip(_browse_btn, "选择脚本文件")
 
@@ -1020,13 +1129,13 @@ def open_sched_manager():
             _mgr_refresh()
             ndlg.destroy()
             show_toast(root, "任务已添加: {}".format(n), "success")
-        tkinter.Button(bf, text="确定", command=_confirm, font=FONT_BUTTON,
-            bg=C["ac"], fg="white", padx=14, pady=3).pack(side="left", padx=4)
+        _ui_theme.roled(tkinter.Button(bf, text="确定", command=_confirm, font=FONT_BUTTON,
+            bg=C["ac"], fg="white", padx=14, pady=3), "ac").pack(side="left", padx=4)
         tkinter.Button(bf, text="取消", command=ndlg.destroy, font=FONT_BUTTON,
             bg=C["bgc"], fg=C["fgb"], padx=14, pady=3).pack(side="left", padx=4)
         ndlg.bind("<Escape>", lambda e: ndlg.destroy())
 
-    _btn(mgr_toolbar, "新建任务", _mgr_new_task, C["ac"], "white").pack(side="left", padx=1)
+    _btn(mgr_toolbar, "新建任务", _mgr_new_task, "ac", "white").pack(side="left", padx=1)
     _btn(mgr_toolbar, "刷新", lambda: _mgr_refresh(), C["bgc"], C["fgb"]).pack(side="left", padx=1)
     tkinter.Frame(mgr_toolbar, bg=C["bd"], width=2, height=20).pack(side="left", fill="y", padx=4)
     _btn(mgr_toolbar, "查看日志", lambda: _mgr_show_logs(dlg),

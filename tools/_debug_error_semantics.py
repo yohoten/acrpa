@@ -76,6 +76,9 @@ def _stub_screenshot():
 
 _silence_logs()
 _stub_screenshot()
+# 失败现场留存 (阶段二第 7 项) 默认关闭: 既有 E1-E15 用例不需要落盘;
+# 新增 E16 会单独开启并指向临时目录, 测完恢复 —— 不改变既有断言强度。
+engine_mod.FAILURE_CONTEXT_ENABLED = False
 engine.retry = 0
 engine.retry_interval = 0
 state.STOP_ON_ERROR = True
@@ -302,6 +305,80 @@ check("E15 无 handler 的块标记不判失败", r15.ok is True, repr(r15.ok))
 check("E15 block marker code=no_handler", r15.code == "no_handler", r15.code)
 r15b = engine.execute(_row("如果", ["1"]), os.getcwd())
 check("E15 '如果' 标记同样不判失败", r15b.ok is True, repr(r15b.ok))
+
+# ── E16: 失败现场留存 JSON 落盘 + 内容断言 (阶段二第 7 项配套) ──
+print("== E16 失败现场留存 ==")
+import glob as _glob
+import json as _json
+import shutil as _shutil
+import tempfile as _tempfile
+
+_ctx_dir = _tempfile.mkdtemp(prefix="acrpa_failctx_")
+_orig_ctx_dir = engine_mod.FAILURE_CONTEXT_DIR
+_orig_ctx_enabled = engine_mod.FAILURE_CONTEXT_ENABLED
+engine_mod.FAILURE_CONTEXT_DIR = _ctx_dir
+engine_mod.FAILURE_CONTEXT_ENABLED = True
+engine.retry = 0
+state.STOP_ON_ERROR = True
+engine.variables.clear()
+_orig_filename = getattr(state, "filename", "")
+try:
+    # 现场 = 第2行失败; 前一行=设置变量, 后一行=设置变量
+    state.filename = "E16_test_script.acrpas"   # 供 payload["script"] 断言
+    engine.execute_script([
+        _row("设置变量", ["keepme", "123"]),
+        _row("测试失败命令", ["a"]),
+        _row("设置变量", ["next_ok", "1"]),
+    ], os.getcwd())
+
+    _files = _glob.glob(os.path.join(_ctx_dir, "fail_context_*.json"))
+    check("E16 失败现场 JSON 已落盘", len(_files) == 1, str(_files))
+    _payload = {}
+    if _files:
+        try:
+            with open(_files[0], "r", encoding="utf-8") as _f:
+                _payload = _json.load(_f)
+        except Exception as _e:
+            check("E16 现场 JSON 可解析", False, str(_e))
+    check("E16 row=2 (1-based 行号)", _payload.get("row") == 2,
+          str(_payload.get("row")))
+    check("E16 cmd=测试失败命令", _payload.get("cmd") == "测试失败命令",
+          str(_payload.get("cmd")))
+    check("E16 args 含 'a'", "a" in (_payload.get("args") or []),
+          str(_payload.get("args")))
+    check("E16 code=command_failed", _payload.get("code") == "command_failed",
+          str(_payload.get("code")))
+    check("E16 attempts 字段存在", "attempts" in _payload,
+          str(_payload.get("attempts")))
+    check("E16 含 screenshot 字段", "screenshot" in _payload,
+          str(sorted(_payload.keys())))
+    check("E16 script 记录脚本名",
+          _payload.get("script") == "E16_test_script.acrpas",
+          str(_payload.get("script")))
+    check("E16 loop 字段存在且为 int", isinstance(_payload.get("loop"), int),
+          str(_payload.get("loop")))
+    check("E16 context.prev 记录前一行命令",
+          ((_payload.get("context") or {}).get("prev") or {}).get("cmd") == "设置变量",
+          str(_payload.get("context")))
+    check("E16 context.next 记录后一行命令",
+          ((_payload.get("context") or {}).get("next") or {}).get("cmd") == "设置变量",
+          str(_payload.get("context")))
+    check("E16 vars 快照含 keepme",
+          str(_payload.get("vars", {}).get("keepme")) == "123",
+          str(_payload.get("vars")))
+    check("E16 键名对齐路线图约定",
+          set(_payload.keys()) >= {"time", "script", "loop", "row", "cmd", "args",
+                                   "code", "message", "attempts", "vars",
+                                   "context", "screenshot"},
+          str(sorted(_payload.keys())))
+finally:
+    # 恢复全局开关/目录, 并清理临时落盘 (绝不污染真实 screenshots)
+    engine_mod.FAILURE_CONTEXT_ENABLED = _orig_ctx_enabled
+    engine_mod.FAILURE_CONTEXT_DIR = _orig_ctx_dir
+    engine_mod.FAILURE_CONTEXT_ENABLED = False
+    state.filename = _orig_filename
+    engine.variables.clear()
+    _shutil.rmtree(_ctx_dir, ignore_errors=True)
 
 # ── 清理 ──
 for _n in ("测试失败命令", "测试循环失败命令"):

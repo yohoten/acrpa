@@ -566,6 +566,11 @@ def _create_mini_bar():
     _mb_form = "compact"
 
     mb = tkinter.Toplevel(root)
+    try:    # 声明自管换肤: 通用 walk 不再跨入, 由 _sync_mini_bar_status 负责
+        from ui import theme as _ui_theme
+        _ui_theme.claim_window(mb, "mini_bar")
+    except Exception:
+        pass
     _set_window_icon(mb)
     mb.overrideredirect(True)
     mb.attributes("-topmost", True)

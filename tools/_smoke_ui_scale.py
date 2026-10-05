@@ -45,8 +45,12 @@ WHITELIST = {
         "录制动作计数 = 等宽粗体; _FONT_SPECS 未定义 mono-bold 角色, 保留原视觉",
     ("src/netlink_window.py", 'lbl_pin = tkinter.Label(dlg, text="—", font=("Consolas", 28, "bold"),'):
         "配对码 28pt 大字, 无对应角色, 保留原视觉",
-    ("src/settings_window.py", KEYCAP_TUPLE):
-        "快捷键键帽 (等宽粗体), 无 mono-bold 角色",
+    # 阶段二第 4 项: 快捷键键帽随卡片迁出 settings_window.py —— 录制键帽 → cards/record.py,
+    # 系统卡全局快捷键键帽 → cards/system.py (定位更新, 白名单条目由 1 拆为 2)。
+    ("src/ui/settings/cards/record.py", KEYCAP_TUPLE):
+        "停止录制快捷键键帽 (等宽粗体), 无 mono-bold 角色",
+    ("src/ui/settings/cards/system.py", KEYCAP_TUPLE):
+        "全局快捷键键帽 (等宽粗体), 无 mono-bold 角色",
 }
 
 
@@ -73,8 +77,23 @@ def _parse_ui():
     return ast.parse(text, filename="<ACRPA.py+mini_bar.py>")
 
 
-UI_MODULES = ("src/utils.py", "src/ACRPA.py", "src/settings_window.py",
-              "src/dialogs.py", "src/tray.py", "src/netlink_window.py")
+# 阶段二第 2 项新增 src/ui/theme.py (承载色板/样式/ThemeBus); 阶段二第 3 项第 1 步新增
+# src/ui/log_dock.py (底部日志面板); 阶段二第 3 项第 2 步新增 src/ui/exec_bar.py
+# (执行控制栏): 三者均经属性式/注入式引用字体角色 (不在模块内复制 _FONT_SPECS 定义),
+# 因此同样纳入「字体角色名可解析」守护断言 (UI 源码集合)。
+UI_MODULES = ("src/utils.py", "src/ui/theme.py", "src/ui/log_dock.py",
+              "src/ui/exec_bar.py", "src/ui/workflow_view.py", "src/ACRPA.py",
+              "src/settings_window.py", "src/dialogs.py", "src/tray.py",
+              "src/netlink_window.py",
+              # 阶段二第 4 项: 设置窗口拆分为门面 + 11 卡 (src/ui/settings/**),
+              # 均经属性式/注入式引用字体角色, 纳入「字体角色名可解析」守护断言。
+              "src/ui/settings/window.py",
+              "src/ui/settings/cards/exec.py", "src/ui/settings/cards/ai.py",
+              "src/ui/settings/cards/sched.py", "src/ui/settings/cards/record.py",
+              "src/ui/settings/cards/log.py", "src/ui/settings/cards/system.py",
+              "src/ui/settings/cards/quick.py", "src/ui/settings/cards/advanced.py",
+              "src/ui/settings/cards/netlink.py", "src/ui/settings/cards/python.py",
+              "src/ui/settings/cards/market.py")
 
 
 def _find_func(tree, name):
@@ -202,6 +221,14 @@ def check_font_names_resolvable():
                     nm = a.asname or a.name
                     if nm.startswith("FONT_"):
                         bound.add(nm)
+            elif isinstance(node, ast.FunctionDef) and node.name == "build_app":
+                # 入口拆分 (§9 阶段二第1项) 后, 依赖配置的 FONT_* 由 build_app() 内以
+                # global 赋值 —— 视作「已绑定」(运行时 root 建好即存在), 不再要求模块级 Assign。
+                for sub in ast.walk(node):
+                    if isinstance(sub, ast.Assign):
+                        for t in sub.targets:
+                            if isinstance(t, ast.Name) and t.id.startswith("FONT_"):
+                                bound.add(t.id)
         missing = sorted(used - bound)
         if not missing:
             _p("OK", "{} 的 FONT_* 引用全部已绑定 ({})".format(

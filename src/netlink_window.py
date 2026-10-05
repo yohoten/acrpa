@@ -441,6 +441,11 @@ class NetLinkWindow(object):
         self._theme_snapshot = dict(C)
         win = tkinter.Toplevel(self.root)
         self.win = win
+        try:    # 声明自管换肤: 通用 walk 不再跨入, 由本类 refresh_theme 负责
+            from ui import theme as _ui_theme
+            _ui_theme.claim_window(win, "netlink_window")
+        except Exception:
+            pass
         win.title("设备互联 — ACRPA")
         geom = ""
         try:
@@ -2929,7 +2934,7 @@ class NetLinkWindow(object):
             from tkinter import filedialog
             path = filedialog.askopenfilename(
                 parent=self.win, title="选择要推送的脚本",
-                filetypes=[("脚本文件", "*.xls *.xlsx *.json")],
+                filetypes=[("脚本文件", "*.xls *.xlsx *.json *.acrpas")],
                 initialdir=_script_root() or None)
             return str(path or "") or None
         except Exception:
@@ -3043,7 +3048,7 @@ class NetLinkWindow(object):
         base = os.path.basename(str(local_path))
         ext = os.path.splitext(base)[1].lower()
         if ext not in tf.ALLOWED_EXT:
-            self._warn("不支持的扩展名（仅 .xls / .xlsx / .json）")
+            self._warn("不支持的扩展名（仅 .xls / .xlsx / .json / .acrpas）")
             return
         if not os.path.isfile(local_path):
             self._warn("文件不存在")

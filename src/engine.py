@@ -20,6 +20,16 @@ import commands
 from safe_eval import safe_eval_condition, safe_eval_math, EvalError
 
 
+# ── 失败现场留存 (路线图 阶段二第 7 项) ──
+# 命令失败时把「行号/命令/参数/错误码/消息/attempts/变量快照/前后各 1 行/截图路径」
+# 落盘为 JSON, 供事后复盘。整体 best-effort: 任何异常仅记 warning, **绝不** 改变
+# 执行结果 / _script_failed / STOP_ON_ERROR / 异常语义。
+#   · FAILURE_CONTEXT_ENABLED=False 可整体关闭 (自测 / 性能敏感场景);
+#   · FAILURE_CONTEXT_DIR 可覆盖落盘目录 (缺省 = CONFIG_PATH 同级 screenshots)。
+FAILURE_CONTEXT_ENABLED = True
+FAILURE_CONTEXT_DIR = None
+
+
 class AbortSignal(Exception):
     """用户请求停止(quit2)时抛出, 用于中断正在执行的长命令。
 
@@ -519,6 +529,11 @@ class ExecutionEngine:
 
                 if not result.ok:
                     self._script_failed = True
+                    # ── 失败现场留存 (此处有绝对行号 i+1; best-effort, 不改语义) ──
+                    try:
+                        self._save_failure_context(rows, i, row, result)
+                    except Exception as _ctx_err:
+                        log1("失败现场留存异常: {}".format(_ctx_err), "warning")
                     if getattr(state, 'STOP_ON_ERROR', True):
                         log1("脚本因命令失败停止: {}".format(result.message or result.code), "error")
                         break
@@ -788,6 +803,117 @@ class ExecutionEngine:
                 log1(hint, "warning")
         except Exception:
             pass
+
+    def _save_failure_context(self, rows, idx, row, result):
+        """失败现场留存: 落盘 JSON(time/script/loop/row/cmd/args/code/message/attempts/vars/context/screenshot)。
+
+        best-effort: 任何异常都被吞成 warning, **绝不** 改变执行结果 / 异常语义。
+        可经模块级 ``FAILURE_CONTEXT_ENABLED`` 关闭、``FAILURE_CONTEXT_DIR`` 覆盖目录。
+        成功返回落盘路径, 否则返回 None。
+        """
+        if not FAILURE_CONTEXT_ENABLED:
+            return None
+        import json as _json
+
+        # 落盘目录: 优先 FAILURE_CONTEXT_DIR, 否则 CONFIG_PATH 同级 screenshots
+        d = FAILURE_CONTEXT_DIR
+        if not d:
+            try:
+                d = os.path.join(os.path.dirname(state.CONFIG_PATH), "screenshots")
+            except Exception:
+                d = ""
+        try:
+            if d:
+                os.makedirs(d, exist_ok=True)
+        except Exception:
+            pass
+        base_dir = d or "."
+
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        fp = os.path.join(base_dir, "fail_context_{}.json".format(ts))
+
+        def _row_repr(r):
+            if r is None:
+                return None
+            try:
+                c = getattr(r, "cmd_type", None)
+                if c is None:
+                    cell = r[0]
+                    c = getattr(cell, "value", cell)
+                a = getattr(r, "args", None)
+                if a is None:
+                    a = [getattr(x, "value", x) for x in list(r)[1:10]]
+                return {"cmd": "" if c is None else str(c),
+                        "args": ["" if x is None else str(x) for x in (a or [])]}
+            except Exception:
+                return None
+
+        try:
+            cur = _row_repr(row)
+            prev_row = _row_repr(rows[idx - 1]) if 0 <= idx - 1 < len(rows) else None
+            next_row = _row_repr(rows[idx + 1]) if 0 <= idx + 1 < len(rows) else None
+        except Exception:
+            cur = {"cmd": "", "args": []}
+            prev_row = next_row = None
+
+        try:
+            variables = dict(self.variables)
+        except Exception:
+            variables = {}
+
+        # 截图 (失败不影响 JSON 落盘): 沿用既有 get_pyautogui().screenshot(path)
+        shot_path = ""
+        try:
+            ts2 = datetime.datetime.now().strftime("%m%d_%H%M%S")
+            cmd_name = (cur or {}).get("cmd", "") or "cmd"
+            shot_path = os.path.join(base_dir, "fail_{}_{}.png".format(cmd_name, ts2))
+            get_pyautogui().screenshot(shot_path)
+        except Exception:
+            shot_path = ""
+
+        try:
+            loop_idx = int(getattr(state, "exec_state", {}).get("loop", 0) or 0)
+        except Exception:
+            loop_idx = 0
+        try:
+            script_name = str(getattr(state, "filename", "") or "")
+        except Exception:
+            script_name = ""
+
+        # 键名对齐路线图 §阶段二第 7 项 step 4 约定:
+        #   time / script / loop / row(1-based) / cmd / args / code / message /
+        #   attempts / vars / context(前后各 1 行) / screenshot(路径|null)
+        payload = {
+            "time": datetime.datetime.now().isoformat(timespec="seconds"),
+            "script": script_name,
+            "loop": loop_idx,
+            "row": idx + 1,
+            "cmd": (cur or {}).get("cmd", ""),
+            "args": (cur or {}).get("args", []),
+            "code": getattr(result, "code", ""),
+            "message": getattr(result, "message", ""),
+            "attempts": getattr(result, "attempts", 0),
+            "vars": variables,
+            "context": {"prev": prev_row, "next": next_row},
+            "screenshot": shot_path or None,
+        }
+        try:
+            text = _json.dumps(payload, ensure_ascii=False, indent=2)
+        except Exception:
+            try:
+                payload["vars"] = {str(k): str(v) for k, v in (variables or {}).items()}
+                text = _json.dumps(payload, ensure_ascii=False, indent=2, default=str)
+            except Exception:
+                return None
+
+        def _writer(tmp):
+            with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+                f.write(text)
+
+        from utils import atomic_save
+        atomic_save(fp, _writer, backup=False)
+        log1("失败现场已保存: {}".format(fp), "warning")
+        return fp
 
     def execute(self, row, script_dir):
         """执行单条命令并返回结果；保留 truthy 兼容，失败不再静默成功。"""

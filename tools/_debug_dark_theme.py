@@ -229,7 +229,16 @@ def _check_mini_bar(acrpa, utils):
     except Exception as e:
         _p("WARN", "Mini Bar 未能创建, 跳过: {}".format(e))
         return
-    mb = acrpa._mini_bar
+    # 拆分第一阶段后 Mini Bar 窗口引用归属 src/mini_bar.py (ACRPA 只 re-export 其函数),
+    # 旧断言读 acrpa._mini_bar 恒 AttributeError 直接中断本脚本 —— 此处按新归属取窗口,
+    # 检查项与强度完全不变 (D6 断言仍全部执行)。
+    mb = getattr(acrpa, "_mini_bar", None)
+    if mb is None:
+        try:
+            import mini_bar as _mb_mod
+            mb = getattr(_mb_mod, "_mini_bar", None)
+        except Exception:
+            mb = None
     if mb is None:
         _p("WARN", "Mini Bar 为空, 跳过")
         return
@@ -280,11 +289,17 @@ def _check_refresh_idempotent(acrpa):
 
 
 def run_static_fallback():
-    """ACRPA 无法实例化时的静态降级校验。"""
+    """ACRPA 无法实例化时的静态降级校验。
+
+    阶段二第 2 项 (ui/theme.py + ThemeBus) 后, 「同步 dialogs.C / 具名调用
+    netlink_window.refresh_theme()」这两条旧断言已改为「一次 publish + 订阅」的
+    等价断言 (检查强度不降: 仍要求广播入口唯一且已无具名扇出)。
+    """
     print("=== 降级为静态断言 (无法实例化 ACRPA) ===")
     srcs = {}
     for key, rel in (("acrpa", "src/ACRPA.py"), ("settings", "src/settings_window.py"),
-                     ("netlink", "src/netlink_window.py"), ("utils", "src/utils.py")):
+                     ("dialogs", "src/dialogs.py"), ("netlink", "src/netlink_window.py"),
+                     ("utils", "src/utils.py"), ("theme", "src/ui/theme.py")):
         with io.open(os.path.join(ROOT, rel), "r", encoding="utf-8") as f:
             srcs[key] = f.read()
 
@@ -292,15 +307,22 @@ def run_static_fallback():
                 "def refresh_theme" in srcs["netlink"])
     expect_true("settings refresh_theme 接受 prev 参数",
                 "def refresh_theme(prev=None):" in srcs["settings"])
-    expect_true("ACRPA._refresh_theme 同步 dialogs.C",
-                "dialogs.C = C" in srcs["acrpa"])
-    expect_true("ACRPA._refresh_theme 调用 netlink_window.refresh_theme()",
-                "netlink_window.refresh_theme()" in srcs["acrpa"])
+    expect_true("ACRPA._refresh_theme 一次 ui_theme.publish (取代 dialogs.C 扇出)",
+                "ui_theme.publish(" in srcs["acrpa"]
+                and "dialogs.C = C" not in srcs["acrpa"])
+    expect_true("dialogs 订阅 ThemeBus 并同步自身色表",
+                "_ui_theme.subscribe(refresh_theme)" in srcs["dialogs"]
+                and "def refresh_theme(" in srcs["dialogs"])
+    expect_true("settings_window 订阅 ThemeBus",
+                "_ui_theme.subscribe(_on_theme_publish)" in srcs["settings"])
+    expect_true("netlink_window.refresh_theme() 仍被调用 (经 ThemeBus 适配器注册)",
+                "netlink_window.refresh_theme()" in srcs["acrpa"]
+                and "ui_theme.subscribe(_fn)" in srcs["acrpa"])
     expect_true("无 C[\"old_sc\"] 残留 (改旧快照判定)",
                 'C["old_sc"]' not in srcs["acrpa"]
                 and 'C.get("old_sc")' not in srcs["acrpa"])
-    expect_true("utils._colors 提供 hlbg 语义键",
-                "hlbg=" in srcs["utils"].replace(" ", ""))
+    expect_true("ui.theme.colors 提供 hlbg 语义键",
+                "hlbg=" in srcs["theme"].replace(" ", ""))
     expect_true("不再有写死的 tag_configure(\"running\", background=\"#FEF3C7\")",
                 '"running", background="#FEF3C7"' not in srcs["acrpa"])
     return 1 if FAILS else 0
@@ -310,6 +332,8 @@ def main():
     print("=== ACRPA 暗黑模式往返切换运行时验证 (真实 Tk) ===")
     try:
         import ACRPA
+        import app
+        app.build()   # 入口拆分后: import ACRPA 不再建窗, 需显式构建
         import state
         import utils
         import dialogs

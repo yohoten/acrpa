@@ -39,6 +39,7 @@ Issue 结构
 """
 import os
 
+import capabilities
 import commands
 
 __all__ = ["validate_script", "unknown_command_names", "IMAGE_COMMANDS"]
@@ -158,6 +159,25 @@ def validate_script(rows, script_dir=""):
             errs = []
         for e in errs:
             issues.append(_issue(i, "error", "param", e))
+
+        # 4. 能力 (可选依赖) 缺失检查 (路线图 阶段二新增项①)
+        #    纯查表 + 惰性探测 (capabilities 为纯 stdlib, 不加载 tkinter/pyautogui)。
+        #    ("core",) 永不产生 Issue; 其余能力非 READY 时按 degraded 定级。
+        for cap in commands.requires(cmd):
+            if cap == "core":
+                continue
+            try:
+                st = capabilities.state(cap)
+            except Exception:
+                st = capabilities.CapState.READY   # 失败开放
+            if st == capabilities.CapState.READY:
+                continue
+            level = ("error" if capabilities.degraded(cap) in ("hard", "none")
+                     else "warning")
+            issues.append(_issue(
+                i, level, "missing_capability",
+                "第 {} 行 '{}' 需要扩展/能力 '{}', 当前 {}".format(
+                    i, cmd, capabilities.label(cap), st.value)))
 
         # 5. 图片存在性 (纯路径判定, 绝不调用 locate/DD/缓存)
         if cmd in IMAGE_COMMANDS:

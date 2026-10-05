@@ -45,6 +45,7 @@ import utils
 from utils import (create_card, _btn, _darken, apply_theme, _colors,
                     ThreadSafeLog, set_tlog, log1, themed)
 from scriptdata import ScriptData
+import commands
 import script_io
 import script_validate  # 路线图 阶段二第 7 项: 运行前静态校验 (纯函数, 无副作用)
 from engine import engine
@@ -1938,7 +1939,8 @@ def _cmd_edit_row_dialog():
 
     tkinter.Label(win, text="命令:", bg=C["bgc"], fg=C["fgb"]).pack(pady=(10, 2))
     cmd_var = tkinter.StringVar(value=sd.cmd_type)
-    cmd_combo = ttk.Combobox(win, textvariable=cmd_var, values=ScriptData.COMMANDS,
+    # 阶段二新增项①: 命令下拉对「缺少外部能力」的命令加 ⚠ 角标 (读取时经 strip 清洗)。
+    cmd_combo = ttk.Combobox(win, textvariable=cmd_var, values=commands.display_names(),
         state="readonly", width=26)
     cmd_combo.pack(pady=2)
 
@@ -1954,7 +1956,8 @@ def _cmd_edit_row_dialog():
         for w in holder.winfo_children():
             w.destroy()
         fr, get = param_form.build_arg_form(
-            holder, cmd_var.get(), seed, colors=C, fonts=_fonts, theme=ui_theme)
+            holder, commands.strip_display_badge(cmd_var.get()), seed,
+            colors=C, fonts=_fonts, theme=ui_theme)
         fr.pack(fill="x")
         _pstate["get"] = get
 
@@ -1989,7 +1992,7 @@ def _cmd_edit_row_dialog():
 
     def _ok():
         _push_undo()
-        sd.cmd_type = cmd_var.get()
+        sd.cmd_type = commands.strip_display_badge(cmd_var.get())
         sd.args = _pstate["get"]() if _pstate["get"] else list(sd.args)
         _update_row_inplace(idx)
         _close()
@@ -2718,7 +2721,7 @@ def _edit_cell():
     cur_val = sd.cmd_type if col == 0 else sd.args[col - 1]
 
     if col == 0:
-        _inline_edit_widget = ttk.Combobox(tree_frame, values=ScriptData.COMMANDS,
+        _inline_edit_widget = ttk.Combobox(tree_frame, values=commands.display_names(),
             state="readonly", font=FONT_BODY)
         _inline_edit_widget.set(cur_val)
     else:
@@ -2740,7 +2743,7 @@ def _edit_cell():
         _push_undo()  # 内联编辑前保存撤销快照
         new_val = w.get()
         if col == 0:
-            sd.cmd_type = new_val
+            sd.cmd_type = commands.strip_display_badge(new_val)
         else:
             sd.args[col - 1] = new_val
         # 单行数据变更: 就地刷新该行, 不再全量重建

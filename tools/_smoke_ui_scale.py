@@ -85,15 +85,17 @@ UI_MODULES = ("src/utils.py", "src/ui/theme.py", "src/ui/log_dock.py",
               "src/ui/exec_bar.py", "src/ui/workflow_view.py", "src/ACRPA.py",
               "src/settings_window.py", "src/dialogs.py", "src/tray.py",
               "src/netlink_window.py",
-              # 阶段二第 4 项: 设置窗口拆分为门面 + 11 卡 (src/ui/settings/**),
+              # 阶段二第 4 项: 设置窗口拆分为门面 + 12 卡 (src/ui/settings/**),
               # 均经属性式/注入式引用字体角色, 纳入「字体角色名可解析」守护断言。
+              # (第 12 张 extensions.py 为 阶段二新增项②「扩展」卡。)
               "src/ui/settings/window.py",
               "src/ui/settings/cards/exec.py", "src/ui/settings/cards/ai.py",
               "src/ui/settings/cards/sched.py", "src/ui/settings/cards/record.py",
               "src/ui/settings/cards/log.py", "src/ui/settings/cards/system.py",
               "src/ui/settings/cards/quick.py", "src/ui/settings/cards/advanced.py",
               "src/ui/settings/cards/netlink.py", "src/ui/settings/cards/python.py",
-              "src/ui/settings/cards/market.py")
+              "src/ui/settings/cards/market.py",
+              "src/ui/settings/cards/extensions.py")
 
 
 def _find_func(tree, name):

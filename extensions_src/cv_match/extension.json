@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "id": "cv.match",
+  "name": "OpenCV 图像匹配",
+  "version": "1.0.0",
+  "entry": "cv_match_ext",
+  "capabilities": ["cv.match"],
+  "platform": "win",
+  "arch": "<auto>",
+  "python_tag": "<auto>",
+  "size": 0,
+  "min_app_version": "0.2.0"
+}

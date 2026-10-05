@@ -1289,7 +1289,8 @@ def _wf_edit_step(event=None):
         # 阶段二第 8 项: 9 个无标签 Entry → 具名控件 (类型/枚举/默认/变长)。
         import commands
         from ui import param_form
-        _cmd_names = commands.list_names()
+        # 阶段二新增项①: 命令下拉对缺外部能力的命令加 ⚠ 角标 (读取时 strip 清洗)。
+        _cmd_names = commands.display_names()
         tkinter.Label(dlg, text="命令:", bg=C["bgc"], fg=C["fgb"]).pack(pady=(10, 2))
         cmd_var = tkinter.StringVar(value=step.get("cmd", ""))
         cmd_combo = ttk.Combobox(dlg, textvariable=cmd_var, values=_cmd_names,
@@ -1306,8 +1307,8 @@ def _wf_edit_step(event=None):
             for w in _pf_holder.winfo_children():
                 w.destroy()
             _fr, _get = param_form.build_arg_form(
-                _pf_holder, cmd_var.get(), seed_args, colors=C, fonts=_pf_fonts,
-                theme=_CTX.get("ui_theme"))
+                _pf_holder, commands.strip_display_badge(cmd_var.get()), seed_args,
+                colors=C, fonts=_pf_fonts, theme=_CTX.get("ui_theme"))
             _fr.pack(fill="x")
             _pf_state["get"] = _get
 
@@ -1321,7 +1322,7 @@ def _wf_edit_step(event=None):
         _rebuild_command_form(step.get("params", []) or [""] * 9)
 
         def _save_command():
-            step["cmd"] = cmd_var.get()
+            step["cmd"] = commands.strip_display_badge(cmd_var.get())
             # get_args() 长度恒为 9 (与 9 位 args 契约一致)
             step["params"] = _pf_state["get"]() if _pf_state["get"] else [""] * 9
             _wf_refresh_tree()

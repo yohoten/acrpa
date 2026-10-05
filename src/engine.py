@@ -17,6 +17,7 @@ import threading
 import state
 from utils import _safe_get, log1
 import commands
+import capabilities
 from safe_eval import safe_eval_condition, safe_eval_math, EvalError
 
 
@@ -28,6 +29,14 @@ from safe_eval import safe_eval_condition, safe_eval_math, EvalError
 #   · FAILURE_CONTEXT_DIR 可覆盖落盘目录 (缺省 = CONFIG_PATH 同级 screenshots)。
 FAILURE_CONTEXT_ENABLED = True
 FAILURE_CONTEXT_DIR = None
+
+# ── 可选能力门禁 (路线图 阶段二新增项①) ──
+# 执行前按 commands.requires(cmd) 检查对应能力 (见 src/capabilities.py):
+#   · ("core",) 永不拦截; hard/none 能力非 READY → 返回 missing_capability 失败;
+#   · soft 能力非 READY → 只记一次 warning, 仍继续执行 (允许降级)。
+# 失败开放: 能力未知 / 探测异常一律放行 —— 绝不因门禁自身故障误伤命令。
+# 显式关闭 (测试环境缺依赖 / 桩化场景) 可设 CAPABILITY_ENFORCE = False。
+CAPABILITY_ENFORCE = True
 
 
 class AbortSignal(Exception):
@@ -270,6 +279,50 @@ _CACHE_TTL = 5.0       # Cache validity in seconds
 _CACHE_MAX = 50         # Maximum cache entries (LRU eviction)
 _CACHE_ORDER = []       # LRU access order list (存缓存键)
 _cache_lock = threading.Lock()
+
+
+# ── cv.match 扩展接入 (路线图 阶段二新增项③) ──
+# 已安装 cv.match 扩展时, 用其提供者 (provider) 的 match() 承担实际匹配; 未装 / 加载
+# 失败 → None, _find_cached 回退到下列既有**内置路径** (pyautogui.locateCenterOnScreen),
+# 语义与缓存行为完全不变 (零回归)。
+#   · CV_MATCH_EXT=False 可整体关闭 (排障 / 强制走内置路径);
+#   · _resolve_matcher() 结果带缓存, 避免每行都探测;
+#   · 安装 / 卸载扩展后调用 _reset_matcher_cache() 使缓存失效。
+CV_MATCH_EXT = True
+_matcher_resolved = False
+_matcher_cache = None
+
+
+def _reset_matcher_cache():
+    """清空 _resolve_matcher 的缓存 (安装 / 卸载 cv.match 扩展后调用)。"""
+    global _matcher_resolved, _matcher_cache
+    _matcher_resolved = False
+    _matcher_cache = None
+
+
+def _resolve_matcher():
+    """→ callable(screen_img, template_path, confidence, region, grayscale) | None。
+
+    由已安装扩展 cv.match 提供; 未装 / 加载失败 → None (回退内置路径)。带缓存。
+    失败开放: 任何异常一律返回 None, 绝不因扩展故障影响找图。
+    """
+    global _matcher_resolved, _matcher_cache
+    if _matcher_resolved:
+        return _matcher_cache
+    matcher = None
+    if CV_MATCH_EXT:
+        try:
+            import extensions
+            if extensions.is_installed("cv.match"):
+                mod = extensions.provider("cv.match")
+                fn = getattr(mod, "match", None) if mod is not None else None
+                if callable(fn):
+                    matcher = fn
+        except Exception:                              # noqa: BLE001 — 失败开放
+            matcher = None
+    _matcher_cache = matcher
+    _matcher_resolved = True
+    return matcher
 
 
 # P1 Enhancement: Event-driven variable watcher
@@ -776,6 +829,43 @@ class ExecutionEngine:
         log1("循环结束，共执行 {} 次".format(iteration_count))
         return loop_end_idx + 1
 
+    def _check_capabilities(self, cv):
+        """执行前的能力门禁 → 需拦截的 ExecutionResult, 或 None (放行)。
+
+        失败开放: 能力未知 / 探测异常 → 放行; ("core",) 永不拦截。
+        hard/none 且能力非 READY → 返回 missing_capability 失败;
+        soft 且能力非 READY → 同一能力只记一次 warning, 仍继续执行。
+        """
+        if not CAPABILITY_ENFORCE:
+            return None
+        try:
+            caps = commands.requires(cv)
+            if not caps:
+                return None
+            for cap in caps:
+                if cap == "core":
+                    continue
+                pr = capabilities.probe(cap)
+                if pr.state == capabilities.CapState.READY:
+                    continue
+                if capabilities.degraded(cap) in ("hard", "none"):
+                    msg = "命令 '{}' 需要扩展/能力 '{}', 当前 {}{}".format(
+                        cv, capabilities.label(cap), pr.state.value,
+                        (" (" + pr.reason + ")") if pr.reason else "")
+                    log1(msg, "error")
+                    return ExecutionResult(False, "missing_capability", msg, 0)
+                seen = getattr(self, "_cap_warned", None)
+                if seen is None:
+                    seen = self._cap_warned = set()
+                if cap not in seen:
+                    seen.add(cap)
+                    log1("命令 '{}' 依赖可选能力 '{}' (当前 {}), 可能降级执行{}".format(
+                        cv, capabilities.label(cap), pr.state.value,
+                        (": " + pr.reason) if pr.reason else ""), "warning")
+        except Exception:
+            return None            # 失败开放: 门禁自身故障绝不误伤
+        return None
+
     def _param_hint_once(self, cmd, row):
         """按 commands 的参数 schema 体检一次, 同一命令只提示一次。
 
@@ -936,6 +1026,9 @@ class ExecutionEngine:
             return ExecutionResult(False, "unknown_command", message, 0)
 
         _t0 = time.time()
+        _cap_result = self._check_capabilities(cv)
+        if _cap_result is not None:
+            return _cap_result
         self._param_hint_once(cv, adapted_row)
         success = False
         last_error = ""
@@ -1081,20 +1174,31 @@ class ExecutionEngine:
             return _make_point(cached[0], cached[1])
 
         # Not in cache or expired, perform actual search
-        pa = get_pyautogui()
-        if _has_cv2():
-            loc = pa.locateCenterOnScreen(img_path, confidence=confidence,
-                                         region=region, grayscale=grayscale)
+        # 阶段二新增项③: 已装 cv.match 扩展优先用其 match(); matcher 为空时下列内置
+        # 路径**原样执行** (语句与语义一字不改, 零回归)。
+        matcher = _resolve_matcher()
+        if matcher is not None:
+            try:
+                res = matcher(None, img_path, confidence,
+                              region=region, grayscale=grayscale)
+            except Exception:                          # noqa: BLE001 — 失败开放
+                res = None
+            loc = _make_point(res[0], res[1]) if res else None
         else:
-            # OpenCV 未安装: pyautogui 的 confidence 参数不可用,
-            # 降级为 Pillow 匹配 (保持小体积设计), 首次运行时提示一次
-            global _cv2_hint_logged
-            if not _cv2_hint_logged:
-                _cv2_hint_logged = True
-                log1("未检测到 OpenCV, 找图使用 Pillow 精确匹配 (不支持 confidence 相似度). "
-                     "安装 opencv-python 可启用相似度匹配", "warning")
-            loc = pa.locateCenterOnScreen(img_path,
-                                         region=region, grayscale=grayscale)
+            pa = get_pyautogui()
+            if _has_cv2():
+                loc = pa.locateCenterOnScreen(img_path, confidence=confidence,
+                                             region=region, grayscale=grayscale)
+            else:
+                # OpenCV 未安装: pyautogui 的 confidence 参数不可用,
+                # 降级为 Pillow 匹配 (保持小体积设计), 首次运行时提示一次
+                global _cv2_hint_logged
+                if not _cv2_hint_logged:
+                    _cv2_hint_logged = True
+                    log1("未检测到 OpenCV, 找图使用 Pillow 精确匹配 (不支持 confidence 相似度). "
+                         "安装 opencv-python 可启用相似度匹配", "warning")
+                loc = pa.locateCenterOnScreen(img_path,
+                                             region=region, grayscale=grayscale)
 
         if loc:
             with _cache_lock:

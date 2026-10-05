@@ -25,6 +25,8 @@ import re
 
 _registry = []
 _schemas = {}
+# 可选依赖/能力声明: name → tuple(capability_id, ...)。语义见文件尾「可选依赖声明」段。
+_requires = {}
 
 # ── 参数说明解析 ─────────────────────────────────────────────────────
 _NUMERIC_HINTS = ("秒", "次数", "间隔", "精度", "超时", "宽度", "高度", "距离",
@@ -104,13 +106,17 @@ def _parse_params(text):
     return [_parse_param(t) for t in _split_params(text)]
 
 
-def register(name, description, params, handler=None, schema=None):
+def register(name, description, params, handler=None, schema=None, requires=()):
     """Register a command. handler=None means engine provides it later.
 
-    schema: 可选的显式参数声明 (list[dict]); 缺省时由 params 字符串解析而来。
+    schema:   可选的显式参数声明 (list[dict]); 缺省时由 params 字符串解析而来。
+    requires: 该命令运行所需的能力 id 元组 (路线图 阶段二新增项①)。**末位新增**
+              且默认空, 旧调用全兼容; 未显式声明时 register 仅记空元组, 由文件尾的
+              「可选依赖声明」段统一补齐默认 ``("core",)``。
     """
     _registry.append((name, description, params, handler))
     _schemas[name] = list(schema) if schema else _parse_params(params)
+    _requires[name] = tuple(requires or ())
 
 
 def get_handler(name):
@@ -125,6 +131,43 @@ def list_names():
 
 def list_all():
     return list(_registry)
+
+
+def requires(name):
+    """→ 该命令声明的能力 id 元组; 未声明返回 ()。"""
+    return _requires.get(name, ())
+
+
+def list_requires():
+    """→ {name: tuple(capability_id, ...)} 的快照。"""
+    return dict(_requires)
+
+
+# ── 命令下拉「能力角标」展示辅助 (路线图 阶段二新增项①) ──────────────
+# 仅用于 UI 下拉展示: 需要外部能力且当前非 READY 的命令名后追加 " ⚠";
+# ("core",) 命令不加。读取选中值时务必先经 strip_display_badge() 清洗。
+_DISPLAY_BADGE = " ⚠"
+
+
+def display_names():
+    """命令名列表 + 能力角标; 失败开放回退 list_names()。仅用于下拉展示。"""
+    try:
+        import capabilities
+        out = []
+        for n, _d, _p, _h in _registry:
+            bad = any(c != "core"
+                      and capabilities.state(c) != capabilities.CapState.READY
+                      for c in requires(n))
+            out.append(n + _DISPLAY_BADGE if bad else n)
+        return out
+    except Exception:
+        return list_names()
+
+
+def strip_display_badge(name):
+    """还原下拉展示值 → 纯命令名。"""
+    s = "" if name is None else str(name)
+    return s[:-len(_DISPLAY_BADGE)] if s.endswith(_DISPLAY_BADGE) else s
 
 
 # ── 结构化参数 schema ────────────────────────────────────────────────
@@ -339,6 +382,45 @@ register("开始监听",       "监听网络响应入队(抓包),支持URL匹配
 register("等待数据包",     "等待并取回命中的数据包,写回变量或落盘",                    "URL匹配(可选), 数量(可选,默认1), 超时秒数(可选), 写回变量(可选), 导出路径(可选), 导出格式(可选,默认json)")
 register("停止监听",       "停止监听并清空队列",                                      "无参数")
 register("启动浏览器录制", "调用 playwright codegen 并把结果转为DSL追加到录制",       "无参数")
+
+# ── 可选依赖声明 (路线图 阶段二新增项①) ────────────────────────────────
+# requires(name) → 该命令运行所需的能力 id 元组:
+#   · ("core",) —— 主包内置能力: **永不拦截、永不加角标**;
+#   · 其余 id 见 src/capabilities.py (cv.match / browser.playwright /
+#     ocr.paddle_dll / input.dd)。
+# 默认全部命令声明 ("core",); 需要外部能力的命令由下表覆盖。
+_EXTERNAL_REQUIRES = {
+    # OpenCV 图像匹配 (找图系列)
+    "找图": ("cv.match",), "区域找图": ("cv.match",),
+    "点图": ("cv.match",), "区域点图": ("cv.match",),
+    # 浏览器自动化 (playwright)
+    "打开网页": ("browser.playwright",), "浏览器点击": ("browser.playwright",),
+    "浏览器输入": ("browser.playwright",), "等待元素": ("browser.playwright",),
+    "浏览器截图": ("browser.playwright",), "浏览器执行JS": ("browser.playwright",),
+    "执行JS": ("browser.playwright",), "浏览器读取Cookie": ("browser.playwright",),
+    "浏览器设置Cookie": ("browser.playwright",), "切换框架": ("browser.playwright",),
+    "返回主框架": ("browser.playwright",), "新建标签页": ("browser.playwright",),
+    "切换标签页": ("browser.playwright",), "关闭标签页": ("browser.playwright",),
+    "等待下载": ("browser.playwright",), "浏览器上传": ("browser.playwright",),
+    "连接已开浏览器": ("browser.playwright",), "接管浏览器": ("browser.playwright",),
+    "开始监听": ("browser.playwright",), "等待数据包": ("browser.playwright",),
+    "停止监听": ("browser.playwright",), "启动浏览器录制": ("browser.playwright",),
+    # PaddleOCR.dll 后端 (可选)
+    "识别文字": ("ocr.paddle_dll",), "等待文字": ("ocr.paddle_dll",),
+    "点击文字": ("ocr.paddle_dll",),
+    # DD 内核输入 (可选, engine 缺失时回退 PyAutoGUI)
+    "写入": ("input.dd",),
+}
+
+for _n, _r in _EXTERNAL_REQUIRES.items():
+    if _n in _schemas:                      # 仅覆盖已注册命令, 避免笔误写错
+        _requires[_n] = tuple(_r)
+
+# 未显式声明的已注册命令统一补 ("core",) (register 缺省只写空元组)。
+for _n, _d, _p, _h in list(_registry):
+    if not _requires.get(_n):
+        _requires[_n] = ("core",)
+
 
 def _set_handler(name, handler):
     """Update a registered command's handler (called by engine)."""

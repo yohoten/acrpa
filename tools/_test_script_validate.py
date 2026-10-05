@@ -131,6 +131,33 @@ def main():
     check(not _by_code(iss, "block_unbalanced"),
           "配对正确 → 不报 block_unbalanced", str(iss))
 
+    # ── V11 能力缺失 (missing_capability) ──
+    # 强制目标能力非 READY, 保证跨环境确定性 (本机装/未装 playwright 都不影响)。
+    print("\n── V11 能力缺失 (missing_capability) ──")
+    import capabilities as _caps
+    _caps.disable("browser.playwright")   # hard
+    _caps.disable("input.dd")             # soft
+    try:
+        iss = script_validate.validate_script([_row("打开网页", ["https://x"])])
+        mc = _by_code(iss, "missing_capability")
+        check(len(mc) == 1 and mc[0]["level"] == "error" and mc[0]["row"] == 1,
+              "hard 能力缺失 → error/missing_capability 且 row=1", str(mc))
+        check(bool(mc) and "Playwright" in mc[0]["message"]
+              and "disabled" in mc[0]["message"],
+              "message 含能力名与状态", str(mc[:1]))
+
+        iss = script_validate.validate_script([_row("写入", ["hi", "0.1", "auto"])])
+        mc = _by_code(iss, "missing_capability")
+        check(len(mc) == 1 and mc[0]["level"] == "warning",
+              "soft 能力缺失 → warning/missing_capability", str(mc))
+
+        iss = script_validate.validate_script([_row("等待", ["1"])])
+        check(not _by_code(iss, "missing_capability"),
+              "core 命令不产生 missing_capability", str(iss))
+    finally:
+        _caps.enable("browser.playwright")
+        _caps.enable("input.dd")
+
     # ── V10 纯函数副作用 ──
     print("\n── V10 纯函数: 不写盘 / 不加载 GUI ──")
     writes = {"n": 0}

@@ -70,7 +70,7 @@ _nav_active_key = None   # 当前高亮的导航项 key
 
 # 卡片模块名 (顺序即导航与 grid 行序): cards/*.py
 _CARD_KEYS = ("exec", "ai", "sched", "record", "log", "system", "quick",
-              "advanced", "netlink", "python", "market")
+              "advanced", "netlink", "python", "market", "extensions")
 
 
 def update_sched_next_label(text):
@@ -422,6 +422,7 @@ _NAV_ITEMS = [
     ("netlink",  "⊕", "网络互联"),
     ("python",   "§", "Python 扩展"),
     ("market",   "⛁", "脚本市场"),
+    ("extensions", "⧉", "扩展"),
 ]
 
 

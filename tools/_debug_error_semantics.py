@@ -383,6 +383,7 @@ finally:
 # ── 清理 ──
 for _n in ("测试失败命令", "测试循环失败命令"):
     commands._registry[:] = [r for r in commands._registry if r[0] != _n]
+    commands._requires.pop(_n, None)   # 阶段二新增项①: 一并清理能力声明, 避免残留
 
 print()
 print("=" * 50)

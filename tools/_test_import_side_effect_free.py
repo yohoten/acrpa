@@ -13,6 +13,9 @@
     I2 不阻塞     : 该 import 子进程在超时内正常退出 (不再建窗阻塞 / 不再挂定时器)
     I3 纯定义可用 : import 后 ACRPA 具备 build_app / main_run / stop_execution 等纯定义符号
     I4 薄入口     : src/app.py 提供 build()/main(); 仅 import app 不触发构建 (无 root)
+    I5/I6 纯函数  : import script_validate / capabilities 不加载 tkinter/pyautogui
+    I7 extensions : import extensions 及其子模块不加载 tkinter/pyautogui/script_package
+                    (阶段二新增项②: 纯逻辑扩展管理器须 import 无副作用)
 
 用法: .venv\\Scripts\\python.exe -X utf8 tools\\_test_import_side_effect_free.py
 退出码: 0=全部通过, 1=存在失败
@@ -107,6 +110,38 @@ def t_script_validate_pure():
     print("      child stdout: {}".format(out.strip().replace("\n", " ") or "(空)"))
 
 
+def t_capabilities_pure():
+    print("\n── I6  capabilities 纯函数: 不加载 GUI ──")
+    code = ("import sys; sys.path.insert(0, {src!r}); "
+            "import capabilities; "
+            "print('TK=%s' % ('tkinter' in sys.modules)); "
+            "print('PA=%s' % ('pyautogui' in sys.modules))").format(src=SRC)
+    rc, out, err = _child(code, timeout=30)
+    check(rc == 0, "子进程 import capabilities 正常退出 (rc={})".format(rc),
+          (err or "").strip()[-200:])
+    check("TK=False" in out, "import capabilities 未加载 tkinter", out.strip())
+    check("PA=False" in out, "import capabilities 未加载 pyautogui", out.strip())
+
+
+def t_extensions_pure():
+    print("\n── I7  extensions 纯逻辑: 不加载 GUI / script_package ──")
+    code = ("import sys; sys.path.insert(0, {src!r}); "
+            "import extensions; "
+            "import extensions.manifest, extensions.package, extensions.manager; "
+            "print('TK=%s' % ('tkinter' in sys.modules)); "
+            "print('PA=%s' % ('pyautogui' in sys.modules)); "
+            "print('SP=%s' % ('script_package' in sys.modules)); "
+            "print('HAS_INSTALL=%s' % callable(getattr(extensions, 'install', None)))").format(src=SRC)
+    rc, out, err = _child(code, timeout=30)
+    check(rc == 0, "子进程 import extensions 正常退出 (rc={})".format(rc),
+          (err or "").strip()[-200:])
+    check("TK=False" in out, "import extensions 未加载 tkinter", out.strip())
+    check("PA=False" in out, "import extensions 未加载 pyautogui", out.strip())
+    check("SP=False" in out, "import extensions 未加载 script_package (惰性复用)", out.strip())
+    check("HAS_INSTALL=True" in out, "extensions.install 顶层 API 可用")
+    print("      child stdout: {}".format(out.strip().replace("\n", " ") or "(空)"))
+
+
 def t_thin_entry():
     print("\n── I4  薄入口 src/app.py ──")
     app_py = os.path.join(SRC, "app.py")
@@ -137,6 +172,8 @@ def main():
     t_side_effect_free()
     t_pure_defs_available()
     t_script_validate_pure()
+    t_capabilities_pure()
+    t_extensions_pure()
     t_thin_entry()
     print("\n=== 结果: {} 通过 / {} 失败 ===".format(len(_PASS), len(_FAIL)))
     if _FAIL:

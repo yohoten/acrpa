@@ -75,6 +75,8 @@ import tkinter
 from tkinter import filedialog
 from tkinter import ttk
 
+import i18n  # 路线图 §5.6: UI 字符串目录 (默认 zh; 文本只作显示, 不作状态/主题判定)
+
 __all__ = [
     "build", "refresh_theme", "set_state", "get_widgets",
     "get_exec_bar", "get_card_run", "get_run_bar", "get_run_bar_outer",
@@ -268,10 +270,10 @@ def build(parent, *, notebook, colors, fonts, deps=None):
     run_scrollbar.grid(row=1, column=0, sticky="ew")
 
     # 脚本选择: 标签 + 最近脚本下拉 + 选择按钮
-    tkinter.Label(run_bar, text="脚本:", font=FONT_SMALL, fg=C["fgm"],
+    tkinter.Label(run_bar, text=i18n.t("exec.label_script"), font=FONT_SMALL, fg=C["fgm"],
         bg=C["bgc"]).pack(side="left", padx=(2, 2))
 
-    script_name_var = tkinter.StringVar(value="没有选择文件")
+    script_name_var = tkinter.StringVar(value=i18n.t("exec.no_file"))
     _script_name_var = script_name_var
     # 快速切换：下拉框 + 浏览按钮
     _script_switcher = ttk.Combobox(run_bar, textvariable=script_name_var,
@@ -281,22 +283,23 @@ def build(parent, *, notebook, colors, fonts, deps=None):
     _script_switcher.bind("<<ComboboxSelected>>", on_script_switched)
     update_recent_scripts()
 
-    ui_theme.roled(tkinter.Button(run_bar, text="选择脚本", font=FONT_BUTTON, bg=C["ac"], fg="white",
+    ui_theme.roled(tkinter.Button(run_bar, text=i18n.t("exec.label_choose"), font=FONT_BUTTON, bg=C["ac"], fg="white",
         activebackground=C["ach"], activeforeground="white", relief="flat", bd=1,
         cursor="hand2", padx=8, pady=2, command=select_script), "ac").pack(side="left", padx=(0, 4))
 
     # 次数: 可编辑 + 预设 + 自定义
-    tkinter.Label(run_bar, text="次数:", font=FONT_SMALL, fg=C["fgm"],
+    tkinter.Label(run_bar, text=i18n.t("exec.label_loops"), font=FONT_SMALL, fg=C["fgm"],
         bg=C["bgc"]).pack(side="left", padx=(6, 2))
-    loop_count_var = tkinter.StringVar(value="无限循环")
+    loop_count_var = tkinter.StringVar(value=i18n.t("exec.loop_infinite"))
     _loop_count_var = loop_count_var
     _loop_combo = ttk.Combobox(run_bar, textvariable=loop_count_var,
-        values=('无限循环', '1', '5', '10', '50', '自定义…'), width=8)
+        values=(i18n.t("exec.loop_infinite"), '1', '5', '10', '50',
+                i18n.t("exec.loop_custom")), width=8)
     _loop_combo.pack(side="left", padx=(0, 4))
     _loop_combo.bind("<<ComboboxSelected>>", on_loop_sel)
 
     # 执行参数就地化 (与工作流/设置共用同一口径: MAX_EXECUTION_MINUTES / STOP_ON_ERROR)
-    tkinter.Label(run_bar, text="最长:", font=FONT_SMALL, fg=C["fgm"],
+    tkinter.Label(run_bar, text=i18n.t("exec.label_maxmin"), font=FONT_SMALL, fg=C["fgm"],
         bg=C["bgc"]).pack(side="left", padx=(sp(4), sp(2)))
     exec_maxmin_var = tkinter.StringVar(value=str(state.MAX_EXECUTION_MINUTES))
     _exec_maxmin_var = exec_maxmin_var
@@ -304,11 +307,11 @@ def build(parent, *, notebook, colors, fonts, deps=None):
         width=4, font=FONT_SMALL, bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1)
     exec_maxmin_sp.pack(side="left", padx=(0, sp(2)))
     _exec_maxmin_sp = exec_maxmin_sp
-    tkinter.Label(run_bar, text="分", font=FONT_SMALL, fg=C["fgm"],
+    tkinter.Label(run_bar, text=i18n.t("exec.label_minute"), font=FONT_SMALL, fg=C["fgm"],
         bg=C["bgc"]).pack(side="left", padx=(0, sp(4)))
     exec_stoponerror_var = tkinter.BooleanVar(value=bool(state.STOP_ON_ERROR))
     _exec_stoponerror_var = exec_stoponerror_var
-    tkinter.Checkbutton(run_bar, text="出错即停", variable=exec_stoponerror_var, font=FONT_SMALL,
+    tkinter.Checkbutton(run_bar, text=i18n.t("exec.stop_on_error"), variable=exec_stoponerror_var, font=FONT_SMALL,
         fg=C["fgm"], bg=C["bgc"], activebackground=C["bgc"], activeforeground=C["fgb"],
         selectcolor=C["ebg"], bd=0, highlightthickness=0,
         command=lambda: exec_params_commit()).pack(side="left", padx=(0, sp(4)))
@@ -320,7 +323,7 @@ def build(parent, *, notebook, colors, fonts, deps=None):
 
     # ✓ 校验 (运行前 dry-run; 默认只读展示问题, 不执行脚本)
     # 置于四键同组之前: 与运行相关但不参与「运行/暂停/单步/停止」状态机
-    btn_validate = ui_theme.roled(tkinter.Button(run_bar, text="✓ 校验", font=FONT_BUTTON, bg=C["ac"], fg="black",
+    btn_validate = ui_theme.roled(tkinter.Button(run_bar, text=i18n.t("exec.btn_validate"), font=FONT_BUTTON, bg=C["ac"], fg="black",
         activebackground=C["ach"], activeforeground="black", disabledforeground="black",
         relief="flat", bd=1,
         cursor="hand2", padx=sp(8), pady=sp(2), command=_call_proxy("validate_script_cb")), "ac")
@@ -330,7 +333,7 @@ def build(parent, *, notebook, colors, fonts, deps=None):
     # 四键同组: ▶ 运行 / ⏸ 暂停 / ⏭ 单步 / ■ 停止
     # (尺寸走 utils.sp 令牌; 四键文字统一黑色, 与「运行」对齐)
     # 语义角色显式登记 (换肤按角色回填, 不再按旧颜色值反推语义组)
-    btn_run = ui_theme.roled(tkinter.Button(run_bar, text="▶ 运行", font=FONT_BUTTON, bg=C["sc"], fg="black",
+    btn_run = ui_theme.roled(tkinter.Button(run_bar, text=i18n.t("exec.btn_run"), font=FONT_BUTTON, bg=C["sc"], fg="black",
         activebackground=darken(C["sc"]), activeforeground="black", disabledforeground="black",
         relief="flat", bd=1,
         cursor="hand2", padx=sp(8), pady=sp(2), command=shared_run), "sc")
@@ -343,13 +346,13 @@ def build(parent, *, notebook, colors, fonts, deps=None):
     btn_pause.pack(side="left", padx=2)
     _btn_pause = btn_pause
 
-    btn_step = ui_theme.roled(tkinter.Button(run_bar, text="⏭ 单步", font=FONT_BUTTON, bg=C["ac"], fg="black",
+    btn_step = ui_theme.roled(tkinter.Button(run_bar, text=i18n.t("exec.btn_step"), font=FONT_BUTTON, bg=C["ac"], fg="black",
         activebackground=C["ach"], activeforeground="black", disabledforeground="black",
         relief="flat", bd=1,
         cursor="hand2", padx=sp(8), pady=sp(2), command=_CTX.get("step_once")), "ac")
     btn_step.pack(side="left", padx=2)
     _btn_step = btn_step
-    btn_stop = ui_theme.roled(tkinter.Button(run_bar, text="■ 停止", font=FONT_BUTTON, bg=C["dg"], fg="black",
+    btn_stop = ui_theme.roled(tkinter.Button(run_bar, text=i18n.t("exec.btn_stop"), font=FONT_BUTTON, bg=C["dg"], fg="black",
         activebackground=darken(C["dg"]), activeforeground="black", disabledforeground="black",
         relief="flat", bd=1,
         cursor="hand2", padx=sp(8), pady=sp(2), command=shared_stop), "dg")
@@ -358,7 +361,7 @@ def build(parent, *, notebook, colors, fonts, deps=None):
 
     # 四键 tooltip (含用户配置快捷键); 单步右键 = 单步模式开关 (调试态内聚)
     try:
-        attach_tooltip(btn_validate, "运行前校验 (静态检查脚本, 不执行)")
+        attach_tooltip(btn_validate, i18n.t("exec.tip_validate"))
         attach_tooltip(btn_run, tip_with_hotkey("运行", "HOTKEY_RUN"))
         attach_tooltip(btn_pause, tip_with_hotkey("暂停/继续", "HOTKEY_PAUSE"))
         attach_tooltip(btn_stop, tip_with_hotkey("停止", "HOTKEY_STOP"))
@@ -373,12 +376,12 @@ def build(parent, *, notebook, colors, fonts, deps=None):
         side="left", fill="y", padx=sp(6), pady=4)
 
     # 调试 / 变量入口 (调试态统一归此; 脚本编辑工具栏已移除该组, 避免两处状态不同步)
-    btn_debug_exec = tkinter.Button(run_bar, text="⚑ 调试", font=FONT_BUTTON, bg=C["bgc"], fg=C["fgb"],
+    btn_debug_exec = tkinter.Button(run_bar, text=i18n.t("exec.btn_debug"), font=FONT_BUTTON, bg=C["bgc"], fg=C["fgb"],
         activebackground=C["acl"], activeforeground=C["fgb"], relief="flat", bd=1,
         cursor="hand2", padx=sp(8), pady=sp(2), command=_call_proxy("toggle_debug_mode"))
     btn_debug_exec.pack(side="left", padx=2)
     _btn_debug_exec = btn_debug_exec
-    btn_vars_exec = tkinter.Button(run_bar, text="☰ 变量", font=FONT_BUTTON, bg=C["bgc"], fg=C["fgb"],
+    btn_vars_exec = tkinter.Button(run_bar, text=i18n.t("exec.btn_vars"), font=FONT_BUTTON, bg=C["bgc"], fg=C["fgb"],
         activebackground=C["acl"], activeforeground=C["fgb"], relief="flat", bd=1,
         cursor="hand2", padx=sp(8), pady=sp(2), command=_call_proxy("show_variables_window"))
     btn_vars_exec.pack(side="left", padx=2)
@@ -512,7 +515,7 @@ def update_recent_scripts():
                 _recent_scripts = json.load(f)[:10]
     except Exception:
         _recent_scripts = []
-    scripts = [os.path.basename(s) for s in _recent_scripts] if _recent_scripts else ["没有选择文件"]
+    scripts = [os.path.basename(s) for s in _recent_scripts] if _recent_scripts else [i18n.t("exec.no_file")]
     try:
         _script_switcher["values"] = scripts
     except Exception:
@@ -582,13 +585,13 @@ def select_script():
         sdot = _call("get_status_dot")
         if sdot is not None:
             try:
-                sdot.config(text="● 已加载", fg=C.get("sc"))
+                sdot.config(text=i18n.t("status.loaded_dot"), fg=C.get("sc"))
             except Exception:
                 pass
         stxt = _call("get_status_text")
         if stxt is not None:
             try:
-                stxt.config(text=" 脚本已加载 — 点击「开始运行」启动", fg=C.get("fgb"))
+                stxt.config(text=i18n.t("exec.loaded_text"), fg=C.get("fgb"))
             except Exception:
                 pass
         _call("editor_load_xls", state.filename)
@@ -599,14 +602,14 @@ def select_script():
 
 def on_loop_sel(event=None):
     """次数下拉: 选中「自定义…」时弹出输入框。"""
-    if _loop_count_var.get() == "自定义…":
+    if _loop_count_var.get() == i18n.t("exec.loop_custom"):
         try:
             from tkinter import simpledialog
-            n = simpledialog.askinteger("运行次数", "请输入运行次数:",
+            n = simpledialog.askinteger(i18n.t("exec.dlg_loops_title"), i18n.t("exec.dlg_loops_prompt"),
                 parent=_CTX.get("root"), minvalue=1, maxvalue=1000000)
-            _loop_count_var.set("无限循环" if n is None else str(n))
+            _loop_count_var.set(i18n.t("exec.loop_infinite") if n is None else str(n))
         except Exception:
-            _loop_count_var.set("无限循环")
+            _loop_count_var.set(i18n.t("exec.loop_infinite"))
 
 
 def exec_params_commit():
@@ -640,7 +643,7 @@ def set_state(code):
             pass
     try:
         if code == 1:      # 已暂停
-            _btn_pause.config(text="▶ 继续", bg=C.get("ac"))
+            _btn_pause.config(text=i18n.t("exec.btn_resume"), bg=C.get("ac"))
         else:              # 就绪 / 运行中 / 已停止
             _btn_pause.config(text="⏸ 暂停", bg=C.get("wn"))
     except Exception:

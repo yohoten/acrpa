@@ -48,6 +48,7 @@ from scriptdata import ScriptData
 import commands
 import script_io
 import script_validate  # 路线图 阶段二第 7 项: 运行前静态校验 (纯函数, 无副作用)
+import i18n  # 路线图 §5.6: UI 字符串目录 (默认 zh; 文本只作显示, 不作状态/主题判定)
 from engine import engine
 import recorder
 import scheduler as sched
@@ -3322,13 +3323,13 @@ def toggle_pause():
         log1("脚本未运行，暂停/继续不可用", "warning")
         return
     if state.pause_event.is_set():
-        state.pause_event.clear(); btn_pause.config(text="▶ 继续",bg=C["ac"])
-        status_text.config(text=" 已暂停 — 点击「继续」恢复执行",fg=C["wn"])
-        status_dot.config(text="● 已暂停",fg=C["wn"])
+        state.pause_event.clear(); btn_pause.config(text=i18n.t("exec.btn_resume"),bg=C["ac"])
+        status_text.config(text=i18n.t("status.paused_resume"),fg=C["wn"])
+        status_dot.config(text=i18n.t("status.dot_paused"),fg=C["wn"])
     else:
         state.pause_event.set(); btn_pause.config(text="⏸ 暂停",bg=C["wn"])
-        status_text.config(text=" 运行中 — 正在执行自动化任务",fg=C["sc"])
-        status_dot.config(text="● 运行中",fg=C["sc"])
+        status_text.config(text=i18n.t("status.running"),fg=C["sc"])
+        status_dot.config(text=i18n.t("status.dot_running"),fg=C["sc"])
 
 
 # 区域截图工具 (曾由「执行控制」迁入脚本编辑工具栏) 随执行栏一并抽到 exec_bar。
@@ -3504,7 +3505,7 @@ def _on_recording_done():
 # ======================================================================
 # Status Bar — 状态文本 + 控制信息 + 执行进度条 (进度条自适应窗口宽度)
 # ======================================================================
-_DASH_EMPTY = "尚未运行 · 选择脚本后点击运行"
+_DASH_EMPTY = i18n.t("status.dash_empty")
 
 # ======================================================================
 # Periodic Updates
@@ -3529,14 +3530,14 @@ def _periodic():
         try: _update_exec_buttons(new_status)
         except Exception: pass
         if is_paused:
-            status_text.config(text=" 已暂停 — 点击继续恢复执行",fg=C["wn"])
-            status_dot.config(text="● 已暂停",fg=C["wn"])
+            status_text.config(text=i18n.t("status.paused"),fg=C["wn"])
+            status_dot.config(text=i18n.t("status.dot_paused"),fg=C["wn"])
         elif is_running:
-            status_text.config(text=" 运行中 — 正在执行自动化任务",fg=C["sc"])
-            status_dot.config(text="● 运行中",fg=C["sc"])
+            status_text.config(text=i18n.t("status.running"),fg=C["sc"])
+            status_dot.config(text=i18n.t("status.dot_running"),fg=C["sc"])
         elif is_stopped:
-            status_text.config(text=" 已停止 — 点击开始运行重新启动",fg=C["dg"])
-            status_dot.config(text="● 已停止",fg=C["dg"])
+            status_text.config(text=i18n.t("status.stopped"),fg=C["dg"])
+            status_dot.config(text=i18n.t("status.dot_stopped"),fg=C["dg"])
         else:
             rows_count = len(state._editor_rows) if state._editor_rows else 0
             mod_mark = " *" if state._editor_modified else ""
@@ -3547,9 +3548,9 @@ def _periodic():
             except Exception:
                 _ai_ok = bool(state.API_KEY)
             ai_status = "[AI]" if _ai_ok else ""
-            status_text.config(text=" 就绪{}{}  |  {} 行  |  请选择脚本文件开始".format(
-                mod_mark, " "+ai_status if ai_status else "", rows_count), fg=C["fgm"])
-            status_dot.config(text="● 就绪",fg=C["fgm"])
+            status_text.config(text=i18n.t("status.ready",
+                mod=mod_mark, ai=(" "+ai_status if ai_status else ""), rows=rows_count), fg=C["fgm"])
+            status_dot.config(text=i18n.t("status.dot_ready"),fg=C["fgm"])
             if _update_pending.get("ver"):
                 _on_update_hint(_update_pending["ver"], "")
     if is_running and state.exec_state.get("total_rows",0)>0:
@@ -3563,10 +3564,15 @@ def _periodic():
         else:
             eta_txt = "--:--"
         ok_n = state.exec_state.get("ok_cmds"); fail_n = state.exec_state.get("fail_cmds")
-        dash_txt = "循环 {}/{}  ·  行 {}/{}  ·  已用 {}  ·  ETA {}".format(
-            lp, "∞" if tl>99999 else tl, rw, tr, _fmt_dur(el), eta_txt)
+        dash_txt = (i18n.t("status.loop", cur=lp, total=("∞" if tl>99999 else tl))
+                    + i18n.t("status.sep")
+                    + i18n.t("status.rows", done=rw, total=tr)
+                    + i18n.t("status.sep")
+                    + i18n.t("status.elapsed", elapsed=_fmt_dur(el))
+                    + i18n.t("status.sep")
+                    + i18n.t("status.eta", eta=eta_txt))
         if ok_n is not None:
-            dash_txt += "  ·  成功 {}  失败 {}".format(ok_n, fail_n or 0)
+            dash_txt += i18n.t("status.counts", ok=ok_n, fail=(fail_n or 0))
         if _pc.get("pct") != pct:
             _pc["pct"] = pct; progress_bar.config(value=pct)
         if _pc.get("dash") != dash_txt:
@@ -3594,8 +3600,8 @@ def _periodic():
         n = len(state.recorded_actions)
         if _pc.get("rec_n") != n:
             _pc["rec_n"] = n
-            status_text.config(text=" ● 录制中 · {} 个动作 · Ctrl+Shift+Q 停止".format(n),fg=C["dg"])
-            status_dot.config(text="● 录制",fg=C["dg"])
+            status_text.config(text=i18n.t("status.recording", n=n),fg=C["dg"])
+            status_dot.config(text=i18n.t("status.dot_recording"),fg=C["dg"])
     if state.SCHED_ENABLED or state.SCHED_NEXT_RUN:
         sched_val = state.SCHED_NEXT_RUN if state.SCHED_NEXT_RUN else "--:--"
         if _pc.get("sched_val") != sched_val:
@@ -3656,8 +3662,8 @@ def _on_update_hint(ver, url):
     """状态栏提示可更新 (由 updater 在发现新版本时回调)。"""
     _update_pending["ver"] = ver
     try:
-        status_text.config(text=" 新版本 v{} 可用 — 点击更新".format(ver), fg=C["wn"])
-        status_dot.config(text=" 更新", fg=C["wn"])
+        status_text.config(text=i18n.t("status.update_available", ver=ver), fg=C["wn"])
+        status_dot.config(text=i18n.t("status.dot_update"), fg=C["wn"])
         status_text.config(cursor="hand2")
     except Exception:
         pass
@@ -4030,7 +4036,7 @@ def build_app():
     dark_frame.grid(row=0,column=1,sticky="e")
     # 语义角色 "ac": 旧实现按「● 就绪」文案嗅探 → fg=ac; 现创建时显式登记 (行为等价)
     status_dot = ui_theme.roled(
-        tkinter.Label(dark_frame,text="● 就绪",font=FONT_SMALL,fg=C["fgm"],bg=C["bg"]), "ac")
+        tkinter.Label(dark_frame,text=i18n.t("status.dot_ready"),font=FONT_SMALL,fg=C["fgm"],bg=C["bg"]), "ac")
     status_dot.pack(side="left",padx=(0,6))
     pin_btn = tkinter.Label(dark_frame,text="△",font=FONT_ICON,
         fg=C["fgm"],bg=C["bg"],cursor="hand2",padx=2)
@@ -4423,7 +4429,7 @@ def build_app():
     status_bar.grid(row=3,column=0,sticky="ew",padx=10,pady=(3,6))
     status_bar.columnconfigure(2,weight=1)
     # 语义角色 "ac": 旧实现按文案含「就绪」嗅探 → fg=ac; 现创建时显式登记 (行为等价)
-    status_text = ui_theme.roled(tkinter.Label(status_bar,text="就绪 — 请选择脚本文件开始",
+    status_text = ui_theme.roled(tkinter.Label(status_bar,text=i18n.t("status.ready_initial"),
         font=FONT_SMALL,fg=C["fgm"],bg=C["bg"],anchor="w"), "ac")
     status_text.grid(row=0,column=0,sticky="w")
 

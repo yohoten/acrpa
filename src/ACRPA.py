@@ -2008,6 +2008,45 @@ def _cmd_edit_row_dialog():
     win.protocol("WM_DELETE_WINDOW", _close)
     win.bind("<Escape>", lambda e: _close())
 
+def _kb_command_palette(event=None):
+    """Ctrl+K — 命令库 (路线图 §5.3): 分组 + 模糊搜索命令, Enter 写入当前行。
+
+    有选中行 → 覆盖该行命令类型并清空参数; 无选中 → 追加一行。
+    命令分组/条目数据源见 ui.command_palette (与帮助窗口命令速查同源)。
+    """
+    from ui import command_palette
+
+    def _apply(name):
+        _push_undo()
+        sel = tree.selection()
+        if sel:
+            idx = tree.index(sel[0])
+            if 0 <= idx < len(state._editor_rows):
+                sd = state._editor_rows[idx]
+                sd.cmd_type = name
+                sd.args = [""] * 9
+                _update_row_inplace(idx, sd)
+                log1("已将命令写入第 {} 行: {}".format(idx + 1, name))
+                return
+        sd = ScriptData(name, [""] * 9)
+        state._editor_rows.append(sd)
+        _editor_sync_to_tree()
+        try:
+            tree.see(tree.get_children()[-1])
+        except Exception:
+            pass
+        log1("已新增命令行: {}".format(name))
+
+    try:
+        command_palette.open_palette(
+            root, C,
+            {"body": FONT_BODY, "small": FONT_SMALL, "button": FONT_BUTTON},
+            _apply, set_icon=_set_window_icon)
+    except Exception as e:
+        log1("命令库打开失败: {}".format(e), "error")
+    return "break"
+
+
 def _cmd_del_row():
     """Delete selected rows from the editor."""
     _push_undo()
@@ -4188,6 +4227,16 @@ def build_app():
     tree.bind("<Control-d>", _kb_duplicate_row)
     tree.bind("<Control-D>", _kb_duplicate_row)
     tree.bind("<Control-slash>", _kb_toggle_comment)
+
+    # Ctrl+K — 命令库 (命令分组 + 模糊搜索); 写入当前行 (无选中则新增行)。
+    # 同时绑到 root 以便焦点不在树时也能唤起; 处理器返回 "break" 避免重复触发。
+    tree.bind("<Control-k>", _kb_command_palette)
+    tree.bind("<Control-K>", _kb_command_palette)
+    try:
+        root.bind("<Control-k>", _kb_command_palette)
+        root.bind("<Control-K>", _kb_command_palette)
+    except Exception:
+        pass
 
     tree.bind("<Alt-Up>", _kb_move_up)
     tree.bind("<Alt-Down>", _kb_move_down)

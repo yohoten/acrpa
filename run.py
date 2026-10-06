@@ -55,6 +55,20 @@ if __name__ == "__main__":
         print(f"\n缺失: {', '.join(missing)}")
         cleanup_and_exit(1)
 
+    # ── CLI / 无头模式 (路线图 §6.5) ──────────────────────────────────
+    # 只有显式给出 --script 才由 cli 接管 (不建任何 Tk 窗口、跑完即退出);
+    # 未给 --script、或 cli 解析/导入失败 → 一律落回下面的 GUI 路径
+    # (app.main() → ACRPA.root.mainloop()), 即现有行为完全不变。
+    argv = sys.argv[1:]
+    try:
+        import cli
+        if cli.parse_args(argv) is not None:
+            sys.exit(cli.main(argv))
+    except SystemExit:
+        raise          # cli 的正常退出码原样向上抛
+    except Exception:
+        pass           # cli 不可用/解析异常 → 静默回退 GUI
+
     try:
         import app
         app.main()

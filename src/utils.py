@@ -171,9 +171,12 @@ FONT_ICON_LG    = "ACRPA_ICON_LG"
 _FONT_SPECS = {
     "ACRPA_TITLE":      ("Microsoft YaHei UI", 10, "bold"),
     "ACRPA_BODY":       ("Microsoft YaHei UI", 9,  "normal"),
-    "ACRPA_SMALL":      ("Microsoft YaHei UI", 8,  "normal"),
-    "ACRPA_SMALL_BOLD": ("Microsoft YaHei UI", 8,  "bold"),
-    "ACRPA_TINY":       ("Microsoft YaHei UI", 7,  "normal"),
+    # 密集表格可读下限 (路线图 §5.5): 全部正文字号不得低于 9pt。
+    # ACRPA_SMALL / SMALL_BOLD 原为 8pt, ACRPA_TINY 原为 7pt —— 均低于下限,
+    # 本批次统一提到 9pt (与 BODY/BUTTON/LOG 等值)。ICON_* 为符号字形, 不受此下限约束。
+    "ACRPA_SMALL":      ("Microsoft YaHei UI", 9,  "normal"),
+    "ACRPA_SMALL_BOLD": ("Microsoft YaHei UI", 9,  "bold"),
+    "ACRPA_TINY":       ("Microsoft YaHei UI", 9,  "normal"),
     "ACRPA_BUTTON":     ("Microsoft YaHei UI", 9,  "bold"),
     "ACRPA_LOG":        ("Consolas",           9,  "normal"),
     "ACRPA_ICON":       ("Segoe UI Symbol",    9,  "normal"),
@@ -432,6 +435,71 @@ def attach_tooltip(widget, text):
     getter = text if callable(text) else (lambda t=text: t)
     widget.bind("<Enter>", lambda e: _show_tooltip(e, getter))
     widget.bind("<Leave>", _hide_tooltip)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 可达性 (a11y) 助手 —— 路线图 §5.5「可达性补齐」
+# ═══════════════════════════════════════════════════════════════════════
+# 背景: 标题栏的 △ ⊟ ◑ ⚙ ? ⊕ 等图标是 `Label` + `<Button-1>`, 既不可 Tab
+# 聚焦, 也没有 accessible name, 屏幕阅读器 / 纯键盘用户无法使用。
+# Tk 没有跨平台标准无障碍接口 (Tk 8.6 无 `-name`/ARIA), 故做如下**文档化**约定:
+#   1) 可访问名落到控件属性 `acrpa_accessible_name` (供测试/内省读取), 并在控件
+#      尚无 `<Enter>` 绑定时复用 attach_tooltip 呈现在悬停提示里;
+#   2) `bind_icon_activate()` 把「Label 图标按钮」一键变为可聚焦 + 可键盘激活。
+# 约束: 绝不覆盖控件上既有 `<Enter>`/`<Leave>` (tooltip) 绑定。
+
+def set_accessible_name(widget, text):
+    """为控件登记可访问名 (Tk 无标准无障碍属性的文档化替代)。
+
+    落地方式 (纯属性 + 复用 tooltip, 不引入新依赖):
+      · `widget.acrpa_accessible_name = text`  —— 唯一权威读取点;
+      · 仅当控件**尚未**绑定 `<Enter>` 时, 才用 attach_tooltip 呈现该名字,
+        避免覆盖既有 tooltip 行为 (标题栏图标已各自绑定 <Enter>)。
+    返回 text。失败静默 (无障碍属性缺失不应影响功能)。
+    """
+    try:
+        widget.acrpa_accessible_name = text
+    except Exception:
+        pass
+    try:
+        if text and not widget.bind("<Enter>"):
+            attach_tooltip(widget, text)
+    except Exception:
+        pass
+    return text
+
+
+def bind_icon_activate(widget, command, name=None):
+    """把 Label 图标按钮变为**可键盘聚焦/激活** (路线图 §5.5 可达性补齐)。
+
+    · takefocus=True + 1px 可见焦点环 (highlightcolor=C["focus"]);
+    · `<Button-1>` / `<Return>` / `<space>` 触发同一 command (键盘等价点击);
+    · name 非空时登记可访问名 (set_accessible_name)。
+    调用方应移除此前对 `<Button-1>` 的直接绑定, 以免重复触发。
+    不触碰 `<Enter>`/`<Leave>` (tooltip) 绑定。返回 widget。
+    """
+    try:
+        widget.configure(takefocus=True, highlightthickness=1,
+                         highlightbackground=themed("bg"),
+                         highlightcolor=themed("focus"))
+    except Exception:
+        pass
+
+    def _fire(_e=None):
+        try:
+            command()
+        except Exception:
+            pass
+        return "break"
+
+    for _seq in ("<Button-1>", "<Return>", "<space>"):
+        try:
+            widget.bind(_seq, _fire)
+        except Exception:
+            pass
+    if name:
+        set_accessible_name(widget, name)
+    return widget
 
 
 def bind_sel_bold(tree_widget, font=None):
@@ -773,6 +841,12 @@ TOKENS = {
     # bar_h: 文档 §3 建议 10, 但该键当前被市场窗口「分类色条」宽度消费
     # (market_window.py:600 sp("bar_h")), 改动会影响既有布局几何 → 保持原值 4 (见结果偏差说明)。
     "card_min_h": 84, "bar_h": 4,
+    # 窗口尺寸 (设计 px, 路线图 §5.5): 主窗口默认几何 / 最小尺寸经 sp() 派生,
+    # 使 set_ui_scale() 真正影响窗口尺寸 (而非只缩放字体)。
+    "win_w": 1000, "win_h": 680, "win_min_w": 640, "win_min_h": 520,
+    # 紧凑模式 (=Mini Bar 折叠前旧布局) 尺寸
+    "win_compact_w": 500, "win_compact_h": 625,
+    "win_compact_min_w": 450, "win_compact_min_h": 550,
 }
 
 
@@ -855,6 +929,106 @@ def center_geometry(root, w, h):
     x = vx + max(0, (vw - w) // 2)
     y = vy + max(0, (vh - h) // 3)
     return "{}x{}+{}+{}".format(w, h, x, y)
+
+
+def dialog_geometry(w, h, parent_rect=None, vroot=None):
+    """**纯函数**: 计算对话框落位字符串 "WxH+X+Y" (可 headless 测试)。
+
+    规则 (路线图 §5.5 待办 2 —— 消除硬编码 +x+y 屏幕偏移):
+      · 有 parent_rect=(px,py,pw,ph) → 居中于父窗 (纵向略偏上 1/3);
+        无 parent_rect           → 居中于 vroot;
+      · 越界钳制: 结果完整落在虚拟屏内 (小屏 / 多显示器不溢出)。
+
+    w/h 为**已缩放**的实际像素。vroot=(vx,vy,vw,vh), 缺省由 parent_rect 派生。
+    不触碰 Tk, 不抛异常。
+    """
+    try:
+        w = max(1, int(w)); h = max(1, int(h))
+    except Exception:
+        w, h = 1, 1
+    if vroot is None:
+        if parent_rect:
+            try:
+                px, py, pw, ph = (int(v) for v in parent_rect)
+            except Exception:
+                px = py = pw = ph = 0
+            vroot = (0, 0, max(px + pw, w), max(py + ph, h))
+        else:
+            vroot = (0, 0, w, h)
+    try:
+        vx, vy, vw, vh = (int(v) for v in vroot)
+    except Exception:
+        vx, vy, vw, vh = 0, 0, w, h
+    vw = max(vw, w); vh = max(vh, h)
+    if parent_rect:
+        try:
+            px, py, pw, ph = (int(v) for v in parent_rect)
+        except Exception:
+            px = py = 0; pw = ph = 0
+        x = px + (pw - w) // 2
+        y = py + max(0, (ph - h) // 3)
+    else:
+        x = vx + (vw - w) // 2
+        y = vy + max(0, (vh - h) // 3)
+    x = max(vx, min(x, vx + vw - w))
+    y = max(vy, min(y, vy + vh - h))
+    return "{}x{}+{}+{}".format(w, h, x, y)
+
+
+def place_dialog(win, w=None, h=None, parent=None):
+    """通用对话框落位助手: 居中于父窗 + 虚拟屏越界钳制。
+
+    替代全库硬编码的 `win.geometry("WxH+固定x+固定y")` (§5.5 待办 2):
+    小屏 / 多显示器下原先的固定屏幕偏移会把窗口推出去。
+
+    参数:
+        win:    目标 Toplevel (或任何有 geometry/winfo_* 的窗口)。
+        w, h:   设计像素尺寸 (内部经 scaled() 派生; None → 取当前请求尺寸)。
+        parent: 居中所依据的父窗; 缺省用 win.master。
+    返回实际写入的几何字符串 (失败时返回 "")。
+    """
+    try:
+        if parent is None:
+            parent = win.master
+    except Exception:
+        parent = None
+
+    try:
+        if w is None or h is None:
+            win.update_idletasks()
+            rw, rh = win.winfo_reqwidth(), win.winfo_reqheight()
+            if w is None:
+                w = rw
+            if h is None:
+                h = rh
+    except Exception:
+        w = w or 1
+        h = h or 1
+    try:
+        w = scaled(w); h = scaled(h)
+    except Exception:
+        pass
+
+    parent_rect = None
+    try:
+        if parent is not None and int(parent.winfo_width()) > 1:
+            parent_rect = (parent.winfo_rootx(), parent.winfo_rooty(),
+                           parent.winfo_width(), parent.winfo_height())
+    except Exception:
+        parent_rect = None
+
+    try:
+        probe = parent.winfo_toplevel() if parent is not None else win
+        vroot = win_virtual_bounds(probe)
+    except Exception:
+        vroot = None
+
+    geo = dialog_geometry(w, h, parent_rect, vroot)
+    try:
+        win.geometry(geo)
+    except Exception:
+        return ""
+    return geo
 
 
 # ═══════════════════════════════════════════════════════════════════════

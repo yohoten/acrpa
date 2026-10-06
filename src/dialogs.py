@@ -19,7 +19,7 @@ from tkinter import ttk, filedialog, messagebox
 import state
 from engine import engine
 from utils import (_btn, _darken, log1, show_toast, attach_tooltip, themed,
-                   bind_sel_bold, FONT_LOG, FONT_TINY)
+                   bind_sel_bold, place_dialog, FONT_LOG, FONT_TINY)
 # UI 基础层 (阶段二第 2 项): 语义角色登记 + 换肤事件总线订阅
 from ui import theme as _ui_theme
 
@@ -235,7 +235,7 @@ def _show_help_dialog_legacy():
             txt_widget.insert("end", "        参数: {}\n".format(params), "param")
 
     try:
-        dlg = tkinter.Toplevel(root); dlg.title("帮助 — A/C RPA"); dlg.geometry("500x600+450+150")
+        dlg = tkinter.Toplevel(root); dlg.title("帮助 — A/C RPA"); place_dialog(dlg, 500, 600)
         dlg.transient(root); dlg.grab_set(); dlg.configure(bg=C["bgc"])
         _set_window_icon(dlg)
         dlg.columnconfigure(0, weight=1); dlg.rowconfigure(1, weight=1)
@@ -408,7 +408,7 @@ def open_version_history():
 
     dlg = tkinter.Toplevel(root)
     dlg.title("版本历史 — {}".format(os.path.basename(state.filename)))
-    dlg.geometry("680x480+350+100")
+    place_dialog(dlg, 680, 480)
     dlg.minsize(500, 350)
     dlg.transient(root)
     dlg.configure(bg=C["bgc"])
@@ -500,7 +500,7 @@ def open_version_history():
         # 弹窗显示 diff
         dd = tkinter.Toplevel(dlg)
         dd.title("版本对比: v{} ↔ 当前".format(vn))
-        dd.geometry("600x400+380+120")
+        place_dialog(dd, 600, 400, parent=dlg)
         dd.transient(dlg)
         dd.configure(bg=C["bgc"])
         _set_window_icon(dd)
@@ -537,7 +537,7 @@ def open_ai_panel():
     """Open AI script generation dialog with new layout."""
     dlg = tkinter.Toplevel(root)
     dlg.title("AI 脚本生成器")
-    dlg.geometry("500x600+400+80")
+    place_dialog(dlg, 500, 600)
     dlg.minsize(400, 500)
     dlg.transient(root)
     dlg.grab_set()
@@ -886,7 +886,7 @@ def open_ai_debug_dialog():
 
     dlg = tkinter.Toplevel(root)
     dlg.title("AI 智能调试 — ACRPA")
-    dlg.geometry("600x550+400+80")
+    place_dialog(dlg, 600, 550)
     dlg.minsize(480, 420)
     dlg.transient(root)
     dlg.grab_set()
@@ -1048,7 +1048,7 @@ def open_sched_manager():
     import scheduler as sched_module
     dlg = tkinter.Toplevel(root)
     dlg.title("计划任务管理 — ACRPA")
-    dlg.geometry("780x520+350+100")
+    place_dialog(dlg, 780, 520)
     dlg.minsize(600, 400)
     dlg.transient(root)
     dlg.configure(bg=C["bgc"])
@@ -1064,7 +1064,7 @@ def open_sched_manager():
     def _mgr_new_task():
         ndlg = tkinter.Toplevel(dlg)
         ndlg.title("新建计划任务")
-        ndlg.geometry("440x340+400+150")
+        place_dialog(ndlg, 440, 340, parent=dlg)
         ndlg.transient(dlg); ndlg.grab_set()
         ndlg.configure(bg=C["bgc"])
         _set_window_icon(ndlg)
@@ -1210,7 +1210,7 @@ def open_sched_manager():
     def _mgr_show_logs(parent):
         ldlg = tkinter.Toplevel(parent)
         ldlg.title("执行日志")
-        ldlg.geometry("700x420+380+120")
+        place_dialog(ldlg, 700, 420, parent=parent)
         ldlg.transient(parent)
         ldlg.configure(bg=C["bgc"])
         _set_window_icon(ldlg)

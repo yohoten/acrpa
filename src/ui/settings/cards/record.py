@@ -9,7 +9,7 @@ import tkinter
 from tkinter import ttk
 
 import state
-from utils import FONT_TINY
+from utils import FONT_TINY, place_dialog
 
 CARD_KEY = "record"
 ROW = 3
@@ -67,7 +67,7 @@ def build(parent, ctx):
     def _record_rec_stop():
         dlg = tkinter.Toplevel(root)
         dlg.title("录制停止录制快捷键")
-        dlg.geometry("320x160+500+300")
+        place_dialog(dlg, 320, 160, parent=root)
         dlg.transient(root); dlg.grab_set()
         dlg.configure(bg=C["bgc"])
         _set_window_icon(dlg)

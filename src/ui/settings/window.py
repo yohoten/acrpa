@@ -494,7 +494,7 @@ def open_settings_window():
             y = min(max(ry + (rh - 680) // 2, 0), max(sh - 680, 0))
             _win.geometry("680x680+{}+{}".format(x, y))
     except Exception:
-        _win.geometry("680x680+450+60")
+        utils.place_dialog(_win, 680, 680)
     _win.minsize(580, 500)
     _win.configure(bg=C["bg"])
     _set_window_icon(_win)

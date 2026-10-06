@@ -925,28 +925,35 @@ def _set_window_icon(window):
 #   utils.center_geometry(root, w, h) —— 主窗口与设置窗口共用同一套判定。
 
 def _apply_main_geometry():
-    """启动时应用主窗口几何:
-       紧凑模式 → 固定 500x625 旧布局;
-       否则 → 优先记忆几何(校验越界), 越界/缺省则按「设计 1000x680 × dpi_factor
+    """启动时应用主窗口几何 (尺寸全部来自 utils 尺寸 token, 路线图 §5.5):
+       紧凑模式 → win_compact_* token 派生尺寸 (旧布局 500x625), 居中落位;
+       否则 → 优先记忆几何(校验越界), 越界/缺省则按「设计 win_w×win_h × dpi_factor
               × ui_scale」派生默认几何并居中; 再恢复最大化。
+       最小尺寸走 win_min_* token —— 使 set_ui_scale() 真正影响窗口尺寸 (而非只缩字体)。
     """
     try:
         if getattr(state, "COMPACT_MODE", False):
+            # 尺寸按 token 派生 (ui_scale 档位走 sp(), 基准档取 token 原值以保持旧行为),
+            # 原先写死的屏幕偏移改为 center_geometry 居中派生 (小屏/多显示器不溢出)。
             if abs(utils.current_ui_scale() - 1.0) > 1e-6:
-                root.geometry("{}x{}+400+80".format(utils.scaled(500), utils.scaled(625)))
-                root.minsize(utils.scaled(450), utils.scaled(550))
+                cw, ch = utils.sp("win_compact_w"), utils.sp("win_compact_h")
+                mw, mh = utils.sp("win_compact_min_w"), utils.sp("win_compact_min_h")
             else:
-                root.geometry("500x625+400+80"); root.minsize(450, 550)
+                cw, ch = utils.TOKENS["win_compact_w"], utils.TOKENS["win_compact_h"]
+                mw, mh = utils.TOKENS["win_compact_min_w"], utils.TOKENS["win_compact_min_h"]
+            root.geometry(utils.center_geometry(root, cw, ch))
+            root.minsize(mw, mh)
             return
         geo = getattr(state, "MAIN_GEOMETRY", "") or ""
         if geo and utils.geometry_in_screen(root, geo):
             root.geometry(geo)
         else:
             # 默认几何须纳入 dpi_factor: 125% DPI 下内容 req 高 703 > 硬编码 680,
-            # 会纵向裁剪底部; 经 utils.scaled() 派生保证 reqheight <= winfo_height。
-            root.geometry(utils.center_geometry(root, utils.scaled(1000),
-                                                utils.scaled(680)))
-        root.minsize(640, 520)
+            # 会纵向裁剪底部; 经 utils.sp() 从 token (win_w/win_h) 派生保证
+            # reqheight <= winfo_height。
+            root.geometry(utils.center_geometry(root, utils.sp("win_w"),
+                                                utils.sp("win_h")))
+        root.minsize(utils.sp("win_min_w"), utils.sp("win_min_h"))
         if getattr(state, "MAIN_MAXIMIZED", False):
             try: root.state("zoomed")
             except Exception: pass
@@ -2424,7 +2431,7 @@ def _manage_snippet_dirs(on_changed=None):
     """管理片段库目录: 展示主库+追加库, 支持添加 / 移除 / 打开。"""
     import snippets
     win = tkinter.Toplevel(root); win.title("片段库目录")
-    win.geometry("640x360+470+180"); win.transient(root); win.grab_set()
+    utils.place_dialog(win, 640, 360); win.transient(root); win.grab_set()
     win.configure(bg=C["bgc"]); _set_window_icon(win)
     win.columnconfigure(0, weight=1); win.rowconfigure(1, weight=1)
     tkinter.Label(win, text="片段库目录（离线可用；主库默认 = 项目 template 文件夹）",
@@ -2473,7 +2480,7 @@ def _cmd_snippet():
     """
     import snippets
     dlg = tkinter.Toplevel(root); dlg.title("片段库")
-    dlg.geometry("840x560+420+130"); dlg.transient(root); dlg.configure(bg=C["bgc"])
+    utils.place_dialog(dlg, 840, 560); dlg.transient(root); dlg.configure(bg=C["bgc"])
     _set_window_icon(dlg)
     dlg.columnconfigure(0, weight=1); dlg.rowconfigure(1, weight=1)
 
@@ -2626,7 +2633,7 @@ def _cmd_snippet():
 
 def _cmd_template():
     """[已弃用] 旧「模板」对话框; 由 _cmd_snippet 取代 (保留兼容, 不再绑定按钮)。"""
-    dlg=tkinter.Toplevel(root); dlg.title("选择模板"); dlg.geometry("540x520+500+150")
+    dlg=tkinter.Toplevel(root); dlg.title("选择模板"); utils.place_dialog(dlg, 540, 520)
     dlg.transient(root); dlg.grab_set(); dlg.configure(bg=C["bgc"])
     _set_window_icon(dlg)
     dlg.columnconfigure(0, weight=1)
@@ -4021,7 +4028,7 @@ def build_app():
 
     # Title bar - compact design
     title_bar = tkinter.Frame(root,bg=C["bg"])
-    title_bar.grid(row=0,column=0,sticky="ew",padx=10,pady=(6,2))
+    title_bar.grid(row=0,column=0,sticky="ew",padx=utils.sp(10),pady=(utils.sp(6),utils.sp(2)))
     title_bar.columnconfigure(0,weight=1)
 
     title_lbl = tkinter.Label(title_bar,text="A/C RPA Automation Workflow",
@@ -4037,18 +4044,16 @@ def build_app():
     # 语义角色 "ac": 旧实现按「● 就绪」文案嗅探 → fg=ac; 现创建时显式登记 (行为等价)
     status_dot = ui_theme.roled(
         tkinter.Label(dark_frame,text=i18n.t("status.dot_ready"),font=FONT_SMALL,fg=C["fgm"],bg=C["bg"]), "ac")
-    status_dot.pack(side="left",padx=(0,6))
+    status_dot.pack(side="left",padx=(0,utils.sp(6)))
     pin_btn = tkinter.Label(dark_frame,text="△",font=FONT_ICON,
-        fg=C["fgm"],bg=C["bg"],cursor="hand2",padx=2)
-    pin_btn.pack(side="left",padx=(0,2))
-    pin_btn.bind("<Button-1>", lambda e: toggle_pin())
+        fg=C["fgm"],bg=C["bg"],cursor="hand2",padx=utils.sp(2))
+    pin_btn.pack(side="left",padx=(0,utils.sp(2)))
     pin_btn.bind("<Enter>", _show_pin_tip)
 
     # 折叠按钮 — 将主窗口折叠为 Mini Bar
     fold_btn = tkinter.Label(dark_frame,text="⊟",font=FONT_ICON,
-        fg=C["fgm"],bg=C["bg"],cursor="hand2",padx=2)
-    fold_btn.pack(side="left",padx=(0,2))
-    fold_btn.bind("<Button-1>", lambda e: _toggle_fold())
+        fg=C["fgm"],bg=C["bg"],cursor="hand2",padx=utils.sp(2))
+    fold_btn.pack(side="left",padx=(0,utils.sp(2)))
     fold_btn.bind("<Enter>", _show_fold_tip)
 
     dark_btn = tkinter.Label(dark_frame,text="◑" if state.DARK_MODE else "◐",
@@ -4056,7 +4061,7 @@ def build_app():
     dark_btn.pack(side="left")
 
     # 标题栏底部 1px 发丝线 (§4.1: 1px 发丝线替代原 2px 强调条)
-    tkinter.Frame(title_bar, bg=C["bd"], height=1).grid(row=1, column=0, columnspan=2, sticky="ew", pady=(5,0))
+    tkinter.Frame(title_bar, bg=C["bd"], height=1).grid(row=1, column=0, columnspan=2, sticky="ew", pady=(utils.sp(5),0))
     dark_btn.bind("<Enter>", _show_tip)
     dark_btn.bind("<Leave>", _hide_tip)
     fold_btn.bind("<Leave>", _hide_tip)
@@ -4064,36 +4069,41 @@ def build_app():
 
     # 设置按钮 — 打开独立设置窗口 (原设置 Tab 已分离，主界面入口)
     settings_btn = tkinter.Label(dark_frame, text="⚙", font=FONT_ICON_MD,
-        fg=C["fgm"], bg=C["bg"], cursor="hand2", padx=2)
-    settings_btn.pack(side="left", padx=(0, 2))
-    settings_btn.bind("<Button-1>", lambda e: settings_window.open_settings_window())
+        fg=C["fgm"], bg=C["bg"], cursor="hand2", padx=utils.sp(2))
+    settings_btn.pack(side="left", padx=(0, utils.sp(2)))
     settings_btn.bind("<Enter>", _show_settings_tip)
     settings_btn.bind("<Leave>", _hide_tip)
 
     # 帮助按钮 — 「?」图标, 与设置图标并列且位于其后 (原「执行控制」底部「? 帮助」上移)
     help_btn = tkinter.Label(dark_frame, text="?", font=FONT_ICON_MD,
-        fg=C["fgm"], bg=C["bg"], cursor="hand2", padx=2)
-    help_btn.pack(side="left", padx=(0, 2))
-    help_btn.bind("<Button-1>", lambda e: show_help_dialog())
+        fg=C["fgm"], bg=C["bg"], cursor="hand2", padx=utils.sp(2))
+    help_btn.pack(side="left", padx=(0, utils.sp(2)))
     help_btn.bind("<Enter>", _show_help_tip)
     help_btn.bind("<Leave>", _hide_tip)
 
     # 互联按钮 — 打开「设备互联」独立窗口 (与设置按钮同级样式)
     devlink_btn = tkinter.Label(dark_frame, text="⊕", font=FONT_ICON_MD,
-        fg=C["fgm"], bg=C["bg"], cursor="hand2", padx=2)
-    devlink_btn.pack(side="left", padx=(0, 2))
-    devlink_btn.bind("<Button-1>", lambda e: open_devlink())
+        fg=C["fgm"], bg=C["bg"], cursor="hand2", padx=utils.sp(2))
+    devlink_btn.pack(side="left", padx=(0, utils.sp(2)))
     devlink_btn.bind("<Enter>", _show_devlink_tip)
     devlink_btn.bind("<Leave>", _hide_tip)
 
-    dark_btn.bind("<Button-1>", lambda e: toggle_dark())
+    # ── 可达性补齐 (路线图 §5.5): 图标 Label → 可 Tab 聚焦 + 可键盘激活 + 可访问名 ──
+    # 在 <Enter>/<Leave> tooltip 绑定之后调用, 以免 set_accessible_name 抢先挂上 tooltip。
+    # <Return>/<space> 与鼠标点击触发同一处理函数 (纯键盘等价)。
+    utils.bind_icon_activate(pin_btn, toggle_pin, "固定窗口（置顶）")
+    utils.bind_icon_activate(fold_btn, _toggle_fold, "折叠为 Mini Bar")
+    utils.bind_icon_activate(dark_btn, toggle_dark, "切换深浅色主题")
+    utils.bind_icon_activate(settings_btn, settings_window.open_settings_window, "打开设置")
+    utils.bind_icon_activate(help_btn, show_help_dialog, "帮助")
+    utils.bind_icon_activate(devlink_btn, open_devlink, "设备互联")
 
     # ③ 主区: 垂直 PanedWindow —— 上 pane 内容(notebook) / 下 pane 常驻日志面板
     # (tkinter grid 无可拖 sash, 「可拖 + minsize + 一键收起」的原生正解即 PanedWindow)
     main_paned = tkinter.PanedWindow(root, orient="vertical",
         bg=C["bd"], sashwidth=utils.sp(4), sashrelief="raised",
         opaqueresize=True, bd=0)
-    main_paned.grid(row=2,column=0,sticky="nsew",padx=8,pady=(0,3))
+    main_paned.grid(row=2,column=0,sticky="nsew",padx=utils.sp(8),pady=(0,utils.sp(3)))
 
     # 底部日志面板容器 (稍后作为 pane#1 加入)
     bottom_dock = tkinter.Frame(main_paned, bg=C["bg"])
@@ -4153,7 +4163,7 @@ def build_app():
     # TreeView - compact layout
     tree_frame = tkinter.Frame(tab_edit,bg=C["bgc"],
         highlightbackground=C["bd"],highlightthickness=1)
-    tree_frame.grid(row=1,column=0,sticky="nsew",padx=3,pady=(0,4))
+    tree_frame.grid(row=1,column=0,sticky="nsew",padx=utils.sp(3),pady=(0,utils.sp(4)))
     tree_frame.columnconfigure(0,weight=1); tree_frame.rowconfigure(0,weight=1)
 
     state._editor_rows = []
@@ -4189,7 +4199,7 @@ def build_app():
     legend_frame = tkinter.Frame(tab_edit, bg=C["bg"])
 
     # ── 工作流名称 ──
-    legend_frame.grid(row=2, column=0, sticky="ew", padx=3, pady=(0, 2))
+    legend_frame.grid(row=2, column=0, sticky="ew", padx=utils.sp(3), pady=(0, utils.sp(2)))
     legend_inner = tkinter.Frame(legend_frame, bg=C["bg"])
     legend_inner.pack(anchor="w")
     for label, color in _LEGEND_ITEMS:
@@ -4426,7 +4436,7 @@ def build_app():
     recorder.set_root(root)
     state._on_recording_done = _on_recording_done
     status_bar = tkinter.Frame(root,bg=C["bg"])
-    status_bar.grid(row=3,column=0,sticky="ew",padx=10,pady=(3,6))
+    status_bar.grid(row=3,column=0,sticky="ew",padx=utils.sp(10),pady=(utils.sp(3),utils.sp(6)))
     status_bar.columnconfigure(2,weight=1)
     # 语义角色 "ac": 旧实现按文案含「就绪」嗅探 → fg=ac; 现创建时显式登记 (行为等价)
     status_text = ui_theme.roled(tkinter.Label(status_bar,text=i18n.t("status.ready_initial"),
@@ -4436,7 +4446,7 @@ def build_app():
     # 控制信息 (循环/行/已用/ETA/成功·失败) — 与进度条同排
     dash_info = tkinter.Label(status_bar,text=_DASH_EMPTY,font=FONT_SMALL,
         fg=C["fgm"],bg=C["bg"],anchor="w")
-    dash_info.grid(row=0,column=1,sticky="w",padx=(12,8))
+    dash_info.grid(row=0,column=1,sticky="w",padx=(utils.sp(12),utils.sp(8)))
 
     # 执行进度条 (加高 8px; 数值刷新复用 _periodic 的 cache 去重)
     try:
@@ -4450,7 +4460,7 @@ def build_app():
     # 底部日志面板展开入口 (收起后仍可见, 常驻状态栏右侧)
     log_dock_toggle_btn = tkinter.Label(status_bar,text="▾ 日志",font=FONT_SMALL,
         fg=C["fgm"],bg=C["bg"],cursor="hand2")
-    log_dock_toggle_btn.grid(row=0,column=3,sticky="e",padx=(8,0))
+    log_dock_toggle_btn.grid(row=0,column=3,sticky="e",padx=(utils.sp(8),0))
     log_dock_toggle_btn.bind("<Button-1>", lambda e: _toggle_log_dock())
     # 注入日志面板的「展开入口」(日志面板先于状态栏构建, 故此处回填)
     ui_log_dock.set_toggle_button(log_dock_toggle_btn)

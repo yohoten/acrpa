@@ -11,7 +11,7 @@ import tkinter
 from tkinter import ttk, messagebox
 
 import state
-from utils import FONT_TINY
+from utils import FONT_TINY, place_dialog
 
 CARD_KEY = "market"
 ROW = 10
@@ -73,7 +73,7 @@ def build(parent, ctx):
         """内联 PAT 输入弹窗；Token 仅经 accounts.login → 凭据库，绝不明文落盘。"""
         dlg = tkinter.Toplevel(_win)
         dlg.title("登录 {}".format(prov))
-        dlg.geometry("440x190+520+320")
+        place_dialog(dlg, 440, 190, parent=_win)
         dlg.transient(_win)
         dlg.configure(bg=C["bgc"])
         try:

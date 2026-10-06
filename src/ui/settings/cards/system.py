@@ -224,7 +224,7 @@ def build(parent, ctx):
     def _record_hotkey(var, key_name):
         dlg = tkinter.Toplevel(root)
         dlg.title("录制快捷键 - {}".format(key_name))
-        dlg.geometry("320x160+500+300")
+        utils.place_dialog(dlg, 320, 160, parent=root)
         dlg.transient(root); dlg.grab_set()
         dlg.configure(bg=C["bgc"])
         _set_window_icon(dlg)

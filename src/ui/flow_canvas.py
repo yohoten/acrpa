@@ -287,6 +287,8 @@ def _draw_node(canvas, node, colors, fonts, ctx):
     text = "{}\n{}".format(line1, _node_detail(node))
     canvas.create_text(cx, cy, text=text, fill="#FFFFFF", justify="center",
                        anchor="center", font=fonts.get("small_bold"), tags=tuple(tags))
+    if ctx.get("show_ports"):
+        _draw_ports(canvas, node, color, outline, tags)
 
 
 def _node_index(ctx, nid):
@@ -301,7 +303,8 @@ def _node_index(ctx, nid):
 def _draw_forward_edge(canvas, e, s, d, color, fonts, ctx):
     sx, sy = s.x + s.w / 2.0, s.y + s.h
     dx, dy = d.x + d.w / 2.0, d.y
-    canvas.create_line(sx, sy, dx, dy, fill=color, width=2, tags=("arrow",))
+    canvas.create_line(sx, sy, dx, dy, fill=color, width=2,
+                       tags=("arrow", "edge:" + str(e.id)))
     _arrow_head(canvas, dx, dy, "down", color)
     if e.label:
         mx, my = (sx + dx) / 2.0, (sy + dy) / 2.0
@@ -314,14 +317,14 @@ def _draw_back_edge(canvas, e, s, d, color, fonts):
         x2, cy = s.x + s.w, s.y + s.h / 2.0
         canvas.create_line(x2, cy - 10, x2 + 26, cy, x2, cy + 10,
                            fill=color, width=2, smooth=True, dash=(4, 2),
-                           arrow="last", tags=("arrow",))
+                           arrow="last", tags=("arrow", "edge:" + str(e.id)))
         return
     sx, sy = s.x, s.y + s.h / 2.0               # 回边走左侧弓形
     dx, dy = d.x, d.y + d.h / 2.0
     bow = min(sx, dx) - 28
     canvas.create_line(sx, sy, bow, (sy + dy) / 2.0, dx, dy,
                        fill=color, width=2, smooth=True, dash=(4, 2),
-                       arrow="last", tags=("arrow",))
+                       arrow="last", tags=("arrow", "edge:" + str(e.id)))
     if e.label:
         canvas.create_text(bow - 4, (sy + dy) / 2.0, text=e.label, anchor="e",
                            fill=color, font=fonts.get("small"), tags=("arrow",))
@@ -509,4 +512,232 @@ def bind_zoom_pan(canvas, *, min_scale=0.4, max_scale=2.5, step=1.12):
     canvas.bind("<B2-Motion>", _pan_move, add="+")
     canvas.bind("<ButtonRelease-2>", _pan_end, add="+")
     st["handlers"] = (_on_zoom, _on_shift_wheel, _pan_start, _pan_move, _pan_end)
+    return st
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 端口 / 连线交互 (路线图 §11.7, D 期)
+# ══════════════════════════════════════════════════════════════════════
+#
+# 端口: 节点边缘圆点, 标签 ``port`` / ``port:<nid>:<port>``; 渲染受 ``ctx["show_ports"]``
+# 控制。边: 每条连线带 ``edge:<eid>`` 标签供命中测试。
+# 交互**只操作内存图** —— 按 §11.4 的工程判断, 执行仍走树执行器, 图编辑为视图级。
+
+PORT_R = 4
+
+
+def _draw_ports(canvas, node, fill, outline, tags):
+    """节点端口 (圆点): in 在上缘; out/body 在下缘; condition 为 true/false 双出口。"""
+    x, y, w, h = node.x, node.y, node.w, node.h
+    cx = x + w / 2.0
+    ports = [("in", cx, y)]
+    if node.type == "condition":
+        ports += [("true", x + w * 0.3, y + h), ("false", x + w * 0.7, y + h)]
+    elif node.type in ("parallel", "loop"):
+        ports.append(("body", cx, y + h))
+    else:
+        ports.append(("out", cx, y + h))
+    for name, px, py in ports:
+        canvas.create_oval(px - PORT_R, py - PORT_R, px + PORT_R, py + PORT_R,
+                           fill=fill, outline=outline, width=1,
+                           tags=tuple(tags) + ("port", "port:%s:%s" % (node.id, name)))
+
+
+def _tags_at(canvas, x, y, prefix, pad=6):
+    """光标附近首个带 prefix 标签对象的「去前缀值」(后绘制者优先)。"""
+    try:
+        items = canvas.find_overlapping(x - pad, y - pad, x + pad, y + pad)
+    except Exception:
+        return None
+    for it in reversed(items):
+        try:
+            for t in canvas.gettags(it):
+                if t.startswith(prefix):
+                    return t[len(prefix):]
+        except Exception:
+            continue
+    return None
+
+
+def port_at(canvas, x, y, pad=8):
+    """→ (node_id, port) 或 (None, None)。"""
+    val = _tags_at(canvas, x, y, "port:", pad)
+    if not val or ":" not in val:
+        return None, None
+    nid, port = val.split(":", 1)
+    return nid, port
+
+
+def node_at(canvas, x, y, pad=2):
+    """→ 光标下节点 id 或 None。"""
+    return _tags_at(canvas, x, y, "fgnode_", pad)
+
+
+def edge_at(canvas, x, y, pad=5):
+    """→ 光标下边 id 或 None。"""
+    return _tags_at(canvas, x, y, "edge:", pad)
+
+
+def fit_to_view(canvas, margin=24):
+    """适应窗口: 把 scrollregion 左上角附近移入视图 (不改缩放, 避免与 zoom 状态失配)。"""
+    sr = _scrollregion(canvas)
+    if not sr:
+        return
+    x0, y0, x1, y1 = sr
+    w = max(x1 - x0, 1.0)
+    h = max(y1 - y0, 1.0)
+    try:
+        canvas.xview_moveto(max(0.0, (x0 + margin) / w))
+        canvas.yview_moveto(max(0.0, (y0 + margin) / h))
+    except Exception:
+        pass
+
+
+def bind_interactions(canvas, graph, *, colors=None, fonts=None, ctx=None,
+                      re_render=None, get_zoom_state=None, on_graph_changed=None,
+                      on_select_edge=None):
+    """D 期连线交互: 端口拖拽建边 / 边选中与 Delete 删除 / F 适应窗口 /
+    Ctrl+0 重置缩放 / Ctrl+Z·Ctrl+Y 撤销重做。返回状态 dict。
+
+    仅操作内存图 (视图级编辑); 变更前压栈快照, 支持撤销/重做。
+    """
+    import flow_graph as _fg
+    colors = colors or {}
+    ctx = ctx or {}
+    st = {"selected_edge": None, "rubber": None, "src": None,
+          "undos": [], "redos": []}
+
+    def _snapshot():
+        return graph.to_dict()
+
+    def _restore(snap):
+        g2 = _fg.Graph.from_dict(snap)
+        graph.nodes[:] = g2.nodes
+        graph.edges[:] = g2.edges
+
+    def _push():
+        st["undos"].append(_snapshot())
+        if len(st["undos"]) > 50:
+            st["undos"].pop(0)
+        st["redos"].clear()
+
+    def _redraw():
+        if callable(re_render):
+            try:
+                re_render(graph)
+            except TypeError:
+                re_render()
+            except Exception:
+                pass
+
+    def _highlight(eid):
+        try:
+            for it in canvas.find_withtag("edge:" + str(eid)) if eid else []:
+                canvas.itemconfigure(it, width=3)
+        except Exception:
+            pass
+
+    def _select_edge(eid):
+        st["selected_edge"] = eid
+        if eid:
+            _highlight(eid)
+        if callable(on_select_edge):
+            try:
+                on_select_edge(eid)
+            except Exception:
+                pass
+
+    def _undo(event=None):
+        if not st["undos"]:
+            return "break"
+        st["redos"].append(_snapshot())
+        _restore(st["undos"].pop())
+        _redraw()
+        return "break"
+
+    def _redo(event=None):
+        if not st["redos"]:
+            return "break"
+        st["undos"].append(_snapshot())
+        _restore(st["redos"].pop())
+        _redraw()
+        return "break"
+
+    def _on_press(event):
+        nid, port = port_at(canvas, event.x, event.y)
+        if nid:
+            st["src"] = (nid, port)
+            st["rubber"] = canvas.create_line(
+                event.x, event.y, event.x, event.y,
+                fill=ctx.get("ac", "#0078D4"), dash=(4, 3), width=2, tags=("rubber",))
+            return "break"
+        eid = edge_at(canvas, event.x, event.y)
+        _select_edge(eid)
+        return "break" if eid else None
+
+    def _on_motion(event):
+        if st["rubber"] is None:
+            return None
+        coords = canvas.coords(st["rubber"])
+        coords[2:] = [event.x, event.y]
+        canvas.coords(st["rubber"], *coords)
+        return "break"
+
+    def _changed():
+        if callable(on_graph_changed):
+            try:
+                on_graph_changed(graph)
+            except Exception:
+                pass
+
+    def _on_release(event):
+        if st["rubber"] is None:
+            return None
+        canvas.delete(st["rubber"])
+        st["rubber"] = None
+        src, src_port = st["src"] or (None, None)
+        st["src"] = None
+        dst = node_at(canvas, event.x, event.y)
+        if not src or not dst or dst == src:
+            return "break"
+        _push()
+        e = _fg.connect(graph, src, dst, src_port or "out", "in")
+        if e is None:
+            st["undos"].pop()
+            return "break"
+        _select_edge(e.id)
+        _changed()
+        _redraw()
+        return "break"
+
+    def _del_edge(event=None):
+        eid = st["selected_edge"]
+        if not eid:
+            return "break"
+        _push()
+        if _fg.disconnect(graph, eid) is None:
+            st["undos"].pop()
+            return "break"
+        st["selected_edge"] = None
+        _changed()
+        _redraw()
+        return "break"
+
+    def _reset_zoom(event=None):
+        zs = get_zoom_state() if callable(get_zoom_state) else None
+        if isinstance(zs, dict):
+            zs["scale"] = 1.0
+        _redraw()
+        return "break"
+
+    canvas.bind("<Button-1>", _on_press)
+    canvas.bind("<B1-Motion>", _on_motion)
+    canvas.bind("<ButtonRelease-1>", _on_release)
+    canvas.bind("<Delete>", _del_edge)
+    canvas.bind("<f>", lambda e: (fit_to_view(canvas), "break")[1])
+    canvas.bind("<F>", lambda e: (fit_to_view(canvas), "break")[1])
+    canvas.bind("<Control-Key-0>", _reset_zoom)
+    canvas.bind("<Control-z>", _undo)
+    canvas.bind("<Control-y>", _redo)
+    st["handlers"] = (_on_press, _on_motion, _on_release, _del_edge, _undo, _redo)
     return st

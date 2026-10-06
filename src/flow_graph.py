@@ -379,3 +379,387 @@ def from_dict(d):
     if "nodes" in d and "edges" in d:
         return Graph.from_dict(d)
     return promote(d)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 静态分析 (路线图 §11.8, D–G 期 E 期) —— 全为纯函数: 输入 Graph, 输出数据
+# ══════════════════════════════════════════════════════════════════════
+#
+# 分析建立在 promote() 的「树 → 图」表示之上 (loop 头部与循环体是两个 SCC,
+# 出口边从 loop 头出发) —— 因此**不做**教科书式「循环无出口」判定 (会对合法
+# 固定次数循环误报), 改为围绕 **loop 节点 / 条件分支 / 主包可达性** 的口径。
+
+MAX_PATHS = 64          # 入口→出口简单路径数阈值 (超过提示拆分)
+COMPLEXITY_WARN = 15    # 环路复杂度阈值
+
+# 会修改变量的节点口径 (用于「条件循环体内是否推进」判定)
+_VAR_CMDS = ("设置变量", "数学运算", "Python", "代码", "工作流变量")
+
+
+def adjacency(g):
+    """→ (fwd, rev, indeg, outdeg): 有向邻接与度 (含回边/自环; 仅计图中存在的节点)。"""
+    idset = {n.id for n in g.nodes}
+    fwd = {i: [] for i in idset}
+    rev = {i: [] for i in idset}
+    for e in g.edges:
+        if e.src in idset and e.dst in idset:
+            fwd[e.src].append(e.dst)
+            rev[e.dst].append(e.src)
+    indeg = {i: len(rev[i]) for i in idset}
+    outdeg = {i: len(fwd[i]) for i in idset}
+    return fwd, rev, indeg, outdeg
+
+
+def entry_ids(g):
+    """入口节点: 无入边者 (含孤立节点)。"""
+    _f, _r, indeg, _o = adjacency(g)
+    return [n.id for n in g.nodes if indeg[n.id] == 0]
+
+
+def exit_ids(g):
+    """出口(汇)节点: 无出边者。"""
+    _f, _r, _i, outdeg = adjacency(g)
+    return [n.id for n in g.nodes if outdeg[n.id] == 0]
+
+
+def reachable_ids(g):
+    """从入口集合 BFS 可达的节点 id 集合。"""
+    fwd, _r, indeg, _o = adjacency(g)
+    seen = set()
+    stack = [n.id for n in g.nodes if indeg[n.id] == 0]
+    while stack:
+        u = stack.pop()
+        if u in seen:
+            continue
+        seen.add(u)
+        stack.extend(v for v in fwd[u] if v not in seen)
+    return seen
+
+
+def can_reach_exit(g):
+    """能(反向 BFS)到达任一出口的节点 id 集合。"""
+    _f, rev, _i, outdeg = adjacency(g)
+    sinks = {n.id for n in g.nodes if outdeg[n.id] == 0}
+    seen = set()
+    stack = list(sinks)
+    while stack:
+        u = stack.pop()
+        if u in seen:
+            continue
+        seen.add(u)
+        stack.extend(v for v in rev[u] if v not in seen)
+    return seen
+
+
+def unreachable_ids(g):
+    """从入口不可达的节点 (排除孤立节点, 后者单列)。"""
+    seen = reachable_ids(g)
+    iso = set(isolated_ids(g))
+    return [n.id for n in g.nodes if n.id not in seen and n.id not in iso]
+
+
+def isolated_ids(g):
+    """孤立节点: 无入边且无出边。"""
+    _f, _r, indeg, outdeg = adjacency(g)
+    return [n.id for n in g.nodes if indeg[n.id] == 0 and outdeg[n.id] == 0]
+
+
+def dead_branch_ids(g):
+    """可达但无法到达任何出口的节点 (之后没有出口)。"""
+    to_exit = can_reach_exit(g)
+    return [n.id for n in g.nodes if n.id not in to_exit]
+
+
+def sccs(g):
+    """Tarjan (迭代实现, 防深递归) → 强连通分量列表 (每项为节点 id 列表)。"""
+    fwd, _r, _i, _o = adjacency(g)
+    index, low, on = {}, {}, set()
+    stack, result, counter = [], [], [0]
+    for root in [n.id for n in g.nodes]:
+        if root in index:
+            continue
+        work = [(root, 0)]
+        while work:
+            v, pi = work[-1]
+            if pi == 0:
+                index[v] = low[v] = counter[0]
+                counter[0] += 1
+                stack.append(v)
+                on.add(v)
+            recurse = False
+            succ = fwd.get(v, [])
+            i = pi
+            while i < len(succ):
+                w = succ[i]
+                if w not in index:
+                    work[-1] = (v, i + 1)
+                    work.append((w, 0))
+                    recurse = True
+                    break
+                if w in on:
+                    low[v] = min(low[v], index[w])
+                i += 1
+            if recurse:
+                continue
+            if low[v] == index[v]:
+                comp = []
+                while True:
+                    w = stack.pop()
+                    on.discard(w)
+                    comp.append(w)
+                    if w == v:
+                        break
+                result.append(comp)
+            work.pop()
+            if work:
+                u = work[-1][0]
+                low[u] = min(low[u], low[v])
+    return result
+
+
+def count_paths(g, limit=MAX_PATHS):
+    """入口→出口的简单路径数 (DFS 去环; 超过 limit 提前返回 limit+1)。"""
+    fwd, _r, indeg, _o = adjacency(g)
+    starts = [n.id for n in g.nodes if indeg[n.id] == 0]
+    if not starts:
+        return 0
+    total = [0]
+
+    def dfs(u, seen):
+        if total[0] > limit:
+            return
+        nxt = fwd.get(u) or []
+        if not nxt:
+            total[0] += 1
+            return
+        for v in nxt:
+            if v in seen:
+                continue
+            dfs(v, seen | {v})
+
+    for s in starts:
+        dfs(s, {s})
+        if total[0] > limit:
+            return limit + 1
+    return total[0]
+
+
+def _components(g):
+    """无向连通分量数 (用于环路复杂度 P)。"""
+    idset = {n.id for n in g.nodes}
+    adj = {i: set() for i in idset}
+    for e in g.edges:
+        if e.src in idset and e.dst in idset:
+            adj[e.src].add(e.dst)
+            adj[e.dst].add(e.src)
+    seen, comp = set(), 0
+    for i in idset:
+        if i in seen:
+            continue
+        comp += 1
+        stack = [i]
+        while stack:
+            u = stack.pop()
+            if u in seen:
+                continue
+            seen.add(u)
+            stack.extend(adj[u] - seen)
+    return comp
+
+
+def cyclomatic_complexity(g):
+    """环路复杂度 E − N + 2P (P=无向连通分量数, 空图为 0)。"""
+    n, e = len(g.nodes), len(g.edges)
+    if n == 0:
+        return 0
+    return e - n + 2 * max(1, _components(g))
+
+
+def _node_modifies_vars(node):
+    if node is None:
+        return False
+    if node.type == "variable":
+        return True
+    if node.type == "command" and node.data.get("cmd") in _VAR_CMDS:
+        return True
+    return False
+
+
+def loop_issues(g):
+    """循环相关检查: 次数为空 / 条件循环体内未修改变量。返回 [(nid, message)]。"""
+    out = []
+    for n in g.nodes:
+        if n.type != "loop":
+            continue
+        t = str(n.data.get("times", "") or "").strip()
+        if not t:
+            out.append((n.id, "循环次数为空（可能不执行或死循环）"))
+        elif not t.isdigit():
+            body = n.body_ids()
+            if not any(_node_modifies_vars(g.node(b)) for b in body):
+                out.append((n.id, "条件循环体内未修改变量（可能死循环）"))
+    return out
+
+
+def duplicate_edge_ids(g):
+    """重复边 (src, src_port, dst, dst_port 相同) 的边 id 列表 (保留首条之外者)。"""
+    seen, dup = set(), []
+    for e in g.edges:
+        key = (e.src, e.src_port, e.dst, e.dst_port)
+        if key in seen:
+            dup.append(e.id)
+        else:
+            seen.add(key)
+    return dup
+
+
+def analyze(g):
+    """→ 问题列表 ``[{code, level, nodes, message}]``; level ∈ error/warning/info。
+
+    覆盖 (≥8): 不可达 / 孤立 / 悬挂出口 / 缺少终止节点 / 路径爆炸 / 环路复杂度 /
+    循环次数 / 无出口分支 / 重复边。全为纯函数, 易测 (§11.11 E 期)。
+    """
+    issues = []
+    if not g.nodes:
+        return issues
+
+    unre = unreachable_ids(g)
+    if unre:
+        issues.append({"code": "unreachable", "level": "error", "nodes": unre,
+                       "message": "{} 个步骤不可达（从入口无法到达）".format(len(unre))})
+
+    iso = isolated_ids(g)
+    if iso:
+        issues.append({"code": "isolated", "level": "warning", "nodes": iso,
+                       "message": "{} 个孤立步骤（无入边也无出边）".format(len(iso))})
+
+    # 悬挂出口: condition 存在某分支却无对应端口出边
+    dangling = set()
+    for n in g.nodes:
+        if n.type != "condition":
+            continue
+        ports = {e.src_port for e in g.edges if e.src == n.id}
+        if (K_THEN in n.data) and ("true" not in ports):
+            dangling.add(n.id)
+        if (K_ELSE in n.data) and ("false" not in ports):
+            dangling.add(n.id)
+    if dangling:
+        issues.append({"code": "dangling_exit", "level": "warning",
+                       "nodes": sorted(dangling), "message": "条件分支缺少出口边"})
+
+    dead = dead_branch_ids(g)
+    if dead:
+        issues.append({"code": "dead_branch", "level": "warning", "nodes": dead,
+                       "message": "{} 个步骤之后没有出口".format(len(dead))})
+
+    for nid, msg in loop_issues(g):
+        issues.append({"code": "loop", "level": "warning", "nodes": [nid],
+                       "message": msg})
+
+    dup = duplicate_edge_ids(g)
+    if dup:
+        issues.append({"code": "duplicate_edge", "level": "info", "nodes": [],
+                       "message": "{} 条重复连线".format(len(dup))})
+
+    if not [n for n in g.nodes if not (adjacency(g)[0].get(n.id))]:
+        issues.append({"code": "missing_exit", "level": "info", "nodes": [],
+                       "message": "没有终止节点（所有节点都有后继）"})
+
+    if count_paths(g) > MAX_PATHS:
+        issues.append({"code": "path_explosion", "level": "warning", "nodes": [],
+                       "message": "入口→出口路径数 > {}，建议拆分".format(MAX_PATHS)})
+
+    cx = cyclomatic_complexity(g)
+    if cx > COMPLEXITY_WARN:
+        issues.append({"code": "complexity", "level": "info", "nodes": [],
+                       "message": "环路复杂度 {} > {}".format(cx, COMPLEXITY_WARN)})
+
+    return issues
+
+
+def issue_summary(issues):
+    """→ (error, warning, info) 计数三元组。"""
+    e = sum(1 for i in issues if i.get("level") == "error")
+    w = sum(1 for i in issues if i.get("level") == "warning")
+    n = sum(1 for i in issues if i.get("level") == "info")
+    return e, w, n
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 图编辑原语 (§11.7 连线交互的纯逻辑层)
+# ══════════════════════════════════════════════════════════════════════
+
+def _reaches(g, a, b, max_hops=None):
+    """a 能否沿出边到达 b (含 a==b 时按有向可达, 不含零跳)。"""
+    fwd, _r, _i, _o = adjacency(g)
+    seen = set()
+    stack = [a]
+    hops = 0
+    while stack:
+        if max_hops is not None and hops > max_hops:
+            return False
+        u = stack.pop()
+        for v in fwd.get(u, []):
+            if v == b:
+                return True
+            if v not in seen:
+                seen.add(v)
+                stack.append(v)
+        hops += 1
+    return False
+
+
+def can_connect(g, src, dst, src_port="out", dst_port="in"):
+    """→ (ok, reason)。拒绝: 节点不存在 / 自环 / 重复边。成环(回边)允许。"""
+    if g.node(src) is None or g.node(dst) is None:
+        return False, "节点不存在"
+    if src == dst:
+        return False, "不能连接到自身"
+    for e in g.edges:
+        if (e.src, e.src_port, e.dst, e.dst_port) == (src, src_port, dst, dst_port):
+            return False, "该连线已存在"
+    return True, ""
+
+
+def connect(g, src, dst, src_port="out", dst_port="in", label=""):
+    """建边 (重复/非法返回 None); 若新边成环则标记 back_edge。返回新 Edge。"""
+    ok, _reason = can_connect(g, src, dst, src_port, dst_port)
+    if not ok:
+        return None
+    back = _reaches(g, dst, src)
+    e = Edge(_new_edge_id(g), src=src, src_port=src_port,
+             dst=dst, dst_port=dst_port, label=label, back_edge=back)
+    g.add_edge(e)
+    return e
+
+
+def disconnect(g, edge_id):
+    """按 id 删除边; 返回被删 Edge 或 None。"""
+    for i, e in enumerate(g.edges):
+        if e.id == edge_id:
+            return g.edges.pop(i)
+    return None
+
+
+def delete_node(g, nid):
+    """删除顶层节点并把前驱 → 后继直连 (§11.7 Delete)。
+
+    容器/条件分支的子节点不可删 (返回 False)。返回 True 表示已删除。
+    """
+    node = g.node(nid)
+    if node is None or nid in g.child_ids():
+        return False
+    preds = [e.src for e in g.edges if e.dst == nid and e.src != nid]
+    succs = [e.dst for e in g.edges if e.src == nid and e.dst != nid]
+    g.edges = [e for e in g.edges if e.src != nid and e.dst != nid]
+    g.nodes = [n for n in g.nodes if n.id != nid]
+    for p in preds:
+        for s in succs:
+            if g.node(p) is not None and g.node(s) is not None:
+                connect(g, p, s, "out", "in")
+    return True
+
+
+def to_graph(g):
+    """图视图序列化 (含坐标) —— 供会话内缓存/回放。"""
+    return g.to_dict()["graph"]

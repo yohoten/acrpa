@@ -165,6 +165,8 @@ wf_sy = None
 wf_flow_frame = None
 wf_flow_canvas = None
 wf_flow_scroll_y = None
+wf_flow_check_lbl = None   # E 期静态分析摘要标签
+_wf_graph_edit = None      # D 期会话内「已编辑图」缓存 (结构未变时复用, 保留连线编辑)
 _wf_show_flow = None
 _wf_view_btn = None
 _WF_LIB_ACTIONS = {}
@@ -295,7 +297,8 @@ def build(parent, *, colors, fonts, deps=None):
         wf_toolbar_overflow_hint, wf_loop_var, wf_maxmin_var, wf_name_var, wf_name_entry, \
         wf_main, wf_lib_frame, wf_lib_search, wf_lib_tree, wf_lib_sy, wf_recent_label, \
         wf_recent_list, wf_paned, wf_list_frame, wf_tree, wf_sy, wf_flow_frame, \
-        wf_flow_canvas, wf_flow_scroll_y, _wf_show_flow, _wf_view_btn, _WF_LIB_ACTIONS
+        wf_flow_canvas, wf_flow_scroll_y, wf_flow_check_lbl, _wf_show_flow, \
+        _wf_view_btn, _WF_LIB_ACTIONS
 
     _CTX.update(deps or {})
     _CTX["colors"] = colors
@@ -492,6 +495,12 @@ def build(parent, *, colors, fonts, deps=None):
     wf_flow_canvas.configure(yscrollcommand=wf_flow_scroll_y.set)
     wf_flow_canvas.grid(row=0, column=0, sticky="nsew")
     wf_flow_scroll_y.grid(row=0, column=1, sticky="ns")
+
+    # E 期: 静态分析摘要 (检查面板) —— 画布下方一行, 随每次渲染刷新
+    wf_flow_check_lbl = tkinter.Label(wf_flow_frame, text="检查: —", font=FONT_SMALL,
+        bg=C["bgc"], fg=C["fgm"], anchor="w", justify="left",
+        highlightthickness=0, wraplength=380)
+    wf_flow_check_lbl.grid(row=1, column=0, columnspan=2, sticky="ew", padx=6, pady=(2, 4))
 
     wf_flow_canvas.bind("<MouseWheel>", _wf_flow_on_wheel)
 
@@ -791,14 +800,29 @@ def _wf_render_flowchart(*args):
     return _wf_render_flowchart_legacy(*args)
 
 
-def _wf_render_flow_canvas():
+def _wf_render_flow_canvas(graph=None):
     """`_wf_data` (树) → promote 成图 → 交由 ui.flow_canvas 分层渲染。
 
     配色仍取本模块唯一真源 `_FLOW_COLORS`; 缩放/平移由 flow_canvas.bind_zoom_pan 挂载
     (垂直滚轮语义仍属 `_wf_flow_on_wheel`, 不删原绑定)。
+
+    D 期: 支持 `graph` 参数复用「已编辑的图」(端口连线保留) —— 结构未变时
+    (`demote(编辑图) == _wf_data`) 复用会话内最后一次编辑的图, 结构变化自动重新提升。
     """
-    global _FLOW_ZOOM_STATE
-    g = _flow_graph.promote(_wf_data)
+    global _FLOW_ZOOM_STATE, _wf_graph_edit
+    if graph is not None:
+        _wf_graph_edit = graph
+    else:
+        reuse = None
+        if _wf_graph_edit is not None:
+            try:
+                if _flow_graph.demote(_wf_graph_edit) == _wf_data:
+                    reuse = _wf_graph_edit
+            except Exception:
+                reuse = None
+        graph = reuse if reuse is not None else _flow_graph.promote(_wf_data)
+        _wf_graph_edit = graph
+    g = graph
     roots = g.roots()
     # 顶层节点 ↔ 原始 steps 序号 的 tag 映射 (双击编辑 / 拖拽换序契约不变)
     index_tags = {n.id: "node_{}".format(i) for i, n in enumerate(roots)}
@@ -823,6 +847,8 @@ def _wf_render_flow_canvas():
         "type_labels": TYPE_LABELS,
         "icons": _FLOW_ICONS,
         "index_tags": index_tags,
+        "show_ports": True,
+        "ac": C.get("ac", "#0078D4"),
     }
     fonts = {"body": FONT_BODY, "small": FONT_SMALL, "small_bold": FONT_SMALL_BOLD}
     _flow_canvas.render(wf_flow_canvas, g, colors=_FLOW_COLORS, fonts=fonts, ctx=ctx)
@@ -835,6 +861,32 @@ def _wf_render_flow_canvas():
             _FLOW_ZOOM_STATE = {}
     if _FLOW_ZOOM_STATE:
         _FLOW_ZOOM_STATE["scale"] = 1.0   # 重绘回到 1.0x, 与画布坐标一致
+
+    # D 期连线交互 (端口拖拽建边 / 边选中·Delete 删除 / F 适应窗口 / Ctrl+0 重置
+    #   缩放 / Ctrl+Z·Ctrl+Y 撤销重做)。图编辑为视图级 (§11.4), 执行仍走树。
+    try:
+        _flow_canvas.bind_interactions(
+            wf_flow_canvas, g, colors=_FLOW_COLORS, fonts=fonts, ctx=ctx,
+            re_render=_wf_render_flow_canvas, get_zoom_state=lambda: _FLOW_ZOOM_STATE)
+    except Exception:
+        pass
+
+    # E 期静态分析摘要 (检查面板): 与图同源, 随渲染刷新
+    try:
+        issues = _flow_graph.analyze(g)
+        e_n, w_n, i_n = _flow_graph.issue_summary(issues)
+        if issues:
+            head = issues[0]["message"]
+            more = "" if len(issues) == 1 else " 等 {} 项".format(len(issues))
+            txt = "检查: 错误{} 警告{} 提示{} — {}{}".format(e_n, w_n, i_n, head, more)
+            color = C.get("dg") if e_n else (C.get("wn") if w_n else C.get("fgm"))
+        else:
+            txt = "检查: 无问题"
+            color = C.get("sc", C.get("fgm"))
+        if wf_flow_check_lbl is not None:
+            wf_flow_check_lbl.configure(text=txt, fg=color)
+    except Exception:
+        pass
 
     for i in range(len(roots)):
         tag = "node_{}".format(i)

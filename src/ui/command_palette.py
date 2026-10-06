@@ -142,14 +142,12 @@ def open_palette(parent, colors, fonts, on_pick, initial_query="",
     返回创建的 ``Toplevel``；``import ui.command_palette`` 本身不建窗。
     """
     import tkinter
+    import utils
 
     C = colors if isinstance(colors, dict) else {}
-    if isinstance(fonts, dict):
-        F_BODY = fonts.get("body") or ("Microsoft YaHei UI", 10)
-        F_SMALL = fonts.get("small") or ("Microsoft YaHei UI", 9)
-    else:
-        F_BODY = ("Microsoft YaHei UI", 10)
-        F_SMALL = ("Microsoft YaHei UI", 9)
+    _f = fonts if isinstance(fonts, dict) else {}
+    F_BODY = _f.get("body") or utils.FONT_BODY
+    F_SMALL = _f.get("small") or utils.FONT_SMALL
 
     def _c(key, default="#000000"):
         return C.get(key, default)

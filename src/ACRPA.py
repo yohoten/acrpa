@@ -1113,7 +1113,7 @@ PAD = {"padx":6,"pady":3}; PI = {"padx":6,"pady":2}
 
 # ── 顶部标题双击内联编辑 (仅会话内存, 绝不写入配置文件) ──────────────
 # 需求: 界面顶部标题可双击自定义; 默认文案与现状一致, 重启回默认。
-TITLE_DEFAULT_TEXT = "A/C RPA Automation Workflow"  # 空/纯空白时回退的默认文案
+TITLE_DEFAULT_TEXT = "Adaptive Control Automation Workflow"  # 空/纯空白时回退的默认文案
 _title_edit_entry = None                            # 当前编辑态 Entry (None=非编辑态)
 
 def _commit_title_edit(save=True):
@@ -3924,6 +3924,23 @@ def build_app():
     FONT_ICON = utils.FONT_ICON; FONT_ICON_MD = utils.FONT_ICON_MD
     FONT_ICON_LG = utils.FONT_ICON_LG
 
+    def _window_title():
+        """窗口标题（标题栏 / 任务栏 / Alt-Tab 共用同一文案）: "A/C RPA v<版本>"。
+
+        版本号取自 version_info（唯一事实来源）；这里不依赖上面 try 块里的
+        `from version_info import VERSION`（那条 import 在 except 分支下不保证
+        名字可见），改为在本函数内自行安全获取。任何一步失败都退回不带版本号的
+        "A/C RPA"，绝不让"取版本"这件事影响启动。
+        注: 界面内自绘标题 Label（TITLE_DEFAULT_TEXT）不受影响。
+        """
+        try:
+            import version_info as _vi
+            ver = _vi.get_version() or getattr(_vi, "VERSION", "")
+        except Exception:
+            ver = ""
+        ver = str(ver).strip()
+        return "A/C RPA v{}".format(ver) if ver else "A/C RPA"
+
     # ── Windows 任务栏图标：必须在创建任何窗口之前设置 AppUserModelID ──
     try:
         import ctypes
@@ -3952,7 +3969,10 @@ def build_app():
     except Exception:
         pass
     utils.init_fonts(root)
-    root.title("A/C RPA")
+    try:
+        root.title(_window_title())     # 标题栏 / 任务栏 / Alt-Tab 统一带版本号
+    except Exception:
+        pass
 
     _apply_main_geometry()
     root.configure(bg=C["bg"]); root.resizable(width=True,height=True)
@@ -4004,10 +4024,10 @@ def build_app():
         except Exception as e:
             log1(f"设置任务栏图标失败: {e}")
 
-    # 设置任务栏窗口标题（与 AppUserModelID 配合）
+    # 设置任务栏窗口标题（与 AppUserModelID 配合）；与 root.title() 共用 _window_title()
     try:
         hwnd = ctypes.windll.user32.GetParent(root.winfo_id())
-        ctypes.windll.user32.SetWindowTextW(hwnd, "A/C RPA")
+        ctypes.windll.user32.SetWindowTextW(hwnd, _window_title())
     except Exception:
         pass
 
@@ -4031,7 +4051,7 @@ def build_app():
     title_bar.grid(row=0,column=0,sticky="ew",padx=utils.sp(10),pady=(utils.sp(6),utils.sp(2)))
     title_bar.columnconfigure(0,weight=1)
 
-    title_lbl = tkinter.Label(title_bar,text="A/C RPA Automation Workflow",
+    title_lbl = tkinter.Label(title_bar,text="Adaptive Control Automation Workflow",
         font=FONT_TITLE,fg=C["fgt"],bg=C["bg"])
     title_lbl.grid(row=0,column=0,sticky="w")
     _title_text_session = TITLE_DEFAULT_TEXT            # 会话内标题 (模块级, 重启即复位)

@@ -1,13 +1,13 @@
 # ACRPA — 桌面自动化工作流工具
 
-> **当前版本**：`v0.1.29-beta`（预发布 / Pre-release） · 许可证 **MIT** · 平台 **Windows x64**
+> **当前版本**：`v0.1.29`（正式版 / Stable） · 许可证 **MIT** · 平台 **Windows x64**
 
 把操作步骤写进一张 Excel 表格（或用「录制」跑一遍），剩下的交给电脑 —— 图像识别定位、窗口管理、OCR、浏览器自动化、工作流编排、NetLink 多机互联、定时任务与本地 AI 增强全部内置。单文件便携版，免安装，双击即用。
 
 > **近期增强**：**命令库（`Ctrl+K`）** 模糊搜索全部命令、**工作流控制流图**（端口连线 + 静态检查面板）、**无头 CLI 与 JSON 报告**（CI / 批量调度）、**可选依赖扩展**（应用内安装 / 启用 / 修复）、`import ACRPA` 无副作用的可测试入口，以及尺寸 Token / 字号与键盘可达性补齐。
 
 - 项目主页：[`index.html`](index.html) · English：[`index.en.html`](index.en.html)
-- 下载：[GitHub Release](https://github.com/yohoten/acrpa/releases/tag/v0.1.29.0) · [Gitee 发行版](https://gitee.com/yohoten/ACRPA/releases)
+- 下载：[GitHub Release](https://github.com/yohoten/acrpa/releases/tag/v0.1.29) · [Gitee 发行版](https://gitee.com/yohoten/ACRPA/releases)
 
 ![ACRPA 脚本编辑主界面](img/image1.png)
 
@@ -63,35 +63,35 @@
 <a id="download"></a>
 ## ⬇️ 下载与校验
 
-> ⚠️ **Beta 预发布（Pre-release）**：本版可能存在问题，建议先在同版本测试机上验证后再投入使用。
+> ✅ **正式版（Stable）**：本版为 v0.1.29 正式版（已去除 `-beta` 预发布标识），建议先在测试机验证后再投入使用。
 > `python_full_enabled`（Python full 权限）与 `netlink_tls`（TLS 加密）**默认关闭**。
 
 | 渠道 | 链接 |
 | --- | --- |
-| GitHub（推荐） | [Release 页面](https://github.com/yohoten/acrpa/releases/tag/v0.1.29.0) · 资产直链 [`ACRPA-v0.1.29-beta.exe`](https://github.com/yohoten/acrpa/releases/download/v0.1.29.0/ACRPA-v0.1.29-beta.exe) |
-| Gitee | [发行版列表页](https://gitee.com/yohoten/ACRPA/releases)（本轮已同步代码与 tag `v0.1.29.0`，Release 附件暂未上传，请先用 GitHub 下载） |
+| GitHub（推荐） | [Release 页面](https://github.com/yohoten/acrpa/releases/tag/v0.1.29) · 资产直链 [`ACRPA-v0.1.29.exe`](https://github.com/yohoten/acrpa/releases/download/v0.1.29/ACRPA-v0.1.29.exe) |
+| Gitee | [发行版列表页](https://gitee.com/yohoten/ACRPA/releases)（本轮已同步代码与 tag `v0.1.29`，Release 附件暂未上传，请先用 GitHub 下载） |
 
-**文件名与大小**：`ACRPA-v0.1.29-beta.exe` —— 14,707,763 字节（14.03 MiB / 14.71 MB），便携版，双击即用。
+**文件名与大小**：`ACRPA-v0.1.29.exe` —— 14,987,809 字节（约 14.29 MiB）（便携版，双击即用）。
 
-**SHA-256**：`0ffb41a18b6b55f44659068762bbddc8cc131af02ea70c76f5685ab1cffb98fd`
+**SHA-256**：`e230d1950b8877ebbdd3025d83e705f9e007f829b34af22020e842c2fe3e2185`（已同步回填 [`VERSION`](VERSION) 第 3 行）
 
 校验命令：
 
 ```bat
-certutil -hashfile "ACRPA-v0.1.29-beta.exe" SHA256
+certutil -hashfile "ACRPA-v0.1.29.exe" SHA256
 ```
 
 ```powershell
-Get-FileHash .\ACRPA-v0.1.29-beta.exe -Algorithm SHA256
+Get-FileHash .\ACRPA-v0.1.29.exe -Algorithm SHA256
 ```
 
-### 本版更新摘要（v0.1.29-beta）
+### 本版更新摘要（v0.1.29）
 
-完整说明见 [`docs/releases/v0.1.29-beta.md`](docs/releases/v0.1.29-beta.md)。
+完整说明见 [`docs/releases/v0.1.29.md`](docs/releases/v0.1.29.md)。
 
-> **发布口径**：应用版本号仍为 `0.1.29-beta`；因仓库启用了 immutable release，`v0.1.29-beta` 这个 tag 已被上一轮发布过的空 Release 永久占用而不可复用，故本次发布 tag 为 **`v0.1.29.0`**（GitHub Release 以 Pre-release 形式发布，下载直链以 [`VERSION`](VERSION) 声明为准）。本次附件为 **2026-10-03 重新构建**的产物，程序内自报版本已修正为 `0.1.29-beta`（不再出现 v0.1.28-beta 时期的自报错配）。
+> **发布口径**：本版为 **正式版 `0.1.29`**（去除 `-beta` 预发布标识），发布 tag 为 **`v0.1.29`**，附件为 `ACRPA-v0.1.29.exe`（下载直链以 [`VERSION`](VERSION) 声明为准）。程序内自报版本为 `0.1.29`，窗口标题显示为 `A/C RPA v0.1.29`。体积 14,987,809 字节（约 14.29 MiB），SHA-256 `e230d1950b8877ebbdd3025d83e705f9e007f829b34af22020e842c2fe3e2185`。
 
-**本次构建新增（2026-10-03）**
+**本次构建新增（v0.1.29 正式版）**
 
 1. **界面美化**：色板与设计令牌扩充，ttk 按钮统一为扁平 + 1px 描边 + 键盘焦点环 + hover 双变化；树形列表新增选中左缘 2px 强调条与行 hover；`show="headings"` 列表降级为整行加粗；日志新增级别徽标（ⓘ / ✔ / ⚠ / ✘）；UI 缩放切换后样式与图标自动重建。
 2. **底部常驻日志面板 + 常驻执行控制工具栏**：日志面板从「执行控制」Tab 迁移到底部常驻（两个 Tab 共用），支持一键收起 / 展开与拖高（默认 160 px、最小 60 px）；▶ 运行 / ■ 停止 按钮按当前激活 Tab 自动分派脚本或工作流。
@@ -99,6 +99,7 @@ Get-FileHash .\ACRPA-v0.1.29-beta.exe -Algorithm SHA256
 4. **PaddleOCR.dll 原生 OCR 后端（可选，默认关闭）**：新增 `src/paddle_dll.py`（ctypes 封装 `PaddleOCR.dll` 导出），DLL 目录 / 模型目录 / 调用原型 / 许可证均可配，初始化与推理先在子进程预检以隔离崩溃；依赖或模型缺失时静默回退，默认配置行为与旧版一致。打包侧仅在 `lib/paddle_ocr` 集齐原生依赖时才随包分发。
 5. **AI 与稳定性修复**：AI 密钥可用性统一为单一真源 `has_ai_key()`（带缓存失效），未配置密钥时给出明确提示；AI 生成脚本统一经 `normalize_ai_output` 规范化并区分「生成成功 / 认证失败」；DD 驱动与 PyAutoGUI 输入、代码执行日志细化，DLL 缺失或加载失败给出明确回退提示。
 6. **文档与截图**：新增 UI 美化、设置窗口优化、底部常驻日志面板、PaddleOCR.dll 使用说明四篇文档；更新首页截图（`img/image1.png`、`img/image3.png`、`img/image5.png`）。
+7. **窗口标题显示版本号（本次新增）**：窗口标题栏 / 任务栏 / Alt-Tab 统一显示为 `A/C RPA v0.1.29`，版本号取自 `VERSION` 唯一事实来源；取版本失败时回退为不带版本号的 `A/C RPA`，不影响启动；界面内自绘标题 `Adaptive Control Automation Workflow` 不变。
 
 **v0.1.29-beta 基线（上一发布附件所含功能）**
 
@@ -145,7 +146,7 @@ python run.py
 
 > `run.py` 会自动把项目根目录与 `src/` 加入 `sys.path` 并做依赖预检，无需手动 `cd src`。
 
-**免源码方式**：从 Releases 下载 `ACRPA-v0.1.29-beta.exe`，双击直接运行，无需安装、无需 Python 环境。
+**免源码方式**：从 Releases 下载 `ACRPA-v0.1.29.exe`，双击直接运行，无需安装、无需 Python 环境。
 
 ### 无头运行（CLI）
 
@@ -651,7 +652,7 @@ ACRPA 自 v0.1.22 起支持 **DD 驱动**作为高性能输入后端：
 - [工作流界面美化设计方案](docs/工作流界面美化设计方案.md)
 - [UI 美化设计方案](docs/UI美化设计方案.md) · [设置窗口优化设计方案](docs/设置窗口优化设计方案.md) · [执行控制 Tab 设计方案](docs/执行控制tab设计方案.md) · [底部常驻日志面板设计方案](docs/底部常驻日志面板重构设计方案.md)
 - [完善路线图（阶段性规划）](docs/ACRPA-完善路线图.md)
-- [版本发布说明](docs/releases/v0.1.29-beta.md)
+- [版本发布说明](docs/releases/v0.1.29.md)
 
 **脚本市场**
 

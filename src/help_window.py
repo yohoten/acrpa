@@ -15,7 +15,7 @@
 特性：
     · 非模态（默认 transient 但不 grab_set）；配置键 help_modal=True 时恢复模态。
     · 左侧章节导航（Listbox 选中高亮）+ 右侧可滚动内容区（Text）。
-    · 顶部搜索框（即时过滤章节/命令 + 命中高亮）；「复制本章」按钮；「关闭」按钮。
+    · 顶部搜索框（即时过滤章节/命令 + 命中高亮）；「复制本章」「下载模板」按钮；「关闭」按钮。
     · Markdown 子集渲染（标题分级/列表/代码块/表格/水平线/可点击链接）。
     · 链接：docs/… 走 resolve_doc_path + os.startfile；http(s) 走浏览器；失败可见提示。
     · 命令速查：get_command_groups() 渲染分组 + 条目，逐条可复制。
@@ -25,8 +25,10 @@
     · 容错：内容层缺失/异常时降级为仅「命令速查」（commands.list_all() 直出）。
 """
 import os
+import shutil
 import sys
 import tkinter
+from tkinter import filedialog
 
 import state
 
@@ -49,6 +51,9 @@ try:
 except Exception:
     help_content = None
     _CONTENT_OK = False
+
+# 内置资源：脚本编辑模板（相对 res/；res/ 已被整体打包，冻结首启释放到 <exe>/res）
+_TEMPLATE_RES_REL = "template/ACRPA脚本编辑模板.xlsx"
 
 # 模块级单实例
 _instance = None
@@ -125,6 +130,7 @@ class _HelpWindow(object):
         self.search_var = None
         self._copy_btn = None
         self._close_btn = None
+        self._dl_btn = None
         self._search_lbl = None
         self._scrolls = []
         self._nav_frame = None
@@ -286,6 +292,13 @@ class _HelpWindow(object):
             activeforeground="white", command=self._copy_current)
         self._copy_btn.pack(side="right", padx=(0, scaled(6)))
         attach_tooltip(self._copy_btn, "复制当前章节为纯文本到剪贴板")
+        self._dl_btn = tkinter.Button(
+            self._bar_frame, text="下载模板", font=self.f_small, bg=C["bgc"],
+            fg=C["fgb"], relief="flat", bd=1, cursor="hand2",
+            padx=scaled(12), pady=scaled(3), activebackground=C["acl"],
+            activeforeground=C["fgb"], command=self._download_template)
+        self._dl_btn.pack(side="right", padx=(0, scaled(6)))
+        attach_tooltip(self._dl_btn, "下载 ACRPA 脚本编辑模板 (.xlsx) 到本地")
 
         # 左：章节导航
         self._nav_frame = tkinter.Frame(win, bg=C["bgc"])
@@ -493,6 +506,12 @@ class _HelpWindow(object):
             self._copy_btn.configure(bg=C["ac"], fg="white",
                                      activebackground=C["ach"],
                                      activeforeground="white")
+        except Exception:
+            pass
+        try:
+            self._dl_btn.configure(bg=C["bgc"], fg=C["fgb"],
+                                   activebackground=C["acl"],
+                                   activeforeground=C["fgb"])
         except Exception:
             pass
         self._configure_tags()
@@ -821,6 +840,9 @@ class _HelpWindow(object):
             except Exception as e:
                 self._link_error(target, e)
                 return False
+        if low.startswith("download:"):
+            # 触发内置脚本编辑模板下载（target 中的文件名仅作展示，实际用内置资源）
+            return self._download_template()
         path = None
         if _CONTENT_OK:
             try:
@@ -853,6 +875,53 @@ class _HelpWindow(object):
             show_toast(self.win, "打开失败: " + target, "warning")
         except Exception:
             pass
+
+    # ── 下载脚本编辑模板 ────────────────────────────────────────
+    def _notify(self, message, level="info"):
+        """轻量提示：日志 + Toast（均失败静默，不阻断窗口）。"""
+        try:
+            log1(message, "warning" if level == "warning" else None)
+        except Exception:
+            pass
+        try:
+            show_toast(self.win, message, level)
+        except Exception:
+            pass
+
+    def _download_template(self):
+        """把内置的「脚本编辑模板」另存到用户自选路径。
+
+        资源缺失、用户取消、复制失败均友好处理，不抛异常。
+        返回 True 表示已成功写出文件。
+        """
+        path = None
+        if _CONTENT_OK:
+            try:
+                path = help_content.resolve_res_path(_TEMPLATE_RES_REL)
+            except Exception:
+                path = None
+        if not path or not os.path.exists(path):
+            self._notify("未找到内置模板资源，请重装或更新 ACRPA", "warning")
+            return False
+        try:
+            dst = filedialog.asksaveasfilename(
+                parent=self.win,
+                title="保存脚本编辑模板",
+                defaultextension=".xlsx",
+                initialfile=os.path.basename(path),
+                filetypes=[("Excel 工作簿", "*.xlsx"), ("所有文件", "*.*")])
+        except Exception as e:
+            self._notify("无法打开「另存为」对话框: {}".format(e), "warning")
+            return False
+        if not dst:            # 用户取消：静默返回
+            return False
+        try:
+            shutil.copyfile(path, dst)
+        except Exception as e:
+            self._notify("保存模板失败: {}".format(e), "warning")
+            return False
+        self._notify("已保存脚本编辑模板: " + dst, "success")
+        return True
 
     def _copy_to_clipboard(self, text):
         try:

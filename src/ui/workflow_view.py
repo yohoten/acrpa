@@ -102,7 +102,17 @@ except Exception:                       # pragma: no cover
 
 # 回退开关: False → 一律走旧单列渲染 (_wf_render_flowchart_legacy), 便于排查
 use_flow_canvas = True
-# 缩放/平移状态 (首次渲染时登记; 主题重绘后复位为 1.0x)
+# P1 / WF-B1 交互增强开关 (新增, 默认 True):
+#   False → 关闭 hover(网格/吸附/框选/拒绝反馈/拖拽指示线), 回到 P0 的连线交互。
+#   既有契约 (tag 契约 / zoom 语义 / 单列回退) 不受影响; 仅新增绑定受其保护。
+_WF_INTERACT_V2 = True
+# P1 / WF-B2 面板/工具栏/小地图/联动总开关 (新增, 默认 True):
+#   False → 不创建「检查面板展开列表 / 画布悬浮工具条 / 小地图 / 大纲联动绑定」,
+#   整体回退到 WF-B1 行为 (检查面板仍是单行 wf_flow_check_lbl)。
+#   各控件均为独立子控件 —— 隐藏即回退 (工具栏/小地图 place_forget,
+#   检查列表 grid_remove); wf_flow_check_lbl 始终保留。
+_WF_PANEL_V2 = True
+# 缩放/平移状态 (首次渲染时登记; 存渲染期 zoom 乘子, 重绘时透传给 render)
 _FLOW_ZOOM_STATE = None
 
 __all__ = [
@@ -171,6 +181,21 @@ _wf_show_flow = None
 _wf_view_btn = None
 _WF_LIB_ACTIONS = {}
 
+# ── WF-B2 新增控件 / 状态 (P1-1 检查面板 / P1-2 工具栏 + 小地图 / P1-5 联动) ──
+wf_flow_toolbar = None      # 画布悬浮工具条 (右上)
+wf_minimap = None           # 画布小地图 (右下, sp(120)×sp(80))
+wf_check_tree = None        # 检查面板展开列表 (show="tree")
+_WF_FLOW_GRID = True        # 网格开关键 (工具条 ⌗)
+_WF_MINIMAP_ON = True       # 小地图开关键 (工具条 ◲)
+_WF_SYNCING = False         # 大纲 ↔ 画布联动防回环
+_FLOW_INTERACT_ST = None    # 最近一次 bind_interactions 状态 (复用 N5 选中集合)
+_wf_check_issues = []       # 最近一次 analyze() 结果 (行 iid → issue 映射)
+_wf_check_expanded = False  # 检查面板展开态
+_wf_check_summary = "检查: —"
+_wf_check_color = None
+_wf_mini_map = None         # 小地图映射 (flow_canvas.minimap 返回值)
+_ISSUE_BADGE = {"error": "错误", "warning": "警告", "info": "提示"}
+
 # ── 注入上下文 (build 填充) ──
 _CTX = {
     "ui_theme": None, "tbtn": None, "sep": None, "sp": None, "ctrl_h": None,
@@ -206,10 +231,61 @@ _NODE_W = 200
 _NODE_H = 36
 _NODE_GAP = 56
 
+# ── 流程图「结构/状态」样式真源 (P0-3; 与 _FLOW_COLORS 同级, 禁止迁出本模块) ──
+#   类型色仍只由 _FLOW_COLORS 提供; 本表只承载结构色/状态色 (方案 §4.5)。
+#   值优先取自当前主题 C[...]; 经 ctx["style"] 传入 ui.flow_canvas 消费。
+#   随 build()/refresh_theme() 重建 (换肤刷新); 缺失键由 flow_canvas 回退默认值。
+_FLOW_STYLE = {}
+
+
+def _refresh_flow_style(palette=None):
+    """由当前主题色板重建 _FLOW_STYLE (唯一真源: 本模块; 方案 §4.5)。"""
+    Cc = palette if isinstance(palette, dict) else (C if isinstance(C, dict) else {})
+    st = _CTX.get("state")
+    dark = bool(st is not None and getattr(st, "DARK_MODE", False))
+
+    def g(key, default):
+        return Cc.get(key) or default
+
+    flowbg = g("flowbg", "#f8fafc")
+    edge = g("fgm", "#94A3B8")
+    blend = getattr(_flow_canvas, "blend", None) if _flow_canvas is not None else None
+    _FLOW_STYLE.clear()
+    _FLOW_STYLE.update({
+        "flowbg": flowbg,                    # 禁用态 40% 近似的混色底
+        "disabled_mix": 0.4,                 # blend(类型色, flowbg, 0.4)
+        "shadow": (g("border_strong", "#4A4A4A") if dark else g("bd", "#E1E1E1")),
+        "text_on_node": "#FFFFFF",
+        "text_sub": (blend("#FFFFFF", edge, 0.15) if callable(blend) else "#E2E8F0"),
+        "grid_fine": g("gridline", "#EEEEEE"),
+        "grid_coarse": g("bd", "#E1E1E1"),
+        "edge": edge,
+        "edge_sel": g("ac", "#0078D4"),
+        "edge_reject": g("dg", "#EF4444"),
+        "edge_back": _FLOW_COLORS.get("loop", "#8B5CF6"),
+        "walked": g("sc", "#10B981"),
+        "terminal": g("fgm", "#94A3B8"),
+        "disabled_color": (blend(edge, flowbg, 0.4) if callable(blend) else "#94A3B8"),
+        "port_idle": None,                    # None → 取节点类型色 (由 flow_canvas 处理)
+        "port_hover": g("ac", "#0078D4"),
+    })
+    return _FLOW_STYLE
+
+
+def _flow_disabled_fill(base_color):
+    """禁用态填充 = blend(类型色, flowbg, 0.4) (Tk 无 alpha 的混色近似, P0-2)。"""
+    blend = getattr(_flow_canvas, "blend", None) if _flow_canvas is not None else None
+    flowbg = _FLOW_STYLE.get("flowbg") or (C.get("flowbg") if isinstance(C, dict) else None)
+    if callable(blend) and isinstance(flowbg, str):
+        return blend(base_color, flowbg, _FLOW_STYLE.get("disabled_mix", 0.4))
+    return base_color
+
+
 # 拖拽状态
 _wf_drag_idx = None
 _wf_drag_start_y = 0
 _wf_drag_node_items = []
+_wf_drag_indic = None   # P1-4/N6: 拖拽插入指示线 item id (局部重绘, 不触发全量渲染)
 
 # ── 操作库分类定义 (参考 AutomationOperation 操作库) ──
 _WF_LIB_CATEGORIES = [
@@ -309,6 +385,7 @@ def build(parent, *, colors, fonts, deps=None):
             _CTX["filedialog"] = filedialog
     _bind_fonts(fonts)
     C = colors
+    _refresh_flow_style(C)
 
     notebook = parent
     sp = _CTX.get("sp")
@@ -504,6 +581,15 @@ def build(parent, *, colors, fonts, deps=None):
 
     wf_flow_canvas.bind("<MouseWheel>", _wf_flow_on_wheel)
 
+    # WF-B2 (P1-1/P1-2): 检查面板展开列表 + 画布悬浮工具条 + 小地图
+    _wf_build_panel_v2()
+
+    # WF-B2 (P1-5/A10): 大纲 → 画布联动 (画布 → 大纲在 _wf_render_flow_canvas 内 tag_bind)
+    try:
+        wf_tree.bind("<<TreeviewSelect>>", _wf_on_tree_select)
+    except Exception:
+        pass
+
     wf_paned.add(wf_flow_frame, minsize=200, width=400)
 
     # 操作库显示名 → 节点构造器 (返回 dict)
@@ -590,6 +676,7 @@ def refresh_theme(dark=None, colors=None, prev=None):
         return
     C = Cc
     _CTX["colors"] = Cc
+    _refresh_flow_style(Cc)
     try:
         if wf_flow_canvas is not None and "flowbg" in Cc:
             wf_flow_canvas.configure(bg=Cc["flowbg"])
@@ -641,6 +728,7 @@ def _wf_toggle_view():
 # 流程图滚轮 - 使用widget级别绑定
 def _wf_flow_on_wheel(event):
     wf_flow_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+    _wf_draw_minimap()          # P1-2: 视口框跟随滚动刷新
 
 
 # ── 操作库功能 ──
@@ -809,7 +897,7 @@ def _wf_render_flow_canvas(graph=None):
     D 期: 支持 `graph` 参数复用「已编辑的图」(端口连线保留) —— 结构未变时
     (`demote(编辑图) == _wf_data`) 复用会话内最后一次编辑的图, 结构变化自动重新提升。
     """
-    global _FLOW_ZOOM_STATE, _wf_graph_edit
+    global _FLOW_ZOOM_STATE, _wf_graph_edit, _FLOW_INTERACT_ST
     if graph is not None:
         _wf_graph_edit = graph
     else:
@@ -836,68 +924,79 @@ def _wf_render_flow_canvas(graph=None):
         cur, results = None, {}
 
     state = _CTX.get("state")
+    style = _FLOW_STYLE or _refresh_flow_style(C)
     ctx = {
         "darken": _CTX.get("darken"),
         "dark": bool(state is not None and getattr(state, "DARK_MODE", False)),
         "current_step": cur,
         "step_results": results,
-        "fgm": C.get("fgm", "#94A3B8"),
-        "sc": C.get("sc", "#10B981"),
-        "dg": C.get("dg", "#EF4444"),
+        # 结构色经 style 下沉 (P0-3); 下列 fgm/sc/dg/ac 为 flow_canvas 的次选
+        "fgm": style.get("edge"),
+        "sc": style.get("walked"),
+        "dg": style.get("edge_reject"),
         "type_labels": TYPE_LABELS,
         "icons": _FLOW_ICONS,
         "index_tags": index_tags,
         "show_ports": True,
-        "ac": C.get("ac", "#0078D4"),
+        "ac": style.get("edge_sel"),
+        # P0-1/P0-3/P0-4: 几何 token / 结构色真源 / 缩放乘子 经 ctx 注入渲染层
+        "style": style,
+        "sp": _CTX.get("sp"),
+        # P1/WF-B1: 交互增强开关 (受 _WF_INTERACT_V2 保护, 便于回滚) + 网格开关
+        "interact_v2": _WF_INTERACT_V2,
+        "grid": bool(_WF_INTERACT_V2 and _WF_FLOW_GRID),
     }
     fonts = {"body": FONT_BODY, "small": FONT_SMALL, "small_bold": FONT_SMALL_BOLD}
-    _flow_canvas.render(wf_flow_canvas, g, colors=_FLOW_COLORS, fonts=fonts, ctx=ctx)
 
-    # 缩放/平移: 仅登记一次 (重复渲染不重复绑定)
+    # 缩放/平移: 仅登记一次 (重复渲染不重复绑定); 回调本次重绘以补偿线宽/字号 (P0-4)
     if not _FLOW_ZOOM_STATE:
         try:
-            _FLOW_ZOOM_STATE = _flow_canvas.bind_zoom_pan(wf_flow_canvas)
+            _FLOW_ZOOM_STATE = _flow_canvas.bind_zoom_pan(
+                wf_flow_canvas, re_render=_wf_render_flow_canvas)
         except Exception:
             _FLOW_ZOOM_STATE = {}
-    if _FLOW_ZOOM_STATE:
-        _FLOW_ZOOM_STATE["scale"] = 1.0   # 重绘回到 1.0x, 与画布坐标一致
+    # 当前 zoom 乘子: 由状态取出并透传 render (布局坐标不变; 无状态时 1.0)
+    zoom = float(_FLOW_ZOOM_STATE.get("scale", 1.0)) if _FLOW_ZOOM_STATE else 1.0
+    ctx["zoom"] = zoom
+    _flow_canvas.render(wf_flow_canvas, g, colors=_FLOW_COLORS, fonts=fonts,
+                        ctx=ctx, zoom=zoom)
 
     # D 期连线交互 (端口拖拽建边 / 边选中·Delete 删除 / F 适应窗口 / Ctrl+0 重置
     #   缩放 / Ctrl+Z·Ctrl+Y 撤销重做)。图编辑为视图级 (§11.4), 执行仍走树。
+    #   P1-2: on_fit 走 zoom-aware 适应窗口 (F 键); 返回值登记供 P1-5 复用选中集合。
     try:
-        _flow_canvas.bind_interactions(
+        _FLOW_INTERACT_ST = _flow_canvas.bind_interactions(
             wf_flow_canvas, g, colors=_FLOW_COLORS, fonts=fonts, ctx=ctx,
-            re_render=_wf_render_flow_canvas, get_zoom_state=lambda: _FLOW_ZOOM_STATE)
+            re_render=_wf_render_flow_canvas, get_zoom_state=lambda: _FLOW_ZOOM_STATE,
+            toast=_toast,                 # N4: 拒绝反馈经宿主 _toast (未注入 show_toast 静默)
+            on_fit=_wf_flow_fit)
     except Exception:
-        pass
+        _FLOW_INTERACT_ST = None
 
-    # E 期静态分析摘要 (检查面板): 与图同源, 随渲染刷新
+    # E 期静态分析摘要 + P1-1 检查面板: 与图同源 (analyze 每渲染仅调用一次)
     try:
         issues = _flow_graph.analyze(g)
-        e_n, w_n, i_n = _flow_graph.issue_summary(issues)
-        if issues:
-            head = issues[0]["message"]
-            more = "" if len(issues) == 1 else " 等 {} 项".format(len(issues))
-            txt = "检查: 错误{} 警告{} 提示{} — {}{}".format(e_n, w_n, i_n, head, more)
-            color = C.get("dg") if e_n else (C.get("wn") if w_n else C.get("fgm"))
-        else:
-            txt = "检查: 无问题"
-            color = C.get("sc", C.get("fgm"))
-        if wf_flow_check_lbl is not None:
-            wf_flow_check_lbl.configure(text=txt, fg=color)
+    except Exception:
+        issues = []
+    try:
+        _wf_refresh_check_panel(issues)
     except Exception:
         pass
 
+    # P1-5: 节点单击补「画布 → 大纲」双向联动; 双击编辑 / 拖拽换序绑定保持不变
     for i in range(len(roots)):
         tag = "node_{}".format(i)
         wf_flow_canvas.tag_bind(tag, "<Double-1>",
             lambda e, idx=i: _wf_edit_step_by_index(idx))
         wf_flow_canvas.tag_bind(tag, "<Button-1>",
-            lambda e, idx=i: _wf_drag_start(e, idx))
+            lambda e, idx=i: _wf_node_click(e, idx))
         wf_flow_canvas.tag_bind(tag, "<B1-Motion>",
             lambda e, idx=i: _wf_drag_move(e, idx))
         wf_flow_canvas.tag_bind(tag, "<ButtonRelease-1>",
             lambda e, idx=i: _wf_drag_end(e, idx))
+
+    # P1-2: 小地图随本次渲染刷新 (数据源 layout() 已写回的 n.x/y/w/h)
+    _wf_draw_minimap()
 
 
 def _wf_render_flowchart_legacy(*args):
@@ -918,6 +1017,8 @@ def _wf_render_flowchart_legacy(*args):
         stype = step.get("type", "script")
         disabled = step.get("enabled", True) is False
         color = _FLOW_COLORS.get(stype, "#6B7280")
+        if disabled:                       # P0-2: 保留类型色, 混色近似 40% 透明
+            color = _flow_disabled_fill(color)
         icon = _FLOW_ICONS.get(stype, "?")
         label = TYPE_LABELS.get(stype, stype)
         comment = step.get("comment", "")
@@ -965,8 +1066,6 @@ def _wf_render_flowchart_legacy(*args):
                 outline_width = 3
         except Exception:
             pass
-        if disabled:
-            color = "#94A3B8"  # 禁用节点灰色
 
         # 绘制节点矩形
         node_id = wf_flow_canvas.create_rectangle(
@@ -982,7 +1081,8 @@ def _wf_render_flowchart_legacy(*args):
 
         # 节点阴影效果 (深色半透明 — 根据主题切换颜色)
         state = _CTX.get("state")
-        shadow_color = "#334155" if (state is not None and state.DARK_MODE) else "#CBD5E0"
+        shadow_color = _FLOW_STYLE.get("shadow") or (
+            "#4A4A4A" if (state is not None and state.DARK_MODE) else "#E1E1E1")
         shadow_id = wf_flow_canvas.create_rectangle(
             x + 2, y + 2, x + _NODE_W + 2, y + _NODE_H + 2,
             fill=shadow_color, outline="", tags=("shadow",))
@@ -1046,23 +1146,156 @@ def _wf_drag_start(event, idx):
     _wf_drag_start_y = event.y
 
 
+def _wf_alt_down(event):
+    """P1-7/N3: 是否按住 Alt (跨平台掩码: X11 Mod1=0x08 / Windows=0x20000)。"""
+    state = getattr(event, "state", 0) or 0
+    return bool(state & 0x0008) or bool(state & 0x20000)
+
+
+def _wf_current_zoom():
+    """P1 收尾: 当前渲染期 zoom 乘子 (无缩放状态时 1.0)。
+
+    与 flow_canvas.render 的几何口径同源 —— 布局几何 (节点/间距/margin) 按 zoom
+    等比缩放; 故 snap 网格与拖拽落点映射在 zoom!=1.0 下与画布几何保持一致。
+    """
+    st = _FLOW_ZOOM_STATE
+    if isinstance(st, dict):
+        try:
+            z = float(st.get("scale", 1.0))
+            return z if z > 0 else 1.0
+        except Exception:
+            return 1.0
+    return 1.0
+
+
+def _wf_snap_coord(value, event=None):
+    """P1-7: 拖拽坐标吸附网格; 按住 Alt 临时关闭吸附 (N3)。
+
+    P1 收尾: 吸附格 = sp(8) * zoom (与布局几何同口径等比缩放) —— zoom==1.0 时仍为
+    sp(8) (与 P0 基线逐位一致), zoom!=1.0 时随几何一起放大; Alt 关闭语义不变。
+    """
+    if event is not None and _wf_alt_down(event):
+        return value
+    sp = _CTX.get("sp")
+    if not callable(sp):
+        return value
+    try:
+        step = float(sp(8)) * _wf_current_zoom()
+    except Exception:
+        return value
+    if step <= 0:
+        return value
+    try:
+        return round(float(value) / step) * step
+    except Exception:
+        return value
+
+
+def _wf_draw_drag_indicator(event):
+    """P1-4/N6 插入指示线: ac 3px 水平线, 复用同一 item (局部重绘, 不触发全量渲染)。"""
+    global _wf_drag_indic
+    canvas = wf_flow_canvas
+    if canvas is None:
+        return
+    if _wf_drag_indic is not None:
+        try:
+            canvas.delete(_wf_drag_indic)
+        except Exception:
+            pass
+        _wf_drag_indic = None
+    y = _wf_snap_coord(event.y, event)
+    color = (C.get("ac") if isinstance(C, dict) else None) \
+        or _FLOW_STYLE.get("edge_sel") or "#0078D4"
+    try:
+        x1 = float(str(canvas.cget("scrollregion")).split()[2])
+    except Exception:
+        try:
+            x1 = float(canvas.winfo_width())
+        except Exception:
+            x1 = 600.0
+    if x1 <= 1.0:
+        x1 = 600.0
+    try:
+        _wf_drag_indic = canvas.create_line(
+            0, y, x1, y, fill=color, width=3, tags=("drag_indicator",))
+    except Exception:
+        _wf_drag_indic = None
+
+
 def _wf_drag_move(event, idx):
-    """拖拽移动中"""
+    """拖拽移动中 (P1-4): 只 move 被拖图元 + 绘制插入指示线, **不**触发全量重绘。"""
     global _wf_drag_idx, _wf_drag_start_y
     if _wf_drag_idx is None or _wf_drag_idx != idx:
         return
     dy = event.y - _wf_drag_start_y
-    # 移动节点图形
+    # 移动节点图形 (局部: find_withtag + move, O(被拖图元))
     for item in wf_flow_canvas.find_withtag("node_{}".format(idx)):
         wf_flow_canvas.move(item, 0, dy)
     _wf_drag_start_y = event.y
+    if _WF_INTERACT_V2:
+        _wf_draw_drag_indicator(event)
+
+def _wf_drop_index(y, n):
+    """拖拽落点 y (画布坐标) → 顶层步骤插入索引 [0, n-1]。
+
+    P1 收尾修正: 原实现用硬编码 ``gap=_NODE_GAP(=56)`` / ``start_y=20`` (旧单列几何),
+    与 V2 分层布局实际步距 ``node_h+v_gap`` (zoom!=1.0 时再 ×zoom) 不符 —— 落点
+    错位 (zoom==1.0 时中心 138 被误判为 idx2, 应为 idx1; zoom!=1.0 时步距更大, 偏差
+    被放大)。现改为按**画布实际几何**判定, 不依赖任何硬编码步距:
+
+      · 优先取图数据中顶层节点 (``_wf_graph_edit.roots()``) 的中心 y —— 其 x/y/w/h
+        由 flow_canvas.layout() 写回 (已含 zoom 等比缩放); 拖拽中被拖图元只是画布
+        视觉位移、图坐标不变, 故不受干扰; 取与落点 y 最近的节点索引。
+      · 无图数据时回退: 按「当前布局步距 node_h+v_gap (含 zoom)」线性映射。
+
+    zoom∈{1.0, 2.0} 下映射均正确 (步距随几何等比缩放, 结果自动跟随)。
+    """
+    if n <= 1:
+        return 0
+    centers = []
+    g = _wf_graph_edit
+    if g is not None:
+        try:
+            for i, nd in enumerate(g.roots()):
+                centers.append((i, float(nd.y) + float(nd.h) / 2.0))
+        except Exception:
+            centers = []
+    if centers:
+        best = min(centers, key=lambda c: abs(float(y) - c[1]))[0]
+        return max(0, min(n - 1, best))
+    # 回退: 无图数据 → 单列分层几何 (节点高 + 间隙, 含 zoom 与 sp 令牌)
+    zoom = _wf_current_zoom()
+    sp = _CTX.get("sp")
+    fc = _flow_canvas
+    try:
+        tok = (lambda v: float(sp(v))) if callable(sp) else (lambda v: float(v))
+        node_h = tok(_NODE_H)
+        v_gap = tok(_NODE_GAP)
+        margin = tok(getattr(fc, "MARGIN", 28))
+    except Exception:
+        node_h, v_gap, margin = float(_NODE_H), float(_NODE_GAP), 28.0
+    step = (node_h + v_gap) * zoom
+    if step <= 0:
+        return 0
+    start = (margin + node_h / 2.0) * zoom
+    try:
+        idx = round((float(y) - start) / step)
+    except Exception:
+        return 0
+    return max(0, min(n - 1, idx))
 
 
 def _wf_drag_end(event, idx):
-    """结束拖拽：根据位置交换步骤顺序"""
-    global _wf_drag_idx
+    """结束拖拽 (P1-4): 先清插入指示线, 再据落点换序并重排 —— 此步才全量重绘。"""
+    global _wf_drag_idx, _wf_drag_indic
     if _wf_drag_idx is None:
         return
+    if _wf_drag_indic is not None and wf_flow_canvas is not None:
+        try:
+            wf_flow_canvas.delete(_wf_drag_indic)
+        except Exception:
+            pass
+    _wf_drag_indic = None
     steps = _wf_data["steps"]
     n = len(steps)
     if n < 2:
@@ -1070,11 +1303,9 @@ def _wf_drag_end(event, idx):
         _wf_render_flowchart()
         return
 
-    # 根据最终 y 位置计算新索引
-    gap = _NODE_GAP
-    start_y = 20
-    new_idx = round((event.y - start_y) / gap)
-    new_idx = max(0, min(n - 1, new_idx))
+    # 落点 → 新索引 (P1 收尾: 与实际渲染几何一致, 不再依赖硬编码步距)
+    y = _wf_snap_coord(event.y, event) if _WF_INTERACT_V2 else event.y
+    new_idx = _wf_drop_index(y, n)          # 已按实际几何映射并钳制到 [0, n-1]
 
     old_idx = _wf_drag_idx
     _wf_drag_idx = None
@@ -1862,6 +2093,445 @@ def _wf_update_workflow_highlight():
         pass
 
 
+# ══════════════════════════════════════════════════════════════════════
+# WF-B2: 检查面板 (P1-1) / 悬浮工具条 + 小地图 (P1-2) / 大纲联动 (P1-5)
+# ══════════════════════════════════════════════════════════════════════
+
+def _wf_a11y_helpers():
+    """惰性取 utils 的可达性助手 (attach_tooltip/set_accessible_name/bind_icon_activate)。
+
+    本模块仅经依赖注入使用 utils (不 import ACRPA); 此处惰性 import utils,
+    取不到则回退为最简 <Button-1> 绑定, 保证离屏/裁剪环境下工具条仍可点击。
+    """
+    try:
+        import utils as _u
+        return (getattr(_u, "attach_tooltip", None),
+                getattr(_u, "set_accessible_name", None),
+                getattr(_u, "bind_icon_activate", None))
+    except Exception:
+        return (None, None, None)
+
+
+def _wf_mk_icon_btn(parent, text, tip, command):
+    """图标按钮 (Label + 可达性): attach_tooltip + set_accessible_name + bind_icon_activate。"""
+    bg = (C.get("bgc") or C.get("bg")) if isinstance(C, dict) else None
+    fg = C.get("fgb") if isinstance(C, dict) else None
+    try:
+        lbl = tkinter.Label(parent, text=text, font=FONT_SMALL_BOLD, bg=bg, fg=fg,
+                            cursor="hand2", padx=3, pady=1)
+        lbl.pack(side="left", padx=1)
+    except Exception:
+        return None
+    tooltip, acc, activate = _wf_a11y_helpers()
+    if callable(tooltip):
+        try:
+            tooltip(lbl, tip)
+        except Exception:
+            pass
+    if callable(activate):
+        try:
+            activate(lbl, command, name=tip)
+        except Exception:
+            pass
+    else:
+        try:
+            lbl.bind("<Button-1>", lambda e: (command(), "break")[1])
+        except Exception:
+            pass
+        if callable(acc):
+            try:
+                acc(lbl, tip)
+            except Exception:
+                pass
+    return lbl
+
+
+def _wf_build_panel_v2():
+    """WF-B2 构建: 检查面板展开列表 + 画布悬浮工具条 + 小地图 (隐藏即回退)。
+
+    全部为独立子控件 (不改变 wf_flow_frame 既有 grid 行 0/1); 工具条/小地图以
+    `place()` 悬浮于画布之上 (`in_` 不作为: 直接以画布为父容器, 保证覆盖且不影响
+    画布滚动)。`_WF_PANEL_V2 == False` 时整体不建 → 回退单行 wf_flow_check_lbl。
+    """
+    global wf_flow_toolbar, wf_minimap, wf_check_tree
+    if not _WF_PANEL_V2 or wf_flow_frame is None or wf_flow_canvas is None:
+        return
+    sp = _CTX.get("sp") or (lambda v: v)
+
+    # ── P1-1: 检查面板 (折叠态 = wf_flow_check_lbl 可点击; 展开态 = Treeview) ──
+    if wf_flow_check_lbl is not None:
+        try:
+            wf_flow_check_lbl.configure(cursor="hand2")
+            wf_flow_check_lbl.bind("<Button-1>", _wf_toggle_check_panel)
+        except Exception:
+            pass
+    try:
+        wf_check_tree = ttk.Treeview(wf_flow_frame, show="tree", height=5,
+                                     selectmode="browse")
+        wf_check_tree.grid(row=2, column=0, columnspan=2, sticky="ew",
+                           padx=6, pady=(0, sp(4)))
+        wf_check_tree.grid_remove()          # 默认折叠
+        wf_check_tree.bind("<<TreeviewSelect>>", _wf_check_tree_click)
+    except Exception:
+        wf_check_tree = None
+
+    # ── P1-2: 画布右上悬浮工具条 (＋/－/⤢fit/⌗网格/◲小地图/⌁自动整理) ──
+    try:
+        wf_flow_toolbar = tkinter.Frame(wf_flow_canvas,
+                                        bg=C.get("bgc") if "bgc" in C else C.get("bg"),
+                                        highlightbackground=C.get("bd"),
+                                        highlightthickness=1)
+        for text, tip, cmd in (
+                ("＋", "放大画布", lambda: _wf_flow_zoom(1.25)),
+                ("－", "缩小画布", lambda: _wf_flow_zoom(0.8)),
+                ("⤢", "适应窗口", _wf_flow_fit),
+                ("⌗", "网格开关", _wf_flow_toggle_grid),
+                ("◲", "小地图开关", _wf_flow_toggle_minimap),
+                ("⌁", "自动整理布局", _wf_flow_auto_layout)):
+            _wf_mk_icon_btn(wf_flow_toolbar, text, tip, cmd)
+        wf_flow_toolbar.place(relx=1.0, rely=0.0, anchor="ne", x=-sp(8), y=sp(8))
+    except Exception:
+        wf_flow_toolbar = None
+
+    # ── P1-2: 右下小地图 (sp(120) × sp(80)) ──
+    try:
+        wf_minimap = tkinter.Canvas(wf_flow_canvas, width=sp(120), height=sp(80),
+                                    bg=C["flowbg"] if "flowbg" in C else "#F8FAFC",
+                                    highlightbackground=C.get("bd"),
+                                    highlightthickness=1)
+        wf_minimap.bind("<Button-1>", _wf_minimap_click)
+        wf_minimap.bind("<B1-Motion>", _wf_minimap_click)
+        if _WF_MINIMAP_ON:
+            _wf_minimap_show()
+    except Exception:
+        wf_minimap = None
+
+    # 视口跟随: 纵向滚动条 + 画布尺寸变化时刷新小地图
+    try:
+        wf_flow_scroll_y.configure(command=_wf_flow_yview)
+    except Exception:
+        pass
+    try:
+        wf_flow_canvas.bind("<Configure>", lambda e: _wf_draw_minimap(), add="+")
+    except Exception:
+        pass
+
+
+def _wf_minimap_show():
+    if wf_minimap is None:
+        return
+    sp = _CTX.get("sp") or (lambda v: v)
+    try:
+        wf_minimap.place(relx=1.0, rely=1.0, anchor="se", x=-sp(8), y=-sp(8))
+    except Exception:
+        pass
+
+
+def _wf_flow_yview(*args):
+    """纵向滚动条命令包装: 先滚动, 再刷新小地图视口框 (P1-2)。"""
+    try:
+        wf_flow_canvas.yview(*args)
+    except Exception:
+        pass
+    _wf_draw_minimap()
+
+
+# ── P1-2 工具条动作 ──────────────────────────────────────────────────
+def _wf_flow_zoom(factor):
+    """工具条 ＋/－: 按乘子缩放 (0.4–2.5 由 bind_zoom_pan 状态钳制) 并重绘。"""
+    st = _FLOW_ZOOM_STATE
+    if not isinstance(st, dict):
+        return
+    try:
+        s = float(st.get("scale", 1.0)) * float(factor)
+    except Exception:
+        return
+    lo = float(st.get("min_scale", 0.4))
+    hi = float(st.get("max_scale", 2.5))
+    st["scale"] = max(lo, min(hi, s))
+    _wf_render_flowchart()
+
+
+def _wf_flow_fit():
+    """工具条 ⤢ / F 键: 按视口等比算 zoom + 居中 (P1-2)。"""
+    try:
+        _flow_canvas.fit_to_view(wf_flow_canvas, zoom_state=_FLOW_ZOOM_STATE,
+                                 re_render=_wf_render_flowchart)
+    except Exception:
+        pass
+    _wf_draw_minimap()
+
+
+def _wf_flow_toggle_grid():
+    global _WF_FLOW_GRID
+    _WF_FLOW_GRID = not _WF_FLOW_GRID
+    _wf_render_flowchart()
+
+
+def _wf_flow_toggle_minimap():
+    global _WF_MINIMAP_ON
+    _WF_MINIMAP_ON = not _WF_MINIMAP_ON
+    if wf_minimap is None:
+        return
+    if _WF_MINIMAP_ON:
+        _wf_minimap_show()
+        _wf_draw_minimap()
+    else:
+        try:
+            wf_minimap.place_forget()
+        except Exception:
+            pass
+
+
+def _wf_flow_auto_layout():
+    """工具条 ⌁: 丢弃会话内编辑图 → 重新 promote (重跑 layout) 并 fit。"""
+    global _wf_graph_edit
+    _wf_graph_edit = None
+    _wf_render_flowchart()
+    _wf_flow_fit()
+
+
+# ── P1-2 小地图 ──────────────────────────────────────────────────────
+def _wf_flow_view_rect():
+    """主画布当前视口对应的内容坐标矩形 (x0,y0,x1,y1); 不可用时 None。"""
+    canvas = wf_flow_canvas
+    if canvas is None:
+        return None
+    try:
+        parts = [float(p) for p in str(canvas.cget("scrollregion")).split()]
+        if len(parts) != 4:
+            return None
+        vx0 = canvas.canvasx(0)
+        vy0 = canvas.canvasy(0)
+        vx1 = canvas.canvasx(max(1, canvas.winfo_width()))
+        vy1 = canvas.canvasy(max(1, canvas.winfo_height()))
+        return (vx0, vy0, vx1, vy1)
+    except Exception:
+        return None
+
+
+def _wf_draw_minimap(event=None):
+    """P1-2: 用 graph.nodes 的 n.x/y/w/h 重绘小地图 (含视口框)。"""
+    global _wf_mini_map
+    if wf_minimap is None or not _WF_MINIMAP_ON:
+        return
+    g = _wf_graph_edit
+    if g is None:
+        return
+    sp = _CTX.get("sp") or (lambda v: v)
+    state = _CTX.get("state")
+    ctx = {"dark": bool(state is not None and getattr(state, "DARK_MODE", False)),
+           "style": _FLOW_STYLE or _refresh_flow_style(C), "sp": sp}
+    try:
+        _wf_mini_map = _flow_canvas.minimap(
+            wf_minimap, g, colors=_FLOW_COLORS, ctx=ctx,
+            width=sp(120), height=sp(80), view=_wf_flow_view_rect())
+    except Exception:
+        _wf_mini_map = None
+
+
+def _wf_minimap_click(event):
+    """小地图点击/拖框 → 主画布跳转到对应内容点 (居中)。"""
+    if _wf_mini_map:
+        try:
+            _flow_canvas.minimap_to_view(wf_flow_canvas, _wf_mini_map, event.x, event.y)
+        except Exception:
+            pass
+        _wf_draw_minimap()
+    return "break"
+
+
+# ── P1-1 检查面板 ────────────────────────────────────────────────────
+def _wf_check_header():
+    """按 _wf_check_summary + 展开态刷新折叠摘要行 (▸/▾)。"""
+    if wf_flow_check_lbl is None:
+        return
+    mark = "▾" if _wf_check_expanded else "▸"
+    try:
+        wf_flow_check_lbl.configure(text="{} {}".format(mark, _wf_check_summary),
+                                    fg=_wf_check_color)
+    except Exception:
+        pass
+
+
+def _wf_refresh_check_panel(issues):
+    """P1-1: 用 analyze(g) 结果刷新检查面板 (折叠摘要 + 展开列表)。
+
+    列表项数恒等于 ``len(issues)`` (= ``len(flow_graph.analyze(g))``) —— A9 断言点;
+    每行 iid = ``issue_<k>``, 点击即以第 k 条 issue 的 ``nodes`` 定位高亮。
+    """
+    global _wf_check_issues, _wf_check_summary, _wf_check_color
+    _wf_check_issues = list(issues or [])
+    try:
+        e_n, w_n, i_n = _flow_graph.issue_summary(_wf_check_issues)
+    except Exception:
+        e_n = w_n = i_n = 0
+    if _wf_check_issues:
+        head = _wf_check_issues[0].get("message", "")
+        more = "" if len(_wf_check_issues) == 1 else " 等 {} 项".format(len(_wf_check_issues))
+        _wf_check_summary = "检查: 错误{} 警告{} 提示{} — {}{}".format(
+            e_n, w_n, i_n, head, more)
+        _wf_check_color = C.get("dg") if e_n else (C.get("wn") if w_n else C.get("fgm"))
+    else:
+        _wf_check_summary = "检查: 无问题"
+        _wf_check_color = C.get("sc", C.get("fgm"))
+    _wf_check_header()
+    if wf_check_tree is None:
+        return
+    try:
+        wf_check_tree.delete(*wf_check_tree.get_children())
+        for k, it in enumerate(_wf_check_issues):
+            lvl = str(it.get("level", "info"))
+            badge = _ISSUE_BADGE.get(lvl, "提示")
+            wf_check_tree.insert("", "end", iid="issue_{}".format(k),
+                                 text="[{}] {}".format(badge, it.get("message", "")),
+                                 tags=(lvl,))
+        for lvl, col in (("error", C.get("dg")), ("warning", C.get("wn")),
+                         ("info", C.get("fgm"))):
+            wf_check_tree.tag_configure(lvl, foreground=col or C.get("fgb"))
+    except Exception:
+        pass
+
+
+def _wf_toggle_check_panel(event=None):
+    """点击折叠摘要行: 展开/收起检查列表面板 (P1-1)。"""
+    global _wf_check_expanded
+    if wf_check_tree is None:
+        return "break"
+    _wf_check_expanded = not _wf_check_expanded
+    try:
+        if _wf_check_expanded:
+            wf_check_tree.grid()
+            wf_check_tree.tkraise()
+        else:
+            wf_check_tree.grid_remove()
+    except Exception:
+        pass
+    _wf_check_header()
+    return "break"
+
+
+def _wf_check_tree_click(event=None):
+    """点击第 k 行 → 高亮第 k 条 issue 的 ``nodes`` 全部节点并滚动定位 (A9)。"""
+    if wf_check_tree is None:
+        return
+    try:
+        sel = wf_check_tree.selection()
+    except Exception:
+        return
+    if not sel:
+        return
+    try:
+        k = int(str(sel[0]).split("_", 1)[1])
+    except Exception:
+        return
+    if 0 <= k < len(_wf_check_issues):
+        _wf_flow_highlight_nodes(_wf_check_issues[k].get("nodes") or [])
+
+
+# ── P1-5 大纲 ↔ 画布双向联动 ─────────────────────────────────────────
+def _wf_flow_highlight_nodes(nids):
+    """在画布给 nids 画选中环 (tag ``wfhl`` / ``wfsel_<nid>``) 并把首节点居中。
+
+    复用 P1-4/N5 的选中集合: 若最近一次 bind_interactions 状态可用, 同步
+    ``selected_nodes``; 不同步即回退为纯视觉高亮。
+    """
+    canvas = wf_flow_canvas
+    g = _wf_graph_edit
+    if canvas is None or g is None or not nids:
+        return
+    try:
+        canvas.delete("wfhl")
+    except Exception:
+        pass
+    color = (C.get("ac") if isinstance(C, dict) else None) \
+        or _FLOW_STYLE.get("edge_sel") or "#0078D4"
+    first = None
+    for nid in nids:
+        n = g.node(nid)
+        if n is None:
+            continue
+        if first is None:
+            first = n
+        try:
+            canvas.create_rectangle(n.x - 2, n.y - 2, n.x + n.w + 2, n.y + n.h + 2,
+                                    outline=color, width=2, dash=(3, 2),
+                                    tags=("wfhl", "wfsel_" + str(nid)))
+        except Exception:
+            pass
+    if first is not None:
+        try:
+            _flow_canvas.view_center(canvas, first.x + first.w / 2.0,
+                                     first.y + first.h / 2.0)
+        except Exception:
+            pass
+    st = _FLOW_INTERACT_ST
+    if isinstance(st, dict):
+        try:
+            st["selected_nodes"] = set(nids)
+        except Exception:
+            pass
+
+
+def _wf_flow_highlight_index(idx):
+    """大纲第 idx 行 (== 顶层 step 序号) → 画布对应节点高亮 (tag ``node_<idx>``)。
+
+    A10 行序假设: 渲染期 `index_tags = {n.id: "node_<i>" for i, n in enumerate(roots)}`
+    (见 `_wf_render_flow_canvas`), 即 tag 的序号 i 与 `g.roots()` 的枚举顺序**同源**;
+    大纲行序亦与顶层 steps 一一对应 —— 故 `roots[idx]` 的 id 必映射到 `node_<idx>`。
+    (roots 顺序在单次渲染内稳定, 无并发变更。)
+    """
+    g = _wf_graph_edit
+    if g is None or idx is None:
+        return
+    try:
+        roots = g.roots()
+    except Exception:
+        return
+    if 0 <= idx < len(roots):
+        _wf_flow_highlight_nodes([roots[idx].id])
+
+
+def _wf_select_row_for_idx(idx):
+    """画布 → 大纲: 选中第 idx 行并滚动可见 (置 _WF_SYNCING 防回环)。"""
+    global _WF_SYNCING
+    if wf_tree is None or idx is None:
+        return
+    try:
+        children = wf_tree.get_children()
+        if idx < 0 or idx >= len(children):
+            return
+        _WF_SYNCING = True
+        try:
+            wf_tree.selection_set(children[idx])
+            wf_tree.see(children[idx])
+        finally:
+            _WF_SYNCING = False
+    except Exception:
+        _WF_SYNCING = False
+
+
+def _wf_node_click(event, idx):
+    """画布节点单击: 补「画布 → 大纲」选中 + 画布高亮 (P1-5), 再做既有拖拽起始。"""
+    _wf_select_row_for_idx(idx)
+    _wf_flow_highlight_index(idx)
+    return _wf_drag_start(event, idx)
+
+
+def _wf_on_tree_select(event=None):
+    """大纲 → 画布 (P1-5/A10): 选中第 i 行 → 画布对应节点高亮 + 视口居中。"""
+    if _WF_SYNCING or wf_tree is None:
+        return
+    try:
+        sel = wf_tree.selection()
+        if not sel:
+            return
+        idx = wf_tree.index(sel[0])
+    except Exception:
+        return
+    _wf_flow_highlight_index(idx)
+
+
 # ── 语义别名 (宿主/自测按语义名引用; 原名保留以便逐行比对迁移) ──
 update_overflow = _wf_update_overflow
 on_wheel = _wf_on_wheel
@@ -1965,6 +2635,10 @@ def get_widgets():
         "wf_flow_frame": wf_flow_frame,
         "wf_flow_canvas": wf_flow_canvas,
         "wf_flow_scroll_y": wf_flow_scroll_y,
+        # WF-B2 新增 (P1-1/P1-2): 检查列表 / 悬浮工具条 / 小地图
+        "wf_flow_toolbar": wf_flow_toolbar,
+        "wf_minimap": wf_minimap,
+        "wf_check_tree": wf_check_tree,
         "_wf_show_flow": _wf_show_flow,
         "_wf_view_btn": _wf_view_btn,
         "_WF_LIB_ACTIONS": _WF_LIB_ACTIONS,

@@ -4,6 +4,8 @@
 
 把操作步骤写进一张 Excel 表格（或用「录制」跑一遍），剩下的交给电脑 —— 图像识别定位、窗口管理、OCR、浏览器自动化、工作流编排、NetLink 多机互联、定时任务与本地 AI 增强全部内置。单文件便携版，免安装，双击即用。
 
+> **近期增强**：**命令库（`Ctrl+K`）** 模糊搜索全部命令、**工作流控制流图**（端口连线 + 静态检查面板）、**无头 CLI 与 JSON 报告**（CI / 批量调度）、**可选依赖扩展**（应用内安装 / 启用 / 修复）、`import ACRPA` 无副作用的可测试入口，以及尺寸 Token / 字号与键盘可达性补齐。
+
 - 项目主页：[`index.html`](index.html) · English：[`index.en.html`](index.en.html)
 - 下载：[GitHub Release](https://github.com/yohoten/acrpa/releases/tag/v0.1.29.0) · [Gitee 发行版](https://gitee.com/yohoten/ACRPA/releases)
 
@@ -40,7 +42,7 @@
 - **窗口管理**：直接操作 Windows 窗口（激活 / 关闭 / 最小化 / 最大化 / 等待 / 相对坐标），无需图像识别，速度比找图快一个量级。
 - **OCR 文字识别**：识别文字、等待文字、点击文字，后端可选 Paddle / WinRT / Tesseract。
 - **浏览器自动化**（可选，需 `pip install playwright`）：打开网页、点击元素、填写表单、等待元素、截图、执行 JS、读写 Cookie。
-- **工作流编排**：多脚本串联 + 可视化流程图（节点 / 连线 / 拖拽）+ 流程控制命令（如果 / 循环 / 跳出）。
+- **工作流编排**：多脚本串联 + **控制流图（CFG）视图**（分层布局、端口拖拽连线、边选中 / `Delete` 删除、适应窗口与缩放、撤销重做）+ **静态检查面板**（不可达 / 孤立 / 悬挂出口 / 循环风险 / 路径爆炸 / 环路复杂度）+ 流程控制命令（如果 / 循环 / 跳出）。
 - **变量系统**：设置变量、读取剪贴板、字符串处理、数学运算，支持复杂数据处理。
 - **AI 增强**：视觉定位（AI 找图 / AI 识别界面）、智能重试、异常检测、自然语言调试。
 - **调试器**：断点 / 条件断点（标记旁显示表达式）/ 单步 / 变量监视 / 调用栈。
@@ -48,6 +50,10 @@
 - **定时执行**：多任务定时调度（一次 / 每天 / 每周），轮询间隔可配。
 - **深浅主题与 Mini Bar**：深色模式、Mini Bar 三形态折叠悬浮条、界面缩放（`ui_scale`）。
 - **代码扩展**：`Python` 命令执行 Python 代码（AST 预检 + 沙箱 + 三层超时 + 审计），权限分 `sandbox / trusted / full`。
+- **命令库（`Ctrl+K`）**：模糊搜索全部命令并按领域分组（与「命令速查」同源），回车即写入当前行。
+- **无头 CLI / JSON 报告**：`python run.py --script x.acrpas --json-report out.json --exit-code`，无需窗口即可执行，供 CI 与批量调度。
+- **可选依赖扩展**：设置窗口「扩展」卡片可安装 / 卸载 / 启用 / 禁用 / 修复可选依赖（首个上线扩展 `cv.match`）；命令以能力声明依赖，缺失时下拉显示 `⚠` 角标。
+- **可测试入口**：`import ACRPA` 不再建窗 / 起定时器，改由 `app.build()` 显式构建，解锁引擎与命令层单测。
 - **多设备互联（NetLink）**：内网多机实时监控 + 远程操控 + 脚本分发，纯标准库实现、零新增依赖。
 
 ![ACRPA 深色模式界面](img/image5.png)
@@ -141,6 +147,35 @@ python run.py
 
 **免源码方式**：从 Releases 下载 `ACRPA-v0.1.29-beta.exe`，双击直接运行，无需安装、无需 Python 环境。
 
+### 无头运行（CLI）
+
+给 `run.py` 传入 `--script` 即进入**无头模式**（不创建任何窗口），适合 CI、服务器定时批处理与 NetLink 远端执行：
+
+```bat
+python run.py --script demos\ok.acrpas --var n=21 --json-report out.json --exit-code
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `--script PATH` | 要运行的脚本（`.acrpas` / `.xls` / `.xlsx`）；**省略则照常启动图形界面** |
+| `--var K=V` | 预置变量，可重复（数值串自动转数字，其余保留字符串） |
+| `--json-report PATH` | 把执行报告写成 JSON（省略则打印到 stdout） |
+| `--exit-code` | 脚本失败时返回非零退出码（默认脚本失败也返回 0） |
+| `--quiet` | 只保留退出码，不打印进度 |
+
+退出码：`0` 成功；给了 `--exit-code` 且脚本失败为 `1`；用法错误为 `2`。JSON 报告结构：
+
+```json
+{
+  "script": "demos\\ok.acrpas", "started": "…", "finished": "…",
+  "duration_ms": 52, "status": "success",
+  "total_rows": 3, "executed_rows": 3, "failed_row": null, "error": null,
+  "rows": [{"index": 0, "cmd": "设置变量", "status": "ok", "message": ""}]
+}
+```
+
+> 无头模式使用 schema 默认值（**不读 `config.json`**），以保证 CI 结果确定；依赖图形会话的命令（找图 / 键鼠 / 窗口操作 / OCR / 浏览器）在无桌面会话下不可用。
+
 ### 版本管理
 
 版本号统一由项目根目录的 [`VERSION`](VERSION) 文件驱动：首行写版本号，其后可写多条下载直链（按顺序尝试）与一行 `sha256:...` 校验和。
@@ -192,7 +227,10 @@ python tools/bump_version.py --verify       # 扫描 src/ 确认无旧版本号�
 <a id="script-format"></a>
 ## 📄 脚本格式与命令总表
 
-脚本为 Excel 文件（`.xls`，**不支持 `.xlsx`**）：第 1 行为标题，第 3 行起为命令。
+脚本支持两种格式：
+
+- **`.acrpas`（JSON 一等格式，推荐纳入版本管理）**：`{"schema":1,"name":…,"rows":[{"cmd":…,"args":[9 个字符串]}],"vars":{},"images":[]}` —— 版本化 schema，与 `.xls` 双向兼容，便于脚本生成与 diff。
+- **`.xls` / `.xlsx`（遗留位置式 Excel）**：第 1 行为标题，第 3 行起为命令。**读**支持 `.xls` 与 `.xlsx`（`.xlsx` 依赖 `xlrd`）；**写**仅支持 `.xls`（`xlwt`）。
 
 | 列 | 字段 | 说明 |
 | --- | --- | --- |
@@ -573,6 +611,14 @@ ACRPA 自 v0.1.22 起支持 **DD 驱动**作为高性能输入后端：
 
 - 在「设置 → AI 增强」填写 `api_key`（或选择自定义提供商与 BaseURL）；密钥存入 Windows 凭据库，不写进 `config.json`。
 
+**命令下拉里出现 `⚠` 是什么意思？**
+
+- 表示该命令依赖的**可选能力当前未就绪**（未安装 / 装了但自检失败 / 被用户禁用）。到「设置 → 扩展」卡片可安装或修复；**启用 / 禁用需重启应用生效**。
+
+**如何在没有桌面的环境里跑脚本？**
+
+- 用无头 CLI：`python run.py --script x.acrpas --json-report out.json --exit-code`，详见上文「快速开始 → 无头运行（CLI）」。
+
 **NetLink 搜不到设备？**
 
 - 确认两端都在同一网段且已勾选「启用设备互联」；
@@ -586,7 +632,7 @@ ACRPA 自 v0.1.22 起支持 **DD 驱动**作为高性能输入后端：
 
 **入门**
 
-- [使用说明](使用说明.txt)
+- [快速开始（应用内使用说明，`res/help/00-快速开始.md`）](res/help/00-快速开始.md)
 - [脚本模板](template/脚本模板.xls)
 
 **NetLink 多设备互联**
@@ -602,6 +648,9 @@ ACRPA 自 v0.1.22 起支持 **DD 驱动**作为高性能输入后端：
 **扩展与其他**
 
 - [Python 代码扩展使用说明](docs/python扩展使用说明.md)
+- [工作流界面美化设计方案](docs/工作流界面美化设计方案.md)
+- [UI 美化设计方案](docs/UI美化设计方案.md) · [设置窗口优化设计方案](docs/设置窗口优化设计方案.md) · [执行控制 Tab 设计方案](docs/执行控制tab设计方案.md) · [底部常驻日志面板设计方案](docs/底部常驻日志面板重构设计方案.md)
+- [完善路线图（阶段性规划）](docs/ACRPA-完善路线图.md)
 - [版本发布说明](docs/releases/v0.1.29-beta.md)
 
 **脚本市场**
@@ -631,6 +680,13 @@ ACRPA 自 v0.1.22 起支持 **DD 驱动**作为高性能输入后端：
 
 <a id="changelog"></a>
 ## 🗒️ 更新日志
+
+- **v0.1.30（开发中 · 未发布）** —— 结构性完善三阶段落地，`run_tests --safe` 通过 52 / 失败 0 / 超时 0。
+
+  - **阶段一 · 稳定化**：找图缓存返回 `Point` 并纳入 `(图片, 精度, 区域, 灰度)` 缓存键 + 加锁；版本比较收敛为唯一实现（修复预发布号被解析成 `0.0.0` 导致更新检查永久失效）；引擎控制流测试接入 CI；停止语义强化（统一 `AbortSignal` 分段检查）；脚本保存原子化（临时文件 + `os.replace`，失败不截断）；三个「改了不生效」的设置项接线；NetLink 配对限流（全局 + IP 维度）；浏览器下载文件名净化。
+  - **阶段二 · 结构化**：`app.py` 入口拆分（`import ACRPA` 无副作用）；`ui/theme.py` + `ThemeBus`（删除「按中文文案嗅探语义色」）；工作流 Tab / 日志面板 / 执行控制栏出模块；设置窗口拆为门面 + 卡片；`.acrpas` JSON 一等格式 + 与 `.xls` 双向兼容；`ScriptTableModel` + 稳定行 ID；运行前校验（dry-run）与失败现场留存；命令 schema 驱动参数表单；工作流 CFG 化 A–C 期（图模型 + 提升 / 降级幂等 + 新画布）。
+  - **新增 · 可选依赖插件化**：Capability 四态注册表（`READY/MISSING/BROKEN/DISABLED`）+ 命令 `requires` 声明（68/68 全覆盖）；`extensions` 管理器（下载 → 校验 → 安全解压 → 原子落地 → 安装期自检 → 回滚 / 隔离）；首个上线扩展 `cv.match`。
+  - **阶段三 · 能力跃迁（本批）**：**命令库 `Ctrl+K`**（模糊搜索 + 命令分组）；**工作流 CFG D–E 期**（端口拖拽连线、边选中 / `Delete` 删除、`F` 适应窗口、`Ctrl+0` 重置缩放、`Ctrl+Z/Y` 撤销重做 + 静态检查面板）；**无头 CLI + JSON 报告**；**i18n 字符串目录**（先抽 42 条承重状态串）；**尺寸 Token + 对话框统一落位 + 标题栏键盘可达性**（`takefocus` / `Enter` / `Space`，字号下限 9pt）。
 
 - **v0.1.29-beta**（2026-10-01）**Beta 预发布 · 重新发布** —— 本次为**重新发布**：因 `v0.1.28-beta` 的 tag 名被 GitHub immutable release 策略永久保留、无法重建，改为新 tag `v0.1.29-beta` 发布；**沿用以 v0.1.28-beta 构建的二进制**（程序内自报版本仍为 `0.1.28-beta`），功能与 v0.1.28-beta 完全一致（NetLink 多设备互联 + 六项体验优化）。独立 EXE 已在 GitHub Release 提供下载（`ACRPA-v0.1.29-beta.exe`，14,680,412 字节）。完整说明见 [`docs/releases/v0.1.29-beta.md`](docs/releases/v0.1.29-beta.md)。
 

@@ -23,7 +23,6 @@
   消除「定义位置在后」的隐式闭包延迟解析问题 (原缺陷 P1-1)。
 · _do_save 顺序不变: _apply_map[key]() → state.save_config() → _flash_saved。
 """
-import importlib
 import os
 import types
 import tkinter
@@ -71,6 +70,27 @@ _nav_active_key = None   # 当前高亮的导航项 key
 # 卡片模块名 (顺序即导航与 grid 行序): cards/*.py
 _CARD_KEYS = ("exec", "ai", "sched", "record", "log", "system", "quick",
               "advanced", "netlink", "python", "market", "extensions")
+
+
+def _card_modules():
+    """静态导入 12 张设置卡模块 → {key: module}。
+
+    **必须是静态 import**：PyInstaller 只跟随静态可分析的 import 语句。
+    早期实现用 ``importlib.import_module("ui.settings.cards." + key)`` 动态拼接模块名，
+    打包（单文件）后这些子模块不会被纳入产物 → 设置窗口只剩左侧导航、右侧内容空白
+    （源码运行不受影响，故难以在开发期发现）。此函数放在函数体内，PyInstaller 同样
+    能静态发现 ``from ui.settings.cards import ...``，无循环导入风险。
+    """
+    from ui.settings.cards import (
+        exec as m_exec, ai as m_ai, sched as m_sched, record as m_record,
+        log as m_log, system as m_system, quick as m_quick,
+        advanced as m_advanced, netlink as m_netlink, python as m_python,
+        market as m_market, extensions as m_extensions,
+    )
+    return {"exec": m_exec, "ai": m_ai, "sched": m_sched, "record": m_record,
+            "log": m_log, "system": m_system, "quick": m_quick,
+            "advanced": m_advanced, "netlink": m_netlink, "python": m_python,
+            "market": m_market, "extensions": m_extensions}
 
 
 def update_sched_next_label(text):
@@ -597,8 +617,9 @@ def open_settings_window():
 
     # ── 逐卡构建 + 注册 apply (顺序即 grid 行序; quick 无 apply) ──
     handles = {}
+    modules = _card_modules()
     for key in _CARD_KEYS:
-        mod = importlib.import_module("ui.settings.cards." + key)
+        mod = modules[key]
         h = mod.build(_inner, ctx)
         handles[key] = h
         if key != "quick":

@@ -32,6 +32,27 @@ _PROJECT_MODULES = [
     "netlink_window",
     # Python 扩展 (自定义代码沙箱 + AcrpaAPI)
     "acrpa_api", "py_sandbox",
+    # 阶段二/三 新增：入口拆分 / 数据与校验 / 能力与扩展 / i18n / CLI / UI 层
+    "settings_window", "dialogs", "help_content", "help_window",
+    "version_info", "snippets", "mini_bar", "tray",
+    "ai_client", "ai_enhance", "browser_backend",
+    "market_window", "market_upload", "accounts",
+    "flow_graph", "script_io", "script_model", "script_validate",
+    "capabilities", "i18n", "cli",
+    "extensions", "extensions.manifest", "extensions.package",
+    "extensions.manager", "extensions.index", "extensions.loader",
+    # UI 层（含设置卡片）—— 单文件打包必须显式纳入：
+    # 设置卡片曾按模块名字符串运行时导入（importlib.import_module），PyInstaller
+    # 静态分析看不到 → 打包后设置窗口只剩左侧导航、右侧内容空白。现已改为静态
+    # 导入，此处再显式声明作双保险（新增 UI 模块请同步追加）。
+    "ui", "ui.theme", "ui.log_dock", "ui.exec_bar", "ui.workflow_view",
+    "ui.flow_canvas", "ui.command_palette", "ui.param_form",
+    "ui.settings", "ui.settings.window", "ui.settings.cards",
+    "ui.settings.cards.exec", "ui.settings.cards.ai", "ui.settings.cards.sched",
+    "ui.settings.cards.record", "ui.settings.cards.log", "ui.settings.cards.system",
+    "ui.settings.cards.quick", "ui.settings.cards.advanced",
+    "ui.settings.cards.netlink", "ui.settings.cards.python",
+    "ui.settings.cards.market", "ui.settings.cards.extensions",
 ]
 
 # ── 核心依赖 hidden imports (仅导入真正用到的子模块) ──

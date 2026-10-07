@@ -14,7 +14,7 @@ develop-eggs/
 #     否则宁可报错也不会静默装上旧包。因此建议同时把 sha256 写进 VERSION
 #     （python tools/make_release.py --write-sha256）。
 # 发布包由 tools/make_release.py 生成，务必与 VERSION 同一次提交、同版本。
-dist/*.exe
+# dist/*.exe
 dist/*.spec
 dist/*.pkg
 dist/*.sha256

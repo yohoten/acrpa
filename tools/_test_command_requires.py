@@ -2,7 +2,7 @@
 """commands 可选依赖声明回归 (路线图 阶段二新增项①)。
 
 断言:
-  R1 向后兼容    : list_all() 仍返回四元组且 list_names() 与之一致 (68 条)
+  R1 向后兼容    : list_all() 仍返回四元组且 list_names() 与之一致 (88 条)
   R2 register    : register(requires=) 末位新增且默认兼容 (旧调用不传 → ())
   R3 契约        : requires() 未声明返回 (); list_requires() 为 dict 快照
   R4 覆盖率 ≥95% : requires(name) != () 的命令数 / 总数 ≥ 0.95
@@ -51,7 +51,8 @@ def main():
     check(total > 0 and all(len(t) == 4 for t in allc),
           "list_all() 仍返回四元组 ({} 条)".format(len(allc)))
     check(names == [t[0] for t in allc], "list_names() 与 list_all() 顺序一致")
-    check(total == 68, "命令总数 = 68 (实际 {})".format(total))
+    # L2 动作库扩充后 68 → 88 (新增 20 条, 见方案文档 §5 L2 清单)
+    check(total == 88, "命令总数 = 88 (实际 {})".format(total))
 
     # ── R2 register(requires=) 默认兼容 ──
     print("\n── R2 register(requires=) 默认兼容 ──")
@@ -114,11 +115,24 @@ def main():
     check(all(commands.requires(n) == ("browser.playwright",) for n in browser),
           "浏览器系列全部声明 browser.playwright")
 
+    # L2 新增的外部能力 (方案文档 §5 L2 requires 列)
+    expect_l2 = {
+        "结束进程": ("proc.kill",),
+        "HTTP 请求": ("net.http",),
+        "电源操作": ("power",),
+        "音量控制": ("audio",),
+        "设置窗口样式": ("win32",),
+    }
+    for name, want in expect_l2.items():
+        check(commands.requires(name) == want,
+              "L2 {} → {}".format(name, want), str(commands.requires(name)))
+
     # ── R6 默认 core ──
     print("\n── R6 其余命令默认 core ──")
     non_external = [n for n in names if commands.requires(n) == ("core",)]
-    check(len(non_external) == total - 30,
-          "core 命令 = 总数 - 30 条外部能力命令 (实际 {} 条 core)".format(
+    # 外部能力命令: 浏览器 22 + OCR 3 + 找图 4 + 写入 1 = 30, L2 再 +5 = 35
+    check(len(non_external) == total - 35,
+          "core 命令 = 总数 - 35 条外部能力命令 (实际 {} 条 core)".format(
               len(non_external)))
     check(commands.requires("设置变量") == ("core",), "设置变量 → core")
     check(commands.requires("如果") == ("core",), "如果 → core")

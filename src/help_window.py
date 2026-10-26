@@ -52,6 +52,17 @@ except Exception:
     help_content = None
     _CONTENT_OK = False
 
+# 图片加载层（可选）：res/bg-ac.ico 需经 Pillow 转 PhotoImage。
+# 不可用时 _bg_image 为 None，「联系与支持」章节只是少一张图，功能完全不受影响。
+try:
+    from ui import bg_image as _bg_image
+except Exception:
+    _bg_image = None
+
+# 「联系与支持」章节末尾空白处展示的单张图标（不平铺、不放大）
+_CONTACT_SECTION_ID = "contact"
+_CONTACT_ICON_NAME = "bg-ac.ico"
+
 # 内置资源：脚本编辑模板（相对 res/；res/ 已被整体打包，冻结首启释放到 <exe>/res）
 _TEMPLATE_RES_REL = "template/ACRPA脚本编辑模板.xlsx"
 
@@ -133,6 +144,7 @@ class _HelpWindow(object):
         self._dl_btn = None
         self._search_lbl = None
         self._scrolls = []
+        self._contact_photo = None
         self._nav_frame = None
         self._txt_frame = None
         self._bar_frame = None
@@ -635,6 +647,62 @@ class _HelpWindow(object):
         if vis:
             self.select_section(vis[0].id)
 
+    # ── 「联系与支持」章节空白处的单张图标（不平铺、不放大）─────
+    def _res_dir(self):
+        """res/ 目录：优先 dialogs.RES_DIR（已处理 frozen/源码两种情形）。"""
+        try:
+            import dialogs
+            res = getattr(dialogs, "RES_DIR", "") or ""
+            if res:
+                return res
+        except Exception:
+            pass
+        try:
+            if getattr(sys, "frozen", False):
+                return os.path.join(os.path.dirname(sys.executable), "res")
+        except Exception:
+            pass
+        return os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "res")
+
+    def _insert_contact_image(self):
+        """在正文末尾空白处插入**单张**图标（居中、不平铺、绝不放大）。
+
+        只对「联系与支持」章节生效；图片层不可用/加载失败时静默跳过，
+        其它章节与所有交互完全不受影响。
+        """
+        if _bg_image is None or self.text is None:
+            return
+        try:
+            width = int(self.text.winfo_width())
+        except Exception:
+            width = 0
+        margin = scaled(48)
+        # 仅在正文区比图还窄时才等比缩小（绝不放大）
+        max_w = (width - margin) if width > margin * 2 else None
+        photo = None
+        try:
+            photo = _bg_image.load_icon_photo(
+                self._res_dir(), _CONTACT_ICON_NAME, max_width=max_w,
+                master=self.win)
+        except Exception:
+            photo = None
+        if photo is None:
+            return
+        try:
+            self.text.tag_configure("contact_img", justify="center")
+        except Exception:
+            pass
+        try:
+            self.text.insert("end", "\n")
+            idx0 = self.text.index("end-1c")
+            self.text.image_create("end", image=photo, align="center",
+                                   pady=scaled(10))
+            self.text.tag_add("contact_img", idx0, self.text.index("end"))
+            self._contact_photo = photo      # 保活，否则 PhotoImage 被 GC → 空白
+        except Exception:
+            self._contact_photo = None
+
     # ── 渲染 ────────────────────────────────────────────────────
     def _render_by_id(self, sid):
         s = self._section_by_id(sid)
@@ -668,6 +736,9 @@ class _HelpWindow(object):
                 self._render_blocks(section.body)
             else:
                 self.text.insert("end", (section.body or "") + "\n", "para")
+        # 「联系与支持」：正文下方空白处补一张单张图标（不平铺）
+        if getattr(section, "id", "") == _CONTACT_SECTION_ID:
+            self._insert_contact_image()
         self.text.config(state="disabled")
         # 命中高亮
         q = self.search_var.get() if self.search_var is not None else ""

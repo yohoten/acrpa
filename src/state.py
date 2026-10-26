@@ -1,5 +1,5 @@
 """Shared state for ACRPA — no tkinter/pyautogui dependencies."""
-import os, sys, json, threading, ctypes
+import os, sys, json, threading, ctypes, time, shutil
 
 # ── Execution state ──
 running = False; quit2 = False; quit3 = False; has_script = False
@@ -35,9 +35,12 @@ _config_schema = [
     # AI 增强配置
     ("ai_smart_retry",  False,          bool),   # AI 智能重试
     ("ai_anomaly_detect", False,        bool),   # AI 异常检测
-    # 计划任务增强 
+    # 计划任务增强
     ("sched_tasks",     [],             list),   # 多任务列表 [{name,script,period,enabled,...}]
     ("sched_poll_interval", 30,         int),    # 轮询间隔(秒)
+    # ── 调度器 L0/L1 (统一 Task + 触发器注册表) ──
+    ("scheduler_backup_keep", 10,       int),    # 任务库备份保留份数 (0=不备份)
+    ("default_boot_delay_sec", 30,      int),    # 新建 on_boot 触发器的默认延迟(秒)
     # 系统增强 
     ("auto_start",      False,          bool),   # 开机自启动
     ("minimize_to_tray", False,         bool),   # 关闭时最小化到托盘
@@ -172,6 +175,23 @@ _config_schema = [
     ("help_geometry",           "",     str),   # 帮助窗口几何记忆 (空=默认居中)
     ("help_maximized",          False,  bool),  # 帮助窗口最大化状态 (启动恢复)
     ("help_modal",              False,  bool),  # 帮助窗口是否模态 (默认非模态)
+    # ── L4 UI/交互 (方案文档 §5 L4 #1/#2/#5) ──
+    # 全部为新增键且有默认值：旧 config.json 缺键无损，未知键不报错 (§8.5)。
+    ("tray_perf_enabled",       True,   bool),   # 托盘悬停 tooltip 显示实时性能
+    ("tray_perf_interval_sec",  2.0,    float),  # 性能 tooltip 刷新限流间隔(秒, 1-5)
+    ("tray_power_delay_sec",    60,     int),    # 托盘电源类操作默认延迟(秒, 0-86400)
+    ("reminder_pos",            "center", str),  # 提醒浮窗位置: center / bottom_right
+    ("reminder_opacity",        92,     int),   # 提醒浮窗不透明度(%): 30-100
+    ("reminder_autoclose_sec",  0,      int),   # 提醒浮窗自动关闭秒数(0=不自动关闭)
+    ("reminder_snooze_min",     5,      int),   # 提醒浮窗「稍后提醒」默认分钟数
+    # ── L5 工程化与稳定性 (方案文档 §5 L5 #6 / #9) ──
+    # 危险动作统一确认闸门: True(默认)=电源操作/永久删除/结束进程在**脚本执行路径**
+    # 上先经 engine 的确认闸门 (无 GUI 一律拒绝); False=跳过该闸门, 回落到各 handler
+    # 自身的既有护栏 (file_ops/sys_ops 仍会拒绝无确认回调的调用)。
+    ("confirm_dangerous",            True, bool),
+    ("confirm_dangerous_timeout_sec", 15,  int),   # 确认框无响应视为拒绝(秒, 1-600)
+    ("history_max_mb",               5,    int),   # 运行历史单文件上限(MB, 超出轮转)
+    ("history_keep_files",           5,    int),   # 运行历史轮转文件保留份数
 ]
 
 # ── Config globals (initialised from schema defaults) ──
@@ -268,12 +288,129 @@ _skip_next_row = False      # 跳过下一行执行 (右键菜单)
 _run_to_row = 0             # 运行到指定行 (0=无)
 _exec_timings = {}          # 行执行耗时记录 {row_num: {cmd, elapsed, success, time}}
 
-# ── Paths ──
-if getattr(sys, "frozen", False):
-    CONFIG_PATH = os.path.join(os.path.dirname(sys.executable), "config.json")
-else:
-    CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(
-        os.path.abspath(__file__))), "config.json")
+# ═══════════════════════════════════════════════════════════════════════
+# Paths —— 用户数据落点 (L5 #5 绿色便携标记)
+# ═══════════════════════════════════════════════════════════════════════
+# **唯一解析点**: 其它模块一律读 state.CONFIG_PATH / state.log_dir() /
+# state.screenshot_dir() / state.history_path()，不得自行拼数据目录。
+#
+# 规则:
+#   · 程序目录存在 `portable.flag`(零字节或任意内容) → 用户数据全部落在
+#     `<程序目录>/userdata/` (U 盘 / 绿色版场景, 不污染宿主机);
+#   · 无标记 → 与既有行为**完全一致** (config.json 在程序目录旁边)。
+#
+# 向后兼容: 无标记时 CONFIG_PATH 与改动前逐字节相同 (frozen=exe 同级,
+# 源码=项目根), 因此 screenshots/ 等以 dirname(CONFIG_PATH) 推导的目录也不变。
+
+_PACKAGE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PORTABLE_FLAG_NAME = "portable.flag"
+USERDATA_DIR_NAME = "userdata"
+
+CONFIG_PATH = ""      # 下方 _resolve_data_paths() 启动期一次性计算
+APP_DIR = ""          # 程序目录 (frozen=exe 同级, 源码=项目根)
+DATA_ROOT = ""        # 用户数据根 (便携=userdata/, 否则=程序目录)
+USERDATA_DIR = ""     # <程序目录>/userdata (便携模式才实际使用)
+PORTABLE = False      # 是否便携模式
+
+
+def _compute_app_dir():
+    """→ 程序目录 (不创建任何目录, 零副作用)。"""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return _PACKAGE_DIR
+
+
+def _resolve_data_paths():
+    """一次性计算全部数据路径 (导入期即调用, 幂等)。"""
+    global APP_DIR, USERDATA_DIR, PORTABLE, DATA_ROOT, CONFIG_PATH
+    APP_DIR = _compute_app_dir()
+    USERDATA_DIR = os.path.join(APP_DIR, USERDATA_DIR_NAME)
+    try:
+        PORTABLE = os.path.isfile(os.path.join(APP_DIR, PORTABLE_FLAG_NAME))
+    except Exception:
+        PORTABLE = False
+    DATA_ROOT = USERDATA_DIR if PORTABLE else APP_DIR
+    CONFIG_PATH = os.path.join(DATA_ROOT, "config.json")
+    return CONFIG_PATH
+
+
+def is_portable():
+    """是否以绿色便携模式运行 (程序目录存在 portable.flag)。"""
+    return bool(PORTABLE)
+
+
+def userdata_dir():
+    """便携模式的用户数据根 (<程序目录>/userdata)。"""
+    return USERDATA_DIR
+
+
+def log_dir():
+    """日志目录: 便携=userdata/logs, 否则=程序目录/logs (与改动前一致)。"""
+    return os.path.join(DATA_ROOT, "logs")
+
+
+def screenshot_dir():
+    """截图/失败现场目录 (与 dirname(CONFIG_PATH)/screenshots 等价)。"""
+    return os.path.join(DATA_ROOT, "screenshots")
+
+
+def history_path():
+    """运行历史 history.jsonl 的落点 (与日志同目录, 便于一起清理/备份)。
+
+    · 便携模式 : <程序目录>/userdata/logs/history.jsonl
+    · 非便携   : <程序目录>/logs/history.jsonl
+    §5 L5 #9 允许 ``logs/history.jsonl`` 或 ``userdata/history.jsonl`` 两种落点,
+    这里选 logs/ 下的原因: 与 acrpa_*.log 同在日志目录, 用户排查时一处可见,
+    且日志清理策略 (LOG_RETENTION_DAYS) 天然覆盖它。
+    """
+    return os.path.join(log_dir(), "history.jsonl")
+
+
+def migrate_portable_data():
+    """首次以便携模式启动时, 把程序目录里的旧用户数据复制到 userdata/。
+
+    规则 (L5 #5 验收: 切换后旧数据不丢):
+      · **只复制不删除**, 目标已存在一律不覆盖 (迁移失败绝不清空任何东西);
+      · 只迁移 config.json + logs/ 与 screenshots/ 下尚未存在的小文件;
+      · 非便携模式直接返回 0 (零行为变化)。
+    返回已迁移的文件数。
+    """
+    if not PORTABLE:
+        return 0
+    moved = 0
+    try:
+        os.makedirs(USERDATA_DIR, exist_ok=True)
+    except Exception:
+        return 0
+    # ① config.json (最关键: 任务库/配置都在里面)
+    try:
+        src = os.path.join(APP_DIR, "config.json")
+        dst = CONFIG_PATH
+        if os.path.isfile(src) and not os.path.exists(dst):
+            shutil.copy2(src, dst)
+            moved += 1
+    except Exception:
+        pass
+    # ② logs/ 与 screenshots/: 逐文件复制, 目标存在即跳过
+    for name in ("logs", "screenshots"):
+        try:
+            src_dir = os.path.join(APP_DIR, name)
+            dst_dir = os.path.join(USERDATA_DIR, name)
+            if not os.path.isdir(src_dir):
+                continue
+            os.makedirs(dst_dir, exist_ok=True)
+            for entry in os.listdir(src_dir):
+                src_file = os.path.join(src_dir, entry)
+                dst_file = os.path.join(dst_dir, entry)
+                if os.path.isfile(src_file) and not os.path.exists(dst_file):
+                    shutil.copy2(src_file, dst_file)
+                    moved += 1
+        except Exception:
+            pass
+    return moved
+
+
+_resolve_data_paths()
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -379,6 +516,103 @@ def _cred_delete():
     cred_delete(_CRED_TARGET)
 
 
+def backups_dir():
+    """任务库备份目录: <数据目录>/backups（写入前备份的唯二落点之一）。
+
+    · 非便携 : <程序目录>/backups/
+    · 便携   : <程序目录>/userdata/backups/
+
+    实现上与 ``dirname(CONFIG_PATH)/backups`` 等价 —— 测试替换 CONFIG_PATH 后
+    备份会自动落到临时目录，不会把噪音写回真实工作区根目录。
+    """
+    return os.path.join(os.path.dirname(CONFIG_PATH) or ".", "backups")
+
+
+def _task_backup_prefix():
+    return os.path.basename(CONFIG_PATH) + ".bak."
+
+
+def _task_backup_folder():
+    """→ 备份落点（确保目录存在）；创建失败返回空串（调用方据此跳过备份）。"""
+    folder = backups_dir()
+    try:
+        if not os.path.isdir(folder):
+            os.makedirs(folder, exist_ok=True)
+    except Exception:
+        return ""
+    return folder if os.path.isdir(folder) else ""
+
+
+def prune_task_backups():
+    """清理超量任务库备份（启动时调用）；失败仅忽略。
+
+    备份命名: <库文件名>.bak.YYYYMMDD-HHMMSS，落在 <数据目录>/backups/ 下。
+    目录不存在视为"尚无备份"，直接返回（不在只读/首次启动路径上强建目录）。
+    """
+    try:
+        keep = int(globals().get("SCHEDULER_BACKUP_KEEP", 10) or 0)
+        if keep < 0:
+            keep = 0
+        folder = backups_dir()
+        if not os.path.isdir(folder):
+            return
+        prefix = _task_backup_prefix()
+        names = sorted(n for n in os.listdir(folder) if n.startswith(prefix))
+        for name in names[:max(0, len(names) - keep)]:
+            try:
+                os.remove(os.path.join(folder, name))
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+def _newest_backup_path():
+    """→ 最新一份备份的绝对路径；没有则 None。"""
+    try:
+        folder = backups_dir()
+        prefix = _task_backup_prefix()
+        names = sorted(n for n in os.listdir(folder) if n.startswith(prefix))
+        return os.path.join(folder, names[-1]) if names else None
+    except Exception:
+        return None
+
+
+def backup_task_library():
+    """任务库写盘前备份：把旧 config.json 复制到 <数据目录>/backups/ 下（保留 N 份）。
+
+    备份文件名仍为 ``<库文件名>.bak.YYYYMMDD-HHMMSS``，只是落点从数据目录根
+    移入 backups/ 子目录，避免工作区根目录被开发/测试期间的备份刷屏。
+    零新依赖（shutil 文件复制，不用 zip）；备份失败绝不影响保存流程。
+    内容与最新一份备份完全相同时跳过 —— 避免高频保存把有用的历史备份挤掉。
+    """
+    try:
+        if not os.path.exists(CONFIG_PATH):
+            return
+        keep = int(globals().get("SCHEDULER_BACKUP_KEEP", 10) or 0)
+        if keep <= 0:
+            return
+        newest = _newest_backup_path()
+        if newest:
+            try:
+                if os.path.getsize(newest) == os.path.getsize(CONFIG_PATH):
+                    with open(newest, "rb") as f1, open(CONFIG_PATH, "rb") as f2:
+                        if f1.read() == f2.read():
+                            return   # 内容未变，已有等价备份
+            except Exception:
+                pass
+        folder = _task_backup_folder()
+        if not folder:
+            return
+        dst = os.path.join(folder, "{}{}".format(
+            _task_backup_prefix(), time.strftime("%Y%m%d-%H%M%S")))
+        if not os.path.exists(dst):
+            shutil.copy2(CONFIG_PATH, dst)
+        prune_task_backups()
+    except Exception:
+        pass
+
+
 def load_config():
     """Load configuration from CONFIG_PATH, falling back to schema defaults.
 
@@ -399,17 +633,21 @@ def load_config():
     globals()["API_KEY"] = _cred_read() or ""
     if "api_key" in c and c.get("api_key"):
         _save_config_plain("api_key", "")  # 迁移后立即清空明文
+    # 启动时清理超量任务库备份 (L0-⑤)
+    prune_task_backups()
 
 
 def save_config():
     """Persist current config to CONFIG_PATH and notify listeners.
 
     API Key 不写入 config.json（明文风险），改存 Windows 凭据库。
+    写盘前先备份旧任务库 (L0-⑤)，备份失败不影响保存。
     """
     try:
         data = {key: globals()[key.upper()] for key, _, _ in _config_schema}
         api_key = data.pop("api_key", "")
         data["api_key"] = ""
+        backup_task_library()
         with open(CONFIG_PATH, "w") as f:
             json.dump(data, f, indent=2)
         if api_key:

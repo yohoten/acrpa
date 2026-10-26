@@ -387,6 +387,12 @@ def check(timeout=_TIMEOUT):
             info = raw
 
     if info is None:
+        # L5 #5: 离线/无网络只记 warning, 绝不阻塞启动 (调用方仍会收到 network_error)
+        try:
+            utils.log1("[更新] 检查更新失败（离线或来源不可达）: {}".format(
+                " | ".join(errors[:2]) or "无可用来源"), "warning")
+        except Exception:
+            pass
         return _empty_result("network_error", " | ".join(errors[:3]))
 
     # 校验和来源: Release API 的 asset digest → 远端清单里【同版本】的 sha256。
@@ -586,8 +592,13 @@ def _sha256_of(path):
     return h.hexdigest()
 
 
-def _verify_file(path, expect_sha256="", expect_size=0):
-    """校验下载产物 → (ok, 原因)。拒绝空包 / HTML 错误页 / 校验和不符。"""
+def _verify_file(path, expect_sha256="", expect_size=0, require_sha=True):
+    """校验下载产物 → (ok, 原因)。拒绝空包 / HTML 错误页 / 校验和不符。
+
+    **L5 #5 强制校验**: ``require_sha=True``(默认) 时「清单没有 sha256」= 直接拒绝,
+    不再像旧实现那样"没有校验和就跳过校验"(元数据缺失即可绕过的供应链缺口)。
+    只有明确传入 ``require_sha=False`` 的调用方 (自测 / 纯体积校验) 才允许跳过。
+    """
     if not os.path.exists(path):
         return False, "文件不存在"
     actual = os.path.getsize(path)
@@ -602,11 +613,14 @@ def _verify_file(path, expect_sha256="", expect_size=0):
     if not any(head.startswith(m) for m in _MAGIC):
         return False, "不是有效的安装包 (疑似错误页或半截文件)"
 
+    if require_sha and not str(expect_sha256 or "").strip():
+        return False, ("更新清单未提供 sha256 校验和，已拒绝安装"
+                       "（供应链完整性要求：无校验和 = 不安装）")
     if expect_sha256:
         got = _sha256_of(path)
-        if got.lower() != expect_sha256.lower():
+        if got.lower() != str(expect_sha256).lower():
             return False, "sha256 校验失败 (期望 {}... 实际 {}...)".format(
-                expect_sha256[:12], got[:12])
+                str(expect_sha256)[:12], got[:12])
     return True, ""
 
 
@@ -646,6 +660,15 @@ def download_package(info, dest_dir=None, progress=None, cancel=None,
     cancel()                     返回 True 时中止下载
     """
     target_dir = dest_dir or os.path.join(get_app_dir(), "updates")
+    # L5 #5: 清单没有 sha256 → 连下载都不做（避免下完才发现无法校验）
+    if not str((info or {}).get("sha256") or "").strip():
+        msg = ("更新清单未提供 sha256 校验和，已拒绝下载安装"
+               "（请等待发布方补齐，或手动下载后自行核对）")
+        try:
+            utils.log1("[更新] " + msg, "warning")
+        except Exception:
+            pass
+        return False, msg
     try:
         os.makedirs(target_dir, exist_ok=True)
     except Exception as e:
@@ -866,6 +889,150 @@ def can_self_update():
     return True, ""
 
 
+def backup_path_for(exe_path=None):
+    """→ 当前 exe 的备份路径 ``<exe>.bak.<VERSION>``（不创建文件）。"""
+    exe = exe_path or (sys.executable if getattr(sys, "frozen", False) else "")
+    if not exe:
+        return ""
+    return "{}.bak.{}".format(exe, VERSION or "unknown")
+
+
+def create_exe_backup(exe_path=None):
+    """把当前主程序复制为 ``<exe>.bak.<VERSION>`` → (ok, 路径或原因)。
+
+    只在打包环境 (frozen) 生效; 源码运行没有"可替换的 exe", 直接返回 False。
+    L5 #5: 安装前必须留一份可回滚的旧 exe。
+    """
+    if not getattr(sys, "frozen", False) and exe_path is None:
+        return False, "源码运行模式无需备份 exe"
+    exe = exe_path or sys.executable
+    if not os.path.isfile(exe):
+        return False, "找不到当前可执行文件: {}".format(exe)
+    bak = backup_path_for(exe)
+    if not bak:
+        return False, "无法确定备份路径"
+    try:
+        if os.path.isfile(bak) and os.path.getsize(bak) == os.path.getsize(exe):
+            return True, bak                     # 同版本备份已存在, 不重复拷贝
+        shutil.copy2(exe, bak)
+        try:
+            utils.log1("[更新] 已备份当前版本: {}".format(os.path.basename(bak)), "info")
+        except Exception:
+            pass
+        return True, bak
+    except Exception as e:
+        try:
+            utils.log1("[更新] 备份当前版本失败: {}".format(e), "warning")
+        except Exception:
+            pass
+        return False, "备份失败: {}".format(e)
+
+
+def list_backups(exe_path=None):
+    """→ 可回滚的备份列表 ``[(version, path, mtime)]``（新的在前）。"""
+    exe = exe_path or (sys.executable if getattr(sys, "frozen", False) else "")
+    if not exe:
+        return []
+    folder = os.path.dirname(os.path.abspath(exe)) or "."
+    prefix = os.path.basename(exe) + ".bak."
+    out = []
+    try:
+        for name in os.listdir(folder):
+            if not name.startswith(prefix):
+                continue
+            path = os.path.join(folder, name)
+            if not os.path.isfile(path):
+                continue
+            out.append((name[len(prefix):], path, os.path.getmtime(path)))
+    except Exception:
+        return []
+    out.sort(key=lambda item: item[2], reverse=True)
+    return out
+
+
+_ROLLBACK_PS1 = r"""# ACRPA 回滚助手 — 等待主程序退出后把 .bak 覆盖回去并重启
+$ErrorActionPreference = 'Continue'
+$src     = $env:ACRPA_RB_SRC
+$target  = $env:ACRPA_RB_TARGET
+$logPath = $env:ACRPA_RB_LOG
+$waitPid = 0
+[void][int]::TryParse($env:ACRPA_PID, [ref]$waitPid)
+
+function Write-Log([string]$m) {
+    try { "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $m" | Out-File -FilePath $logPath -Append -Encoding UTF8 } catch {}
+}
+
+if ($waitPid -gt 0) {
+    for ($i = 0; $i -lt 120; $i++) {
+        $p = Get-Process -Id $waitPid -ErrorAction SilentlyContinue
+        if (-not $p) { break }
+        Start-Sleep -Milliseconds 500
+    }
+}
+try {
+    if (-not (Test-Path $src)) { Write-Log "rollback source missing: $src"; exit 1 }
+    Copy-Item -LiteralPath $src -Destination $target -Force
+    Write-Log "rollback ok: $src -> $target"
+    Start-Process -FilePath $target
+} catch {
+    Write-Log ("rollback failed: " + $_.Exception.Message)
+    exit 1
+}
+"""
+
+
+def rollback(exe_path=None, restart=True):
+    """把主程序回滚到最近一次自更新前的备份 → (ok, 说明)。
+
+    实现与 :func:`apply_update` 同款: 写一个独立 PowerShell 助手, 等本进程退出后
+    用 ``.bak.<版本>`` 覆盖 exe 并重启, 因此**不需要**管理员权限, 也不会出现
+    "替换正在运行的 exe" 的文件占用问题。调用方收到 (True, _) 后应尽快退出。
+    """
+    exe = exe_path or (sys.executable if getattr(sys, "frozen", False) else "")
+    if not exe:
+        return False, "源码运行模式无可回滚的 exe"
+    backups = list_backups(exe)
+    if not backups:
+        return False, "没有可回滚的备份（{}*.bak.* 不存在）".format(os.path.basename(exe))
+    version, src, _mtime = backups[0]
+    if not os.path.isfile(exe):
+        return False, "找不到当前可执行文件: {}".format(exe)
+    updates_dir = os.path.join(get_app_dir(), "updates")
+    try:
+        os.makedirs(updates_dir, exist_ok=True)
+        ps1 = os.path.join(updates_dir, "rollback.ps1")
+        with open(ps1, "w", encoding="utf-8") as f:
+            f.write(_ROLLBACK_PS1)
+    except Exception as e:
+        return False, "无法写入回滚助手: {}".format(e)
+    env = dict(os.environ)
+    env.update({
+        "ACRPA_RB_SRC": src,
+        "ACRPA_RB_TARGET": exe,
+        "ACRPA_PID": str(os.getpid()),
+        "ACRPA_RB_LOG": os.path.join(updates_dir, "rollback.log"),
+    })
+    flags = 0
+    detached = getattr(subprocess, "DETACHED_PROCESS", 0)
+    new_group = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    if detached or new_group:
+        flags = detached | new_group
+    try:
+        subprocess.Popen(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
+             "-File", ps1],
+            env=env, close_fds=True, creationflags=flags, cwd=updates_dir,
+        )
+    except Exception as e:
+        return False, "无法启动回滚助手: {}".format(e)
+    try:
+        utils.log1("[更新] 已安排回滚到 {}（{}）".format(version, os.path.basename(src)),
+                   "warning")
+    except Exception:
+        pass
+    return True, "已安排回滚到版本 {}，程序退出后生效（重启后生效）".format(version)
+
+
 def apply_update(package_path, restart=True, expected_version="",
                  download_url="", sha256=""):
     """启动自更新助手: 等待本进程退出 → 替换主程序与 VERSION → 重启。
@@ -898,6 +1065,15 @@ def apply_update(package_path, restart=True, expected_version="",
         os.makedirs(updates_dir, exist_ok=True)
     except Exception as e:
         return False, "无法创建更新目录: {}".format(e)
+
+    # L5 #5: 安装前**必须**留一份旧 exe 备份 (失败也不阻断——已校验过 sha256,
+    # 但备份能让我们在"新版本起不来"时有一条明确的回滚路径)。
+    ok_bak, bak_or_reason = create_exe_backup()
+    if not ok_bak:
+        try:
+            utils.log1("[更新] 未生成 exe 备份: {}".format(bak_or_reason), "warning")
+        except Exception:
+            pass
 
     ps1 = os.path.join(updates_dir, "apply_update.ps1")
     try:

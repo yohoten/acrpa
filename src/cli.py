@@ -3,7 +3,8 @@
 
 目标形态::
 
-    python run.py --script <PATH> [--var K=V ...] [--json-report OUT.json] [--exit-code] [--quiet]
+    python run.py --script <PATH> [--var K=V ...] [-p0:值 ...] [ex:值]
+                  [--json-report OUT.json] [--exit-code] [--quiet]
 
 公开契约
 --------
@@ -57,25 +58,64 @@ JSON 报告 schema (UTF-8, 2 空格缩进)::
    会话; 浏览器 (playwright) / OCR 等可选后端未安装时按其能力声明判失败。这些不是本模块
    能兜底的 —— 本模块只保证「引擎主循环可在不创建任何 Tk 窗口的前提下运行」。
 
+L5 追加开关 (方案文档 §5 L5 #6)
+------------------------------
+* ``--workflow <PATH>``: **无头执行工作流**，输出与 ``--script`` 完全一致的
+  JSON 报告结构（``script`` 字段填工作流的绝对路径；``rows`` 为空数组，因为
+  工作流解释器不产生逐行轨迹）。
+* ``--exec-task <ID>``: 触发一个已存在的计划任务。本模块只负责**解析**；
+  实际转发/启动由 ``run.py`` 完成（需要 GUI 与单实例 IPC），故 ``main()``
+  见到该开关时按用法错误返回 2（正常情况下 run.py 已先行处理）。
+* ``--rollback``: 把上次自更新备份的 exe 还原（见 ``updater.rollback``）。
+
 退出码
 ------
 * ``0`` 成功 (或脚本失败但未给 --exit-code)
 * ``1`` 脚本失败且给了 --exit-code
 * ``2`` 用法错误 (未给 --script / 脚本不存在 / 载入失败 / --var 格式非法 / 报告写入失败)
+
+L3 变量插值的两个注入通道 (互不污染)
+-----------------------------------
+* ``--var K=V``  → ``engine.variables``: 影响脚本逻辑 (设置变量/如果/数学运算),
+  同时也能被 ``{var:K}`` 与 ``${K}`` 取到;
+* ``-p0:值`` .. ``-p9:值`` / ``ex:值`` → ``engine.script_args``: 只影响文本替换
+  (``{arg:p0}`` / ``{arg:ex}``), **不**进入变量表, 因此不改变条件求值结果。
+  (对齐 zTasker 的 ``-p0:xxx`` 位置参数约定; 分隔符 ``:`` 与 ``=`` 都接受)
 """
 import json
 import os
+import re
 import sys
 from datetime import datetime
 
-_USAGE = ("用法: python run.py --script <PATH> [--var K=V ...] "
-          "[--json-report OUT.json] [--exit-code] [--quiet]")
+_USAGE = ("用法: python run.py (--script <PATH> | --workflow <PATH> | --exec-task <ID>) "
+          "[--var K=V ...] [-p0:值 ...] [ex:值] "
+          "[--json-report OUT.json] [--exit-code] [--quiet] [--rollback]")
 
 # 引擎内部处理、不经 execute() 的块结构标记 (与 engine.execute_script 的分支一致)
 _BLOCK_CMDS = frozenset(["如果", "否则", "结束如果", "循环开始", "循环结束", "跳出循环"])
 
 # 需要取值的选项
-_VALUE_OPTS = ("--script", "--var", "--json-report")
+_VALUE_OPTS = ("--script", "--var", "--json-report", "--workflow", "--exec-task")
+
+# L3: 位置参数槽 —— -p0:xxx .. -p9:xxx 与 ex:xxx (对齐 zTasker 风格)
+_SLOT_RE = re.compile(r"^-(p[0-9])[:=](.*)$", re.S)
+_EX_SLOT_RE = re.compile(r"^ex[:=](.*)$", re.S)
+
+
+def _slot_of(arg):
+    """``-pN:值`` / ``-pN=值`` / ``ex:值`` → ``(键, 值)``; 非槽位返回 None。
+
+    键就是 ``{arg:...}`` 里用的名字 (``p0`` .. ``p9`` / ``ex``), 全小写。
+    """
+    text = "" if arg is None else str(arg)
+    m = _SLOT_RE.match(text)
+    if m:
+        return m.group(1), m.group(2)
+    m = _EX_SLOT_RE.match(text)
+    if m:
+        return "ex", m.group(1)
+    return None
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -83,20 +123,29 @@ _VALUE_OPTS = ("--script", "--var", "--json-report")
 # ═══════════════════════════════════════════════════════════════════════
 
 def parse_args(argv):
-    """解析 CLI 参数 → ``dict``; 未给 ``--script`` 时返回 ``None``。
+    """解析 CLI 参数 → ``dict``; 未给任何动作开关时返回 ``None``。
 
-    返回: ``{"script","vars","json_report","exit_code","quiet"}``。
+    返回: ``{"script","workflow","exec_task","rollback","vars","args",
+    "json_report","exit_code","quiet"}``。
+
+    L5: 新增 ``--workflow`` / ``--exec-task`` / ``--rollback``。只要给了其中
+    任意一个（或 ``--script``）就返回 dict，因此 ``run.py`` 的「有值就走 CLI
+    分支」判定保持不变; 三者互斥（同时给出时按 script > workflow > exec_task
+    > rollback 的顺序取第一个非空）。
 
     约定:
       · 支持 ``--opt value`` 与 ``--opt=value`` 两种写法;
       · ``--var`` 可重复出现 (累积, 重复键以后者为准);
+      · ``-p0:值`` .. ``-p9:值`` / ``ex:值`` 写入 ``args`` (键 p0..p9 / ex);
+        值为空时把下一个不以 '-' 开头的 argv 当作它的值;
       · 未知开关 (含路线图提到的 ``--headless``) 一律忽略 —— 保持对 GUI 参数与
         未来扩展的容忍, 也避免 argparse 在这里抛 SystemExit 影响 run.py 回退分支;
       · 缺值 (如末尾孤立的 ``--script``) 视为「未给脚本」→ 返回 None。
 
     副作用: 无 (不打印 / 不导入 engine / 不建窗)。
     """
-    opts = {"script": None, "vars": [], "json_report": None,
+    opts = {"script": None, "workflow": None, "exec_task": None,
+            "rollback": False, "vars": [], "args": {}, "json_report": None,
             "exit_code": False, "quiet": False}
 
     args = [str(a) for a in (argv or [])]
@@ -104,6 +153,7 @@ def parse_args(argv):
     while i < n:
         arg = args[i]
         key, sep, inline = arg.partition("=")
+        slot = _slot_of(arg)
         if key in _VALUE_OPTS:
             if sep:
                 value = inline
@@ -114,17 +164,34 @@ def parse_args(argv):
                 value = ""          # 缺值 → 交给 main 判为用法错误
             if key == "--script":
                 opts["script"] = value
+            elif key == "--workflow":
+                opts["workflow"] = value
+            elif key == "--exec-task":
+                opts["exec_task"] = value
             elif key == "--var":
                 opts["vars"].append(value)
             else:
                 opts["json_report"] = value
+        elif slot is not None:
+            slot_key, slot_value = slot
+            if slot_value == "" and i + 1 < n and not args[i + 1].startswith("-"):
+                i += 1
+                slot_value = args[i]
+            opts["args"][slot_key] = slot_value
         elif arg == "--exit-code":
             opts["exit_code"] = True
+        elif arg == "--rollback":
+            opts["rollback"] = True
         elif arg in ("--quiet", "-q"):
             opts["quiet"] = True
         i += 1
 
-    if not opts["script"]:
+    if opts["workflow"] == "":
+        opts["workflow"] = None          # 缺值 → 视为未给
+    if opts["exec_task"] == "":
+        opts["exec_task"] = None
+    if not (opts["script"] or opts["workflow"] or opts["exec_task"]
+            or opts["rollback"]):
         return None
     return opts
 
@@ -258,6 +325,96 @@ def _build_rows_report(rows, records, last_visited):
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# L5: 运行历史 / 工作流 / 回滚
+# ═══════════════════════════════════════════════════════════════════════
+
+def _record_history(kind, target, duration_ms, failed, failed_row, rows_total,
+                    detail=""):
+    """把一次运行写进 history.jsonl（失败静默，绝不影响退出码）。"""
+    try:
+        import history
+        history.record(kind=kind, target=target, trigger="cli",
+                       duration_ms=duration_ms,
+                       status="failed" if failed else "success",
+                       failed_row=failed_row, rows_total=rows_total,
+                       mode="headless", detail=detail)
+    except Exception:
+        pass
+
+
+def _run_rollback(out):
+    """``--rollback``: 把上次自更新备份的 exe 还原 → 退出码 0/2。"""
+    try:
+        import updater
+    except Exception as e:
+        _say(out, "[ACRPA CLI] 无法加载 updater: {}: {}".format(type(e).__name__, e))
+        return 2
+    ok, msg = updater.rollback()
+    _say(out, "[ACRPA CLI] 回滚{}: {}".format("成功" if ok else "失败", msg))
+    return 0 if ok else 2
+
+
+def _run_workflow_headless(opts, out):
+    """``--workflow``: 无头执行工作流 → 与 --script 一致的报告 → 退出码 0/1/2。"""
+    quiet = bool(opts.get("quiet"))
+    path = opts.get("workflow")
+    if not path or not os.path.isfile(path):
+        _say(out, "[ACRPA CLI] 用法错误: 工作流不存在: {}".format(path))
+        return 2
+    path_abs = os.path.abspath(path)
+    started = datetime.now()
+    fatal = None
+    try:
+        import state
+        import workflow as wf_mod
+        wf_def = wf_mod.parse_workflow(path_abs)
+        state.quit2 = False
+        state.quit3 = True
+        wf_mod.workflow_engine.run_workflow(wf_def, os.path.dirname(path_abs))
+    except Exception as e:
+        fatal = "{}: {}".format(type(e).__name__, e)
+    finished = datetime.now()
+    failed = fatal is not None
+    report = {
+        "script": path_abs,                     # 与 --script 结构一致: 执行目标放这里
+        "kind": "workflow",
+        "started": started.isoformat(timespec="seconds"),
+        "finished": finished.isoformat(timespec="seconds"),
+        "duration_ms": int((finished - started).total_seconds() * 1000),
+        "status": "failed" if failed else "success",
+        "total_rows": 0,                        # 工作流解释器不产出逐行轨迹
+        "executed_rows": 0,
+        "failed_row": None,
+        "error": fatal,
+        "rows": [],
+    }
+    if not quiet:
+        _say(out, "[ACRPA CLI] 工作流: {} → {} ({} ms)".format(
+            path_abs, report["status"], report["duration_ms"]))
+        if failed:
+            _say(out, "[ACRPA CLI] 错误: {}".format(fatal))
+    text = json.dumps(report, ensure_ascii=False, indent=2)
+    if opts.get("json_report"):
+        try:
+            _write_report(opts["json_report"], text)
+        except Exception as e:
+            _say(out, "[ACRPA CLI] 报告写入失败 ({}): {}: {}".format(
+                opts["json_report"], type(e).__name__, e))
+            _record_history("workflow", path_abs, report["duration_ms"], True,
+                            None, 0, fatal or "报告写入失败")
+            return 2
+        if not quiet:
+            _say(out, "[ACRPA CLI] JSON 报告: {}".format(os.path.abspath(opts["json_report"])))
+    elif not quiet:
+        _say(out, text)
+    _record_history("workflow", path_abs, report["duration_ms"], failed,
+                    None, 0, fatal or "")
+    if failed and opts.get("exit_code"):
+        return 1
+    return 0
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # 主入口
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -276,8 +433,18 @@ def main(argv, *, stdout=None):
 
     opts = parse_args(argv)
     if opts is None:
-        _say(out, "[ACRPA CLI] 用法错误: 缺少 --script")
+        _say(out, "[ACRPA CLI] 用法错误: 缺少 --script / --workflow / --exec-task")
         _say(out, _USAGE)
+        return 2
+
+    # ── L5: 先处理不需要「加载脚本」的三个动作 ──
+    if opts.get("rollback"):
+        return _run_rollback(out)
+    if opts.get("script") is None and opts.get("workflow"):
+        return _run_workflow_headless(opts, out)
+    if opts.get("script") is None and opts.get("exec_task"):
+        # run.py 应已先行拦截; 走到这里说明被直接调用了 (测试/嵌入)
+        _say(out, "[ACRPA CLI] --exec-task 由 run.py 转交给运行中的实例执行")
         return 2
 
     script = opts["script"]
@@ -325,11 +492,26 @@ def main(argv, *, stdout=None):
     if variables:
         eng.variables.update(variables)
 
+    # -pN:/ex: → engine.script_args ({arg:pN} / {arg:ex}); 与 --var 完全隔离
+    cli_args = opts.get("args") or {}
+    try:
+        eng.script_args.clear()
+    except Exception:
+        pass
+    if cli_args:
+        try:
+            eng.script_args.update(cli_args)
+        except Exception:
+            pass
+
     if not quiet:
         _say(out, "[ACRPA CLI] 脚本: {} ({} 行)".format(script_abs, len(rows)))
         if variables:
             _say(out, "[ACRPA CLI] 预置变量: {}".format(
                 ", ".join("{}={}".format(k, variables[k]) for k in sorted(variables))))
+        if cli_args:
+            _say(out, "[ACRPA CLI] 位置参数: {}".format(
+                ", ".join("{}={}".format(k, cli_args[k]) for k in sorted(cli_args))))
 
     trace = _RowTrace(rows, out=out, quiet=quiet)
     fatal = None
@@ -383,11 +565,17 @@ def main(argv, *, stdout=None):
         except Exception as e:
             _say(out, "[ACRPA CLI] 报告写入失败 ({}): {}: {}".format(
                 opts["json_report"], type(e).__name__, e))
+            _record_history("script", script_abs, report["duration_ms"], True,
+                            failed_row, report["total_rows"], "报告写入失败")
             return 2
         if not quiet:
             _say(out, "[ACRPA CLI] JSON 报告: {}".format(os.path.abspath(opts["json_report"])))
     elif not quiet:
         _say(out, text)          # 未给 --json-report: 同一份报告打到 stdout (便于管道捕获)
+
+    # L5 #9: 运行历史（脱敏后追加一行；写盘失败不影响退出码）
+    _record_history("script", script_abs, report["duration_ms"], failed,
+                    failed_row, report["total_rows"], error or "")
 
     if failed and opts["exit_code"]:
         return 1

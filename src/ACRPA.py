@@ -67,6 +67,9 @@ from ui import theme as ui_theme
 # 日志面板 (阶段二第 3 项第 1 步): 底部常驻日志面板整体抽到 src/ui/log_dock.py。
 # 本文件只保留「转发别名」(rz/_tlog/scroll/_log_*) 与构建期的 get_* 取回。
 from ui import log_dock as ui_log_dock
+# 背景图合成 (res/bg-ac.ico): 主窗口「待机背景」与帮助窗口 40% 常驻背景共用。
+# 纯 Pillow 合成 + 惰性 import, 不可用时返回 None (静默降级), 不影响启动。
+from ui import bg_image as ui_bg_image
 # 执行控制栏 (阶段二第 3 项第 2 步): 运行控制条的构建 + 行为函数 + 换肤订阅整体抽到
 # src/ui/exec_bar.py。本文件只保留「转发别名」(btn_* / script_name_var / _update_exec_buttons
 # 等) 与构建期的 get_widgets() 取回; 执行核心 (main_run/stop_execution/toggle_pause/
@@ -100,6 +103,13 @@ def _ensure_tray():
                        on_stop=_tray_stop,
                        on_open_settings=_tray_open_settings,
                        on_open_scheduler=_tray_open_scheduler)
+    # L4 (§5 L4 #5): 提醒浮窗宿主注入 —— reminder 不 import 本模块（避免循环依赖），
+    # 只接收根窗口；托盘「快速提醒」也经同一入口弹窗。
+    try:
+        import reminder
+        reminder.register_reminder_api(root=root)
+    except Exception as _e:                   # noqa: BLE001
+        log1("提醒模块注入失败: {}".format(_e), "warning")
 
 def _tray_run():
     """托盘菜单：执行全部"""
@@ -1410,6 +1420,11 @@ def _refresh_theme():
         style.configure("Exec.Horizontal.TProgressbar", thickness=8)
     except Exception:
         pass
+    # 待机背景图: 底色基线随主题变化 → 清合成缓存并按新 C["bgc"] 重绘 (仅待机态重绘)
+    try:
+        _idle_bg_retheme()
+    except Exception:
+        pass
     # 旧实现此处向 C 注入 old_sc/old_dg/old_wn/old_ac 供下次切换比对;
     # 现改用局部旧快照 _prev, 不再污染主题色表 C。
 
@@ -1910,6 +1925,7 @@ def _cmd_add_row():
     # Scroll to the new row
     tree.see(tree.get_children()[-1])
     log1("已添加新行")
+    _sync_idle_bg()
 
 def _cmd_edit_row_dialog():
     """「编辑行」对话框: 命令下拉 + ui.param_form 参数表单 (针对当前选中行)。
@@ -2003,6 +2019,7 @@ def _cmd_edit_row_dialog():
         sd.cmd_type = commands.strip_display_badge(cmd_var.get())
         sd.args = _pstate["get"]() if _pstate["get"] else list(sd.args)
         _update_row_inplace(idx)
+        _sync_idle_bg()
         _close()
 
     bar = tkinter.Frame(win, bg=C["bgc"])
@@ -2128,6 +2145,7 @@ def _editor_load_xls(fp):
     except Exception as e:
         log1("加载失败: {}".format(e), "error")
         messagebox.showerror("加载失败", str(e))
+    _sync_idle_bg()
 
 # Command-type color map
 _CMD_COLORS = {
@@ -2240,6 +2258,7 @@ def _cmd_new():
     edit_file_label.config(text="未保存")
     log1("已创建新脚本")
     from utils import show_toast; show_toast(root, "已创建新脚本", "success")
+    _sync_idle_bg()
 
 def _cmd_open():
     if state._editor_modified and state._editor_rows:
@@ -2255,6 +2274,7 @@ def _cmd_open():
         _editor_load_xls(fp)
         _add_recent_script(fp)
         from utils import show_toast; show_toast(root, "已加载: {}".format(os.path.basename(fp)), "success")
+        _sync_idle_bg()
 
 def _cmd_save():
     """Save current script to disk (.acrpas → JSON, 其它 → .xls)."""
@@ -2284,6 +2304,7 @@ def _cmd_save():
                 log1("版本快照失败: {}".format(e), "error")
             from utils import show_toast
             show_toast(root, "✓ 脚本已保存 ({} 行)".format(len(state._editor_rows)), "success")
+            _sync_idle_bg()
         except ImportError:
             messagebox.showerror("错误","需要安装 xlwt: pip install xlwt")
         except Exception as e:
@@ -2317,6 +2338,7 @@ def _cmd_save_as():
                 log1("版本快照失败: {}".format(e), "error")
             from utils import show_toast
             show_toast(root, "已另存为: {}".format(os.path.basename(fp)), "success")
+            _sync_idle_bg()
         except ImportError:
             messagebox.showerror("错误","需要安装 xlwt: pip install xlwt")
         except Exception as e:
@@ -2388,6 +2410,7 @@ def _insert_snippet_rows(rows):
         state._editor_rows.extend(_clone_snippet_rows(rows))
         _editor_sync_to_tree()
         log1("已插入片段 ({} 行)".format(len(rows)))
+        _sync_idle_bg()
         return
     mode = _ask_insert_mode(len(state._editor_rows))
     if not mode:
@@ -2404,6 +2427,7 @@ def _insert_snippet_rows(rows):
         state._editor_rows[:] = _clone_snippet_rows(rows)
     _editor_sync_to_tree()
     log1("已插入片段 ({} 行, {})".format(len(rows), mode))
+    _sync_idle_bg()
 
 
 def _save_selection_as_snippet(default_category="我的"):
@@ -2780,6 +2804,7 @@ def _edit_cell():
 
     _inline_edit_widget.place(x=x, y=y, width=w + 4, height=h + 2)
     _inline_edit_widget.focus_set()
+    _sync_idle_bg()   # 进入内联编辑 = 已退出待机态 (背景层让位给真实表格)
 
     def _save_inline(event=None):
         global _inline_edit_widget
@@ -2797,6 +2822,7 @@ def _edit_cell():
         _update_row_inplace(idx)
         w.destroy()
         _inline_edit_widget = None
+        _sync_idle_bg()
 
     def _cancel_inline(event=None):
         global _inline_edit_widget
@@ -3209,6 +3235,7 @@ def _market_on_install(xls_path):
         _editor_load_xls(xls_path)
         from utils import show_toast
         show_toast(root, "脚本已导入: {}".format(os.path.basename(xls_path)), "success")
+        _sync_idle_bg()
     except Exception as e:
         log1("市场脚本导入失败: {}".format(e), "error")
         from utils import show_toast
@@ -3507,6 +3534,7 @@ def _on_recording_done():
         state._editor_rows.append(sd)
     _editor_sync_to_tree()
     log1("已从录制导入 {} 条命令".format(len(state.recorded_actions)))
+    _sync_idle_bg()
     from utils import show_toast; show_toast(root, "录制完成 ({} 条)".format(len(state.recorded_actions)), "success")
 
 # ======================================================================
@@ -3602,6 +3630,16 @@ def _periodic():
                 tags = list(tree.item(children[ni],"tags"))
                 if "running" not in tags: tags.append("running"); tree.item(children[ni],tags=tags)
         _pc["hl"] = hl; _pc["hl_old"] = hl
+    # 待机背景兜底轮询: exec_bar / netlink / scheduler 等跨模块写入点无法回调本文件
+    # 的 _sync_idle_bg, 这里每 8 轮 (≈0.8s) 校正一次显隐。_sync_idle_bg 幂等且
+    # 状态/尺寸未变时不做任何重绘, 不会有持续开销。
+    try:
+        _idle_tick = int(_pc.get("idle_bg_tick", 0)) + 1
+        _pc["idle_bg_tick"] = _idle_tick
+        if _idle_tick % 8 == 0:
+            _sync_idle_bg()
+    except Exception:
+        pass
     _periodic._cache = _pc
     if is_recording:
         n = len(state.recorded_actions)
@@ -3706,6 +3744,10 @@ def _check_update(status=None):
 # 启用 state.on_config_change 机制: 配置保存后自动重建快捷键映射、同步 engine 参数、刷新主题
 _HOTKEY_ACTIONS = {}   # {action: (mods_set, vk)} — 由 _rebuild_hotkey_specs() 重建
 _hotkey_prev = {}      # 边沿检测: {action: bool}，避免按住时重复触发
+# 任务级热键表 (L1-5): {(frozenset(mods), vk): (task_id, 任务名, "run"|"stop")}
+_TASK_HOTKEYS = {}
+_task_hotkey_prev = {}
+_task_hotkey_sig = ()   # 任务热键签名：变化才重建，避免每次保存都重置边沿状态
 # 「停止录制」热键 (P0-7 接线): 同款解析 + 独立边沿检测状态
 _RECORD_STOP_SPEC = None   # (mods_set, vk) 或 None(未配置/解析失败)
 _recstop_prev = False      # 边沿检测: 避免按住时每 200ms 重复触发
@@ -3758,6 +3800,78 @@ def _rebuild_hotkey_specs():
     # 用户配置的「停止录制」热键 (默认 Ctrl+Alt+F12)；None = 不参与判定
     _RECORD_STOP_SPEC = _parse_hotkey_spec(getattr(state, "RECORDING_STOP_HOTKEY", ""))
     _recstop_prev = False
+    # 内建热键表变了下游的任务热键冲突判定也要跟着变 → 一并重建
+    _rebuild_task_hotkeys()
+
+
+def _task_hotkey_signature():
+    """任务级热键签名 (任务/键位文本变化时才重建，避免重置边沿检测状态)。"""
+    sig = []
+    try:
+        for t in state.SCHED_TASKS:
+            if not isinstance(t, dict):
+                continue
+            tid = str(t.get("id") or "")
+            for spec in (t.get("triggers") or []):
+                if isinstance(spec, dict) and str(spec.get("kind")) == "hotkey":
+                    sig.append((tid, str(spec.get("spec") or "")))
+            if t.get("hotkey_spec"):
+                sig.append((tid, str(t.get("hotkey_spec"))))
+            if t.get("stop_hotkey"):
+                sig.append((tid + "#stop", str(t.get("stop_hotkey"))))
+    except Exception:
+        pass
+    return tuple(sorted(sig))
+
+
+def _rebuild_task_hotkeys():
+    """重建任务热键表：hotkey 触发器 → 运行该任务；stop_hotkey → 停止当前执行。
+
+    冲突检测（只告警 + 忽略该绑定，绝不误触发）：
+      ① 与内建 run/pause/stop 或「停止录制」热键相同；
+      ② 两个任务绑定了同一个键。
+    """
+    global _TASK_HOTKEYS, _task_hotkey_prev, _task_hotkey_sig
+    _task_hotkey_sig = _task_hotkey_signature()
+    table = {}
+    builtin = {}
+    for action, parsed in _HOTKEY_ACTIONS.items():
+        builtin[(frozenset(parsed[0]), parsed[1])] = "内建热键 {}".format(action)
+    if _RECORD_STOP_SPEC:
+        builtin[(frozenset(_RECORD_STOP_SPEC[0]), _RECORD_STOP_SPEC[1])] = "停止录制热键"
+    try:
+        tasks = list(state.SCHED_TASKS)
+    except Exception:
+        tasks = []
+    for t in tasks:
+        if not isinstance(t, dict):
+            continue
+        tid = t.get("id")
+        tname = t.get("name") or tid
+        bindings = []
+        for spec in (t.get("triggers") or []):
+            if isinstance(spec, dict) and str(spec.get("kind")) == "hotkey":
+                bindings.append((str(spec.get("spec") or ""), "run"))
+        if t.get("hotkey_spec"):
+            bindings.append((str(t.get("hotkey_spec")), "run"))
+        if t.get("stop_hotkey"):
+            bindings.append((str(t.get("stop_hotkey")), "stop"))
+        for text, action in bindings:
+            parsed = _parse_hotkey_spec(text)
+            if not parsed:
+                continue
+            key = (frozenset(parsed[0]), parsed[1])
+            if key in builtin:
+                log1("任务热键与{}冲突，已忽略: {} → {}".format(
+                    builtin[key], text, tname), "warning")
+                continue
+            if key in table:
+                log1("任务热键重复，已忽略: {} → {} (已被 {} 占用)".format(
+                    text, tname, table[key][1]), "warning")
+                continue
+            table[key] = (tid, tname, action)
+    _TASK_HOTKEYS = table
+    _task_hotkey_prev = {k: False for k in table}
 
 
 # ── 配置变更监听器: 保存配置后自动同步运行时状态 ──
@@ -3791,6 +3905,11 @@ def _on_config_changed(data, changed):
                                       "recording_stop_hotkey")):
             _rebuild_hotkey_specs()
             log1("全局快捷键配置已更新")
+        if "sched_tasks" in changed:
+            # 任务库变化 (含 hotkey/stop_hotkey 字段) → 仅在签名变化时重建
+            if _task_hotkey_signature() != _task_hotkey_sig:
+                _rebuild_task_hotkeys()
+                log1("任务热键表已更新 ({} 项)".format(len(_TASK_HOTKEYS)))
     except Exception as e:
         log1("配置监听器处理失败: {}".format(e), "warning")
 
@@ -3836,6 +3955,25 @@ def _hotkey_poll():
                     log1("热键触发: {}".format(action))
                     root.after(0, _hotkey_executors[action])
             _hotkey_prev[action] = now
+
+        # ── 任务级热键 (L1-5): 与内建热键同款边沿检测; 冲突项已在重建时告警忽略 ──
+        for tkey, (tid, tname, taction) in list(_TASK_HOTKEYS.items()):
+            tmods, tvk = tkey
+            try:
+                tpressed = all(
+                    ctypes.windll.user32.GetAsyncKeyState(m) & 0x8000 for m in tmods)
+                tnow = bool(tpressed and
+                            (ctypes.windll.user32.GetAsyncKeyState(tvk) & 0x8000))
+            except Exception:
+                tnow = False
+            if tnow and not _task_hotkey_prev.get(tkey):
+                if taction == "stop":
+                    log1("任务停止热键触发: {}".format(tname))
+                    root.after(0, stop_execution)
+                else:
+                    log1("任务热键触发: {}".format(tname))
+                    root.after(0, lambda t=tid: sched.run_task_now(t, main_run))
+            _task_hotkey_prev[tkey] = tnow
     except Exception: pass
     root.after(200, _hotkey_poll)
 
@@ -3857,6 +3995,203 @@ def _setup_scroll_bindings():
 
 # 注意: mainloop() 调用已移至 run.py,避免重复调用
 # root.mainloop()
+
+
+# ======================================================================
+# 编辑区「待机背景图」(res/bg-ac.ico)
+#   · 待机 = 未打开/未新建脚本 且 编辑器零行; 此时在脚本表格的原位置叠一层
+#     背景图 (Label), 同时把 tree_frame 暂挂 (grid_remove)。
+#   · 一旦出现操作 (打开/新建/导入/增删行/内联编辑/点击选中编辑区…), 背景层
+#     隐藏、tree_frame 复位 (grid()), 布局与改动前**完全一致**。
+#   · 纯显示层: 不碰 tree / state._editor_rows 的任何数据与销毁逻辑, 零数据风险。
+#   · 图片由 ui_bg_image 预合成 (Tk 控件无 alpha); 任一环节失败即静默降级为
+#     不显示 (回退原来的空表格), 绝不抛异常阻断启动。
+# ======================================================================
+_IDLE_BG = {
+    "label": None,      # 背景 Label (与 tree_frame 同格叠放)
+    "photo": None,      # 保活的 PhotoImage (不保活会白屏)
+    "enabled": True,    # 特性开关 (PIL/图片不可用 → False, 永久降级)
+    "shown": False,     # 当前是否已显示背景层
+    "size": None,       # 上次合成的像素尺寸 (w, h)
+    "after": None,      # <Configure> 节流的 after id
+}
+_IDLE_BG_NAME = "bg-ac.ico"
+# 主窗口待机背景的不透明度: 图标本身是 256x256 的暗灰 logo (均值 alpha≈0.5)。
+# 背景图**单张居中、等比自适应（绝不放大、不平铺）**; 0.55 与图标自身 alpha
+# 相乘后约 27%, 既能"看得出是背景图", 又不至于压过工具条/图例的视觉层级。
+_IDLE_BG_ALPHA = 0.55
+
+
+def _is_editor_idle():
+    """待机判据: 尚未打开/新建脚本 且 编辑器零行。
+
+    刻意**不用** state._editor_modified 判断待机 (空编辑器也可能被标 modified)。
+    """
+    try:
+        if bool(getattr(state, "has_script", False)):
+            return False
+        if getattr(state, "filename", None):
+            return False
+        return not state._editor_rows
+    except Exception:
+        return False
+
+
+def _idle_bg_disable(reason=""):
+    """永久关闭待机背景特性 (静默降级: 不显示背景, 表格照常可用)。"""
+    holder = _IDLE_BG
+    if not holder.get("enabled"):
+        return
+    holder["enabled"] = False
+    holder["photo"] = None
+    holder["size"] = None
+    try:
+        label = holder.get("label")
+        if label is not None and label.winfo_exists():
+            label.grid_remove()
+    except Exception:
+        pass
+    try:
+        tree_frame.grid()
+    except Exception:
+        pass
+    holder["shown"] = False
+    if reason:
+        try:
+            log1("待机背景图已降级为不显示: {}".format(reason), "warning")
+        except Exception:
+            pass
+
+
+def _idle_bg_target_size():
+    """待机背景的合成尺寸 (像素)。
+
+    背景层显示时 tree_frame 已被 grid_remove, 它的 winfo_width/height 停在旧值,
+    因此此时必须量背景层自己 (它随窗口缩放); 反之量真实的脚本表格。
+    两者都还是 1px (布局未落定) 时返回 (0, 0), 由调用方跳过本次绘制。
+    """
+    holder = _IDLE_BG
+    label = holder.get("label")
+    cands = []
+    if holder.get("shown") and label is not None:
+        cands.append(label)
+    cands.append(tree_frame)
+    if label is not None and not holder.get("shown"):
+        cands.append(label)
+    for w in cands:
+        try:
+            ww, hh = int(w.winfo_width()), int(w.winfo_height())
+        except Exception:
+            continue
+        if ww > 1 and hh > 1:
+            return (ww, hh)
+    return (0, 0)
+
+
+def _sync_idle_bg(force=False):
+    """按「待机 / 非待机」切换背景层与 tree_frame 的显隐 (幂等, 可随时调用)。
+
+    force=True 时忽略尺寸/图片缓存强制重新合成 (主题切换用)。
+    """
+    holder = _IDLE_BG
+    holder["after"] = None
+    label = holder.get("label")
+    if label is None or not holder.get("enabled"):
+        return
+    try:
+        if not label.winfo_exists():
+            return
+    except Exception:
+        return
+
+    if not _is_editor_idle():
+        if holder.get("shown"):
+            try:
+                label.grid_remove()
+            except Exception:
+                pass
+            try:
+                tree_frame.grid()      # grid_remove 会记住原 grid 选项, 复位布局一致
+            except Exception:
+                pass
+            holder["shown"] = False
+        return
+    # 待机态: 取目标像素尺寸; 尚未完成布局 (尺寸 1px) 时等 <Configure> 再来
+    w, h = _idle_bg_target_size()
+    if w <= 1 or h <= 1:
+        return
+
+    if force or holder.get("photo") is None or holder.get("size") != (w, h):
+        try:
+            bgc = C.get("bgc", "#FFFFFF")
+        except Exception:
+            bgc = "#FFFFFF"
+        try:
+            photo = ui_bg_image.load_bg_photo(
+                RES_DIR, _IDLE_BG_NAME, alpha=_IDLE_BG_ALPHA,
+                bg_color=bgc, size=(w, h), master=root)
+        except Exception:
+            photo = None
+        if photo is None:
+            try:
+                _why = ui_bg_image.get_last_error() or "未知原因"
+            except Exception:
+                _why = "未知原因"
+            _idle_bg_disable("{} 加载/合成失败({})".format(_IDLE_BG_NAME, _why))
+            return
+        try:
+            label.configure(image=photo, bg=bgc)
+        except Exception:
+            _idle_bg_disable("背景层配置失败")
+            return
+        holder["photo"] = photo        # 保活 (Tk 不会持有引用)
+        holder["size"] = (w, h)
+
+    if not holder.get("shown"):
+        try:
+            label.grid()
+            tree_frame.grid_remove()
+        except Exception:
+            return
+        holder["shown"] = True
+
+
+def _idle_bg_on_configure(event=None):
+    """tab_edit / tree_frame / 背景层 <Configure>: 尺寸变化时节流 (120ms) 重绘。
+
+    必须同时绑背景层自己: 窗口缩放时 tab_edit 的 Configure 早于子控件重排,
+    那一刻量到的是背景层的旧尺寸; 背景层自己的 Configure 才带新尺寸。
+    """
+    holder = _IDLE_BG
+    if not holder.get("enabled") or holder.get("label") is None:
+        return
+    if not _is_editor_idle():
+        return
+    size = _idle_bg_target_size()
+    if size[0] <= 1 or size[1] <= 1:
+        return
+    if holder.get("shown") and holder.get("size") == size:
+        return
+    try:
+        if holder.get("after"):
+            root.after_cancel(holder["after"])
+    except Exception:
+        pass
+    try:
+        holder["after"] = root.after(120, _sync_idle_bg)
+    except Exception:
+        holder["after"] = None
+
+
+def _idle_bg_retheme():
+    """主题切换后: 清合成缓存 + 丢弃旧图, 待机态下按新底色重绘一次。"""
+    try:
+        ui_bg_image.clear_cache()
+    except Exception:
+        pass
+    _IDLE_BG["photo"] = None
+    _IDLE_BG["size"] = None
+    _sync_idle_bg()
 
 
 def build_app():
@@ -3903,8 +4238,15 @@ def build_app():
         APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         RES_DIR = os.path.join(APP_ROOT, "res")
 
-    LOG_DIR = os.path.join(APP_ROOT, "logs")
-    SCREENSHOT_DIR = os.path.join(APP_ROOT, "screenshots")
+    # L5 #5: 日志/截图目录统一由 state 解析（便携模式 = <程序目录>/userdata/...）。
+    # 这里保持"程序目录优先"的旧行为: 无 portable.flag 时 state.log_dir() 返回
+    # <程序目录>/logs，与改动前完全一致。
+    try:
+        LOG_DIR = state.log_dir()
+        SCREENSHOT_DIR = state.screenshot_dir()
+    except Exception:
+        LOG_DIR = os.path.join(APP_ROOT, "logs")
+        SCREENSHOT_DIR = os.path.join(APP_ROOT, "screenshots")
     os.makedirs(LOG_DIR, exist_ok=True)
     os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
@@ -4186,6 +4528,24 @@ def build_app():
     tree_frame.grid(row=1,column=0,sticky="nsew",padx=utils.sp(3),pady=(0,utils.sp(4)))
     tree_frame.columnconfigure(0,weight=1); tree_frame.rowconfigure(0,weight=1)
 
+    # ── 待机背景层: 与 tree_frame 同格 (row=1) 叠放, 默认隐藏 ──
+    #   1px 描边与 tree_frame 视觉对齐 (同为 C["bd"]), 显隐由 _sync_idle_bg 统一调度:
+    #   待机 → 本层 grid() + tree_frame.grid_remove(); 非待机 → 反之 (布局完全复原)。
+    _idle_bg_label = tkinter.Label(tab_edit, bd=0, highlightthickness=1,
+        highlightbackground=C["bd"], bg=C["bgc"])
+    _idle_bg_label.grid(row=1,column=0,sticky="nsew",
+        padx=utils.sp(3),pady=(0,utils.sp(4)))
+    _idle_bg_label.grid_remove()
+    _IDLE_BG["label"] = _idle_bg_label
+    # tab_edit 始终是 mapped 的, 绑它的 <Configure> 才能在「背景层显示中 (tree_frame
+    # 已 grid_remove, 自身不再产生 Configure)」时也跟随窗口缩放重绘;
+    # 背景层自己也要绑 (它的 Configure 才携带新尺寸, 见 _idle_bg_on_configure)。
+    try:
+        tab_edit.bind("<Configure>", _idle_bg_on_configure, add=True)
+        _idle_bg_label.bind("<Configure>", _idle_bg_on_configure, add=True)
+    except Exception:
+        pass
+
     state._editor_rows = []
     tree = ttk.Treeview(tree_frame,
         columns=("cmd",)+tuple("p{}".format(i) for i in range(1,10)),
@@ -4274,6 +4634,22 @@ def build_app():
     except Exception:
         pass
 
+    # L4 #6 降级: 拖放新建任务需 tkinterdnd2（第三方 GUI 依赖，未引入）→
+    # 主窗 Ctrl+V 粘贴路径等效（.acrpas/.xls/.xlsx/.json → 脚本/工作流；
+    # .exe/.lnk → 单命令「启动程序」）。焦点在文本控件时不拦截原生粘贴。
+    try:
+        dialogs.bind_paste_new_task(root, root, None)
+    except Exception as _e:                   # noqa: BLE001
+        log1("粘贴路径新建任务绑定失败: {}".format(_e), "warning")
+
+    # L4 #7: 参数输入占位符提示 —— 悬停脚本表格给出当前命令的插值说明
+    # （判定依据 commands.get_no_interp，日期标记文案取 interp.DATE_MAP_TEXT）
+    try:
+        utils.attach_tooltip(tree, lambda: dialogs.interp_hint_for_values(
+            [tree.set(_iid, "cmd") for _iid in tree.selection()]))
+    except Exception:                         # noqa: BLE001
+        pass
+
     tree.bind("<Alt-Up>", _kb_move_up)
     tree.bind("<Alt-Down>", _kb_move_down)
     tree.bind("<F9>", _kb_toggle_breakpoint)
@@ -4283,6 +4659,21 @@ def build_app():
 
     # 将双击绑定放在 _edit_cell 定义之后
     tree.bind("<Double-1>", lambda e: _edit_cell())
+
+    # ── 待机背景: 编辑区的任何"操作"立即退出待机态 ──
+    #   全部用 add=True 追加绑定 (不覆盖上面既有的 click/double-click/快捷键回调);
+    #   _sync_idle_bg 幂等且状态未变时不重绘, 高频事件下无额外开销。
+    for _bg_seq in ("<<TreeviewSelect>>", "<Button-1>", "<Double-1>",
+                    "<Key>", "<ButtonRelease-1>"):
+        try:
+            tree.bind(_bg_seq, lambda e: _sync_idle_bg(), add=True)
+        except Exception:
+            pass
+    # 尺寸变化 (窗口缩放 / 日志面板拖拽 / Tab 切换) → 节流重绘
+    try:
+        tree_frame.bind("<Configure>", _idle_bg_on_configure, add=True)
+    except Exception:
+        pass
 
 
     # Initialize toolbar buttons now that all command functions are defined
@@ -4453,6 +4844,8 @@ def build_app():
     # Wire scheduler to GUI (设置窗口为独立窗口: 勾选变量在此创建并复用，下次执行标签由设置窗口注入)
     state._sched_enabled_var = tkinter.BooleanVar(value=state.SCHED_ENABLED)
     sched.set_gui_refs(root, state._sched_enabled_var, None)
+    # 执行钩子注入 (L0): 任务级超时/terminate 需要 stop_execution; 脚本目标需要 main_run
+    sched.set_exec_hooks(stop_fn=stop_execution, main_run_fn=main_run)
     recorder.set_root(root)
     state._on_recording_done = _on_recording_done
     status_bar = tkinter.Frame(root,bg=C["bg"])
@@ -4534,6 +4927,12 @@ def build_app():
         "stop": stop_execution,
     }
 
+    # ── 多任务调度 (L0/L1): 任务库驱动, 与旧「定时执行当前脚本」互相独立 ──
+    try:
+        sched.start_multi_scheduler(main_run)
+    except Exception as _e:
+        log1("多任务调度启动失败: {}".format(_e), "warning")
+
 
     # 主线程标识: 用于把工作线程触发的配置变更回调调度回 Tk 主线程
     _main_thread = threading.current_thread()
@@ -4542,12 +4941,19 @@ def build_app():
     state.on_config_change(_on_config_changed, keys=(
         "dark_mode", "retry_max", "retry_interval",
         "hotkey_run", "hotkey_pause", "hotkey_stop",
-        "recording_stop_hotkey"))
+        "recording_stop_hotkey", "sched_tasks"))
     _rebuild_hotkey_specs()
 
     root.after(200, _hotkey_poll)
 
     root.after(10, _setup_scroll_bindings)
+
+    # ── 待机背景图: 首次同步 (布局尚未落定时靠 tree_frame 的 <Configure> 兜底) ──
+    try:
+        _sync_idle_bg()
+        root.after(300, _sync_idle_bg)
+    except Exception:
+        pass
 
     # ── NetLink 多设备互联: 按配置自动启动 (失败不影响主程序) ──
     try:

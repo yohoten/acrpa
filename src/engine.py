@@ -39,6 +39,112 @@ FAILURE_CONTEXT_DIR = None
 CAPABILITY_ENFORCE = True
 
 
+# ══════════════════════════════════════════════════════════════════════════
+# 危险动作统一确认闸门 (方案文档 §5 L5 #6)
+# ══════════════════════════════════════════════════════════════════════════
+# 已有护栏 (各自 handler 内) 保持不变:
+#   · sys_ops.power_action  无 confirm 回调 → 拒绝;
+#   · file_ops.delete_path  永久删除无 confirm 回调 → 拒绝;
+#   · sys_ops.kill_process  非 force 无 confirm 回调 → 拒绝。
+# 本闸门只做**统一前置**: 在脚本执行路径上把「电源操作(非预演) / 删除文件(永久) /
+# 结束进程(非强制)」三类动作先问一次 GUI。
+#
+# 安全约定 (不得破坏):
+#   1. 无 GUI (未注入回调) → **拒绝执行**并给出明确错误, 绝不静默放行;
+#   2. 回调抛异常 → 同样拒绝 (失败即拒绝, 不失败开放);
+#   3. 是否确认只看**渲染后**的参数位, 而 commands.NO_INTERP 已把
+#      「预演 / 强制 / 送回收站」这三个安全闸门参数排除在插值之外,
+#      因此脚本**无法**用变量把 预演=是 / 强制=是 注入以绕过本闸门;
+#   4. 关掉确认 (state.CONFIRM_DANGEROUS=False) 只是不再问, handler 自身的
+#      护栏照旧生效 (无 GUI 仍然拒绝)。
+DANGER_CONFIRM_ENABLED_DEFAULT = True
+
+# 命令名 → 判定函数(row) → 需要确认时的说明文本；返回 None = 本次无需确认
+_DANGER_RULES = {}
+
+
+def _yes(value, default=False):
+    """宽松布尔解析 (与 commands._is_yes 的语义保持一致)。"""
+    if value is None:
+        return default
+    text = str(value).strip().lower()
+    if text in ("", "none"):
+        return default
+    if text in ("是", "y", "yes", "true", "1", "on", "开"):
+        return True
+    if text in ("否", "n", "no", "false", "0", "off", "关"):
+        return False
+    return default
+
+
+def _cell(row, idx):
+    """安全取第 idx 个单元格的值 (取不到返回 None, 绝不抛)。"""
+    try:
+        cell = row[idx]
+        return getattr(cell, "value", cell)
+    except Exception:
+        return None
+
+
+def _rule_power(row):
+    """电源操作: 预演(是) 不拦；其余都要确认。"""
+    if _yes(_cell(row, 3), False):
+        return None
+    action = str(_cell(row, 0) or "")
+    delay = str(_cell(row, 1) or "60")
+    force = "是" if _yes(_cell(row, 2), False) else "否"
+    return "动作={} 延迟={}秒 强制={}".format(action, delay, force)
+
+
+def _rule_delete(row):
+    """删除文件: 只有「送回收站=否」(永久删除) 才拦。"""
+    if _yes(_cell(row, 2), True):
+        return None
+    path = str(_cell(row, 0) or "")
+    recursive = "是" if _yes(_cell(row, 1), False) else "否"
+    return "永久删除(不可恢复) 路径={} 递归={}".format(path, recursive)
+
+
+def _rule_kill(row):
+    """结束进程: 非强制才拦。"""
+    if _yes(_cell(row, 1), False):
+        return None
+    name = str(_cell(row, 0) or "")
+    return "结束进程(非强制) 进程名={}".format(name)
+
+
+_DANGER_RULES.update({
+    "电源操作": _rule_power,
+    "删除文件": _rule_delete,
+    "结束进程": _rule_kill,
+})
+
+# 注入的确认回调: fn(cmd, detail, timeout_sec) -> bool
+_DANGER_CONFIRM_HOOK = None
+
+
+def set_danger_confirm_hook(fn):
+    """注入 GUI 确认回调 (app.install_danger_confirm_hook 调用); None = 无 GUI。"""
+    global _DANGER_CONFIRM_HOOK
+    _DANGER_CONFIRM_HOOK = fn if callable(fn) else None
+    return True
+
+
+def get_danger_confirm_hook():
+    return _DANGER_CONFIRM_HOOK
+
+
+def danger_confirm_needed(cmd, row):
+    """→ 该命令+参数是否需要二次确认 (对外可单测的纯判定)。"""
+    rule = _DANGER_RULES.get(str(cmd))
+    if rule is None:
+        return None
+    try:
+        return rule(row)
+    except Exception:
+        return None
+
+
 class AbortSignal(Exception):
     """用户请求停止(quit2)时抛出, 用于中断正在执行的长命令。
 
@@ -111,6 +217,23 @@ def _make_api(script_dir=""):
         return None
 
 
+def make_interp_ctx(variables=None, args=None):
+    """构造 L3 插值上下文 —— 项目内**唯一**的 ctx 构造点 (方案文档 §5 L3)。
+
+    interp 只认 ``get_var/set_var/env/now`` 这套轻量接口, 不认识 engine 全局,
+    因此由调用方 (engine / workflow / acrpa_api / 测试) 用本函数构造上下文:
+    ``make_interp_ctx(eng.variables, eng.script_args)``。
+
+    ``variables`` 传 dict 时按**引用**持有 (运行时读到最新变量值);
+    其它可映射对象按快照复制。interp 不可用 (理论上不会) 返回 None。
+    """
+    try:
+        import interp as _interp
+        return _interp.Context(variables, args)
+    except Exception:
+        return None
+
+
 def _invoke_handler(h, adapted_row, script_dir):
     """按 handler 参数个数自适应调用: 3 参 → 追加 api；否则旧两参。"""
     arity = _handler_arity(h)
@@ -160,6 +283,19 @@ class RowAdapter:
         if index < len(self.cells):
             return self.cells[index]
         return _Cell()  # 返回空 Cell，不再动态 type()
+
+
+class _RenderedRow(RowAdapter):
+    """L3 插值后的行: 与 RowAdapter 同形 (``row[i].value``), 只是值已渲染。
+
+    刻意**不提供** ``args`` 属性 —— 与 RowAdapter 一致, 因此各 handler 里的
+    ``hasattr(row, "args")`` 分支归属不变 (仍走 ``row[i].value`` 路径),
+    handler 无需任何改动。
+    """
+    __slots__ = ()
+
+    def __init__(self, cells):
+        self.cells = list(cells)
 
 
 # P0 Optimization #1: Lazy imports for heavy libraries (P0 optimization #1)
@@ -417,6 +553,9 @@ class ExecutionEngine:
         self.retry_interval = state.RETRY_INTERVAL
         # Variable storage for condition/loop support
         self.variables = {}
+        # L3 变量插值: {arg:名称} 的命名空间 (CLI -p0:xxx / ex:xxx 注入),
+        # 与 self.variables 完全隔离 —— --var 影响脚本逻辑, --arg/-pN 只影响文本替换。
+        self.script_args = {}
         
         # P1 Enhancement: Initialize variable watcher and call stack
         self.variable_watcher = VariableWatcher()
@@ -1005,6 +1144,126 @@ class ExecutionEngine:
         log1("失败现场已保存: {}".format(fp), "warning")
         return fp
 
+    # ══════════════════════════════════════════════════════════════════════
+    # SECTION: L3 变量插值 (方案文档 §5 L3 变量与表达式体系 / §8.6 安全)
+    # ══════════════════════════════════════════════════════════════════════
+
+    def _render_args(self, cmd, row):
+        """把本行的运行时参数渲染成插值后的行 —— 引擎侧**唯一**插值接入点。
+
+        约束 (方案文档 §8.6 安全, 越界即事故):
+          · 只渲染参数位 (cell 1..), 命令名 (cell 0) 恒不插值;
+          · ``commands.NO_INTERP`` 白名单命中的参数原样透传 (变量名 / 安全闸门 /
+            枚举参数), 所以 ``预演``/``强制``/``送回收站`` 等**无法**被脚本用
+            ``${}`` 动态关掉 —— 插值不削弱任何安全闸门;
+          · 插值异常一律退化为字面量 + warning, **绝不中断执行**;
+          · 渲染结果照常进入各 handler 的既有校验 (空值/白名单), 不绕过任何判定;
+          · 不动 ``.xls`` 位置式 9 参数布局: 只渲染内存里的运行时参数副本。
+        """
+        cells = getattr(row, "cells", None)
+        if not cells:
+            return row
+
+        whole, skip = False, frozenset()
+        try:
+            whole, skip = commands.get_no_interp(cmd)
+        except Exception:
+            pass
+        if whole:
+            return row                      # 整条禁插值 (块结构 / 代码类命令)
+
+        # 快路径: 没有任何参数含 '{' 或 '$' 时不构造 ctx (绝大多数参数走这里)
+        need = False
+        for i in range(1, len(cells)):
+            if (i - 1) in skip:
+                continue
+            value = getattr(cells[i], "value", None)
+            if isinstance(value, str) and ("{" in value or "$" in value):
+                need = True
+                break
+        if not need:
+            return row
+
+        try:
+            import interp as interp_mod
+        except Exception:
+            return row                      # 插值模块不可用 → 退化为不插值
+        ctx = make_interp_ctx(self.variables, self.script_args)
+        if ctx is None:
+            return row
+
+        changed = False
+        new_cells = [cells[0]]
+        for i in range(1, len(cells)):
+            cell = cells[i]
+            value = getattr(cell, "value", None)
+            if (i - 1) in skip or value is None or not isinstance(value, str) or not value:
+                new_cells.append(cell)
+                continue
+            try:
+                rendered = interp_mod.interpolate(value, ctx)
+            except Exception as e:          # 插值自身故障 → 字面量, 不阻断执行
+                log1("参数插值失败 (已退化为字面量): {}".format(e), "warning")
+                rendered = value
+            if rendered == value:
+                new_cells.append(cell)
+                continue
+            _c = _Cell()
+            _c.value = rendered
+            new_cells.append(_c)
+            changed = True
+
+        if not changed:
+            return row
+        return _RenderedRow(new_cells)
+
+    def _danger_confirm_gate(self, cmd, row):
+        """危险动作统一确认闸门 (L5 #6) → 需要拒绝时返回 ExecutionResult。
+
+        只在**脚本执行路径**生效: 电源操作(非预演) / 删除文件(永久) /
+        结束进程(非强制)。返回 None = 无需确认或已确认。
+
+        语义 (与既有 handler 护栏互补, 不替代):
+          · state.CONFIRM_DANGEROUS=False → 不额外询问, 回落 handler 自身护栏;
+          · 无 GUI 回调 → **拒绝**并给出可读原因 (绝不静默放行);
+          · 回调异常/超时未答 → 拒绝。
+        """
+        try:
+            enabled = bool(getattr(state, "CONFIRM_DANGEROUS",
+                                   DANGER_CONFIRM_ENABLED_DEFAULT))
+        except Exception:
+            enabled = DANGER_CONFIRM_ENABLED_DEFAULT
+        if not enabled:
+            return None
+        detail = danger_confirm_needed(cmd, row)
+        if detail is None:
+            return None
+        try:
+            timeout = int(getattr(state, "CONFIRM_DANGEROUS_TIMEOUT_SEC", 15) or 15)
+        except Exception:
+            timeout = 15
+        timeout = max(1, min(600, timeout))
+        hook = _DANGER_CONFIRM_HOOK
+        if not callable(hook):
+            msg = ("危险操作需二次确认，但当前没有可用的确认界面（无 GUI），"
+                   "已拒绝执行：{}（{}）".format(cmd, detail))
+            log1(msg, "error")
+            return ExecutionResult(False, "danger_rejected", msg, 0)
+        try:
+            approved = bool(hook(cmd, detail, timeout))
+        except AbortSignal:
+            raise
+        except Exception as e:
+            msg = "危险操作确认过程异常，已按拒绝处理：{}（{}）".format(cmd, e)
+            log1(msg, "error")
+            return ExecutionResult(False, "danger_rejected", msg, 0)
+        if not approved:
+            msg = "危险操作未获确认，已取消执行：{}（{}）".format(cmd, detail)
+            log1(msg, "warning")
+            return ExecutionResult(False, "danger_rejected", msg, 0)
+        log1("危险操作已确认: {}（{}）".format(cmd, detail), "warning")
+        return None
+
     def execute(self, row, script_dir):
         """执行单条命令并返回结果；保留 truthy 兼容，失败不再静默成功。"""
         if hasattr(row, 'cmd_type'):
@@ -1029,7 +1288,16 @@ class ExecutionEngine:
         _cap_result = self._check_capabilities(cv)
         if _cap_result is not None:
             return _cap_result
+        # L3: **唯一 choke point** —— 运行时参数在这里统一渲染一次,
+        # 其后 _param_hint_once / _invoke_handler (含 AI 智能重试分支) 拿到的
+        # 都是渲染后的行, 不存在第二处插值入口。
+        adapted_row = self._render_args(cv, adapted_row)
         self._param_hint_once(cv, adapted_row)
+        # L5 #6: 危险动作统一确认闸门 —— 只看**渲染后**参数位; commands.NO_INTERP
+        # 已把「预演/强制/送回收站」排除在插值之外, 故脚本无法绕过。
+        _gate = self._danger_confirm_gate(cv, adapted_row)
+        if _gate is not None:
+            return _gate
         success = False
         last_error = ""
         attempts = 0

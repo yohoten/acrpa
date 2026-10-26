@@ -46,6 +46,14 @@ config.json
 # 属于用户本机状态，不应入库
 recent.json
 recent_workflow.json
+# 任务库自动备份 (L0-⑤ save_config 写盘前备份 → 现落在 <数据目录>/backups/)：
+#   · backups/            数据目录下的备份子目录 (含便携模式 userdata/backups/)
+#   · config.json.bak.*   旧版本曾直接堆在数据目录根的备份名，一并忽略
+#   · *.bak               atomic_save / save_script 覆盖写时留下的同名备份
+# 三者都是"跑一遍就多几个"的本机运行产物，不入库。
+backups/
+config.json.bak.*
+*.bak
 
 # ACRPA 构建资源（构建输入，必须纳入版本控制）
 # res/ 内含 automation.ico / wechat_qrcode.png，被 ACRPA.spec 引用，请勿加入忽略规则

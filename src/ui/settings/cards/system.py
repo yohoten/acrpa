@@ -303,16 +303,43 @@ def build(parent, ctx):
             (v.set(default_val), setattr(state, k.upper(), default_val) if k else None,
              state.save_config(), _flash_saved("system")))
 
+    # ── L5 #6: 危险动作二次确认闸门 ──
+    danger_frame = tkinter.Frame(content, bg=C["bgc"])
+    danger_frame.grid(row=7, column=0, sticky="ew", padx=8, pady=(2, 4))
+    danger_var = tkinter.BooleanVar(
+        value=bool(getattr(state, "CONFIRM_DANGEROUS", True)))
+
+    def _toggle_danger():
+        state.CONFIRM_DANGEROUS = bool(danger_var.get())
+        state.save_config()
+        _flash_saved("system")
+
+    ttk.Checkbutton(danger_frame, text="危险动作执行前二次确认",
+        variable=danger_var, command=_toggle_danger).pack(side="left")
+    tkinter.Label(danger_frame, text="电源操作 / 永久删除 / 结束进程；无界面时一律拒绝",
+        font=FONT_TINY, fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(6, 10))
+    tkinter.Label(danger_frame, text="确认超时:", font=FONT_TINY,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
+    danger_timeout_var = tkinter.StringVar(
+        value=str(int(getattr(state, "CONFIRM_DANGEROUS_TIMEOUT_SEC", 15) or 15)))
+    _validate_number(tkinter.Spinbox(danger_frame, textvariable=danger_timeout_var,
+        from_=1, to=600, increment=5, width=5, font=ctx.FONT_SMALL,
+        bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1), danger_timeout_var,
+        "危险动作确认超时", 15, int, 1, 600, card_key="system").pack(
+            side="left", padx=(0, 4))
+    tkinter.Label(danger_frame, text="秒（无响应视为拒绝）", font=FONT_TINY,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left")
+
     # 底部提示
     tkinter.Label(content,
         text="提示：支持 Ctrl/Alt/Shift/Win + 字母/数字/F1-F12；录制的快捷键在所有应用中全局生效",
         font=FONT_TINY, fg=C["fgm"], bg=C["bgc"]).grid(
-        row=5, column=0, sticky="w", padx=8, pady=(0, 6))
+        row=8, column=0, sticky="w", padx=8, pady=(0, 6))
 
     # 系统卡: 任一控件改动 → 600ms 防抖后走 apply 即时落盘
     _track_card_vars("system", (auto_start_var, tray_var, compact_var, mini_bar_var,
                                 mb_width_var, mb_height_var, mb_opacity_var,
-                                ui_scale_var))
+                                ui_scale_var, danger_var, danger_timeout_var))
 
     return {
         "card": card, "content": content, "title": sys_title,
@@ -321,6 +348,7 @@ def build(parent, ctx):
         "mini_bar_var": mini_bar_var, "mb_width_var": mb_width_var,
         "mb_height_var": mb_height_var, "mb_opacity_var": mb_opacity_var,
         "ui_scale_var": ui_scale_var, "hotkey_vars": hotkey_vars,
+        "danger_var": danger_var, "danger_timeout_var": danger_timeout_var,
     }
 
 
@@ -359,6 +387,16 @@ def apply(ctx, handles):
         state.UI_SCALE = max(0.8, min(1.5, float(handles["ui_scale_var"].get())))
     except (TypeError, ValueError):
         state.UI_SCALE = 1.0
+    # L5 #6: 危险动作确认开关 + 超时（缺键用默认值，向后兼容旧 handles）
+    try:
+        state.CONFIRM_DANGEROUS = bool(handles["danger_var"].get())
+    except Exception:
+        pass
+    try:
+        t = int(handles["danger_timeout_var"].get())
+        state.CONFIRM_DANGEROUS_TIMEOUT_SEC = max(1, min(600, t))
+    except Exception:
+        pass
     # 本卡内由独立控件写入的快捷键键 (显式经 handles 传递, 无隐式闭包顺序)
     try:
         for _name, (_v, _sk) in handles["hotkey_vars"].items():

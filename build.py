@@ -17,6 +17,36 @@ APP = "ACRPA"
 ICON = os.path.join(RES, "automation.ico")
 ENTRY = os.path.join(BASE, "run.py")
 
+# ── L5 #9: 体积门禁 (文档 §8.2 —— ACRPA.exe > 15 MB 即构建失败) ──
+MAX_EXE_MB = 15.0
+
+
+def exe_candidates():
+    """→ 打包产物候选路径 (单文件 dist/ACRPA.exe 优先, 其次文件夹模式)。"""
+    return [
+        os.path.join(DIST, "{}.exe".format(APP)),
+        os.path.join(DIST, APP, "{}.exe".format(APP)),
+    ]
+
+
+def check_exe_volume(max_mb=None):
+    """校验打包产物体积 → (rc, 说明)。
+
+    rc: 0 = 通过 / 1 = 超限 / 2 = 没找到产物 (构建模式不需要, 由调用方忽略)。
+    只在"确实存在 exe"时判定，因此 `python build.py --dir` 与源码运行都能用。
+    """
+    limit = float(MAX_EXE_MB if max_mb is None else max_mb)
+    for path in exe_candidates():
+        if not os.path.isfile(path):
+            continue
+        size_mb = os.path.getsize(path) / (1024.0 * 1024.0)
+        text = "{}: {:.2f} MB (上限 {:.1f} MB)".format(
+            os.path.basename(path), size_mb, limit)
+        if size_mb > limit:
+            return 1, text
+        return 0, text
+    return 2, "未找到打包产物 (dist/{}.exe 或 dist/{}/{}.exe)".format(APP, APP, APP)
+
 # 7-Zip SFX 检测
 _7Z_PATHS = [
     r"C:\Program Files\7-Zip\7z.exe",
@@ -28,6 +58,10 @@ _7Z_PATHS = [
 _PROJECT_MODULES = [
     "app", "state", "scriptdata", "templates", "utils", "commands",
     "engine", "recorder", "scheduler", "updater",
+    # L0 触发器注册表 (triggers.py): scheduler.py 顶层 `import triggers` 本可被
+    # 静态分析发现，但 dialogs.py 里是函数内惰性 import —— 显式声明避免
+    # 未来某次改动把 scheduler 的依赖也改成惰性后打包缺模块静默失败。
+    "triggers",
     "marketplace", "ocr_backend", "dd_backend", "paddle_dll", "safe_eval",
     "netlink_window",
     # Python 扩展 (自定义代码沙箱 + AcrpaAPI)
@@ -39,6 +73,18 @@ _PROJECT_MODULES = [
     "market_window", "market_upload", "accounts",
     "flow_graph", "script_io", "script_model", "script_validate",
     "capabilities", "i18n", "cli",
+    # L2 动作库扩充：文件/系统/网络三个纯逻辑模块（20 条新命令的后端）。
+    # 均为纯 stdlib（shutil/ctypes/urllib/hashlib/base64），体积影响 < 120 KB。
+    "file_ops", "sys_ops", "net_ops",
+    # L3 变量插值：四类占位符 + 日志脱敏（纯 stdlib，不依赖 tkinter，约 12 KB）。
+    # engine 在运行期 `import interp`，静态分析不可见 → 必须显式纳入。
+    "interp",
+    # L4 UI/交互：性能采集器 / 提醒浮窗 / 托盘菜单规格（纯 ctypes + tkinter）。
+    # 三者均由 tray.py / dialogs.py 在**函数内**惰性 import，静态分析不可见 → 显式纳入。
+    "sys_perf", "reminder", "ui.tray_menu",
+    # L5 工程化：单实例 IPC / 崩溃留痕 / 运行历史（纯 ctypes + 标准库，约 1200 行）。
+    # 均由 run.py / app.py / cli.py 在**函数内**惰性 import，静态分析不可见 → 显式纳入。
+    "single_instance", "crashlog", "history",
     "extensions", "extensions.manifest", "extensions.package",
     "extensions.manager", "extensions.index", "extensions.loader",
     # UI 层（含设置卡片）—— 单文件打包必须显式纳入：
@@ -60,8 +106,12 @@ HIDDEN_IMPORTS = _PROJECT_MODULES + [
     # tkinter GUI
     "tkinter", "tkinter.ttk", "tkinter.filedialog", "tkinter.messagebox",
     # 图像处理 (仅 PNG/JPEG, 不用 OpenCV)
+    # 背景图/帮助页小图（res/bg-ac.*）：ui.bg_image 走 Pillow 预合成，
+    # PNG 优先、ICO 兜底，两个插件都必须进包（此前 IcoImagePlugin 被 exclude
+    # 导致冻结版读不出 .ico、待机背景静默降级）。
+    "ui.bg_image",
     "PIL.Image", "PIL.ImageTk", "PIL.ImageGrab",
-    "PIL.PngImagePlugin", "PIL.JpegImagePlugin",
+    "PIL.PngImagePlugin", "PIL.JpegImagePlugin", "PIL.IcoImagePlugin",
     # 自动化
     "pyautogui", "pyperclip",
     # Excel
@@ -148,7 +198,7 @@ EXCLUDE_MODULES = [
     "PIL.GifImagePlugin", "PIL.MpoImagePlugin",
     "PIL.PcxImagePlugin", "PIL.FpxImagePlugin",
     "PIL.MicImagePlugin", "PIL.XbmImagePlugin",
-    "PIL.IcoImagePlugin", "PIL.ImImagePlugin",
+    "PIL.ImImagePlugin",
     "PIL.PalmImagePlugin", "PIL.PpmImagePlugin",
     "PIL.SgiImagePlugin", "PIL.TgaImagePlugin",
     "PIL.XpmImagePlugin", "PIL.FitsImagePlugin",
@@ -320,6 +370,16 @@ def build(onefile=True, console=False, clean_first=False):
             print("\n[WARN] EXE not found in {}".format(DIST))
     else:
         print("\n[WARN] EXE not found in {}".format(DIST))
+
+    # ── L5 #9: 体积门禁 (文档 §8.2 要求: ACRPA.exe > 15 MB 即构建失败) ──
+    gate_rc, gate_text = check_exe_volume()
+    if gate_rc == 1:
+        print("\n[FAIL] 体积门禁未通过: {}".format(gate_text))
+        return 1
+    if gate_rc == 0:
+        print("[OK] 体积门禁通过: {}".format(gate_text))
+    else:
+        print("[WARN] 体积门禁跳过: {}".format(gate_text))
     return 0
 
 def build_sfx():

@@ -1041,6 +1041,892 @@ def open_ai_debug_dialog():
 
 
 # ======================================================================
+# 计划任务编辑表单 (L0/L1: 目标三型 + 触发器注册表 + 执行语义字段)
+# ======================================================================
+_SCHED_TARGET_LABELS = (("脚本", "script"), ("工作流", "workflow"), ("单命令", "command"))
+
+# 触发器参数输入框的动态提示 (与 triggers.from_text 的解析口径一一对应)
+_SCHED_TRIGGER_HINTS = {
+    "once": "格式: YYYY-MM-DD HH:MM",
+    "daily": "格式: HH:MM",
+    "weekly": "格式: 0,1,2|HH:MM  (0=周一 … 6=周日)",
+    "interval": "格式: 秒数 (如 3600)",
+    "countdown": "格式: 秒数 或 H:M:S (如 90 或 0:1:30)",
+    "hourly": "格式: 小时白名单 如 9,12,18 (空=每小时)",
+    "hotkey": "格式: ctrl+shift+1 (需含至少一个修饰键)",
+    "on_boot": "格式: 延迟秒数 (如 30)",
+}
+
+
+def _sched_target_kind(label):
+    """目标类型下拉文本 → target_type。"""
+    for text, kind in _SCHED_TARGET_LABELS:
+        if text == label:
+            return kind
+    return "script"
+
+
+def _sched_spec_text(spec):
+    """trigger spec → 表单里那一行文本 (与 triggers.from_text 互逆)。"""
+    spec = spec if isinstance(spec, dict) else {}
+    kind = str(spec.get("kind") or "daily")
+    if kind == "once":
+        return str(spec.get("at") or "")
+    if kind == "daily":
+        return str(spec.get("time") or "09:00")
+    if kind == "weekly":
+        days = spec.get("days") or [0]
+        try:
+            days_text = ",".join(str(int(d)) for d in days)
+        except Exception:
+            days_text = "0"
+        return "{}|{}".format(days_text, spec.get("time") or "09:00")
+    if kind == "interval":
+        return str(spec.get("seconds") or 3600)
+    if kind == "countdown":
+        if spec.get("seconds") not in (None, ""):
+            return str(spec.get("seconds"))
+        return "{}:{}:{}".format(int(spec.get("hours") or 0),
+                                 int(spec.get("minutes") or 0),
+                                 int(spec.get("secs") or 0))
+    if kind == "hourly":
+        try:
+            return ",".join(str(int(h)) for h in (spec.get("hours") or []))
+        except Exception:
+            return ""
+    if kind == "hotkey":
+        return str(spec.get("spec") or "")
+    if kind == "on_boot":
+        return str(spec.get("delay_sec") or getattr(state, "DEFAULT_BOOT_DELAY_SEC", 30))
+    return ""
+
+
+# ══════════════════════════════════════════════════════════════════════
+# L4: 搜索增强 / 粘贴路径 / 占位符提示 —— 纯逻辑（无 tkinter，可单测）
+# ══════════════════════════════════════════════════════════════════════
+
+_PINYIN = {"tried": False, "mod": None}
+_PINYIN_CACHE = {}
+
+
+def _pinyin_module():
+    """可选增强：环境里装了 ``pypinyin`` 才启用首字母匹配，未装静默降级。
+
+    注意：**不**把 ``pypinyin`` 写进 requirements.txt（体积约束，方案文档 §8.2）。
+    """
+    if not _PINYIN["tried"]:
+        _PINYIN["tried"] = True
+        try:
+            import pypinyin                     # noqa: F401 —— 可选依赖
+            _PINYIN["mod"] = pypinyin
+        except Exception:                       # noqa: BLE001
+            _PINYIN["mod"] = None
+    return _PINYIN["mod"]
+
+
+def pinyin_available():
+    """→ 拼音首字母匹配是否启用（当前环境真实状态，供 UI 提示）。"""
+    return _pinyin_module() is not None
+
+
+def pinyin_initials(text):
+    """→ 文本的拼音首字母串（小写无分隔）；未装 pypinyin 返回空串。"""
+    text = str(text or "")
+    if not text:
+        return ""
+    cached = _PINYIN_CACHE.get(text)
+    if cached is not None:
+        return cached
+    out = ""
+    mod = _pinyin_module()
+    if mod is not None:
+        try:
+            groups = mod.lazy_pinyin(text, style=mod.Style.FIRST_LETTER)
+            out = "".join(groups).lower()
+        except Exception:                       # noqa: BLE001
+            out = ""
+    if len(_PINYIN_CACHE) > 512:
+        _PINYIN_CACHE.clear()
+    _PINYIN_CACHE[text] = out
+    return out
+
+
+def sched_search_tokens(query):
+    """空格分隔的多关键词 → list（空查询返回 []）。"""
+    text = str(query or "").replace("\u3000", " ")
+    return [tok for tok in text.split(" ") if tok]
+
+
+def normalize_date_token(token):
+    """日期关键词归一化：``2026/10`` / ``2026.10`` → ``2026-10``。"""
+    return str(token or "").replace("/", "-").replace(".", "-").strip()
+
+
+def search_blob(row, task=None):
+    """把任务列表一行的可搜索字段拼成一个字符串。"""
+    parts = []
+    if isinstance(row, dict):
+        for key in ("name", "target", "plan", "next_run", "last_run", "status"):
+            parts.append(str(row.get(key) or ""))
+    if isinstance(task, dict):
+        for key in ("id", "created", "start_date", "end_date"):
+            parts.append(str(task.get(key) or ""))
+    return " ".join(parts)
+
+
+def sched_row_matches(row, query, task=None, blob=None):
+    """多关键词 **AND** 过滤（含日期关键词 + 可选拼音首字母）。
+
+    * 每个关键词都必须命中（AND 语义）；
+    * 命中判定：子串（大小写不敏感）或拼音首字母子串；
+    * 日期关键词（``2026-10`` / ``10-23``）归一化后子串匹配
+      ``next_run / last_run / created`` 等字段 —— 无需专用日期解析。
+    """
+    tokens = sched_search_tokens(query)
+    if not tokens:
+        return True
+    text = blob if blob is not None else search_blob(row, task)
+    haystack = text.lower()
+    initials = pinyin_initials(text)
+    for token in tokens:
+        needle = normalize_date_token(token).lower()
+        if not needle:
+            continue
+        if needle in haystack:
+            continue
+        if initials and needle in initials:
+            continue
+        return False
+    return True
+
+
+_TARGET_EXT_KINDS = {
+    ".acrpas": "script", ".xls": "script", ".xlsx": "script",
+    ".json": "workflow", ".yaml": "workflow", ".yml": "workflow",
+    ".exe": "command", ".lnk": "command",
+}
+LAUNCH_COMMAND = "启动程序"
+
+
+def classify_pasted_path(text):
+    """粘贴文本 → 新建任务的预填信息（纯逻辑，可单测）。
+
+    扩展名 → 目标类型映射：
+        ``.acrpas/.xls/.xlsx`` → ``script``（脚本）
+        ``.json/.yaml/.yml``   → ``workflow``（工作流）
+        ``.exe/.lnk``          → ``command``（单命令「启动程序」，路径进参数1）
+
+    → ``{"ok":True,"target_type","target","target_params","name","ext"}``
+      或 ``{"ok":False,"reason":...}``
+    """
+    raw = str(text or "").strip()
+    if len(raw) > 1 and raw[:1] in ("\"", "'") and raw[-1:] == raw[:1]:
+        raw = raw[1:-1].strip()
+    raw = raw.strip().strip("\r\n")
+    if not raw:
+        return {"ok": False, "reason": "剪贴板为空"}
+    if "\n" in raw or "\r" in raw:
+        return {"ok": False, "reason": "只支持单个路径"}
+    ext = os.path.splitext(raw)[1].lower()
+    kind = _TARGET_EXT_KINDS.get(ext)
+    if kind is None:
+        return {"ok": False,
+                "reason": "不支持的文件类型: {}".format(ext or "(无扩展名)")}
+    if not os.path.exists(raw):
+        return {"ok": False, "reason": "路径不存在: {}".format(raw)}
+    base = os.path.splitext(os.path.basename(raw))[0] or "新任务"
+    info = {"ok": True, "ext": ext, "target_type": kind, "name": base}
+    if kind == "command":
+        info["target"] = LAUNCH_COMMAND
+        info["target_params"] = {"args": [raw]}
+    else:
+        info["target"] = raw
+        info["target_params"] = None
+    return info
+
+
+INTERP_HINT_HEAD = "参数支持 {var:}/{env:}/{date:}/{arg:}"
+
+
+def interp_hint_text(cmd_name=None):
+    """参数输入占位符提示（判定依据 ``commands.get_no_interp``）。
+
+    返回一段中文提示：支持哪些占位符、该命令的哪些参数被安全闸门排除插值，
+    并附 ``interp.DATE_MAP_TEXT`` 的日期标记说明。**不做**参数表达式预览求值。
+    """
+    whole_blocked, blocked = False, frozenset()
+    name = str(cmd_name or "").strip()
+    if name:
+        try:
+            import commands as _cmd_mod
+            whole_blocked, blocked = _cmd_mod.get_no_interp(name)
+        except Exception:                       # noqa: BLE001
+            whole_blocked, blocked = False, frozenset()
+    date_text = ""
+    try:
+        import interp as _interp
+        date_text = str(_interp.DATE_MAP_TEXT or "")
+    except Exception:                           # noqa: BLE001
+        date_text = "Y=四位年 M=两位月 D=两位日 h=24小时 m=两位分 s=两位秒"
+    if name and whole_blocked:
+        body = "「{}」全部参数不做插值（安全闸门），原样传入".format(name)
+    elif name and blocked:
+        body = "「{}」{} 不做插值（安全闸门）；其余{}".format(
+            name, "/".join("参数{}".format(i + 1) for i in sorted(blocked)),
+            INTERP_HINT_HEAD)
+    elif name:
+        body = "「{}」{}".format(name, INTERP_HINT_HEAD)
+    else:
+        body = INTERP_HINT_HEAD
+    if not date_text:
+        return body
+    return "{}（日期标记: {}）".format(body, date_text)
+
+
+def interp_hint_for_values(cmd_names):
+    """脚本编辑页选中行 → 提示文案（单行给精确提示，多行/空给通用提示）。"""
+    names = [str(n) for n in (cmd_names or []) if str(n or "").strip()]
+    if len(names) == 1:
+        return interp_hint_text(names[0])
+    return interp_hint_text(None)
+
+
+def _spec_hotkey_text(specs):
+    """从触发器列表里取 hotkey spec 的按键文本。"""
+    for spec in specs or []:
+        if isinstance(spec, dict) and str(spec.get("kind")) == "hotkey":
+            return str(spec.get("spec") or "")
+    return ""
+
+
+# ══════════════════════════════════════════════════════════════════════
+# L4: 粘贴路径 / 拖放降级入口
+# ══════════════════════════════════════════════════════════════════════
+
+def new_task_from_path(parent=None, path="", on_done=None):
+    """粘贴路径 → 打开「新建任务」并预填目标（拖放的**等效降级**入口）。
+
+    ``tkinterdnd2`` 是第三方 GUI 依赖（违反纯 tkinter 约束，方案文档 §8.3），
+    因此不做真拖放，改用 Ctrl+V 粘贴路径达成同样效果。
+    """
+    info = classify_pasted_path(path)
+    if not info.get("ok"):
+        try:
+            show_toast(root, "无法用该路径新建任务: {}".format(info.get("reason")),
+                       "warning")
+        except Exception:                       # noqa: BLE001
+            pass
+        return None
+    prefill = {"name": info["name"], "target_type": info["target_type"],
+               "target": info["target"], "target_params": info["target_params"]}
+    return _sched_task_dialog(parent or root, None, on_done, prefill=prefill)
+
+
+def paste_path_from_clipboard(widget=None):
+    """→ 剪贴板文本；失败返回空串。"""
+    try:
+        src = widget if widget is not None else root
+        return str(src.clipboard_get())
+    except Exception:                           # noqa: BLE001
+        return ""
+
+
+# 文本类控件：在这些控件里 Ctrl+V 必须保留原生的「粘贴文本」语义
+_TEXT_WIDGET_CLASSES = frozenset({
+    "Text", "Entry", "TEntry", "TCombobox", "Listbox", "Spinbox", "TSpinbox",
+})
+
+
+def paste_should_intercept(widget):
+    """→ 当前焦点是否**不该**被 Ctrl+V 新建任务拦截（纯判定，可单测）。"""
+    try:
+        focus = widget.focus_get() if widget is not None else None
+    except Exception:                           # noqa: BLE001
+        return True
+    if focus is None:
+        return False
+    try:
+        cls = focus.winfo_class()
+    except Exception:                           # noqa: BLE001
+        return True
+    return cls in _TEXT_WIDGET_CLASSES
+
+
+def bind_paste_new_task(widget, parent=None, on_done=None):
+    """给 widget 绑定 Ctrl+V：剪贴板是受支持路径时打开「新建任务」并预填。
+
+    焦点在文本类控件时**不**拦截，避免抢掉编辑器自身的粘贴。
+    """
+    def _handler(event=None):
+        if paste_should_intercept(widget):
+            return None
+        text = paste_path_from_clipboard(widget)
+        if not classify_pasted_path(text).get("ok"):
+            return None
+        new_task_from_path(parent or widget, text, on_done)
+        return "break"
+
+    try:
+        widget.bind("<Control-v>", _handler, add="+")
+        widget.bind("<Control-V>", _handler, add="+")
+    except Exception:                           # noqa: BLE001
+        pass
+    return _handler
+
+
+# ══════════════════════════════════════════════════════════════════════
+# L4: 任务编辑窗 —— 四页签（任务 / 计划 / 热键 / 执行）
+# ══════════════════════════════════════════════════════════════════════
+
+def _sched_task_dialog(parent, task=None, on_done=None, prefill=None):
+    """新建 / 编辑计划任务（四页签：任务 / 计划 / 热键 / 执行）。
+
+    Args:
+        parent:   父窗口
+        task:     编辑时的任务 dict；``None`` = 新建（旧签名保持不变）
+        on_done:  保存成功后的回调
+        prefill:  新建时的预填 dict（键同 task），供「粘贴路径新建」使用
+
+    设计要点（方案文档 §5 L4 #4）：
+    * **触发器 / 热键 / 执行策略是三件正交的事**，各占一页；
+    * 「计划」页支持**增删多条**触发器，kind 由 ``triggers.list_infos()`` 动态生成；
+    * 「热键」页编辑 ``hotkey`` 触发器 spec 与任务级 ``stop_hotkey``；
+    * 保存仍走 ``scheduler.add_task()/update_task()``，列表取数仍走
+      ``task_summary()/task_status()`` —— 数据面零改动（向后兼容）；
+    * 校验失败会切到出错页签并把输入框描红（沿用设置窗口的定位高亮风格）。
+    """
+    import scheduler as sched_module
+    import triggers as trg_mod
+    import commands as cmd_mod
+
+    editing = isinstance(task, dict)
+    base = dict(task) if editing else dict(prefill or {})
+    _specs = [dict(s) for s in (base.get("triggers") or []) if isinstance(s, dict)]
+    if not _specs:
+        _specs = [trg_mod.default_trigger()]
+
+    def _to_int(text, default=0):
+        try:
+            return int(float(str(text).strip()))
+        except (TypeError, ValueError):
+            return default
+
+    def _to_int_or_none(text):
+        text = str(text).strip()
+        return None if not text else _to_int(text, 0)
+
+    dlg2 = tkinter.Toplevel(parent)
+    dlg2.title("编辑计划任务" if editing else "新建计划任务")
+    place_dialog(dlg2, 650, 680, parent=parent)
+    dlg2.minsize(600, 620)
+    dlg2.transient(parent); dlg2.grab_set()
+    dlg2.configure(bg=C["bgc"])
+    _set_window_icon(dlg2)
+
+    tkinter.Label(dlg2, text="编辑计划任务" if editing else "新建计划任务",
+        font=FONT_TITLE, bg=C["bgc"], fg=C["fgt"]).pack(pady=(8, 4))
+
+    nb = ttk.Notebook(dlg2)
+    nb.pack(fill="both", expand=True, padx=12, pady=(0, 4))
+    tab_task = tkinter.Frame(nb, bg=C["bgc"])
+    tab_plan = tkinter.Frame(nb, bg=C["bgc"])
+    tab_hotkey = tkinter.Frame(nb, bg=C["bgc"])
+    tab_exec = tkinter.Frame(nb, bg=C["bgc"])
+    nb.add(tab_task, text="任务")
+    nb.add(tab_plan, text="计划")
+    nb.add(tab_hotkey, text="热键")
+    nb.add(tab_exec, text="执行")
+    _TAB_TASK, _TAB_PLAN, _TAB_HOTKEY, _TAB_EXEC = 0, 1, 2, 3
+
+    def _mk_grid(frame):
+        """在 frame 上建一套「标签 + 输入控件」网格工具 → (new_row, entry)。"""
+        frame.columnconfigure(1, weight=1)
+        counter = [0]
+
+        def _new_row(text, width=11):
+            idx = counter[0]
+            counter[0] += 1
+            if text:
+                tkinter.Label(frame, text=text, font=FONT_BODY, bg=C["bgc"],
+                    fg=C["fgb"], width=width, anchor="e").grid(
+                    row=idx, column=0, sticky="e", padx=(0, 6), pady=3)
+            return idx
+
+        def _entry(var, width=32):
+            return tkinter.Entry(frame, textvariable=var, font=FONT_BODY,
+                width=width, bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1)
+
+        return _new_row, _entry
+
+    # ══════════════════ 页签① 任务 ══════════════════
+    _row_t, _entry_t = _mk_grid(tab_task)
+
+    nv = tkinter.StringVar(value=str(base.get("name") or "新任务"))
+    i = _row_t("任务名称:")
+    name_entry = _entry_t(nv)
+    name_entry.grid(row=i, column=1, sticky="ew", pady=3)
+
+    cur_type = str(base.get("target_type") or "script").lower()
+    ttv = tkinter.StringVar(
+        value={k: t for t, k in _SCHED_TARGET_LABELS}.get(cur_type, "脚本"))
+    i = _row_t("目标类型:")
+    ttk.Combobox(tab_task, textvariable=ttv,
+        values=[t for t, _k in _SCHED_TARGET_LABELS],
+        state="readonly", width=12).grid(row=i, column=1, sticky="w", pady=3)
+
+    tv = tkinter.StringVar(value=str(base.get("target") or base.get("script") or ""))
+    i_tgt = _row_t("目标:")
+    tgt_frame = tkinter.Frame(tab_task, bg=C["bgc"])
+    tgt_frame.grid(row=i_tgt, column=1, sticky="ew", pady=3)
+    tgt_frame.columnconfigure(0, weight=1)
+    tgt_entry = tkinter.Entry(tgt_frame, textvariable=tv, font=FONT_BODY,
+        bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1)
+    tgt_entry.grid(row=0, column=0, sticky="ew")
+
+    def _browse_target():
+        kind = _sched_target_kind(ttv.get())
+        if kind == "command":
+            return
+        if kind == "workflow":
+            ftypes = [('工作流', '*.json *.yaml *.yml'), ('全部', '*.*')]
+            title = "选择工作流文件"
+        else:
+            ftypes = [('Excel', '*.xls *.xlsx'), ('ACRPA 脚本', '*.acrpas'), ('全部', '*.*')]
+            title = "选择脚本"
+        path = filedialog.askopenfilename(title=title, filetypes=ftypes, initialdir=APP_ROOT)
+        if path:
+            tv.set(path)
+
+    _browse = tkinter.Button(tgt_frame, text="浏览", font=FONT_SMALL, bg=C["ac"],
+        fg="white", command=_browse_target)
+    _ui_theme.set_role(_browse, "ac")
+    _browse.grid(row=0, column=1, padx=4)
+    attach_tooltip(_browse, "选择脚本 / 工作流文件")
+    cmd_combo = ttk.Combobox(tgt_frame, textvariable=tv, width=26,
+        values=tuple(cmd_mod.list_names()))
+    cmd_combo.grid(row=0, column=0, sticky="ew")
+    cmd_combo.grid_remove()
+
+    # 单命令参数（逗号分隔，依次填入参数槽）+ L4 #7 占位符提示
+    _params = base.get("target_params") if isinstance(base.get("target_params"), dict) else {}
+    _args_val = _params.get("args", _params.get("params", ""))
+    if isinstance(_args_val, (list, tuple)):
+        _args_val = ",".join(str(x) for x in _args_val)
+    av = tkinter.StringVar(value=str(_args_val or ""))
+    i = _row_t("命令参数:")
+    args_entry = _entry_t(av)
+    args_entry.grid(row=i, column=1, sticky="ew", pady=3)
+    i = _row_t("")
+    param_hint_var = tkinter.StringVar(value=interp_hint_text(None))
+    tkinter.Label(tab_task, textvariable=param_hint_var, font=FONT_SMALL,
+        bg=C["bgc"], fg=C["fgm"], anchor="w", justify="left",
+        wraplength=420).grid(row=i, column=1, sticky="w")
+    attach_tooltip(args_entry, lambda: param_hint_var.get())
+
+    ev = tkinter.BooleanVar(value=bool(base.get("enabled", True)))
+    i = _row_t("")
+    ttk.Checkbutton(tab_task, text="启用该任务", variable=ev).grid(
+        row=i, column=1, sticky="w", pady=(8, 0))
+
+    def _refresh_param_hint(*_a):
+        kind = _sched_target_kind(ttv.get())
+        cmd_name = tv.get().strip() if kind == "command" else None
+        try:
+            param_hint_var.set(interp_hint_text(cmd_name))
+        except Exception:                       # noqa: BLE001
+            pass
+
+    def _on_type_change(*_a):
+        kind = _sched_target_kind(ttv.get())
+        if kind == "command":
+            tgt_entry.grid_remove(); cmd_combo.grid()
+            _browse.configure(text="命令")
+        else:
+            cmd_combo.grid_remove(); tgt_entry.grid()
+            _browse.configure(text="浏览")
+        _refresh_param_hint()
+
+    ttv.trace_add("write", _on_type_change)
+    tv.trace_add("write", _refresh_param_hint)
+
+    # ══════════════════ 页签② 计划（触发器可多条）══════════════════
+    _row_p, _entry_p = _mk_grid(tab_plan)
+    _infos = trg_mod.list_infos()
+    _label_of = {k: lab for k, lab in _infos}
+    _kind_of_label = {lab: k for k, lab in _infos}
+    _KIND_DEFAULT_TEXT = {
+        "once": "", "daily": "09:00", "weekly": "0,1|09:00", "interval": "3600",
+        "countdown": "60", "hourly": "", "hotkey": "",
+        "on_boot": str(getattr(state, "DEFAULT_BOOT_DELAY_SEC", 30)),
+    }
+
+    i = _row_p("触发器列表:")
+    trg_wrap = tkinter.Frame(tab_plan, bg=C["bgc"],
+        highlightbackground=C["bd"], highlightthickness=1)
+    trg_wrap.grid(row=i, column=1, sticky="ew", pady=3)
+    trg_wrap.columnconfigure(0, weight=1)
+    trg_tree = ttk.Treeview(trg_wrap, columns=("kind", "param"), show="headings",
+        height=4, selectmode="browse")
+    trg_tree.heading("kind", text="类型")
+    trg_tree.column("kind", width=90, anchor="w")
+    trg_tree.heading("param", text="参数 / 摘要")
+    trg_tree.column("param", width=260, anchor="w")
+    trg_tree.grid(row=0, column=0, sticky="ew")
+    bind_sel_bold(trg_tree)
+
+    _loading = {"on": False}
+    _sel = {"idx": None}
+
+    ktv = tkinter.StringVar(value=_label_of.get("daily", "每天"))
+    i = _row_p("类型:")
+    ttk.Combobox(tab_plan, textvariable=ktv, values=[lab for _k, lab in _infos],
+        state="readonly", width=14).grid(row=i, column=1, sticky="w", pady=3)
+
+    pv = tkinter.StringVar(value=_sched_spec_text(trg_mod.default_trigger()))
+    i = _row_p("参数:")
+    pv_entry = _entry_p(pv)
+    pv_entry.grid(row=i, column=1, sticky="ew", pady=3)
+    i = _row_p("")
+    hint_var = tkinter.StringVar(value=_SCHED_TRIGGER_HINTS.get("daily", ""))
+    tkinter.Label(tab_plan, textvariable=hint_var, font=FONT_SMALL, bg=C["bgc"],
+        fg=C["fgm"], anchor="w", justify="left", wraplength=420).grid(
+        row=i, column=1, sticky="w")
+
+    mode_var = tkinter.StringVar(value="full")
+    i = _row_p("整点模式:")
+    mode_combo = ttk.Combobox(tab_plan, textvariable=mode_var,
+        values=("full", "half", "both"), state="disabled", width=10)
+    mode_combo.grid(row=i, column=1, sticky="w", pady=3)
+
+    def _on_kind_change(*_a):
+        kind = _kind_of_label.get(ktv.get(), "daily")
+        hint_var.set(_SCHED_TRIGGER_HINTS.get(kind, ""))
+        try:
+            mode_combo.configure(state=("readonly" if kind == "hourly" else "disabled"))
+        except Exception:                       # noqa: BLE001
+            pass
+        if not _loading["on"]:
+            pv.set(_KIND_DEFAULT_TEXT.get(kind, ""))
+    ktv.trace_add("write", _on_kind_change)
+
+    def _spec_summary(spec):
+        try:
+            inst = trg_mod.make(spec)
+            return inst.describe() if inst is not None else str(spec.get("kind"))
+        except Exception:                       # noqa: BLE001
+            return str(spec.get("kind"))
+
+    def _trg_load(iid):
+        try:
+            idx = int(iid)
+        except (TypeError, ValueError):
+            return
+        if not (0 <= idx < len(_specs)):
+            return
+        spec = _specs[idx]
+        _sel["idx"] = idx
+        kind = str(spec.get("kind") or "daily")
+        _loading["on"] = True
+        try:
+            ktv.set(_label_of.get(kind, _label_of.get("daily", "每天")))
+            pv.set(_sched_spec_text(spec))
+            mode_var.set(str(spec.get("mode") or "full"))
+        finally:
+            _loading["on"] = False
+        hint_var.set(_SCHED_TRIGGER_HINTS.get(kind, ""))
+        try:
+            mode_combo.configure(state=("readonly" if kind == "hourly" else "disabled"))
+        except Exception:                       # noqa: BLE001
+            pass
+
+    def _trg_refresh(select=None):
+        for iid in trg_tree.get_children():
+            trg_tree.delete(iid)
+        for idx, spec in enumerate(_specs):
+            kind = str(spec.get("kind") or "daily")
+            trg_tree.insert("", "end", iid=str(idx),
+                values=(_label_of.get(kind, kind), _spec_summary(spec)))
+        kids = trg_tree.get_children()
+        if kids:
+            want = str(select) if select is not None else kids[0]
+            if want not in kids:
+                want = kids[0]
+            trg_tree.selection_set(want)
+            trg_tree.focus(want)
+            _trg_load(want)
+        else:
+            _sel["idx"] = None
+
+    def _current_spec():
+        kind = _kind_of_label.get(ktv.get(), "daily")
+        return trg_mod.from_text(kind, pv.get().strip(), mode=mode_var.get())
+
+    def _trg_add():
+        kind = _kind_of_label.get(ktv.get(), "daily")
+        if kind == "once" and not pv.get().strip():
+            _alert(_TAB_PLAN, pv_entry, "「一次性」触发器需要填写具体时间")
+            return
+        _specs.append(_current_spec())
+        _trg_refresh(len(_specs) - 1)
+
+    def _trg_update():
+        idx = _sel["idx"]
+        if idx is None or not (0 <= idx < len(_specs)):
+            _alert(_TAB_PLAN, pv_entry, "请先在列表里选择要更新的触发器")
+            return
+        _specs[idx] = _current_spec()
+        _trg_refresh(idx)
+
+    def _trg_del():
+        idx = _sel["idx"]
+        if idx is None or not (0 <= idx < len(_specs)):
+            _alert(_TAB_PLAN, pv_entry, "请先在列表里选择要删除的触发器")
+            return
+        _specs.pop(idx)
+        _trg_refresh(idx if idx < len(_specs) else (len(_specs) - 1))
+
+    def _trg_reset():
+        kind = _kind_of_label.get(ktv.get(), "daily")
+        pv.set(_KIND_DEFAULT_TEXT.get(kind, ""))
+
+    trg_tree.bind("<<TreeviewSelect>>",
+        lambda e: _trg_load(trg_tree.selection()[0]) if trg_tree.selection() else None)
+
+    i = _row_p("")
+    _trg_bar = tkinter.Frame(tab_plan, bg=C["bgc"])
+    _trg_bar.grid(row=i, column=1, sticky="w", pady=(2, 6))
+    _btn(_trg_bar, "添加", _trg_add, "ac", "white").pack(side="left", padx=(0, 4))
+    _btn(_trg_bar, "更新选中", _trg_update, C["bgc"], C["fgb"]).pack(side="left", padx=(0, 4))
+    _btn(_trg_bar, "删除", _trg_del, C["dg"], "white").pack(side="left", padx=(0, 4))
+    _btn(_trg_bar, "清空重填", _trg_reset, C["bgc"], C["fgb"]).pack(side="left")
+
+    sdv = tkinter.StringVar(value=str(base.get("start_date") or ""))
+    i = _row_p("生效开始:")
+    sd_entry = _entry_p(sdv, 16)
+    sd_entry.grid(row=i, column=1, sticky="w", pady=3)
+    edv = tkinter.StringVar(value=str(base.get("end_date") or ""))
+    i = _row_p("生效结束:")
+    ed_entry = _entry_p(edv, 16)
+    ed_entry.grid(row=i, column=1, sticky="w", pady=3)
+    i = _row_p("")
+    tkinter.Label(tab_plan, text="格式 YYYY-MM-DD，空 = 不限（含起止当日）",
+        font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"], anchor="w").grid(
+        row=i, column=1, sticky="w")
+
+    # ══════════════════ 页签③ 热键 ══════════════════
+    _row_h, _entry_h = _mk_grid(tab_hotkey)
+    hkv = tkinter.StringVar(value=_spec_hotkey_text(_specs))
+    i = _row_h("任务热键:")
+    hk_entry = _entry_h(hkv, 20)
+    hk_entry.grid(row=i, column=1, sticky="w", pady=3)
+    attach_tooltip(hk_entry, "如 ctrl+alt+1（需含至少一个修饰键）；留空 = 不绑热键")
+    i = _row_h("")
+    tkinter.Label(tab_hotkey, text="如 ctrl+alt+1（需含至少一个修饰键）；留空 = 该任务不绑热键",
+        font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"], anchor="w", justify="left",
+        wraplength=420).grid(row=i, column=1, sticky="w")
+
+    shv = tkinter.StringVar(value=str(sched_module.exec_opt(base, "stop_hotkey", "")))
+    i = _row_h("停止热键:")
+    sh_entry = _entry_h(shv, 20)
+    sh_entry.grid(row=i, column=1, sticky="w", pady=3)
+    attach_tooltip(sh_entry, "任务级停止热键，如 ctrl+alt+f12")
+    i = _row_h("")
+    tkinter.Label(tab_hotkey, text="如 ctrl+alt+f12；与内建热键冲突时会在日志告警并忽略",
+        font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"], anchor="w", justify="left",
+        wraplength=420).grid(row=i, column=1, sticky="w")
+
+    i = _row_h("")
+    tkinter.Label(tab_hotkey,
+        text="说明：热键是独立的触发方式，不占用「计划」页的触发器列表；"
+             "保存时会自动合并为 hotkey 触发器。",
+        font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"], anchor="w", justify="left",
+        wraplength=420).grid(row=i, column=1, sticky="w", pady=(10, 0))
+
+    # ══════════════════ 页签④ 执行 ══════════════════
+    _row_e, _entry_e = _mk_grid(tab_exec)
+
+    ov = tkinter.StringVar(value=str(sched_module.exec_opt(base, "on_overlap", "skip")))
+    i = _row_e("重入策略:")
+    ttk.Combobox(tab_exec, textvariable=ov, values=("skip", "queue", "terminate"),
+        state="readonly", width=12).grid(row=i, column=1, sticky="w", pady=3)
+    i = _row_e("")
+    tkinter.Label(tab_exec, text="skip=运行中跳过 / queue=排队等上次结束 / terminate=先停止再执行",
+        font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"], anchor="w", justify="left",
+        wraplength=420).grid(row=i, column=1, sticky="w")
+
+    tov = tkinter.StringVar(value=str(sched_module.exec_opt(base, "timeout_sec", 0)))
+    i = _row_e("任务超时(秒):")
+    tov_entry = _entry_e(tov, 10)
+    tov_entry.grid(row=i, column=1, sticky="w", pady=3)
+    i = _row_e("")
+    tkinter.Label(tab_exec, text="0 = 不限；到点会真正中断本次执行",
+        font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"], anchor="w").grid(
+        row=i, column=1, sticky="w")
+
+    mrv = tkinter.StringVar(value=str(sched_module.exec_opt(base, "missed_run", "ignore")))
+    i = _row_e("错过补偿:")
+    ttk.Combobox(tab_exec, textvariable=mrv,
+        values=("ignore", "run_now", "run_delay"), state="readonly",
+        width=12).grid(row=i, column=1, sticky="w", pady=3)
+
+    mdv = tkinter.StringVar(value=str(sched_module.exec_opt(base, "missed_delay_sec", 60)))
+    i = _row_e("补偿延迟(秒):")
+    mdv_entry = _entry_e(mdv, 10)
+    mdv_entry.grid(row=i, column=1, sticky="w", pady=3)
+
+    _max_runs = base.get("max_runs")
+    maxv = tkinter.StringVar(value="" if _max_runs in (None, "") else str(_max_runs))
+    i = _row_e("次数上限:")
+    maxv_entry = _entry_e(maxv, 10)
+    maxv_entry.grid(row=i, column=1, sticky="w", pady=3)
+    i = _row_e("")
+    tkinter.Label(tab_exec,
+        text="空 = 不限；已执行 {} 次（只读）".format(int(base.get("run_count") or 0)),
+        font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"], anchor="w").grid(
+        row=i, column=1, sticky="w")
+
+    # ══════════════════ 校验 / 保存 ══════════════════
+    _watch = [name_entry, tgt_entry, args_entry, pv_entry, sd_entry, ed_entry,
+              hk_entry, sh_entry, tov_entry, mdv_entry, maxv_entry]
+
+    def _clear_marks():
+        for widget in _watch:
+            try:
+                widget.configure(highlightthickness=0)
+            except Exception:                   # noqa: BLE001
+                pass
+
+    def _alert(tab_idx, widget, msg):
+        """保存失败定位：切页签 + 输入框描红 + 聚焦 + 提示。"""
+        try:
+            nb.select(tab_idx)
+        except Exception:                       # noqa: BLE001
+            pass
+        try:
+            widget.configure(highlightthickness=2,
+                             highlightbackground=C["dg"], highlightcolor=C["dg"])
+            widget.focus_set()
+        except Exception:                       # noqa: BLE001
+            pass
+        try:
+            messagebox.showwarning("提示", msg, parent=dlg2)
+        except Exception:                       # noqa: BLE001
+            pass
+
+    def _confirm():
+        _clear_marks()
+        name = nv.get().strip()
+        if not name:
+            _alert(_TAB_TASK, name_entry, "请输入任务名称")
+            return
+        tkind = _sched_target_kind(ttv.get())
+        target = tv.get().strip()
+        if not target:
+            _alert(_TAB_TASK, tgt_entry if tkind != "command" else cmd_combo,
+                   "请指定目标（脚本 / 工作流 / 命令）")
+            return
+        if tkind == "command":
+            try:
+                known = set(cmd_mod.list_names())
+            except Exception:                   # noqa: BLE001
+                known = set()
+            if known and target not in known:
+                _alert(_TAB_TASK, cmd_combo,
+                       "未知命令：{}（请从下拉列表选择）".format(target))
+                return
+        if not _specs:
+            _alert(_TAB_PLAN, pv_entry, "请至少添加一个触发器")
+            return
+        start_date = sdv.get().strip()
+        end_date = edv.get().strip()
+        if start_date and trg_mod.parse_date(start_date) is None:
+            _alert(_TAB_PLAN, sd_entry, "生效开始日期格式应为 YYYY-MM-DD")
+            return
+        if end_date and trg_mod.parse_date(end_date) is None:
+            _alert(_TAB_PLAN, ed_entry, "生效结束日期格式应为 YYYY-MM-DD")
+            return
+        if start_date and end_date and end_date < start_date:
+            _alert(_TAB_PLAN, ed_entry, "结束日期不能早于开始日期")
+            return
+        timeout_val = _to_int(tov.get(), 0)
+        if timeout_val < 0:
+            _alert(_TAB_EXEC, tov_entry, "任务超时需为 0（不限）或正整数秒")
+            return
+        delay_val = _to_int(mdv.get(), 60)
+        if delay_val < 0:
+            _alert(_TAB_EXEC, mdv_entry, "补偿延迟需为非负整数秒")
+            return
+        max_runs = _to_int_or_none(maxv.get())
+        if max_runs is not None and max_runs <= 0:
+            max_runs = None
+
+        # 热键页 → hotkey 触发器（与「计划」页列表合并，不重复）
+        hk_value = hkv.get().strip()
+        if hk_value and "+" not in hk_value:
+            _alert(_TAB_HOTKEY, hk_entry, "热键需含至少一个修饰键，如 ctrl+alt+1")
+            return
+        specs = [dict(s) for s in _specs if str(s.get("kind")) != "hotkey"]
+        if hk_value:
+            specs.append({"kind": "hotkey", "spec": hk_value})
+        if not specs:
+            _alert(_TAB_PLAN, pv_entry, "请至少保留一个触发器，或在「热键」页填写任务热键")
+            return
+
+        target_params = None
+        if tkind == "command":
+            target_params = {"args": [a.strip() for a in av.get().split(",") if a.strip()]}
+        patch = {
+            "name": name,
+            "target_type": tkind,
+            "target": target,
+            "triggers": specs,
+            "enabled": bool(ev.get()),
+            "on_overlap": ov.get(),
+            "timeout_sec": timeout_val,
+            "missed_run": mrv.get(),
+            "missed_delay_sec": delay_val,
+            "max_runs": max_runs,
+            "start_date": start_date,
+            "end_date": end_date,
+            "stop_hotkey": shv.get().strip(),
+            "target_params": target_params,
+        }
+        try:
+            if editing:
+                sched_module.update_task(base.get("id"), patch)
+            else:
+                sched_module.add_task(
+                    name, target if tkind == "script" else "", "daily", "09:00",
+                    bool(ev.get()), None, tkind, target, specs,
+                    on_overlap=patch["on_overlap"], timeout_sec=patch["timeout_sec"],
+                    missed_run=patch["missed_run"],
+                    missed_delay_sec=patch["missed_delay_sec"],
+                    stop_hotkey=patch["stop_hotkey"], max_runs=max_runs,
+                    start_date=start_date, end_date=end_date,
+                    target_params=target_params)
+        except Exception as e:                  # noqa: BLE001
+            _alert(_TAB_TASK, name_entry, "保存失败: {}".format(e))
+            return
+        dlg2.destroy()
+        if on_done:
+            try:
+                on_done()
+            except Exception:                   # noqa: BLE001
+                pass
+        show_toast(root, "任务已保存: {}".format(name), "success")
+
+    bf = tkinter.Frame(dlg2, bg=C["bgc"])
+    bf.pack(pady=(4, 10))
+    _ui_theme.roled(tkinter.Button(bf, text="确定", command=_confirm, font=FONT_BUTTON,
+        bg=C["ac"], fg="white", padx=14, pady=3), "ac").pack(side="left", padx=4)
+    tkinter.Button(bf, text="取消", command=dlg2.destroy, font=FONT_BUTTON,
+        bg=C["bgc"], fg=C["fgb"], padx=14, pady=3).pack(side="left", padx=4)
+    dlg2.bind("<Escape>", lambda e: dlg2.destroy())
+
+    _on_type_change()
+    _trg_refresh(0)
+    return dlg2
+# ======================================================================
 # 计划任务管理窗口
 # ======================================================================
 def open_sched_manager():
@@ -1062,84 +1948,38 @@ def open_sched_manager():
     mgr_toolbar.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 2))
 
     def _mgr_new_task():
-        ndlg = tkinter.Toplevel(dlg)
-        ndlg.title("新建计划任务")
-        place_dialog(ndlg, 440, 340, parent=dlg)
-        ndlg.transient(dlg); ndlg.grab_set()
-        ndlg.configure(bg=C["bgc"])
-        _set_window_icon(ndlg)
+        # 表单统一走 _sched_task_dialog (目标三型 + 触发器 + 执行语义, L0/L1)
+        _sched_task_dialog(dlg, None, _mgr_refresh)
 
-        tkinter.Label(ndlg, text="新建计划任务", font=FONT_TITLE, bg=C["bgc"],
-            fg=C["fgt"]).pack(pady=(10, 6))
-        f1 = tkinter.Frame(ndlg, bg=C["bgc"])
-        f1.pack(fill="x", padx=14, pady=2)
-        tkinter.Label(f1, text="任务名称:", font=FONT_BODY, bg=C["bgc"], fg=C["fgb"],
-            width=9, anchor="e").pack(side="left", padx=(0, 6))
-        nv = tkinter.StringVar(value="新任务")
-        tkinter.Entry(f1, textvariable=nv, font=FONT_BODY, width=28,
-            bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1).pack(side="left")
-
-        f2 = tkinter.Frame(ndlg, bg=C["bgc"])
-        f2.pack(fill="x", padx=14, pady=2)
-        tkinter.Label(f2, text="脚本文件:", font=FONT_BODY, bg=C["bgc"], fg=C["fgb"],
-            width=9, anchor="e").pack(side="left", padx=(0, 6))
-        sv = tkinter.StringVar()
-        tkinter.Entry(f2, textvariable=sv, font=FONT_BODY, width=22,
-            bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1).pack(side="left")
-        _browse_btn = tkinter.Button(f2, text="浏览", font=FONT_SMALL, bg=C["ac"], fg="white",
-            command=lambda: sv.set(filedialog.askopenfilename(
-                title="选择脚本", filetypes=[('Excel', '*.xls *.xlsx'), ('ACRPA 脚本', '*.acrpas')],
-                initialdir=APP_ROOT) or sv.get()))
-        _ui_theme.set_role(_browse_btn, "ac")
-        _browse_btn.pack(side="left", padx=4)
-        attach_tooltip(_browse_btn, "选择脚本文件")
-
-        f3 = tkinter.Frame(ndlg, bg=C["bgc"])
-        f3.pack(fill="x", padx=14, pady=2)
-        tkinter.Label(f3, text="执行周期:", font=FONT_BODY, bg=C["bgc"], fg=C["fgb"],
-            width=9, anchor="e").pack(side="left", padx=(0, 6))
-        ptv = tkinter.StringVar(value="daily")
-        ttk.Combobox(f3, textvariable=ptv, width=12,
-            values=("daily", "interval", "weekly", "once"), state="readonly").pack(side="left")
-
-        f4 = tkinter.Frame(ndlg, bg=C["bgc"])
-        f4.pack(fill="x", padx=14, pady=2)
-        tkinter.Label(f4, text="周期值:", font=FONT_BODY, bg=C["bgc"], fg=C["fgb"],
-            width=9, anchor="e").pack(side="left", padx=(0, 6))
-        pvv = tkinter.StringVar(value="09:00")
-        tkinter.Entry(f4, textvariable=pvv, font=FONT_BODY, width=15,
-            bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1).pack(side="left")
-        ph = tkinter.Label(f4, text="(HH:MM / 秒 / 日期)", font=FONT_SMALL,
-            bg=C["bgc"], fg=C["fgm"])
-        ph.pack(side="left", padx=4)
-        def _on_pt(*a):
-            h = {"daily":"(HH:MM)","interval":"(秒数)","weekly":"(0,1|HH:MM)","once":"(YYYY-MM-DD HH:MM)"}
-            ph.config(text=h.get(ptv.get(), ""))
-        ptv.trace_add("write", _on_pt)
-
-        ev = tkinter.BooleanVar(value=True)
-        ttk.Checkbutton(ndlg, text="创建后立即启用", variable=ev).pack(pady=6)
-
-        bf = tkinter.Frame(ndlg, bg=C["bgc"]); bf.pack(pady=8)
-        def _confirm():
-            n = nv.get().strip(); s = sv.get().strip()
-            if not n: messagebox.showwarning("提示", "请输入任务名称"); return
-            if not s: messagebox.showwarning("提示", "请选择脚本"); return
-            sched_module.add_task(n, s, ptv.get(), pvv.get(), ev.get())
-            _mgr_refresh()
-            ndlg.destroy()
-            show_toast(root, "任务已添加: {}".format(n), "success")
-        _ui_theme.roled(tkinter.Button(bf, text="确定", command=_confirm, font=FONT_BUTTON,
-            bg=C["ac"], fg="white", padx=14, pady=3), "ac").pack(side="left", padx=4)
-        tkinter.Button(bf, text="取消", command=ndlg.destroy, font=FONT_BUTTON,
-            bg=C["bgc"], fg=C["fgb"], padx=14, pady=3).pack(side="left", padx=4)
-        ndlg.bind("<Escape>", lambda e: ndlg.destroy())
+    def _mgr_edit_task(tid):
+        task = next((t for t in state.SCHED_TASKS if t.get("id") == tid), None)
+        if task is None:
+            return
+        _sched_task_dialog(dlg, task, _mgr_refresh)
 
     _btn(mgr_toolbar, "新建任务", _mgr_new_task, "ac", "white").pack(side="left", padx=1)
+    _btn(mgr_toolbar, "编辑", lambda: (
+        _mgr_edit_task(mgr_tree.selection()[0]) if mgr_tree.selection() else None),
+        C["bgc"], C["fgb"]).pack(side="left", padx=1)
     _btn(mgr_toolbar, "刷新", lambda: _mgr_refresh(), C["bgc"], C["fgb"]).pack(side="left", padx=1)
     tkinter.Frame(mgr_toolbar, bg=C["bd"], width=2, height=20).pack(side="left", fill="y", padx=4)
     _btn(mgr_toolbar, "查看日志", lambda: _mgr_show_logs(dlg),
         C["bgc"], C["fgb"]).pack(side="left", padx=1)
+    tkinter.Frame(mgr_toolbar, bg=C["bd"], width=2, height=20).pack(side="left", fill="y", padx=4)
+    # L4 #5 搜索增强: 空格分隔多关键词 AND + 日期关键词(2026-10 / 10-23)
+    tkinter.Label(mgr_toolbar, text="搜索:", font=FONT_SMALL,
+        bg=C["bgc"], fg=C["fgm"]).pack(side="left", padx=(0, 4))
+    mgr_search_var = tkinter.StringVar(value="")
+    _mgr_search = tkinter.Entry(mgr_toolbar, textvariable=mgr_search_var,
+        font=FONT_SMALL, width=22, relief="solid", bd=1,
+        bg=C["ebg"], fg=C["fgb"], insertbackground=C["fgt"])
+    _mgr_search.pack(side="left")
+    attach_tooltip(_mgr_search,
+        "空格分隔多关键词（同时满足）；可输日期如 2026-10 / 10-23"
+        + ("；已启用拼音首字母匹配" if pinyin_available() else ""))
+    _mgr_count = tkinter.Label(mgr_toolbar, text="",
+        font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"])
+    _mgr_count.pack(side="right", padx=(6, 0))
     tkinter.Label(mgr_toolbar, text="( 计划任务模块)",
         font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"]).pack(side="right")
 
@@ -1149,11 +1989,11 @@ def open_sched_manager():
     list_f.columnconfigure(0, weight=1); list_f.rowconfigure(0, weight=1)
 
     mgr_tree = ttk.Treeview(list_f,
-        columns=("name", "script", "period", "next_run", "last_run", "enabled"),
+        columns=("name", "target", "plan", "next_run", "last_run", "status"),
         show="headings", selectmode="browse")
-    for c, t, w in [("name", "任务名称", 110), ("script", "脚本名称", 140),
-        ("period", "周期", 60), ("next_run", "下次执行", 140),
-        ("last_run", "上次执行", 140), ("enabled", "启用", 45)]:
+    for c, t, w in [("name", "任务名称", 110), ("target", "目标", 150),
+        ("plan", "计划", 160), ("next_run", "下次执行", 130),
+        ("last_run", "上次执行", 130), ("status", "状态", 60)]:
         mgr_tree.heading(c, text=t); mgr_tree.column(c, width=w, minwidth=40)
     # §4.5 降级: show="headings" 无 #0 列 → 选中行加粗
     bind_sel_bold(mgr_tree)
@@ -1165,19 +2005,33 @@ def open_sched_manager():
     def _mgr_refresh():
         for item in mgr_tree.get_children():
             mgr_tree.delete(item)
+        try:
+            query = mgr_search_var.get()
+        except Exception:                       # noqa: BLE001
+            query = ""
+        shown = 0
         for task in state.SCHED_TASKS:
-            tid = task["id"]
-            nr = sched_module._task_next_runs.get(tid, "--")
-            lr = sched_module._task_last_runs.get(tid, "--")
-            pl = {"daily":"每天","interval":"间隔","weekly":"每周","once":"一次"}.get(
-                task.get("period_type",""), task.get("period_type",""))
-            en = "✔" if task.get("enabled", True) else "✘"
-            vals = (task.get("name",""), os.path.basename(task.get("script","")),
-                    pl, nr, lr, en)
-            tag = "en" if task.get("enabled", True) else "dis"
-            mgr_tree.insert("", "end", values=vals, iid=tid, tags=(tag,))
+            # 单一数据来源: scheduler.task_summary() (目标/计划/下次/上次/状态)
+            row = sched_module.task_summary(task)
+            # L4 #5: 纯函数过滤（多关键词 AND / 日期关键词 / 可选拼音首字母）
+            if not sched_row_matches(row, query, task):
+                continue
+            tag = "en" if row["enabled"] else "dis"
+            if row["status"] in ("已过期", "已达上限"):
+                tag = "exp"
+            vals = (row["name"], row["target"], row["plan"],
+                    row["next_run"], row["last_run"], row["status"])
+            mgr_tree.insert("", "end", values=vals, iid=row["id"], tags=(tag,))
             mgr_tree.tag_configure("en", foreground=C["fgb"])
             mgr_tree.tag_configure("dis", foreground=C["fgm"])
+            mgr_tree.tag_configure("exp", foreground=C["wn"])
+            shown += 1
+        try:
+            _mgr_count.configure(text="共 {} 条{}".format(
+                shown, "" if shown == len(state.SCHED_TASKS)
+                else " / 全部 {} 条".format(len(state.SCHED_TASKS))))
+        except Exception:                       # noqa: BLE001
+            pass
 
     def _mgr_context(event):
         sel = mgr_tree.selection()
@@ -1188,6 +2042,8 @@ def open_sched_manager():
             activebackground=C["ac"], activeforeground="white")
         if task:
             en = task.get("enabled", True)
+            menu.add_command(label="编辑…",
+                command=lambda: _mgr_edit_task(tid))
             menu.add_command(label="禁用" if en else "启用",
                 command=lambda: (sched_module.toggle_task(tid, not en), _mgr_refresh()))
             menu.add_command(label="立即执行",
@@ -1254,6 +2110,15 @@ def open_sched_manager():
         _log_refresh()
 
         ldlg.bind("<Escape>", lambda e: ldlg.destroy())
+
+    # L4 #5: 搜索输入即时过滤
+    try:
+        mgr_search_var.trace_add("write", lambda *a: _mgr_refresh())
+    except Exception:                           # noqa: BLE001
+        pass
+    # L4 #6 降级: 拖放需第三方依赖 → Ctrl+V 粘贴路径即新建任务
+    bind_paste_new_task(mgr_tree, dlg, _mgr_refresh)
+    bind_paste_new_task(dlg, dlg, _mgr_refresh)
 
     _mgr_refresh()
     dlg.bind("<Escape>", lambda e: dlg.destroy())

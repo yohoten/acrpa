@@ -270,6 +270,71 @@ def _probe_input_dd():
         "未启用 DD 内核驱动 (input_mode={!r}), 回退 PyAutoGUI".format(mode))
 
 
+# ── L2 动作库扩充 (方案文档 §5 L2) 的能力探测 ───────────────────────
+# 这 5 个能力都是 **Windows 原生/标准库** 具备的, 注册它们的目的不是"拦命令",
+# 而是让 requires() 声明的 id 有单一事实来源 (label/degraded/原因), 并让
+# 非 Windows 环境 / 缺 ssl 的裁剪环境能给出可读的 MISSING 原因。
+def _probe_proc_kill():
+    """进程管理 (OpenProcess/TerminateProcess, 纯 ctypes)。"""
+    if os.name != "nt":
+        return ProbeResult(CapState.MISSING, "非 Windows 平台无进程管理能力")
+    try:
+        import ctypes
+        ctypes.windll.kernel32
+        return ProbeResult(CapState.READY, "ctypes kernel32 可用")
+    except Exception as e:                # noqa: BLE001
+        return ProbeResult(CapState.BROKEN, "kernel32 不可用: {}".format(e))
+
+
+def _probe_net_http():
+    """HTTP(S) 请求 (urllib.request + ssl)。"""
+    try:
+        import ssl  # noqa: F401
+        import urllib.request  # noqa: F401
+        return ProbeResult(CapState.READY, "urllib.request + ssl 可用")
+    except ImportError as e:
+        return ProbeResult(CapState.MISSING, "标准库缺 urllib/ssl: {}".format(e))
+    except Exception as e:                # noqa: BLE001
+        return ProbeResult(CapState.BROKEN, "urllib/ssl 导入失败: {}".format(e))
+
+
+def _probe_power():
+    """电源操作 (shutdown.exe + user32/powrprof)。"""
+    if os.name != "nt":
+        return ProbeResult(CapState.MISSING, "非 Windows 平台无电源操作能力")
+    try:
+        import ctypes
+        ctypes.windll.user32
+        return ProbeResult(CapState.READY, "user32/powrprof 可用")
+    except Exception as e:                # noqa: BLE001
+        return ProbeResult(CapState.BROKEN, "电源接口不可用: {}".format(e))
+
+
+def _probe_audio():
+    """音量控制 (IAudioEndpointVolume COM / keybd_event 回退)。"""
+    if os.name != "nt":
+        return ProbeResult(CapState.MISSING, "非 Windows 平台无音量控制能力")
+    try:
+        import ctypes
+        ctypes.windll.ole32
+        ctypes.windll.user32
+        return ProbeResult(CapState.READY, "ole32/user32 可用 (COM 优先, 键击回退)")
+    except Exception as e:                # noqa: BLE001
+        return ProbeResult(CapState.BROKEN, "音频接口不可用: {}".format(e))
+
+
+def _probe_win32():
+    """Win32 窗口样式 (SetLayeredWindowAttributes/SetWindowPos)。"""
+    if os.name != "nt":
+        return ProbeResult(CapState.MISSING, "非 Windows 平台无窗口样式能力")
+    try:
+        import ctypes
+        ctypes.windll.user32
+        return ProbeResult(CapState.READY, "user32 可用")
+    except Exception as e:                # noqa: BLE001
+        return ProbeResult(CapState.BROKEN, "user32 不可用: {}".format(e))
+
+
 # ── 首期注册 4 个能力 ────────────────────────────────────────────────
 # 阶段二新增项③: cv.match 由可选扩展 cv.match 提供 (ext_id 指向该扩展);
 # 其余 3 个能力暂无扩展来源, ext_id 保持 None。
@@ -289,3 +354,28 @@ register(Capability(id="input.dd", label="⌨ DD 内核输入",
                     ext_id=None, degraded="soft",
                     degraded_note="缺失时回退 PyAutoGUI",
                     probe=_probe_input_dd))
+
+# ── L2 动作库扩充新增的 5 个能力 (方案文档 §5 L2 的 requires 列) ──────
+# degraded 取值说明: soft = 非 READY 只记一次 warning 并继续 (允许降级执行),
+# 因此这些 Windows 原生能力不会因探测抖动误拦用户脚本; net.http 取 hard,
+# 因为缺 ssl 时 HTTPS 请求必然失败, 提前拦下比执行期报错更清晰。
+register(Capability(id="proc.kill", label="⚙ 结束进程",
+                    ext_id=None, degraded="soft",
+                    degraded_note="仅 Windows 可用; 系统关键进程被硬白名单拒绝",
+                    probe=_probe_proc_kill))
+register(Capability(id="net.http", label="🌐 HTTP 请求",
+                    ext_id=None, degraded="hard",
+                    degraded_note="依赖标准库 urllib.request + ssl",
+                    probe=_probe_net_http))
+register(Capability(id="power", label="⏻ 电源操作",
+                    ext_id=None, degraded="soft",
+                    degraded_note="仅 Windows 可用; 真实执行需二次确认",
+                    probe=_probe_power))
+register(Capability(id="audio", label="🔊 音量控制",
+                    ext_id=None, degraded="soft",
+                    degraded_note="COM 不可用时回退音量键 (精度受限)",
+                    probe=_probe_audio))
+register(Capability(id="win32", label="🪟 Win32 窗口样式",
+                    ext_id=None, degraded="soft",
+                    degraded_note="仅 Windows 可用; 缺 pywin32 时用 ctypes 查找窗口",
+                    probe=_probe_win32))

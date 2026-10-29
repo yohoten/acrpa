@@ -317,13 +317,47 @@ def build_date_format(fmt):
 
 
 def _render_date(fmt, now):
-    translated = build_date_format(fmt)
-    if translated is None:
+    """渲染 ``{date:}`` 格式串; 非法/不可渲染返回 None (调用方字面保留)。
+
+    为什么**逐段**渲染而不是把整串交给 ``strftime``
+    ------------------------------------------------
+    Windows 的 ``strftime`` 会用当前 **ANSI 代码页**去编码整个格式串。
+    格式串里含中文等非 ASCII 字面量时 (``{date:T=Y年M月D日}``), 只要机器不是
+    中文代码页 (例如 CI 的 windows-latest), 就会抛 ``UnicodeEncodeError``
+    —— 表现为"同一个占位符只在部分机器上失效"的诡异回归。
+
+    这里把字面量直接拼进结果, 只让**纯 ASCII 的指令**进 ``strftime``,
+    结果与本机代码页/locale 编码无关。``build_date_format`` 保留为对外翻译
+    工具 (文档与调试用), 不再是本函数的唯一路径。
+    """
+    if not isinstance(fmt, str):
         return None
-    try:
-        return now.strftime(translated)
-    except Exception:
-        return None
+    out = []
+    i, n = 0, len(fmt)
+    while i < n:
+        ch = fmt[i]
+        if ch == "%":
+            if i + 1 >= n:
+                return None                      # 孤立 % → 非法
+            nxt = fmt[i + 1]
+            if nxt not in _DATE_DIRECTIVES:
+                return None                      # 未知指令 → 非法
+            try:
+                out.append(now.strftime("%" + nxt))
+            except Exception:
+                return None
+            i += 2
+            continue
+        directive = DATE_MAP.get(ch)
+        if directive is None:
+            out.append(ch)                       # 字面量: 绝不进 strftime
+        else:
+            try:
+                out.append(now.strftime(directive))
+            except Exception:
+                return None
+        i += 1
+    return "".join(out)
 
 
 # ═══════════════════════════════════════════════════════════════════════

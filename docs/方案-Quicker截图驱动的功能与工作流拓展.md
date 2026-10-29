@@ -417,7 +417,7 @@ def _run_if(self, step, base_dir):
 ``` |
 | **变量注入** | `when` 里的 `${x}` 由 `_eval_condition`(`:615`) 自行解析；**不经过** `_render_args`（避免把条件当普通参数插值，`NO_INTERP` 对 `如果` 已登记为 `None` 整条禁插值，`src/commands.py:910`） |
 | **错误语义** | 表达式非法/求值异常 → `_eval_condition` 内部 `except` 返回 `False`（`src/workflow.py:633-636` 现状），记 `warning` 不中断；**新增**：`code="BAD_CONDITION"` 计数，静态检查 `analyze()`(`src/flow_graph.py:616`) 增加「条件恒假」提示 |
-| **验收标准** | ① 三分支 `if/elif/else` 对 3 组输入分别命中正确分支；② 每分支 5 个步骤全部执行（不再受"单节点"限制）；③ 非法表达式（如 `${{{`）不抛异常、走 else、日志含 warning；④ 旧 `condition` 工作流文件打开后行为**逐条不变**（回归基线） |
+| **验收标准** | ① 三分支 `if/elif/else` 对 3 组输入分别命中正确分支；② 每分支 5 个步骤全部执行（不再受"单节点"限制）；③ 非法表达式（如 `$` 后接三个连续左花括号）不抛异常、走 else、日志含 warning；④ 旧 `condition` 工作流文件打开后行为**逐条不变**（回归基线） |
 
 ### 4.3 重复（`loop` 三形态增强）
 
@@ -1127,7 +1127,7 @@ def procs(mode, name=""):
 | `系统路径`（K22） | 类型(桌面/文档/下载/临时/程序/用户/AppData), 目标变量名 | `{目标变量名}` | `ctypes SHGetKnownFolderPath` | 7 种类型全部返回存在的绝对路径 |
 | `字符信息`（H6/H9） | 源变量, 模式(字符/字/行/词), 目标变量名 | `{目标变量名}` | `src/str_ops.py` | 中英文混排字数与 Word 统计一致（±1 容差） |
 | `正则提取`（H8） | 源变量, 表达式, 分组序号或名, 全部匹配(是/否), 目标变量名 | `{目标变量名}` | `src/str_ops.py` | 非法正则返回 `BAD_REGEX` 不抛栈；超长文本有回溯保护 |
-| `文本模板`（H4） | 模板, 目标变量名 | `{目标变量名}` | `src/str_ops.py` + `interp.interpolate` | 模板里的 `{var:}`/`{{`/`$$` 与 `src/interp.py:23-37` 行为一致 |
+| `文本模板`（H4） | 模板, 目标变量名 | `{目标变量名}` | `src/str_ops.py` + `interp.interpolate` | 模板里的 `{var:}`/双花括号/`$$` 与 `src/interp.py:23-37` 行为一致 |
 | `文本转列表` / `列表转文本`（H1/H2） | 源变量, 分隔符, 目标变量名 | `{目标变量名}` | `src/list_ops.py` | 往返转换幂等（`a\nb` → 列表 → `a\nb`） |
 | `图片信息`（N8） | 源, 目标变量前缀 | `{前缀_w}` 等 | `src/img_ops.py`（新） | 5 种格式（png/jpg/bmp/gif/webp）尺寸正确 |
 | `显示图片`（N9） | 源, 标题, 最大宽高 | 无 | `src/ui/img_view.py` | 超大图不撑破窗口（按最大宽高等比缩放） |

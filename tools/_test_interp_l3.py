@@ -361,8 +361,12 @@ def case4b_engine_render():
     check(r[1].value == "{var:dyn} == 'v1'", "如果 整条不插值", repr(r[1].value))
 
     # 普通参数照常插值（钥匙: 这是"行为变化"的正面用例）
+    # 期望值不能写死用户名: 这条走的是引擎真实链路, {env:USERNAME} 读的是
+    # **本机**环境变量 —— 开发机叫 yohoten, 而 CI 的 windows-latest 叫
+    # runneradmin, 写死会让用例在 CI 上必红(本地却绿)。
     r = render_row("输入", ["{var:dyn}-{env:USERNAME}"])
-    check(r[1].value == "v1-yohoten", "输入 的文本参数照常插值", repr(r[1].value))
+    _user = os.environ.get("USERNAME", "")
+    check(r[1].value == "v1-" + _user, "输入 的文本参数照常插值", repr(r[1].value))
 
     # 渲染后的行与 RowAdapter 同形（handler 的 hasattr(row,'args') 分支不变）
     check(not hasattr(r, "args"), "渲染行不带 args 属性（与 RowAdapter 同形）")

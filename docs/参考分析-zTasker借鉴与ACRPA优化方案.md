@@ -499,7 +499,7 @@ Trigger（基类）
    | `{env:名称}` | 环境变量 | `{env:USERNAME}` |
    | `{date:格式}` | 当前时间，`strftime` 格式 | `{date:%Y%m%d_%H%M%S}` |
    | `{arg:名称}` | CLI/调用方传入参数（对齐 zTasker `-p0:` → `{arg:p0}`） | `{arg:order_id}` |
-   | `{{` / `}}` | 转义为字面 `{` `}` | `{{literal}}` |
+   | 双左花括号 / 双右花括号 | 转义为字面 `{` 与 `}` | 双括号包裹 `literal` → `{literal}` |
 
 2. **全命令参数统一插值（关键改动）**：在 `engine.execute()` 取参数**之前**统一过一次 `interp`，而不是在各 handler 内部各自处理。落点建议：`engine.py` 中构造命令参数列表的位置（`engine.execute_script` 取 `row[i].value` 的聚合点），**一处生效**。
 
@@ -522,7 +522,7 @@ Trigger（基类）
 | 1 | `interp("a${x}b", {"x":1})` | `a1b` |
 | 2 | `interp("a{var:x}b", {"x":1})` | `a1b` |
 | 3 | `interp("{var:missing}", {})` | `""` 且记 warning |
-| 4 | `interp("{{literal}}", {})` | `{literal}` |
+| 4 | 把双花括号包裹的 `literal` 交给 `interp` | `{literal}` |
 | 5 | `interp("{date:%Y}", {}, now=fixed)` | `2026` |
 | 6 | `interp("{\"a\":1}", {})` | 原样（未闭合不误伤） |
 | 7 | 嵌套 `{var:{var:x}}` | **不做二次展开**，原样返回 |

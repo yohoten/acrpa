@@ -303,6 +303,35 @@ def build(parent, ctx):
             (v.set(default_val), setattr(state, k.upper(), default_val) if k else None,
              state.save_config(), _flash_saved("system")))
 
+    # ── S1-04: 热键后端状态 + 热字串限制 (注册失败必须可见, 不许静默) ──
+    # 注册被其他程序占用 (ERROR_HOTKEY_ALREADY_REGISTERED=1409) 时该条已自动退回
+    # 轮询, 功能不丢; 这里把结论直接显示在「全局快捷键」表格下方。
+    _hk_lines, _hk_bad = [], False
+    try:
+        import hotkey_win as _hkwin
+        _backend = str(getattr(state, "HOTKEY_BACKEND", "poll") or "poll").lower()
+        _mgr = _hkwin.HotkeyManager.existing_instance()
+        _errs = dict(_mgr.errors()) if _mgr is not None else {}
+        if _backend != "register":
+            _hk_lines.append(
+                "热键后端：轮询（兼容默认）。改为 register 可启用吞键式全局热键。")
+        elif _errs:
+            _hk_bad = True
+            _hk_lines.append("❌ 热键注册失败（该条已退回轮询，功能仍可用）：")
+            for _a in sorted(_errs):
+                _hk_lines.append("   · {} → {}".format(_a, _errs[_a]))
+        else:
+            _hk_lines.append(
+                "✔ 热键后端：RegisterHotKey（不轮询、目标程序收不到该组合键）")
+        _hk_lines.append(_hkwin.HotstringEngine.LIMITS_TEXT)
+    except Exception:
+        _hk_lines, _hk_bad = [], False
+    if _hk_lines:
+        tkinter.Label(content, text="\n".join(_hk_lines), font=FONT_TINY,
+            fg=(C["dg"] if _hk_bad else C["fgm"]), bg=C["bgc"], anchor="w",
+            justify="left", wraplength=640).grid(
+            row=5, column=0, sticky="w", padx=8, pady=(0, 2))
+
     # ── L5 #6: 危险动作二次确认闸门 ──
     danger_frame = tkinter.Frame(content, bg=C["bgc"])
     danger_frame.grid(row=7, column=0, sticky="ew", padx=8, pady=(2, 4))

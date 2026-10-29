@@ -21,6 +21,12 @@
   · 工作流全局: _wf_data / _wf_file / TYPE_LABELS / _FLOW_COLORS / _FLOW_ICONS /
     _NODE_W/_NODE_H/_NODE_GAP / 拖拽状态 / _WF_LIB_CATEGORIES / _WF_RECENT / _WF_CLIPBOARD /
     _WF_LIB_ACTIONS;
+  · S0-04 模块库数据源 (开发计划 §2.1): 左栏「操作库」改由 `ui.module_catalog` 供给
+    (`res/help/command_groups.json` + `command_schema.json` → 11 组 88 命令, 带 icon /
+    参数签名 / 悬停说明 / 检索命中片段), `_WF_LIB_CATEGORIES` + `_WF_LIB_ACTIONS` 降级为
+    **兜底快照** (json 缺失/损坏时仍能建树, 见 `_wf_library_catalog()` + `_wf_lib_notice()`);
+    双击/右键覆盖全部 88 条: 老动作走 `_WF_LIB_ACTIONS` 构造器 (行为不变), 其余走通用
+    `{"type":"command","cmd":<命令名>,"params":[""]*9}` 节点 (`_wf_library_make_step_by_name`)。
   · 换肤回调: 原 ACRPA._refresh_theme 内对工作流的具名回填 (调用 _wf_refresh_tree() +
     wf_flow_canvas 的 flowbg 特判) 移入本模块 ThemeBus 订阅回调 refresh_theme ——
     _refresh_theme 不再出现这两处工作流具名回填。
@@ -100,6 +106,20 @@ except Exception:                       # pragma: no cover
         except Exception:
             _flow_canvas = None
 
+# ── S0-04 (开发计划 §2.1): 模块库数据源适配器 ──
+#   `ui.module_catalog` 是**纯逻辑**模块 (只读 res/help/*.json, 零 tkinter): 模块库树的一级
+#   分组 / 二级命令 / 检索 / 悬停说明全部由它供给。导入失败 (冻结版漏打包 / 旧版本目录) 时
+#   置 None, 模块库全程退回本模块既有的 `_WF_LIB_CATEGORIES` + `_WF_LIB_ACTIONS` 硬编码兜底。
+try:
+    from ui import module_catalog as _module_catalog
+except Exception:                       # pragma: no cover - 兜底回退硬编码
+    try:
+        from . import module_catalog as _module_catalog
+    except Exception:
+        try:
+            import module_catalog as _module_catalog
+        except Exception:
+            _module_catalog = None
 # 回退开关: False → 一律走旧单列渲染 (_wf_render_flowchart_legacy), 便于排查
 use_flow_canvas = True
 # P1 / WF-B1 交互增强开关 (新增, 默认 True):
@@ -179,7 +199,8 @@ wf_flow_check_lbl = None   # E 期静态分析摘要标签
 _wf_graph_edit = None      # D 期会话内「已编辑图」缓存 (结构未变时复用, 保留连线编辑)
 _wf_show_flow = None
 _wf_view_btn = None
-_WF_LIB_ACTIONS = {}
+# 注: 「操作库显示名 → 节点构造器」`_WF_LIB_ACTIONS` 在下方 `_WF_LIB_CATEGORIES` 之后定义
+# (S0-04 起由 build() 体内提到模块级), 故此处不再前置声明空 dict。
 
 # ── WF-B2 新增控件 / 状态 (P1-1 检查面板 / P1-2 工具栏 + 小地图 / P1-5 联动) ──
 wf_flow_toolbar = None      # 画布悬浮工具条 (右上)
@@ -288,6 +309,11 @@ _wf_drag_node_items = []
 _wf_drag_indic = None   # P1-4/N6: 拖拽插入指示线 item id (局部重绘, 不触发全量渲染)
 
 # ── 操作库分类定义 (参考 AutomationOperation 操作库) ──
+# **S0-04 起降级为兜底常量**: 正常路径的数据源是
+#   `res/help/command_groups.json` + `res/help/command_schema.json` (11 组 88 条),
+# 由 [`ui.module_catalog`](src/ui/module_catalog.py) 适配, 见 `_wf_library_catalog()`。
+# 本常量**仅当 `module_catalog` 不可用或分组 json 缺失/损坏时使用** (8 分类 45 动作),
+# 保证工作流 Tab 永远打得开; 不删除 (S0-04 卡禁止事项)。
 _WF_LIB_CATEGORIES = [
     ("流程控制", ["运行脚本", "循环", "并行分支", "条件判断", "等待", "日志输出", "设置变量"]),
     ("鼠标操作", ["点击坐标", "鼠标悬停", "鼠标拖拽", "滚动滚轮", "相对移动", "按下按键", "释放按键"]),
@@ -298,6 +324,72 @@ _WF_LIB_CATEGORIES = [
     ("变量操作", ["设置变量", "读取剪贴板", "字符串处理", "数学运算"]),
     ("浏览器", ["打开网页", "浏览器点击", "浏览器输入", "等待元素", "浏览器截图"]),
 ]
+
+# 操作库显示名 → 节点构造器 (返回 dict)
+# S0-04: **字面量未改动**, 只是从 `build()` 体内提到模块级 ——
+#   ① 兜底路径与「命令名 ↔ 显示名反查」需要在 build() 之前/之外可用 (冒烟测试亦然);
+#   ② 行为等价: 原实现每次 build() 都重建同一份字面量, 模块级只建一次, 内容逐字相同;
+#   ③ 它仍只服务"旧的 45 个动作显示名 + 同名命令"; 其余新命令走通用构造器
+#      `_wf_library_make_step_by_name()` → `{"type":"command","cmd":<命令名>,"params":[""]*9}`。
+_WF_LIB_ACTIONS = {
+    "运行脚本":   lambda: {"type": "script", "path": ""},
+    "循环":       lambda: {"type": "loop", "times": "3", "steps": []},
+    "并行分支":   lambda: {"type": "parallel", "steps": []},
+    "条件判断":   lambda: {"type": "condition", "if": "${var} == True", "then": "", "else": ""},
+    "等待":       lambda: {"type": "wait", "seconds": 1},
+    "日志输出":   lambda: {"type": "log", "text": ""},
+    "设置变量":   lambda: {"type": "variable", "var_name": "", "var_value": ""},
+    "点击坐标":   lambda: {"type": "command", "cmd": "坐标", "params": ["0", "0", "左", "1", "0.1", "", "", "", ""]},
+    "鼠标悬停":   lambda: {"type": "command", "cmd": "悬停", "params": ["0", "0", "0.1", "", "", "", "", "", ""]},
+    "鼠标拖拽":   lambda: {"type": "command", "cmd": "拖拽", "params": ["0", "0", "0.1", "", "", "", "", "", ""]},
+    "滚动滚轮":   lambda: {"type": "command", "cmd": "滚轮", "params": ["-300", "", "", "", "", "", "", "", ""]},
+    "相对移动":   lambda: {"type": "command", "cmd": "相移", "params": ["10", "10", "0.1", "", "", "", "", "", ""]},
+    "按下按键":   lambda: {"type": "command", "cmd": "按下", "params": ["ctrl", "", "", "", "", "", "", "", ""]},
+    "释放按键":   lambda: {"type": "command", "cmd": "释放", "params": ["ctrl", "", "", "", "", "", "", "", ""]},
+    "模拟按键":   lambda: {"type": "command", "cmd": "按键", "params": ["enter", "1", "0.1", "", "", "", "", "", ""]},
+    "组合热键":   lambda: {"type": "command", "cmd": "热键", "params": ["ctrl", "c", "", "", "", "", "", "", ""]},
+    "文本输入":   lambda: {"type": "command", "cmd": "输入", "params": ["", "", "", "", "", "", "", "", ""]},
+    "逐字写入":   lambda: {"type": "command", "cmd": "写入", "params": ["", "0.05", "auto", "", "", "", "", "", ""]},
+    "复制":       lambda: {"type": "command", "cmd": "复制", "params": ["", "", "", "", "", "", "", "", ""]},
+    "粘贴":       lambda: {"type": "command", "cmd": "粘贴", "params": ["", "", "", "", "", "", "", "", ""]},
+    "查找图片":   lambda: {"type": "command", "cmd": "找图", "params": ["img.png", "0.96", "", "", "", "", "", "", ""]},
+    "区域找图":   lambda: {"type": "command", "cmd": "区域找图", "params": ["img.png", "0.96", "0", "0", "800", "600", "True", "", ""]},
+    "点击图片":   lambda: {"type": "command", "cmd": "点图", "params": ["img.png", "0.96", "", "", "", "", "", "", ""]},
+    "区域点图":   lambda: {"type": "command", "cmd": "区域点图", "params": ["img.png", "0.96", "0", "0", "800", "600", "True", "左", "1"]},
+    "OCR识别文字": lambda: {"type": "command", "cmd": "识别文字", "params": ["0", "0", "800", "600", "text", "", "", "", ""]},
+    "等待文字":   lambda: {"type": "command", "cmd": "等待文字", "params": ["文字", "10", "存在", "0", "0", "800", "600", "", ""]},
+    "点击文字":   lambda: {"type": "command", "cmd": "点击文字", "params": ["文字", "0.7", "左", "0", "0", "800", "600", "", ""]},
+    "激活窗口":   lambda: {"type": "command", "cmd": "激活窗口", "params": ["窗口标题", "", "", "", "", "", "", "", ""]},
+    "关闭窗口":   lambda: {"type": "command", "cmd": "关闭窗口", "params": ["窗口标题", "", "", "", "", "", "", "", ""]},
+    "最小化窗口": lambda: {"type": "command", "cmd": "最小化窗口", "params": ["窗口标题", "", "", "", "", "", "", "", ""]},
+    "最大化窗口": lambda: {"type": "command", "cmd": "最大化窗口", "params": ["窗口标题", "", "", "", "", "", "", "", ""]},
+    "获取窗口位置": lambda: {"type": "command", "cmd": "获取窗口位置", "params": ["窗口标题", "x", "y", "w", "h", "", "", "", ""]},
+    "等待窗口":   lambda: {"type": "command", "cmd": "等待窗口", "params": ["窗口标题", "10", "存在", "", "", "", "", "", ""]},
+    "屏幕截图":   lambda: {"type": "command", "cmd": "截屏", "params": ["shot", "", "", "", "", "", "", "", ""]},
+    "打开程序":   lambda: {"type": "command", "cmd": "代码", "params": ["run_program", "", "", "", "", "", "", "", ""]},
+    "浏览文件":   lambda: {"type": "command", "cmd": "代码", "params": ["browse_file", "", "", "", "", "", "", "", ""]},
+    "读取剪贴板": lambda: {"type": "command", "cmd": "读取剪贴板", "params": ["clip", "", "", "", "", "", "", "", ""]},
+    "字符串处理": lambda: {"type": "command", "cmd": "字符串处理", "params": ["src", "截取", "0,5", "dst", "", "", "", "", ""]},
+    "数学运算":   lambda: {"type": "command", "cmd": "数学运算", "params": ["a + b", "result", "", "", "", "", "", "", ""]},
+    "打开网页":   lambda: {"type": "command", "cmd": "打开网页", "params": ["https://", "", "", "", "", "", "", "", ""]},
+    "浏览器点击": lambda: {"type": "command", "cmd": "浏览器点击", "params": ["#btn", "", "", "", "", "", "", "", ""]},
+    "浏览器输入": lambda: {"type": "command", "cmd": "浏览器输入", "params": ["#input", "text", "", "", "", "", "", "", ""]},
+    "等待元素":   lambda: {"type": "command", "cmd": "等待元素", "params": ["#el", "10", "出现", "", "", "", "", "", ""]},
+    "浏览器截图": lambda: {"type": "command", "cmd": "浏览器截图", "params": ["page", "page", "", "", "", "", "", "", ""]},
+}
+
+# ── S0-04: 模块库运行态 ──
+_WF_LIB_CATALOG = None        # 当前目录 (`module_catalog.load_catalog()` 结果, 惰性缓存)
+_WF_LIB_NODES = {}            # iid → 命令/动作节点 dict (双击添加 + 悬停说明的唯一反查表)
+_WF_LIB_DEGRADED = False      # 是否已发过"降级"提示 (只提示一次, 绝不弹模态框)
+_WF_LIB_STATUS = ""           # 最近一次降级提示文本 (状态行 / 测试可读)
+_WF_LIB_MAKER_BY_CMD = None   # 命令名 → 旧构造器 反向索引 (惰性构建, 见 _wf_lib_maker_by_cmd)
+_WF_LIB_TIP_TIMER = None      # 悬停说明的 500ms after 句柄
+_WF_LIB_TIP_IID = None        # 悬停说明当前指向的树行
+
+# 检索命中字段 → 中文标签 (非命令名的命中把它拼到行文本里, 让命中片段可见)
+_WF_LIB_FIELD_LABELS = {"cmd": "命令", "sub": "子族", "group": "分组",
+                        "params": "参数", "params_text": "参数说明"}
 
 # 最近使用记录 (存入 APP_ROOT/recent_workflow.json)
 _WF_RECENT = []
@@ -592,53 +684,9 @@ def build(parent, *, colors, fonts, deps=None):
 
     wf_paned.add(wf_flow_frame, minsize=200, width=400)
 
-    # 操作库显示名 → 节点构造器 (返回 dict)
-    _WF_LIB_ACTIONS = {
-        "运行脚本":   lambda: {"type": "script", "path": ""},
-        "循环":       lambda: {"type": "loop", "times": "3", "steps": []},
-        "并行分支":   lambda: {"type": "parallel", "steps": []},
-        "条件判断":   lambda: {"type": "condition", "if": "${var} == True", "then": "", "else": ""},
-        "等待":       lambda: {"type": "wait", "seconds": 1},
-        "日志输出":   lambda: {"type": "log", "text": ""},
-        "设置变量":   lambda: {"type": "variable", "var_name": "", "var_value": ""},
-        "点击坐标":   lambda: {"type": "command", "cmd": "坐标", "params": ["0", "0", "左", "1", "0.1", "", "", "", ""]},
-        "鼠标悬停":   lambda: {"type": "command", "cmd": "悬停", "params": ["0", "0", "0.1", "", "", "", "", "", ""]},
-        "鼠标拖拽":   lambda: {"type": "command", "cmd": "拖拽", "params": ["0", "0", "0.1", "", "", "", "", "", ""]},
-        "滚动滚轮":   lambda: {"type": "command", "cmd": "滚轮", "params": ["-300", "", "", "", "", "", "", "", ""]},
-        "相对移动":   lambda: {"type": "command", "cmd": "相移", "params": ["10", "10", "0.1", "", "", "", "", "", ""]},
-        "按下按键":   lambda: {"type": "command", "cmd": "按下", "params": ["ctrl", "", "", "", "", "", "", "", ""]},
-        "释放按键":   lambda: {"type": "command", "cmd": "释放", "params": ["ctrl", "", "", "", "", "", "", "", ""]},
-        "模拟按键":   lambda: {"type": "command", "cmd": "按键", "params": ["enter", "1", "0.1", "", "", "", "", "", ""]},
-        "组合热键":   lambda: {"type": "command", "cmd": "热键", "params": ["ctrl", "c", "", "", "", "", "", "", ""]},
-        "文本输入":   lambda: {"type": "command", "cmd": "输入", "params": ["", "", "", "", "", "", "", "", ""]},
-        "逐字写入":   lambda: {"type": "command", "cmd": "写入", "params": ["", "0.05", "auto", "", "", "", "", "", ""]},
-        "复制":       lambda: {"type": "command", "cmd": "复制", "params": ["", "", "", "", "", "", "", "", ""]},
-        "粘贴":       lambda: {"type": "command", "cmd": "粘贴", "params": ["", "", "", "", "", "", "", "", ""]},
-        "查找图片":   lambda: {"type": "command", "cmd": "找图", "params": ["img.png", "0.96", "", "", "", "", "", "", ""]},
-        "区域找图":   lambda: {"type": "command", "cmd": "区域找图", "params": ["img.png", "0.96", "0", "0", "800", "600", "True", "", ""]},
-        "点击图片":   lambda: {"type": "command", "cmd": "点图", "params": ["img.png", "0.96", "", "", "", "", "", "", ""]},
-        "区域点图":   lambda: {"type": "command", "cmd": "区域点图", "params": ["img.png", "0.96", "0", "0", "800", "600", "True", "左", "1"]},
-        "OCR识别文字": lambda: {"type": "command", "cmd": "识别文字", "params": ["0", "0", "800", "600", "text", "", "", "", ""]},
-        "等待文字":   lambda: {"type": "command", "cmd": "等待文字", "params": ["文字", "10", "存在", "0", "0", "800", "600", "", ""]},
-        "点击文字":   lambda: {"type": "command", "cmd": "点击文字", "params": ["文字", "0.7", "左", "0", "0", "800", "600", "", ""]},
-        "激活窗口":   lambda: {"type": "command", "cmd": "激活窗口", "params": ["窗口标题", "", "", "", "", "", "", "", ""]},
-        "关闭窗口":   lambda: {"type": "command", "cmd": "关闭窗口", "params": ["窗口标题", "", "", "", "", "", "", "", ""]},
-        "最小化窗口": lambda: {"type": "command", "cmd": "最小化窗口", "params": ["窗口标题", "", "", "", "", "", "", "", ""]},
-        "最大化窗口": lambda: {"type": "command", "cmd": "最大化窗口", "params": ["窗口标题", "", "", "", "", "", "", "", ""]},
-        "获取窗口位置": lambda: {"type": "command", "cmd": "获取窗口位置", "params": ["窗口标题", "x", "y", "w", "h", "", "", "", ""]},
-        "等待窗口":   lambda: {"type": "command", "cmd": "等待窗口", "params": ["窗口标题", "10", "存在", "", "", "", "", "", ""]},
-        "屏幕截图":   lambda: {"type": "command", "cmd": "截屏", "params": ["shot", "", "", "", "", "", "", "", ""]},
-        "打开程序":   lambda: {"type": "command", "cmd": "代码", "params": ["run_program", "", "", "", "", "", "", "", ""]},
-        "浏览文件":   lambda: {"type": "command", "cmd": "代码", "params": ["browse_file", "", "", "", "", "", "", "", ""]},
-        "读取剪贴板": lambda: {"type": "command", "cmd": "读取剪贴板", "params": ["clip", "", "", "", "", "", "", "", ""]},
-        "字符串处理": lambda: {"type": "command", "cmd": "字符串处理", "params": ["src", "截取", "0,5", "dst", "", "", "", "", ""]},
-        "数学运算":   lambda: {"type": "command", "cmd": "数学运算", "params": ["a + b", "result", "", "", "", "", "", "", ""]},
-        "打开网页":   lambda: {"type": "command", "cmd": "打开网页", "params": ["https://", "", "", "", "", "", "", "", ""]},
-        "浏览器点击": lambda: {"type": "command", "cmd": "浏览器点击", "params": ["#btn", "", "", "", "", "", "", "", ""]},
-        "浏览器输入": lambda: {"type": "command", "cmd": "浏览器输入", "params": ["#input", "text", "", "", "", "", "", "", ""]},
-        "等待元素":   lambda: {"type": "command", "cmd": "等待元素", "params": ["#el", "10", "出现", "", "", "", "", "", ""]},
-        "浏览器截图": lambda: {"type": "command", "cmd": "浏览器截图", "params": ["page", "page", "", "", "", "", "", "", ""]},
-    }
+    # 操作库显示名 → 节点构造器 `_WF_LIB_ACTIONS`: S0-04 起提到**模块级**定义
+    #   (见 `_WF_LIB_CATEGORIES` 之后的同名赋值) —— 兜底路径与"命令名 ↔ 显示名"反查需要在
+    #   build() 之外可用; 内容逐字未改动, build() 不再重复构造。
     wf_tree.bind("<Double-1>", _wf_edit_step)
 
     wf_tree.bind("<Delete>", lambda e: _wf_delete_step())
@@ -648,7 +696,10 @@ def build(parent, *, colors, fonts, deps=None):
     # 操作库事件绑定
     wf_lib_tree.bind("<Double-1>", lambda e: _wf_add_from_library())
     wf_lib_tree.bind("<Button-3>", _wf_library_context_menu)
-    # 初始化: 填充操作库 + 加载最近使用
+    # S0-04: 悬停 500ms 显示说明 (命令 desc + 参数签名); 复用既有 tooltip 渲染, 不新增依赖
+    wf_lib_tree.bind("<Motion>", _wf_lib_on_motion)
+    wf_lib_tree.bind("<Leave>", lambda e: _wf_lib_tip_cancel())
+    # 初始化: 填充操作库 (数据源 = module_catalog, 失败退硬编码兜底) + 加载最近使用
     _wf_load_recent()
     _wf_populate_library()
     _wf_refresh_recent()
@@ -749,54 +800,381 @@ def _wf_insert_step(step, label=None):
     _wf_add_recent(step, label)
 
 
-def _wf_populate_library(filter_text=""):
-    """填充操作库分类树 (支持搜索过滤)。"""
-    wf_lib_tree.delete(*wf_lib_tree.get_children())
-    filter_text = (filter_text or "").strip().lower()
-    for category, actions in _WF_LIB_CATEGORIES:
-        # 过滤
-        if filter_text:
-            visible = [a for a in actions if filter_text in a.lower()]
-            if not visible:
+def _wf_lib_color(key, default=None):
+    """取当前主题色 (缺失/未绑定主题时给 default, 保证离屏环境不炸)。"""
+    try:
+        return (C or {}).get(key) or default
+    except Exception:
+        return default
+
+
+def _wf_lib_icon_default():
+    """兜底分组图标 (Unicode 单字符; 与 module_catalog.FALLBACK_ICON 对齐)。"""
+    if _module_catalog is not None:
+        try:
+            return getattr(_module_catalog, "FALLBACK_ICON", None) or "▫"
+        except Exception:
+            pass
+    return "▫"
+
+
+def _wf_lib_tag_cfg(widget, tag, **kw):
+    """一次性配置 Treeview tag (None/空串选项丢弃, 避免 ttk 报错)。"""
+    opts = dict((k, v) for k, v in kw.items() if v is not None and v != "")
+    if not opts:
+        return
+    try:
+        widget.tag_configure(tag, **opts)
+    except Exception:
+        pass
+
+
+def _wf_lib_leaf_count(catalog):
+    """目录中的命令叶子数 (兜底提示与测试断言共用)。"""
+    n = 0
+    for g in (catalog or ()):
+        if isinstance(g, dict):
+            for it in (g.get("items") or ()):
+                if isinstance(it, dict):
+                    n += 1
+    return n
+
+
+def _wf_lib_legacy_catalog(reason=""):
+    """按 `_WF_LIB_CATEGORIES` 构造**兜底目录** (8 分类 45 动作, 与 Catalog 同形)。
+
+    S0-04: `module_catalog` 不可用、或分组 json 缺失/损坏时使用 —— 结构与
+    `module_catalog.load_fallback_catalog()` 等价 (普通 list 即可: 遍历/检索函数对
+    纯 list 同样适用), 保证模块库永远建得出树、工作流 Tab 永远打得开。
+    """
+    icon = _wf_lib_icon_default()
+    groups = []
+    for idx, (title, actions) in enumerate(_WF_LIB_CATEGORIES):
+        items = []
+        for act in actions:
+            items.append({
+                "cmd": act, "desc": "", "sig": "", "params": [], "params_text": "",
+                "group": title, "sub": "", "has_schema": False, "has_params": False,
+                "variadic": False, "fallback": True,
+            })
+        groups.append({"group": title, "icon": icon, "tier": "core",
+                       "order": idx + 1, "subgroups": [], "items": items})
+    return groups
+
+
+def _wf_lib_notice(reason, leaves):
+    """降级提示: 记日志 (`log1`) + 记状态字符串; **只提示一次**, 绝不弹模态框。
+
+    返回值即状态文本, 便于调用方/测试读取 (`_WF_LIB_STATUS` 同值)。
+    """
+    global _WF_LIB_DEGRADED, _WF_LIB_STATUS
+    _WF_LIB_STATUS = "模块库已降级: {} (展示 {} 条内置动作)".format(
+        reason or "数据源不可用", leaves)
+    if not _WF_LIB_DEGRADED:
+        _WF_LIB_DEGRADED = True
+        _log1(_WF_LIB_STATUS, "WARN")
+    return _WF_LIB_STATUS
+
+
+def _wf_lib_use_legacy(reason):
+    """切到硬编码兜底目录 + 一次降级提示 (内部用)。"""
+    cat = _wf_lib_legacy_catalog(reason)
+    _wf_lib_notice(reason, _wf_lib_leaf_count(cat))
+    return cat
+
+
+def _wf_library_catalog(groups_json=None, schema_json=None, force_reload=False):
+    """取模块库数据源 → 目录 (11 组 88 命令, 或兜底 8 组 45 动作)。
+
+    · 正常: `module_catalog.load_catalog()` (分组 json 顺序/`order` + schema 描述签名);
+    · 失败开放: json 缺失/损坏/结构非法 → `_WF_LIB_CATEGORIES` 硬编码快照 + 一次性降级提示
+      (日志 + `_WF_LIB_STATUS`), 不抛异常、不让工作流 Tab 打不开;
+    · `groups_json` / `schema_json` 可注入 (冒烟测试指到不存在路径验证兜底, 不改仓库 json)。
+    """
+    global _WF_LIB_CATALOG
+    cacheable = groups_json is None and schema_json is None
+    if cacheable and _WF_LIB_CATALOG is not None and not force_reload:
+        return _WF_LIB_CATALOG
+    if _module_catalog is None:
+        return _wf_lib_use_legacy("module_catalog 不可用")
+    try:
+        cat = _module_catalog.load_catalog(groups_json, schema_json)
+    except Exception as exc:                      # 防御: load_catalog 理论上不抛
+        return _wf_lib_use_legacy("module_catalog 异常: {}".format(exc))
+    if getattr(cat, "failed", False) or not len(cat):
+        return _wf_lib_use_legacy(getattr(cat, "reason", "") or "模块库数据源加载失败")
+    if not getattr(cat, "ok", True):
+        # 仅 command_schema.json 缺失/损坏: 分组与 88 条命令照出, 只是描述/签名退化
+        _wf_lib_notice(getattr(cat, "reason", "") or "参数说明缺失",
+                       _wf_lib_leaf_count(cat))
+    if cacheable:
+        _WF_LIB_CATALOG = cat
+    return cat
+
+
+def _wf_lib_search_hits(keyword, catalog):
+    """关键字检索 → `[{"group","cmd","field","snippet"}]` (统一形状)。
+
+    优先 `module_catalog.search()` (命中命令名/参数名/参数说明/分组名, 大小写不敏感);
+    module_catalog 不可用时退回"仅命令名子串"的本地极简检索 (兜底路径不裸奔)。
+    """
+    kw = (keyword or "").strip()
+    if not kw:
+        return []
+    if _module_catalog is not None:
+        try:
+            return [{"group": getattr(h, "group", ""), "cmd": getattr(h, "cmd", ""),
+                     "field": getattr(h, "field", ""), "snippet": getattr(h, "snippet", "")}
+                    for h in _module_catalog.search(kw, catalog)]
+        except Exception:
+            pass
+    low = kw.lower()
+    hits = []
+    for g in (catalog or ()):
+        if not isinstance(g, dict):
+            continue
+        title = g.get("group", "")
+        for it in (g.get("items") or ()):
+            if not isinstance(it, dict):
                 continue
-        else:
-            visible = actions
-        cat_id = wf_lib_tree.insert("", "end", text="▫ {}".format(category), open=True)
-        for act in visible:
-            iid = "{}_{}".format(category, act)
-            wf_lib_tree.insert(cat_id, "end", iid=iid, text="  {}".format(act))
-            wf_lib_tree.tag_configure(act, foreground=C["fgb"])
-    # 展开根
-    for cid in wf_lib_tree.get_children():
-        wf_lib_tree.item(cid, open=True)
+            cmd = str(it.get("cmd") or "")
+            if low in cmd.lower():
+                hits.append({"group": title, "cmd": cmd, "field": "cmd", "snippet": cmd})
+    return hits
+
+
+def _wf_lib_group_text(group):
+    """分组行文本 (`◈ 基础操作`; 优先 `module_catalog.group_label`)。"""
+    if _module_catalog is not None:
+        try:
+            return _module_catalog.group_label(group)
+        except Exception:
+            pass
+    if isinstance(group, dict):
+        return "{} {}".format(group.get("icon") or _wf_lib_icon_default(),
+                              group.get("group") or "")
+    return str(group or "")
+
+
+def _wf_lib_node_text(item):
+    """命令行文本 (`按键  按键名, 次数=1`; 优先 `module_catalog.node_label`)。"""
+    if _module_catalog is not None:
+        try:
+            return _module_catalog.node_label(item)
+        except Exception:
+            pass
+    return str(item.get("cmd") or "") if isinstance(item, dict) else str(item or "")
+
+
+def _wf_lib_tooltip_text(item):
+    """悬停说明文本: description + 参数签名 (优先 `module_catalog.tooltip_text`)。"""
+    if _module_catalog is not None:
+        try:
+            return _module_catalog.tooltip_text(item)
+        except Exception:
+            pass
+    if not isinstance(item, dict):
+        return ""
+    lines = []
+    desc = str(item.get("desc") or "").strip()
+    if desc:
+        lines.append(desc)
+    sig = str(item.get("sig") or item.get("params_text") or "").strip()
+    if sig and item.get("has_params"):
+        lines.append("参数: {}".format(sig))
+    return "\n".join(lines)
+
+
+def _wf_populate_library(filter_text="", groups_json=None, schema_json=None,
+                         force_reload=False):
+    """填充操作库分类树 (数据源: `ui.module_catalog`; 支持搜索过滤)。
+
+    结构 (S0-04):
+      一级 = 分组 —— 文本取 `group_label()` (Unicode icon + 组名), iid = `"g|{分组名}"`,
+             分组间顺序由分组 json 的 `order` 决定 (module_catalog 已排);
+      二级 = 命令 —— 文本取 `node_label()` (命令名 + 参数签名), iid = `"{分组名}|{命令名}"`,
+             命令名含半角空格 (如 `HTTP 请求`) 也精确成立, 供双击/右键反查;
+      子族恒空 (数据层无 subgroups 声明) → **不凭空造空节点**, 树实际退化为两级。
+
+    搜索: 走 `module_catalog.search()`, 只保留命中分支 (整组无命中即不出现), 命中行打
+          `wf_lib_hit` 标签; 命中字段不是命令名时把命中片段拼进行文本, 保证"命中可见"。
+
+    `groups_json` / `schema_json` / `force_reload`: 测试注入用 (指到坏路径验证兜底)。
+    :return: 本次插入的命令叶子数
+    """
+    global _WF_LIB_NODES
+    tree = wf_lib_tree
+    if tree is None:
+        return 0
+    try:
+        tree.delete(*tree.get_children())
+    except Exception:
+        return 0
+    _WF_LIB_NODES = {}
+    catalog = _wf_library_catalog(groups_json, schema_json, force_reload)
+    kw = (filter_text or "").strip()
+    hit_map = {}
+    for h in _wf_lib_search_hits(kw, catalog):
+        hit_map[(h.get("group", ""), h.get("cmd", ""))] = h
+    # tag 一次性配置 (旧实现逐行重复 tag_configure 属无效开销, 见 §6.1.5)
+    _wf_lib_tag_cfg(tree, "wf_lib_group", foreground=_wf_lib_color("fgt"),
+                    font=FONT_SMALL_BOLD or FONT_SMALL)
+    _wf_lib_tag_cfg(tree, "wf_lib_cmd", foreground=_wf_lib_color("fgb"))
+    if kw:
+        _wf_lib_tag_cfg(tree, "wf_lib_hit", foreground=_wf_lib_color("ac", "blue"))
+    leaves = 0
+    for g in (catalog or ()):
+        if not isinstance(g, dict):
+            continue
+        title = g.get("group", "")
+        items = [it for it in (g.get("items") or ()) if isinstance(it, dict)]
+        if kw:
+            items = [it for it in items if (title, it.get("cmd", "")) in hit_map]
+            if not items:
+                continue
+        gid = "g|{}".format(title)
+        try:
+            tree.insert("", "end", iid=gid, text=_wf_lib_group_text(g), open=True,
+                        tags=("wf_lib_group",))
+        except Exception:
+            continue
+        for it in items:
+            cmd = str(it.get("cmd") or "")
+            iid = "{}|{}".format(title, cmd)
+            text = "  " + _wf_lib_node_text(it)
+            tags = ["wf_lib_cmd"]
+            hit = hit_map.get((title, cmd)) if kw else None
+            if hit is not None:
+                tags.append("wf_lib_hit")
+                field = hit.get("field") or ""
+                if field and field != "cmd":
+                    text = "{}   [{}] {}".format(
+                        text, _WF_LIB_FIELD_LABELS.get(field, field),
+                        hit.get("snippet") or "")
+            try:
+                tree.insert(gid, "end", iid=iid, text=text, tags=tuple(tags))
+            except Exception:
+                continue
+            _WF_LIB_NODES[iid] = it
+            leaves += 1
+    # 展开根 (搜索态同样全展开; 折叠状态持久化属 S4-01, 本卡不做)
+    for cid in tree.get_children():
+        try:
+            tree.item(cid, open=True)
+        except Exception:
+            pass
+    return leaves
 
 
 def _wf_filter_library():
-    """根据搜索框文本过滤操作库。"""
-    _wf_populate_library(wf_lib_search.get())
+    """根据搜索框文本过滤操作库 (命中分支 + 命中片段, 由 `module_catalog.search` 驱动)。"""
+    txt = ""
+    try:
+        if wf_lib_search is not None:
+            txt = wf_lib_search.get()
+    except Exception:
+        txt = ""
+    _wf_populate_library(txt)
 
 
 def _wf_library_action_name(iid):
-    """从操作库 Treeview item 反查动作显示名 (去掉前缀)。"""
-    txt = wf_lib_tree.item(iid, "text").strip()
-    return txt
+    """从操作库节点反查名称 (命令名 / 兜底动作显示名)。
+
+    S0-04 起 iid 改为 `"{分组}|{命令名}"` 且行文本带参数签名, 故**优先**查
+    `_WF_LIB_NODES` 反查表; 表里没有 (异常场景) 才退回旧的"去前缀文本"口径。
+    """
+    item = _WF_LIB_NODES.get(iid)
+    if isinstance(item, dict) and item.get("cmd"):
+        return str(item["cmd"])
+    try:
+        return wf_lib_tree.item(iid, "text").strip()
+    except Exception:
+        return ""
+
+
+def _wf_lib_maker_by_cmd():
+    """「命令名 → 旧构造器」反向索引 (惰性构建, 一次性)。
+
+    用途: 老动作的**显示名**与**命令名**并不总是同名 (`模拟按键` → `按键`, `屏幕截图` →
+    `截屏`), 命令库改数据源后树里出现的是命令名, 靠本索引仍能命中旧构造器, 从而保住
+    "老动作插出的步骤类型/参数字面量与改造前逐字段相同"。
+    歧义命令名 (一个命令名被多个旧动作产出, 如 `代码` ← `打开程序`/`浏览文件`) **不登记**,
+    交由通用构造器产出干净的空参数节点。
+    """
+    global _WF_LIB_MAKER_BY_CMD
+    if _WF_LIB_MAKER_BY_CMD is not None:
+        return _WF_LIB_MAKER_BY_CMD
+    by_cmd, dup = {}, set()
+    for name, maker in (_WF_LIB_ACTIONS or {}).items():
+        try:
+            step = maker()
+        except Exception:
+            continue
+        if not isinstance(step, dict) or step.get("type") != "command":
+            continue
+        cmd = str(step.get("cmd") or "")
+        if not cmd or cmd == name:
+            continue                     # 同名情形已由"显示名直查"覆盖
+        if cmd in by_cmd:
+            dup.add(cmd)
+        else:
+            by_cmd[cmd] = maker
+    for cmd in dup:
+        by_cmd.pop(cmd, None)
+    _WF_LIB_MAKER_BY_CMD = by_cmd
+    return by_cmd
+
+
+def _wf_library_make_step_by_name(name):
+    """名称 → 步骤 dict (**双路径**)。
+
+    ① 显示名/同名命令命中 `_WF_LIB_ACTIONS` → 走旧构造器 (行为与改造前逐字段一致);
+    ② 未命中但命令名由某个旧动作产出 (唯一) → 仍走旧构造器 (保住默认参数值);
+    ③ 其余 (新增的 L2 命令等) → **通用路径**: `{"type":"command","cmd":<命令名>,
+       "params":[""]*9}` —— 9 槽空串, 参数由右栏/`param_form` 后续填写, 执行层按
+       `command` + `cmd` 识别 (参数说明取自 schema, 见悬停说明)。
+    """
+    name = str(name or "").strip()
+    if not name:
+        return None
+    maker = (_WF_LIB_ACTIONS or {}).get(name)
+    if maker is None:
+        maker = _wf_lib_maker_by_cmd().get(name)
+    if maker is not None:
+        try:
+            step = maker()
+            if isinstance(step, dict):
+                return step
+        except Exception:
+            pass
+    return {"type": "command", "cmd": name, "params": [""] * 9}
+
+
+def _wf_lib_insert_by_name(name):
+    """按名称构造节点并插入 (双击 / 右键 / 最近使用共用)。"""
+    step = _wf_library_make_step_by_name(name)
+    if step is None:
+        return
+    _wf_insert_step(step, label=name)
 
 
 def _wf_add_from_library():
-    """操作库双击: 添加节点到工作流。"""
-    sel = wf_lib_tree.selection()
+    """操作库双击: 添加节点到工作流 (覆盖全部 88 条命令)。"""
+    try:
+        sel = wf_lib_tree.selection()
+    except Exception:
+        return
     if not sel:
         return
     iid = sel[0]
-    # 忽略分类节点 (有子节点)
+    # 忽略分组节点 (有子节点)
     if wf_lib_tree.get_children(iid):
         return
     action = _wf_library_action_name(iid)
-    maker = _WF_LIB_ACTIONS.get(action)
-    if maker:
-        step = maker()
-        _wf_insert_step(step, label=action)
-        _toast("已添加: {}".format(action), "success")
+    if not action:
+        return
+    _wf_lib_insert_by_name(action)
+    _toast("已添加: {}".format(action), "success")
 
 
 def _wf_library_context_menu(event):
@@ -808,14 +1186,86 @@ def _wf_library_context_menu(event):
     action = _wf_library_action_name(iid)
     if not action or wf_lib_tree.get_children(iid):
         return
-    menu = tkinter.Menu(_root(), tearoff=0, bg=C["bgc"], fg=C["fgt"],
-        activebackground=C["ac"], activeforeground="white")
+    menu = tkinter.Menu(_root(), tearoff=0, bg=_wf_lib_color("bgc", "white"),
+        fg=_wf_lib_color("fgt", "black"), activebackground=_wf_lib_color("ac", "blue"),
+        activeforeground="white")
     menu.add_command(label="添加到末尾",
-        command=lambda: (_wf_insert_step(_WF_LIB_ACTIONS[action](), label=action)))
+        command=lambda: _wf_lib_insert_by_name(action))
     try:
         menu.tk_popup(event.x_root, event.y_root)
     finally:
         menu.grab_release()
+
+
+class _WfLibTipEvent(object):
+    """伪事件: 只暴露 `utils._show_tooltip` 需要的 `widget` / `x_root` / `y_root`。
+
+    用于 500ms 惰性悬停 —— 复用项目既有 tooltip 渲染 (浅黄底 + `tooltip_border` token),
+    不新建第二套提示窗口、不引第三方依赖。
+    """
+    __slots__ = ("widget", "x_root", "y_root")
+
+    def __init__(self, widget, x_root, y_root):
+        self.widget = widget
+        self.x_root = x_root
+        self.y_root = y_root
+
+
+def _wf_lib_tip_cancel():
+    """取消挂起的悬停计时并关闭提示窗口。"""
+    global _WF_LIB_TIP_TIMER, _WF_LIB_TIP_IID
+    if _WF_LIB_TIP_TIMER is not None:
+        try:
+            wf_lib_tree.after_cancel(_WF_LIB_TIP_TIMER)
+        except Exception:
+            pass
+        _WF_LIB_TIP_TIMER = None
+    _WF_LIB_TIP_IID = None
+    try:
+        import utils as _u
+        hide = getattr(_u, "_hide_tooltip", None)
+        if callable(hide):
+            hide()
+    except Exception:
+        pass
+
+
+def _wf_lib_tip_show(x_root, y_root, iid):
+    """(500ms 到点) 显示悬停说明: 命令 desc + 参数签名。"""
+    global _WF_LIB_TIP_TIMER
+    _WF_LIB_TIP_TIMER = None
+    if iid != _WF_LIB_TIP_IID:
+        return
+    txt = _wf_lib_tooltip_text(_WF_LIB_NODES.get(iid))
+    if not txt:
+        return
+    try:
+        import utils as _u
+        show = getattr(_u, "_show_tooltip", None)
+        if callable(show):
+            show(_WfLibTipEvent(wf_lib_tree, x_root, y_root), txt)
+    except Exception:
+        pass
+
+
+def _wf_lib_on_motion(event):
+    """鼠标在模块库上移动: 行变化才重启 500ms 计时 (同一行不重复弹)。"""
+    global _WF_LIB_TIP_TIMER, _WF_LIB_TIP_IID
+    try:
+        iid = wf_lib_tree.identify_row(event.y)
+    except Exception:
+        return
+    if iid == _WF_LIB_TIP_IID:
+        return
+    _wf_lib_tip_cancel()
+    if not iid or iid not in _WF_LIB_NODES:
+        return
+    _WF_LIB_TIP_IID = iid
+    try:
+        _WF_LIB_TIP_TIMER = wf_lib_tree.after(
+            500, lambda: _wf_lib_tip_show(event.x_root, event.y_root, iid))
+    except Exception:
+        _WF_LIB_TIP_TIMER = None
 
 
 def _wf_add_recent(step, label=None):
@@ -862,14 +1312,17 @@ def _wf_load_recent():
 
 
 def _wf_add_recent_clicked():
-    """点击最近使用项: 添加对应节点。"""
+    """点击最近使用项: 添加对应节点。
+
+    S0-04: 记录里的名称可能是**旧显示名** (`模拟按键`) 也可能是**新命令名** (`复制文件`),
+    统一走 `_wf_library_make_step_by_name()` 的双路径解析 (旧构造器 / 通用 command 节点),
+    故 `recent_workflow.json` 结构无需迁移。
+    """
     sel = wf_recent_list.curselection()
     if not sel:
         return
     label = wf_recent_list.get(sel[0])
-    maker = _WF_LIB_ACTIONS.get(label)
-    if maker:
-        _wf_insert_step(maker(), label=label)
+    _wf_lib_insert_by_name(label)
 
 
 def _wf_render_flowchart(*args):

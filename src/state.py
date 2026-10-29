@@ -58,6 +58,16 @@ _config_schema = [
     ("hotkey_run",      "",             str),    # 运行脚本快捷键
     ("hotkey_pause",    "",             str),    # 暂停/恢复快捷键
     ("hotkey_stop",     "",             str),    # 停止脚本快捷键
+    # ── S1-04 热键后端 (RegisterHotKey) + 热字串 ──
+    # hotkey_backend: "poll"=GetAsyncKeyState 轮询 (默认, 与改造前逐字节等价);
+    #                 "register"=RegisterHotKey + WM_HOTKEY (可吞键/无轮询/无 200ms 丢失),
+    #                 注册失败的条目**自动**落回轮询, 功能不丢。
+    # 默认 "poll" 是本卡"零行为变更默认值 + 可整体回退"的落点 (档位 L, 风险最高)。
+    ("hotkey_backend",  "poll",         str),
+    # hotstrings: 热字串 [{trigger, expand, kind:"text"|"script", script_path}]。
+    # 空列表 = 关闭 (默认) → **不安装任何键盘钩子**; 非空才启 WH_KEYBOARD_LL 缓冲展开。
+    # 已知限制: 对以管理员运行的目标程序无效 (UIPI); IME 组合态不触发; 仅纯 ASCII 触发词。
+    ("hotstrings",      [],             list),
     ("failsafe",        True,           bool),   # PyAutoGUI fail-safe开关
     # 执行增强 ( AutomationOperation 设计)
     ("max_execution_minutes", 0,        int),    # 最大执行时间(分钟), 0=不限

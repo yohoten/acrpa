@@ -13,6 +13,7 @@ P3 Optimization: 录制改为事件驱动 — 优先使用 Windows 低级键盘/
 """
 import time
 import ctypes
+import threading
 import state
 from scriptdata import ScriptData
 from utils import log1
@@ -212,6 +213,14 @@ _mouse_hook = None
 _kbd_proc = None
 _mouse_proc = None
 
+# ── S1-04 最小扩展: 单个 WH_KEYBOARD_LL + 引用计数 + 常驻消费者 ──
+# 动机: 热字串需要**常驻**键盘钩子, 而录制需要**期间**键盘钩子。若各装一套低级钩子,
+# 两者会争抢同一条输入链 (重复回调/互相摘钩)。因此仍只装一个钩子, 用引用计数管理
+# 生命周期, 用消费者列表把事件分发给录制之外的使用方 (见 acquire/release/add_consumer)。
+_hook_lock = threading.RLock()      # 保护下面三个可变项 (RLock: 函数内可重入)
+_kbd_refs = 0                       # 键盘钩子引用计数 (录制 1 + 每个常驻消费者 1)
+_kbd_consumers = []                 # [fn(vk, is_down, injected)] 常驻消费者快照列表
+
 # 录制状态 (事件驱动模式共享)
 _hook_state = {
     "lbtn_down": False,      # 左键是否按下 (拖拽起点)
@@ -319,19 +328,35 @@ def _on_mouse_event(wParam, x, y):
 
 
 def _kbd_callback(nCode, wParam, lParam):
-    """键盘低级钩子回调 (仅在真实按键事件时被系统调用)。"""
-    if nCode == HC_ACTION and wParam in (WM_KEYDOWN, WM_SYSKEYDOWN):
+    """键盘低级钩子回调 (仅在真实按键事件时被系统调用)。
+
+    S1-04 扩展: 除录制外, 还把事件分发给常驻消费者 (热字串)。
+    回调内**不得做任何 IO/日志** —— 超时会被系统摘钩, 拖慢全局输入。
+    """
+    if nCode == HC_ACTION and wParam in (WM_KEYDOWN, WM_SYSKEYDOWN,
+                                         WM_KEYUP, WM_SYSKEYUP):
+        is_down = wParam in (WM_KEYDOWN, WM_SYSKEYDOWN)
+        vk = 0
+        injected = False
         try:
             info = ctypes.cast(lParam, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
-            _on_key_event(info.vkCode, True)
+            vk = int(info.vkCode)
+            injected = bool(int(getattr(info, "flags", 0)) & 0x10)  # LLKHF_INJECTED
         except Exception:
-            pass
-    elif nCode == HC_ACTION and wParam in (WM_KEYUP, WM_SYSKEYUP):
-        try:
-            info = ctypes.cast(lParam, ctypes.POINTER(KBDLLHOOKSTRUCT)).contents
-            _on_key_event(info.vkCode, False)
-        except Exception:
-            pass
+            vk = 0
+        # 录制路径: 仅录制中才走 (钩子可能由热字串常驻持有, 此时绝不能记动作)
+        if getattr(state, "recording", False):
+            try:
+                _on_key_event(vk, is_down)
+            except Exception:
+                pass
+        # 常驻消费者路径 (热字串): 零 IO
+        if _kbd_consumers:
+            for fn in tuple(_kbd_consumers):
+                try:
+                    fn(vk, is_down, injected)
+                except Exception:
+                    pass
     return _user32.CallNextHookEx(_kbd_hook, nCode, wParam, lParam)
 
 
@@ -346,25 +371,101 @@ def _mouse_callback(nCode, wParam, lParam):
     return _user32.CallNextHookEx(_mouse_hook, nCode, wParam, lParam)
 
 
+def acquire_kbd_hook():
+    """S1-04: 申请低级键盘钩子 (引用计数)。全库**只装一个** WH_KEYBOARD_LL。
+
+    返回是否可用。调用方线程必须自己跑消息泵 (录制 → _message_pump,
+    常驻消费者 → run_hook_pump), 否则钩子回调无人分发。
+    """
+    global _kbd_hook, _kbd_proc, _kbd_refs
+    with _hook_lock:
+        _kbd_refs += 1
+        if _kbd_hook:
+            return True
+        _kbd_proc = HOOKPROC(_kbd_callback)
+        _kbd_hook = _user32.SetWindowsHookExW(WH_KEYBOARD_LL, _kbd_proc, None, 0)
+        if not _kbd_hook:
+            _kbd_proc = None
+            _kbd_refs = max(0, _kbd_refs - 1)
+            return False
+        return True
+
+
+def release_kbd_hook():
+    """S1-04: 归还键盘钩子引用; 计数归零才真正 Unhook (幂等, 不抛)。"""
+    global _kbd_hook, _kbd_proc, _kbd_refs
+    with _hook_lock:
+        if _kbd_refs > 0:
+            _kbd_refs -= 1
+        if _kbd_refs == 0 and _kbd_hook:
+            try:
+                _user32.UnhookWindowsHookEx(_kbd_hook)
+            except Exception:
+                pass
+            _kbd_hook = None
+            _kbd_proc = None
+
+
+def add_kbd_consumer(fn):
+    """S1-04: 注册键盘常驻消费者 ``fn(vk, is_down, injected)``。重复注册幂等。
+
+    ⚠ fn 在**系统输入回调线程**里执行: 禁止任何 IO/日志/阻塞, 只做内存缓冲。
+    """
+    with _hook_lock:
+        if fn not in _kbd_consumers:
+            _kbd_consumers.append(fn)
+
+
+def remove_kbd_consumer(fn):
+    """S1-04: 注销键盘常驻消费者 (不存在也安全)。"""
+    with _hook_lock:
+        try:
+            _kbd_consumers.remove(fn)
+        except ValueError:
+            pass
+
+
+def run_hook_pump(should_stop):
+    """S1-04: 与录制同款的消息泵 (PeekMessage+DispatchMessage), 供常驻宿主线程使用。
+
+    与 _message_pump 的差别只有停止条件由调用方给出 (录制看 record_stop/quit2/_closing)。
+    """
+    msg = MSG()
+    while not should_stop():
+        if _user32.PeekMessageW(ctypes.byref(msg), None, 0, 0, PM_REMOVE):
+            if msg.message == WM_QUIT:
+                break
+            _user32.TranslateMessage(ctypes.byref(msg))
+            _user32.DispatchMessageW(ctypes.byref(msg))
+            continue
+        time.sleep(0.01)
+
+
 def _install_hooks():
     """安装键盘/鼠标低级钩子。任一成功即视为可用。"""
-    global _kbd_hook, _mouse_hook, _kbd_proc, _mouse_proc
-    _kbd_proc = HOOKPROC(_kbd_callback)
-    _mouse_proc = HOOKPROC(_mouse_callback)
-    _kbd_hook = _user32.SetWindowsHookExW(WH_KEYBOARD_LL, _kbd_proc, None, 0)
-    _mouse_hook = _user32.SetWindowsHookExW(WH_MOUSE_LL, _mouse_proc, None, 0)
-    return bool(_kbd_hook) or bool(_mouse_hook)
+    global _mouse_hook, _mouse_proc
+    ok_kbd = acquire_kbd_hook()
+    with _hook_lock:
+        if _mouse_hook is None:
+            _mouse_proc = HOOKPROC(_mouse_callback)
+            _mouse_hook = _user32.SetWindowsHookExW(WH_MOUSE_LL, _mouse_proc, None, 0)
+            if not _mouse_hook:
+                _mouse_proc = None
+    return bool(ok_kbd or _mouse_hook)
 
 
 def _uninstall_hooks():
-    """卸载钩子并释放回调引用。"""
-    global _kbd_hook, _mouse_hook, _kbd_proc, _mouse_proc
-    if _kbd_hook:
-        _user32.UnhookWindowsHookEx(_kbd_hook); _kbd_hook = None
-    if _mouse_hook:
-        _user32.UnhookWindowsHookEx(_mouse_hook); _mouse_hook = None
-    _kbd_proc = None
-    _mouse_proc = None
+    """卸载钩子并释放回调引用 (键盘钩子按引用计数归还, 不硬摘别人在用的钩子)。"""
+    global _mouse_hook, _mouse_proc
+    with _hook_lock:
+        if _mouse_hook:
+            try:
+                _user32.UnhookWindowsHookEx(_mouse_hook)
+            except Exception:
+                pass
+            _mouse_hook = None
+        _mouse_proc = None
+    release_kbd_hook()
 
 
 def _message_pump():

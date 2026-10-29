@@ -6,6 +6,7 @@ __pycache__/
 .Python
 build/
 develop-eggs/
+backups/
 # dist/ 下有三类文件，处置不同：
 #   · dist/*.exe    —— 每次构建都变的产物，不入库
 #   · dist/*.sha256 —— make_release.py 生成的本地校验和旁挂文件，不入库

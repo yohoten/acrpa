@@ -11,7 +11,19 @@
   E. get_about_info() 字段完整且 qr_path 文件存在。
   F. help_content 可导入且未引入 tkinter 依赖。
   G. 兜底行为：注册表新增（模拟插件）命令会落入兜底分组。
+
+S0-07 增强（全部是 [FAIL] 级，失败即退 1，不降级为 [WARN]）：
+  H. 兜底组必须为空：渲染分组标题中不得出现 `_fallback_title`（"其他命令"），
+     且 command_groups.json 不得存在空分组。
+  I. 分组覆盖率：json 全部命令去重后 == commands.list_names()（双向全等），
+     组内无重复，分组数 == 11。
+  J. 三键齐全：每组 icon/tier/order 均存在且非空；tier ⊆ {core,advanced,expert}；
+     order 无重复且恰好构成 1..11。
+  K. schema 互洽：command_schema.json 的 commands 名集合 == 分组命令集合
+     == 注册表集合；`stats.commands` == 注册表条数。
 """
+import io
+import json
 import os
 import sys
 
@@ -144,6 +156,100 @@ def check_groups_json():
             sorted(set(unknown))))
     else:
         ok("command_groups.json 所列命令均在注册表内")
+
+    # ── H. 兜底组为空 + 无空组（S0-07）──
+    # 既有 A 段允许命令落兜底组，只保证「不丢」；本段把它收紧为「不该有兜底组」。
+    fallback_title = str(data.get("_fallback_title") or "其他命令")
+    rendered_titles = [t for t, _entries in help_content.get_command_groups()]
+    check(fallback_title not in rendered_titles,
+          "兜底组「{}」为空（渲染分组 {} 个，无兜底组）".format(
+              fallback_title, len(rendered_titles)),
+          "兜底组「{}」非空：仍有命令未归入正式分组（渲染标题={}）".format(
+              fallback_title, rendered_titles))
+
+    empty_groups = [g.get("title") for g in groups
+                    if not (g.get("commands") or [])]
+    check(not empty_groups,
+          "分组均非空（无空组）",
+          "存在空分组（commands 为空列表）: {}".format(empty_groups))
+
+    # ── I. 分组覆盖率：双向全等 + 无重复 + 组数 11（S0-07）──
+    json_names = []
+    for g in groups:
+        json_names.extend(g.get("commands") or [])
+    dup = sorted({n for n in json_names if json_names.count(n) > 1})
+    check(not dup,
+          "分组内命令无重复（json 共 {} 条）".format(len(json_names)),
+          "分组内命令重复出现: {}".format(dup))
+
+    json_set = set(json_names)
+    unassigned = sorted(registry - json_set)          # 注册表有、分组没有
+    phantom = sorted(json_set - registry)             # 分组有、注册表没有
+    check(not unassigned,
+          "分组覆盖注册表全部命令（注册表 {} 条 == json {} 条）".format(
+              len(registry), len(json_set)),
+          "命令未归属任何分组: {}".format(unassigned))
+    check(not phantom,
+          "分组命令集合 ⊆ 注册表（无幽灵命令）",
+          "分组包含注册表不存在的命令: {}".format(phantom))
+    check(len(groups) == 11,
+          "分组数 == 11",
+          "分组数不是 11: {}".format(len(groups)))
+
+    # ── J. 三键齐全 icon/tier/order（S0-02 的机器验收，S0-07）──
+    allowed_tiers = {"core", "advanced", "expert"}
+    missing_keys = []
+    for g in groups:
+        for key in ("icon", "tier", "order"):
+            val = g.get(key)
+            if val is None or (isinstance(val, str) and not val.strip()):
+                missing_keys.append("{}:{}".format(g.get("title"), key))
+    check(not missing_keys,
+          "每组 icon/tier/order 三键齐全且非空（{} 组）".format(len(groups)),
+          "分组缺少 icon/tier/order: {}".format(missing_keys))
+
+    tiers = {g.get("tier") for g in groups}
+    check(tiers <= allowed_tiers,
+          "tier 取值合法: {}".format(sorted(t for t in tiers if isinstance(t, str))),
+          "tier 取值越界: {}".format(sorted(str(t) for t in tiers - allowed_tiers)))
+
+    orders = [g.get("order") for g in groups]
+    int_orders = [o for o in orders if isinstance(o, int)]
+    check(len(int_orders) == len(orders)
+          and sorted(int_orders) == list(range(1, len(groups) + 1)),
+          "order 无重复且构成 1..{}".format(len(groups)),
+          "order 不构成 1..{}: {}".format(len(groups), orders))
+
+    # ── K. schema 与分组/注册表互洽（S0-05 的机器验收，S0-07）──
+    schema_path = os.path.join(BASE, "res", "help", "command_schema.json")
+    schema = None
+    try:
+        with io.open(schema_path, "r", encoding="utf-8") as sf:
+            schema = json.load(sf)
+    except Exception as exc:
+        fail("command_schema.json 不可读或非法 JSON: {}".format(exc))
+
+    if isinstance(schema, dict):
+        schema_names = [c.get("name") for c in (schema.get("commands") or [])
+                        if isinstance(c, dict)]
+        schema_set = set(schema_names)
+        check(schema_set == json_set == registry
+              and len(schema_names) == len(registry),
+              "schema 命令集合 == 分组命令集合 == 注册表集合（各 {} 条）".format(
+                  len(registry)),
+              "schema/分组/注册表三方不一致: 注册表-分组={} 分组-注册表={}"
+              " 注册表-schema={} schema-注册表={}".format(
+                  sorted(registry - json_set), sorted(json_set - registry),
+                  sorted(registry - schema_set), sorted(schema_set - registry)))
+        check(len(schema_names) == len(schema_set),
+              "schema 内命令名无重复（{} 条）".format(len(schema_names)),
+              "schema 内命令名重复（{} 条 / 去重 {} 条）".format(
+                  len(schema_names), len(schema_set)))
+        stats = schema.get("stats") or {}
+        check(stats.get("commands") == len(registry),
+              "schema stats.commands == 注册表条数 ({})".format(len(registry)),
+              "schema stats.commands={} 与注册表 {} 条不一致".format(
+                  stats.get("commands"), len(registry)))
     return groups
 
 

@@ -39,7 +39,18 @@ import subprocess
 import sys
 import threading
 
+# 依赖/模型清单的**单一定义源**（S1-03）：权威字面量只在 src/ocr_consts.py，
+# capabilities.py 从同一处以另一组名字 import，故
+# ``paddle_dll.DEP_DLLS is capabilities.PADDLE_DEP_DLLS`` 恒为 True（同一 tuple
+# 对象，不存在"两处不同步"）。这里的名字与历史上完全一致，消费方无需改动。
+from ocr_consts import (DEP_DLLS, DLL_NAME, MODEL_FILES,
+                        MODEL_FILES_LEGACY)
 from utils import log1
+
+try:                       # 纯 stdlib 静态检查（PE 位数 / 依赖存在性 / 路径 ASCII）
+    import native_check
+except Exception:          # pragma: no cover - 打包缺模块时自检降级为内置判断
+    native_check = None
 
 try:
     import state
@@ -50,17 +61,12 @@ except Exception:  # pragma: no cover - state 必定存在，兜底避免导入�
 # ══════════════════════════════════════════════════════════════════════
 # 常量
 # ══════════════════════════════════════════════════════════════════════
-
-DLL_NAME = "PaddleOCR.dll"
-
-#: 运行期必需的同目录原生依赖（缺失则 LoadLibrary 直接失败）
-DEP_DLLS = ("paddle_inference.dll", "tbb12.dll", "yaml-cpp.dll", "opencv_world470.dll")
-
-#: 模型目录内的必备文件（新版 Paddle Inference IR）
-MODEL_FILES = ("inference.json", "inference.pdiparams")
-
-#: 兼容标记（旧版 .pdmodel / yml 也能被 v6.1 之前版本识别）
-MODEL_FILES_LEGACY = ("model.pdmodel", "model.pdiparams", "inference.yml")
+# DLL_NAME / DEP_DLLS / MODEL_FILES / MODEL_FILES_LEGACY 已**下沉**到
+# src/ocr_consts.py（S1-03 单一定义源），由本文件顶部 import 引入：
+#   * 对外名字不变（``paddle_dll.DEP_DLLS`` 等仍可用，且与 ocr_consts 同一对象）；
+#   * capabilities.py 从同一模块 import，因此三处永远一致，不再靠注释自觉同步。
+# ⚠ 不要在本文件重新写字面量清单 —— tools/_test_ocr_selfcheck.py 会扫描
+#   src/ 下"第二份同名 tuple/list 字面量"并判失败。
 
 #: 初始化原型表 —— name: (导出名, 参数形态)
 #:   形态含义: dir=模型目录, file=字典/许可证文件, json=参数 JSON 字符串, flag=整数开关
@@ -884,6 +890,213 @@ def format_diagnosis(d=None):
     lines.append("  结论      : {}".format(
         "可调用（可在设置中启用）" if d["ready"] else "不可调用 —— 请补齐上面标注的缺失项"))
     return "\n".join(lines)
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 静态自检 self_check() / self_check_report()  (S1-03)
+# ══════════════════════════════════════════════════════════════════════
+# ⚠ 本节**绝不加载 DLL**（无 ctypes.WinDLL / CDLL / LoadLibrary 调用）：
+#   该 DLL 在依赖缺失或调用原型不匹配时会触发 Access Violation **直接打死整个
+#   进程**——这正是"真实加载只走 preflight_child() 子进程路径"的原因（见模块头
+#   「设计原则 4」）。本节只做 os.path 存在性与字符串判断，故可在 Tk 主线程里
+#   直接调用（设置界面「DLL 自检」按钮即如此）。
+
+def _resolve_dll_dir(dll_dir=None):
+    """定位含 ``PaddleOCR.dll`` 的目录 → ``(命中目录 或 "", 候选目录列表)``。
+
+    优先级: 显式参数 → ``state.PADDLE_DLL_DIR`` → ``<程序根>/lib/paddle_ocr`` 等，
+    完全复用既有的 ``candidate_dirs()``（不另起一套路径规则）。
+    """
+    if dll_dir:
+        # 显式参数**只认这一个目录**（不再回退候选目录）：否则"用户填错的目录"
+        # 会被静默忽略、改用 lib/paddle_ocr 里那份，自检结论与用户预期不符。
+        try:
+            only = os.path.abspath(str(dll_dir))
+        except Exception:                 # pragma: no cover - 纯防御
+            only = str(dll_dir)
+        if os.path.isfile(os.path.join(only, DLL_NAME)):
+            return only, [only]
+        return "", [only]
+    cands = list(candidate_dirs())
+    out, seen = [], set()
+    for d in cands:
+        try:
+            key = os.path.normcase(os.path.abspath(d))
+        except Exception:                 # pragma: no cover
+            continue
+        if key not in seen:
+            seen.add(key)
+            out.append(d)
+    for d in out:
+        if os.path.isfile(os.path.join(d, DLL_NAME)):
+            return d, out
+    return "", out
+
+
+def _resolve_model_dir(dll_dir, model_dir=None):
+    """定位模型目录 → 路径 或 ""。
+
+    优先级: 显式参数（**即使不存在也照用**，以便把"目录写错"如实报出来）→
+    ``state.PADDLE_DLL_MODEL_DIR`` → DLL 同级的 ``models/model/inference/runtime``
+    （与 ``find_model_dir()`` 同口径）。
+    """
+    if model_dir:
+        try:
+            return os.path.abspath(str(model_dir))
+        except Exception:                 # pragma: no cover
+            return str(model_dir)
+    try:
+        if state is not None:
+            custom = getattr(state, "PADDLE_DLL_MODEL_DIR", "") or ""
+            if custom and os.path.isdir(custom):
+                return os.path.abspath(custom)
+    except Exception:                     # pragma: no cover
+        pass
+    for name in ("models", "model", "inference", "runtime"):
+        cand = os.path.join(dll_dir or "", name)
+        if os.path.isdir(cand):
+            return cand
+    return ""
+
+
+def _find_model_file(root, name):
+    """在 ``root`` 及其**一级子目录**里找模型文件 → 命中路径 或 ""。
+
+    兼容两种形态: A 单模型目录（文件在根下）/ B 模型集合目录（各子目录各带一套，
+    绿色版 ``inference/`` 即此形态）。
+    """
+    if not root:
+        return ""
+    try:
+        direct = os.path.join(root, name)
+        if os.path.isfile(direct):
+            return direct
+        subs = [d for d in sorted(os.listdir(root))
+                if os.path.isdir(os.path.join(root, d))]
+    except Exception:                     # pragma: no cover - 目录不可读
+        return ""
+    for s in subs:
+        cand = os.path.join(root, s, name)
+        if os.path.isfile(cand):
+            return cand
+    return ""
+
+
+def _ascii_problem(path):
+    """路径含非 ASCII → 可读原因；纯 ASCII / 空路径 → ""。"""
+    if not path:
+        return ""
+    if native_check is not None:
+        try:
+            ok, why = native_check.dir_ascii_only(path)
+            return "" if ok else why
+        except Exception:                 # pragma: no cover - 失败开放
+            return ""
+    try:                                  # 无 native_check 时的等价兜底
+        ap = os.path.abspath(path)
+        bad = sorted({ch for ch in ap if ord(ch) > 127})
+    except Exception:                     # pragma: no cover
+        return ""
+    if not bad:
+        return ""
+    return ("路径含非 ASCII 字符 {} —— PaddleOCR.dll 内部按 ANSI 查找模型文件, "
+            "会报 'can not find model file in ...'; 请改用纯英文/数字路径: {}".format(
+                "".join(bad), ap))
+
+
+def self_check_report(dll_dir=None, model_dir=None):
+    """PaddleOCR.dll **静态**自检的结构化结果（设置界面「DLL 自检」逐项清单用）。
+
+    :returns: dict —— ``{"state", "reason", "missing", "dll_dir", "model_dir",
+        "items"}``；``items`` 逐文件列举 ``{"kind","name","path","ok"}``
+        （kind ∈ ``dll`` / ``dep`` / ``model`` / ``legacy``，缺失项 ``ok=False``）。
+
+    ⚠ **绝不加载 DLL**（见本节抬头说明）。
+    """
+    d, cands = _resolve_dll_dir(dll_dir)
+    if not d:
+        return {
+            "state": "missing",
+            "reason": ("未找到 {}。已查候选目录: {} —— 请把绿色版整个目录复制到 "
+                       "lib/paddle_ocr（须含 {}）".format(
+                           DLL_NAME, "; ".join(cands) or "无",
+                           ", ".join(DEP_DLLS))),
+            "missing": [DLL_NAME],
+            "dll_dir": "",
+            "model_dir": "",
+            "items": [],
+        }
+
+    items = [{"kind": "dll", "name": DLL_NAME,
+              "path": os.path.join(d, DLL_NAME), "ok": True}]
+
+    missing_deps = [n for n in DEP_DLLS
+                    if not os.path.isfile(os.path.join(d, n))]
+    for n in DEP_DLLS:
+        items.append({"kind": "dep", "name": n,
+                      "path": os.path.join(d, n), "ok": n not in missing_deps})
+
+    md = _resolve_model_dir(d, model_dir)
+    model_ok, model_msg = _model_state(md)
+    for n in MODEL_FILES:
+        p = _find_model_file(md, n)
+        items.append({"kind": "model", "name": n, "path": p, "ok": bool(p)})
+    # 旧版文件只作为「兼容标记」列出，不计入 missing（新版文件齐全时与就绪无关）
+    for n in MODEL_FILES_LEGACY:
+        p = _find_model_file(md, n)
+        items.append({"kind": "legacy", "name": n, "path": p, "ok": bool(p)})
+
+    missing = list(missing_deps)
+    if not model_ok:
+        missing.extend(MODEL_FILES)
+
+    problems = []
+    if missing_deps:
+        problems.append("缺少原生依赖: {}（须与 {} 同目录，可从绿色版整目录复制）".format(
+            ", ".join(missing_deps), DLL_NAME))
+    if not model_ok:
+        problems.append("模型不可用: {}（模型目录={}；需要 {} 之一）".format(
+            model_msg, md or "未找到（DLL 同级无 models/model/inference/runtime）",
+            " + ".join(MODEL_FILES)))
+    for label, p in (("DLL 目录", d), ("模型目录", md)):
+        why = _ascii_problem(p)
+        if why:
+            problems.append("{}: {}".format(label, why))
+
+    if problems:
+        return {"state": "broken",
+                "reason": "静态自检未通过 —— " + "; ".join(problems),
+                "missing": missing, "dll_dir": d, "model_dir": md,
+                "items": items}
+    return {"state": "ready",
+            "reason": ("静态自检通过: 依赖 {} 件齐全, 模型: {}, 路径纯 ASCII ({})"
+                       " —— 可在设置中启用（真实加载仍走子进程预检）".format(
+                           len(DEP_DLLS), model_msg, d)),
+            "missing": [], "dll_dir": d, "model_dir": md, "items": items}
+
+
+def self_check(dll_dir=None, model_dir=None):
+    """PaddleOCR.dll **静态**自检 → ``(state, reason, missing)``。
+
+    ``state`` 取值::
+
+        "ready"    主模块 + 4 个原生依赖 + 模型文件齐全，且 DLL/模型目录纯 ASCII
+        "missing"  **没有找到** PaddleOCR.dll（未安装 / 没放对目录）
+        "broken"   找到了主模块，但依赖缺失 / 模型缺失 / 路径含非 ASCII
+                   （``reason`` 逐项说明，``missing`` 列出缺的文件名）
+
+    :param dll_dir: 显式 DLL 目录；None → ``state.PADDLE_DLL_DIR`` → 候选目录
+    :param model_dir: 显式模型目录；None → ``state.PADDLE_DLL_MODEL_DIR`` → DLL 同级
+    :returns: ``(state: str, reason: str, missing: list)``
+
+    ⚠ **绝不在本函数内加载 DLL**（全程无 ``ctypes.WinDLL`` / ``LoadLibrary`` /
+    ``CDLL`` 调用）：该 DLL 在依赖缺失或调用原型不匹配时会触发 **Access Violation
+    直接打死整个进程**（这也正是真实加载只走 ``preflight_child()`` 子进程预检的
+    原因，见模块头「设计原则 4」）。本函数只做 ``os.path`` 存在性与字符串判断，
+    因此在 UI 线程里直接调用是安全的。
+    """
+    r = self_check_report(dll_dir=dll_dir, model_dir=model_dir)
+    return r["state"], r["reason"], list(r["missing"])
 
 
 _PREFLIGHT_CODE = (

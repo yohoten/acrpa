@@ -43,6 +43,11 @@ jobs:
       - name: 版本号一致性 (含 version_info 回退值)
         run: python tools/bump_version.py --verify
 
+      - name: schema 漂移门禁 (注册表 vs res/help/command_schema.json)
+        # S0-05/S0-08: 改了 src/commands.py 却没重跑生成器 → 此处红。
+        # 只校验不写盘; 退出码非 0 即失败 (ubuntu/windows 同一条命令, 无 shell 差异)。
+        run: python tools/export_command_schema.py --check
+
       - name: 核心回归测试
         # --safe 只跑不依赖 GUI 交互 / playwright / 真实网络的子集;
         # 被排除的脚本会打印 SKIP 与原因, 不会静默漏跑。

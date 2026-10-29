@@ -51,6 +51,10 @@ import script_validate  # 路线图 阶段二第 7 项: 运行前静态校验 (�
 import i18n  # 路线图 §5.6: UI 字符串目录 (默认 zh; 文本只作显示, 不作状态/主题判定)
 from engine import engine
 import recorder
+# S1-04: RegisterHotKey + WM_HOTKEY 热键后端与热字串引擎。
+# 纯 ctypes + stdlib (零 pip 依赖/零 DLL); import 期无副作用 (不建窗口/不起线程,
+# 也不 import tkinter) —— 符合 H8「纯逻辑模块无副作用」。
+import hotkey_win
 import scheduler as sched
 from tray import SystemTray
 # 独立弹窗模块 (依赖注入: init_ctx 在 root 创建后调用)
@@ -1089,7 +1093,14 @@ def _do_close():
         sched.stop_scheduler()
     except Exception:
         pass
-    
+
+    # S1-04: 注销全部 RegisterHotKey + 退出消息线程 + 卸载热字串钩子
+    # (不清理会留下悬空 daemon 线程与泄漏的注册项, 下次启动同组合将 1409)
+    try:
+        _hotkey_shutdown()
+    except Exception:
+        pass
+
     if state.quit2:
         root.destroy()
     else:
@@ -3751,10 +3762,26 @@ _task_hotkey_sig = ()   # 任务热键签名：变化才重建，避免每次保
 # 「停止录制」热键 (P0-7 接线): 同款解析 + 独立边沿检测状态
 _RECORD_STOP_SPEC = None   # (mods_set, vk) 或 None(未配置/解析失败)
 _recstop_prev = False      # 边沿检测: 避免按住时每 200ms 重复触发
+# ── S1-04 RegisterHotKey 后端状态 (仅 state.HOTKEY_BACKEND == "register" 时非空) ──
+_HOTKEY_WIN_OK = set()     # 已由 HotkeyManager 成功注册的 action → 轮询跳过这一条
+_HOTKEY_WIN_ERRS = {}      # {action: err} 注册失败 → 自动落回轮询, 并在设置界面提示
+_HOTSTRING_ENGINE = None   # 热字串引擎 (未启用时 None; 空配置不装钩子)
 
 
 def _parse_hotkey_spec(spec):
-    """解析快捷键字符串 'ctrl+shift+q' → (mods:set, vk:int)；无效返回 None。"""
+    """解析快捷键字符串 'ctrl+shift+q' → (mods:set, vk:int)；无效返回 None。
+
+    S1-04 步骤 3: 实现已下沉到 hotkey_win.parse_spec (唯一实现), 此处只保留薄封装
+    —— 函数名与全部调用点不变; 旧实现留作 _parse_hotkey_spec_legacy 备查/回退对照。
+    """
+    try:
+        return hotkey_win.parse_spec(spec)
+    except Exception:
+        return _parse_hotkey_spec_legacy(spec)
+
+
+def _parse_hotkey_spec_legacy(spec):
+    """原实现 (逐字节保留)。仅当 hotkey_win 不可用时兜底, 亦供等价性单测对照。"""
     if not spec or spec == "未设置":
         return None
     parts = [p.strip().lower() for p in str(spec).split("+")]
@@ -3783,6 +3810,142 @@ def _parse_hotkey_spec(spec):
     return (mods, key)
 
 
+# ── S1-04: RegisterHotKey 后端接线 (回调只做 root.after 投递, 下游零改动) ──
+def _hotkey_win_dispatch(action):
+    """HotkeyManager 的消息线程回调: 只把执行投递回 Tk 主线程。
+
+    与 _hotkey_poll 的做法一致 (root.after(0, _hotkey_executors[action])),
+    因此 build/stop 等下游函数一行都不用改。
+    """
+    try:
+        root.after(0, _hotkey_win_execute, action)
+    except Exception:
+        pass
+
+
+def _hotkey_win_execute(action):
+    """主线程执行 WM_HOTKEY 命中的动作 (日志文案与轮询路径逐字一致)。"""
+    try:
+        if action == "pause" and not state.running:
+            return   # 未运行时忽略暂停热键 (与 _hotkey_poll 同款判定)
+        log1("热键触发: {}".format(action))
+        fn = _hotkey_executors.get(action)
+        if fn:
+            fn()
+    except Exception:
+        pass
+
+
+def _hotkey_win_sync():
+    """S1-04 步骤 1/2: 按 state.HOTKEY_BACKEND 重建 RegisterHotKey 注册表。
+
+    * ``poll`` (默认): 清空注册表 → _HOTKEY_WIN_OK 为空 → 轮询行为与改造前逐字节等价;
+    * ``register``    : 交给 HotkeyManager 注册, 成功项记入 _HOTKEY_WIN_OK (轮询跳过),
+      失败项 (含 1409 已被其他程序占用) 记入 _HOTKEY_WIN_ERRS 并**自动落回轮询**。
+    绝不抛异常。
+    """
+    global _HOTKEY_WIN_OK, _HOTKEY_WIN_ERRS
+    backend = str(getattr(state, "HOTKEY_BACKEND", "poll") or "poll").strip().lower()
+    if backend != "register":
+        # poll 模式: 不构造 manager、不起线程、不碰 user32 —— 与改造前逐字节等价。
+        # 若刚从 register 切回来, 才需要真正注销 (instance 已存在且持有注册项)。
+        _HOTKEY_WIN_OK = set()
+        _HOTKEY_WIN_ERRS = {}
+        try:
+            inst = hotkey_win.HotkeyManager.existing_instance()
+            if inst is not None:
+                if inst.is_running and inst.registered_actions():
+                    inst.unregister_all()
+                else:
+                    inst.clear_local()
+        except Exception:
+            pass
+        return
+    mgr = hotkey_win.HotkeyManager.instance()
+    bindings = {}
+    for action, key in (("run", "HOTKEY_RUN"), ("pause", "HOTKEY_PAUSE"),
+                        ("stop", "HOTKEY_STOP")):
+        if action in _HOTKEY_ACTIONS:
+            bindings[action] = str(getattr(state, key, "") or "")
+    if not hotkey_win.is_supported():
+        _HOTKEY_WIN_OK = set()
+        _HOTKEY_WIN_ERRS = {a: hotkey_win.MSG_ERR_NON_WIN for a in bindings}
+        return
+    try:
+        mgr.set_dispatcher(_hotkey_win_dispatch)
+        errs = mgr.rebuild(bindings)
+        _HOTKEY_WIN_OK = set(mgr.registered_actions())
+        _HOTKEY_WIN_ERRS = dict(errs)
+        for action, err in errs.items():
+            log1("热键 {} ({}) {} —— 该条继续由轮询兜住".format(
+                action, bindings.get(action, ""), err), "warning")
+    except Exception as e:
+        _HOTKEY_WIN_OK = set()
+        _HOTKEY_WIN_ERRS = {}
+        log1("热键注册后端不可用，已退回轮询: {}".format(e), "warning")
+
+
+def _hotstring_sync():
+    """S1-04: 按 state.HOTSTRINGS 启停热字串引擎 (空列表 = 关闭, 不装任何钩子)。"""
+    global _HOTSTRING_ENGINE
+    raw = getattr(state, "HOTSTRINGS", []) or []
+    eng = hotkey_win.hotstring_engine()
+    _HOTSTRING_ENGINE = eng
+    eng.load_bindings(raw)
+    if not raw:
+        try:
+            if eng.is_running:
+                eng.stop()
+        except Exception:
+            pass
+        return False
+    try:
+        eng.set_script_runner(_hotstring_run_script)
+        return bool(eng.start())
+    except Exception as e:
+        log1("热字串引擎启动失败 (不影响其它功能): {}".format(e), "warning")
+        return False
+
+
+def _hotstring_run_script(path):
+    """热字串 kind="script": 只投递回主线程 (钩子线程内绝不做 IO)。"""
+    try:
+        root.after(0, _hotstring_load_and_run, path)
+    except Exception:
+        pass
+
+
+def _hotstring_load_and_run(path):
+    """主线程: 载入脚本到编辑器并运行 (复用既有 load/main_run 路径, 不新建执行通道)。"""
+    try:
+        _editor_load_xls(path)
+        main_run()
+    except Exception as e:
+        log1("热字串脚本运行失败: {}".format(e), "warning")
+
+
+def _hotkey_shutdown():
+    """S1-04: 退出清理 —— 注销全部热键 + 退出消息线程 + 卸载热字串钩子。
+
+    必须干净: 不留悬空线程, 不留泄漏的注册项 (否则下次启动同组合会 1409)。
+    """
+    global _HOTKEY_WIN_OK, _HOTKEY_WIN_ERRS, _HOTSTRING_ENGINE
+    try:
+        inst = hotkey_win.HotkeyManager.existing_instance()
+        if inst is not None:
+            inst.stop()
+    except Exception:
+        pass
+    try:
+        if _HOTSTRING_ENGINE is not None:
+            _HOTSTRING_ENGINE.stop()
+    except Exception:
+        pass
+    _HOTKEY_WIN_OK = set()
+    _HOTKEY_WIN_ERRS = {}
+    _HOTSTRING_ENGINE = None
+
+
 def _rebuild_hotkey_specs():
     """根据 state 中的 HOTKEY_* / RECORDING_STOP_HOTKEY 配置重建快捷键映射表。
 
@@ -3802,6 +3965,13 @@ def _rebuild_hotkey_specs():
     _recstop_prev = False
     # 内建热键表变了下游的任务热键冲突判定也要跟着变 → 一并重建
     _rebuild_task_hotkeys()
+    # ── S1-04 步骤 1: RegisterHotKey 后端重建 (仅 register 模式; 失败项落回轮询) ──
+    # 冲突检测结论不受影响: 上面的内建/任务热键表与 4 条日志文案完全不变, 这里只是把
+    # **已解析成功**的条目额外交给系统注册, 失败条目仍由 _hotkey_poll 继续兜住。
+    try:
+        _hotkey_win_sync()
+    except Exception:
+        pass
 
 
 def _task_hotkey_signature():
@@ -3902,9 +4072,12 @@ def _on_config_changed(data, changed):
         if "retry_interval" in changed:
             engine.retry_interval = state.RETRY_INTERVAL
         if any(k in changed for k in ("hotkey_run", "hotkey_pause", "hotkey_stop",
-                                      "recording_stop_hotkey")):
+                                      "recording_stop_hotkey", "hotkey_backend")):
             _rebuild_hotkey_specs()
             log1("全局快捷键配置已更新")
+        if "hotstrings" in changed:
+            # S1-04: 热字串配置变化 → 重新同步引擎 (空列表 = 卸载钩子)
+            _hotstring_sync()
         if "sched_tasks" in changed:
             # 任务库变化 (含 hotkey/stop_hotkey 字段) → 仅在签名变化时重建
             if _task_hotkey_signature() != _task_hotkey_sig:
@@ -3945,6 +4118,11 @@ def _hotkey_poll():
 
         # 用户配置的全局快捷键 (边沿检测)
         for action, (mods, vk) in _HOTKEY_ACTIONS.items():
+            # S1-04 步骤 2: register 模式下已成功注册的条目由 WM_HOTKEY 接管 → 跳过,
+            # 只对"注册失败"的条目继续轮询。poll 模式下 _HOTKEY_WIN_OK 恒为空集合,
+            # 因此本分支不改变任何既有行为 (逐字节等价)。
+            if action in _HOTKEY_WIN_OK:
+                continue
             pressed = all(
                 ctypes.windll.user32.GetAsyncKeyState(m) & 0x8000 for m in mods)
             now = bool(pressed and (ctypes.windll.user32.GetAsyncKeyState(vk) & 0x8000))
@@ -4941,8 +5119,10 @@ def build_app():
     state.on_config_change(_on_config_changed, keys=(
         "dark_mode", "retry_max", "retry_interval",
         "hotkey_run", "hotkey_pause", "hotkey_stop",
-        "recording_stop_hotkey", "sched_tasks"))
+        "recording_stop_hotkey", "hotkey_backend", "hotstrings", "sched_tasks"))
     _rebuild_hotkey_specs()
+    # S1-04: 热字串 (默认关闭: state.HOTSTRINGS 为空 → 不安装任何键盘钩子)
+    _hotstring_sync()
 
     root.after(200, _hotkey_poll)
 

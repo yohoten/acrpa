@@ -13,7 +13,9 @@ SRC  = os.path.join(BASE, "src")
 RES  = os.path.join(BASE, "res")
 DIST = os.path.join(BASE, "dist")
 
-APP = "ACRPA"
+_VER = (open(os.path.join(BASE, "VERSION"), encoding="utf-8-sig").readline().strip() if os.path.isfile(os.path.join(BASE, "VERSION")) else "").lstrip("vV")
+APP  = "ACRPA v{}".format(_VER) if _VER else "ACRPA"
+# APP = "ACRPA v{}".format(_VERSION) if _VERSION else "ACRPA"
 ICON = os.path.join(RES, "automation.ico")
 ENTRY = os.path.join(BASE, "run.py")
 
@@ -73,6 +75,18 @@ _PROJECT_MODULES = [
     "market_window", "market_upload", "accounts",
     "flow_graph", "script_io", "script_model", "script_validate",
     "capabilities", "i18n", "cli",
+    # S1-01: 原生文件静态检查 (PE 位数/依赖存在性/路径 ASCII)。纯 stdlib
+    # (io/os/struct), capabilities 在**模块级** import 它 —— 静态分析本可见,
+    # 但仍是"import 期即需要"的硬依赖, 显式声明以防未来改成惰性后漏包。
+    "native_check",
+    # S1-03: PaddleOCR 依赖/模型清单的**单一定义源** (零 import, 只有字面量)。
+    # capabilities.py 与 paddle_dll.py 均在模块级 import 它, 漏加则冻结版
+    # 一启动 ImportError (源码模式永远测不出来) —— 与 ACRPA.spec 必须同序同内容。
+    "ocr_consts",
+    # S1-04: RegisterHotKey + WM_HOTKEY 热键后端与热字串引擎 (纯 ctypes + stdlib,
+    # 零 DLL/零 pip, ≈14 KB)。ACRPA.py 在**模块级** import 它, 静态分析本可见;
+    # 仍显式声明以防未来改成惰性 import 后冻结版静默缺模块。
+    "hotkey_win",
     # L2 动作库扩充：文件/系统/网络三个纯逻辑模块（20 条新命令的后端）。
     # 均为纯 stdlib（shutil/ctypes/urllib/hashlib/base64），体积影响 < 120 KB。
     "file_ops", "sys_ops", "net_ops",
@@ -92,7 +106,9 @@ _PROJECT_MODULES = [
     # 静态分析看不到 → 打包后设置窗口只剩左侧导航、右侧内容空白。现已改为静态
     # 导入，此处再显式声明作双保险（新增 UI 模块请同步追加）。
     "ui", "ui.theme", "ui.log_dock", "ui.exec_bar", "ui.workflow_view",
-    "ui.flow_canvas", "ui.command_palette", "ui.param_form",
+    # S0-03/S0-04: 模块库数据源适配器 —— workflow_view 在函数内惰性 import,
+    # 静态分析不可见; 漏加则冻结版模块库退化为硬编码兜底 45 条 (历史踩过)。
+    "ui.flow_canvas", "ui.command_palette", "ui.param_form", "ui.module_catalog",
     "ui.settings", "ui.settings.window", "ui.settings.cards",
     "ui.settings.cards.exec", "ui.settings.cards.ai", "ui.settings.cards.sched",
     "ui.settings.cards.record", "ui.settings.cards.log", "ui.settings.cards.system",

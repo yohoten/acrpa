@@ -10,7 +10,7 @@ PaddleOCR.dll (开关·路径·高级参数)。
 """
 import threading
 import tkinter
-from tkinter import ttk, filedialog
+from tkinter import ttk, filedialog, messagebox
 
 import state
 from utils import FONT_TINY
@@ -118,12 +118,38 @@ def build(parent, ctx):
     ocr_status_var = tkinter.StringVar(value="检测中…")
     tkinter.Label(ocr_status_frame, text="OCR 状态:", font=ctx.FONT_SMALL,
         fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 6))
+    # wraplength 保持 330（不加大卡宽）: 失败原因较长时换行显示即可，
+    # 卡片本身可纵向滚动，加大 wraplength 会把 reqwidth 顶宽导致窗宽 680 时横向裁剪。
     tkinter.Label(ocr_status_frame, textvariable=ocr_status_var, font=ctx.FONT_SMALL,
         fg=C["sc"], bg=C["bgc"], wraplength=330,
         justify="left").pack(side="left", padx=(0, 8))
 
+    def _ocr_unavailable_reason():
+        """无可用后端时的**可读原因**（复用 capabilities / ocr_backend 的 reason）。
+
+        不新造一套文案体系：原生 DLL 后端的原因直接取
+        ``capabilities.probe("ocr.paddle_dll").reason`` —— 与命令角标、能力体检
+        卡片是同一份文本；未启用时给出可执行的下一步。
+        """
+        bits = []
+        try:
+            import capabilities
+            if bool(getattr(state, "PADDLE_DLL_ENABLED", False)):
+                why = (capabilities.probe("ocr.paddle_dll").reason or "").strip()
+                if why:
+                    bits.append("PaddleOCR.dll: {}".format(why))
+            else:
+                bits.append("PaddleOCR.dll 原生后端未启用")
+        except Exception:                  # noqa: BLE001 — 探测故障不影响状态行显示
+            pass
+        if not bits:
+            bits.append("pip 版 PaddleOCR / Windows OCR / Tesseract 均未就绪")
+        bits.append("最短修复路径: 勾「启用 PaddleOCR.dll」→ 点「DLL 自检」按清单补齐"
+                    "依赖与模型; 或 pip install paddlepaddle paddleocr")
+        return "；".join(bits)
+
     def _refresh_ocr_status():
-        """显示真实后端状态（ocr_backend.ocr_get_backend_info），不可用时说明原因。
+        """显示真实后端状态（ocr_backend.ocr_get_backend_info）+ 不可用时说明原因。
 
         状态探测会触发后端惰性加载（pip 版 PaddleOCR 需加载模型，可能耗时数秒），
         因此放后台线程执行，结果再回主线程刷新文本，避免打开设置窗口时卡顿。
@@ -134,12 +160,14 @@ def build(parent, ctx):
             try:
                 from ocr_backend import ocr_get_backend_info
                 info = ocr_get_backend_info() or {}
+                pref = _backend_label.get(
+                    getattr(state, "OCR_PREFERRED_BACKEND", "auto"), "自动")
                 if info.get("available"):
-                    text = "● 已就绪: {}".format(
-                        info.get("name") or info.get("backend") or "未知后端")
+                    text = "● 已就绪: {}（偏好: {}）".format(
+                        info.get("name") or info.get("backend") or "未知后端", pref)
                 else:
-                    text = ("○ 无可用后端（pip 版 PaddleOCR / Windows OCR / "
-                            "Tesseract 均未就绪）")
+                    text = "○ 无可用后端（偏好: {}）—— {}".format(
+                        pref, _ocr_unavailable_reason())
             except Exception as e:
                 text = "状态检测失败: {}".format(e)
             try:
@@ -185,7 +213,7 @@ def build(parent, ctx):
     tkinter.Label(ocr_pref_frame, text="(1-32，pip 版与 DLL 后端共用)", font=FONT_TINY,
         fg=C["fgm"], bg=C["bgc"]).pack(side="left")
 
-    # === 行8：PaddleOCR.dll 开关 + 自检（结论就地显示，不再弹模态） ===
+    # === 行8：PaddleOCR.dll 开关 + 「DLL 自检」（结论就地显示 + 逐项清单） ===
     adv_pdll_frame = tkinter.Frame(adv_content, bg=C["bgc"])
     adv_pdll_frame.grid(row=8, column=0, sticky="ew", padx=8, pady=(4, 1))
     paddle_dll_enabled_var = tkinter.BooleanVar(
@@ -194,24 +222,68 @@ def build(parent, ctx):
         variable=paddle_dll_enabled_var).pack(side="left", padx=(0,8))
     pdll_status_var = tkinter.StringVar(value="未自检")
 
+    def _format_self_check(report):
+        """``paddle_dll.self_check_report()`` → 人类可读的**逐项清单**
+        （✔ 就绪 / ✘ 缺失，逐文件列举，缺失项附应放路径）。"""
+        verdict = {"ready": "✔ 就绪（可在左侧勾选启用）",
+                   "missing": "✘ 未安装 / 未放对目录",
+                   "broken": "✘ 存在但不可用 —— 请按下面标 ✘ 的项补齐"}.get(
+                       report.get("state"), str(report.get("state")))
+        kind = {"dll": "主模块", "dep": "原生依赖", "model": "模型文件",
+                "legacy": "旧版兼容"}
+        lines = ["结论: {}".format(verdict),
+                 "DLL 目录 : {}".format(report.get("dll_dir") or "未找到"),
+                 "模型目录 : {}".format(report.get("model_dir") or "未找到/未配置"),
+                 ""]
+        for it in report.get("items") or []:
+            lines.append("{} {:<24} ({})".format(
+                "✔" if it.get("ok") else "✘", it.get("name"),
+                kind.get(it.get("kind"), it.get("kind"))))
+            if not it.get("ok") and it.get("path"):
+                lines.append("     缺: {}".format(it.get("path")))
+        lines.append("")
+        lines.append(report.get("reason") or "")
+        return "\n".join(lines)
+
     def _check_paddle_dll():
-        """就地自检: 显示结论并重置后端探测，使新设置立即参与下次识别。"""
+        """「DLL 自检」: 就地出结论 + 弹出逐项清单（数据来自 paddle_dll.self_check()）。
+
+        静态检查（**不加载 DLL**，不会因 Access Violation 打死进程），故同步执行；
+        完成后重置后端探测，使新设置立即参与下次识别。
+        """
         try:
             import paddle_dll
-            report = paddle_dll.format_diagnosis()
-            _log1(report)
-            try:
-                from ocr_backend import ocr_reset_backend
-                ocr_reset_backend()
-            except Exception:
-                pass
-            lines = [ln.strip() for ln in report.splitlines() if ln.strip()]
-            pdll_status_var.set((lines[-1][:80] if lines else "自检完成"))
-            _refresh_ocr_status()
+            report = paddle_dll.self_check_report()
         except Exception as e:
             pdll_status_var.set("自检失败: {}".format(e))
+            return
+        chk_state = report.get("state")
+        missing = list(report.get("missing") or [])
+        if chk_state == "ready":
+            pdll_status_var.set("✔ 就绪: 依赖齐全 + 模型齐全 + 路径纯 ASCII")
+        elif chk_state == "missing":
+            pdll_status_var.set("✘ 未找到 {} —— 见「DLL 自检」清单".format(
+                getattr(paddle_dll, "DLL_NAME", "PaddleOCR.dll")))
+        elif missing:
+            pdll_status_var.set("✘ 缺 {} 项: {}".format(len(missing), ", ".join(missing)))
+        else:
+            pdll_status_var.set("✘ 不可用: {}".format((report.get("reason") or "")[:70]))
+        try:
+            from ocr_backend import ocr_reset_backend
+            ocr_reset_backend()
+        except Exception:
+            pass
+        _refresh_ocr_status()
+        text = _format_self_check(report)
+        _log1("PaddleOCR.dll 自检: {}".format(report.get("reason") or chk_state))
+        _log1(text)
+        try:
+            messagebox.showinfo("PaddleOCR.dll 自检", text, parent=_win)
+        except Exception:                  # noqa: BLE001 — 无 GUI 环境下只留日志
+            pass
     _btn(adv_pdll_frame, "DLL 自检", _check_paddle_dll, "ac", "white",
-        tip="检查 DLL/依赖/模型是否就绪(依赖不全时不可调用)").pack(side="left", padx=(0,8))
+        tip="静态检查 DLL/4 个依赖/模型文件与路径编码，并逐项列出缺失文件").pack(
+            side="left", padx=(0,8))
     tkinter.Label(adv_pdll_frame, textvariable=pdll_status_var, font=FONT_TINY,
         fg=C["fgm"], bg=C["bgc"], wraplength=320,
         justify="left").pack(side="left")

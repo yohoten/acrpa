@@ -369,6 +369,9 @@
   .t-basic{color:var(--c1);background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.3)}
   .t-adv{color:var(--c2);background:rgba(129,140,248,.1);border:1px solid rgba(129,140,248,.35)}
   .t-ai{color:var(--c3);background:rgba(232,121,249,.1);border:1px solid rgba(232,121,249,.3)}
+  .tmpl-card li{flex-wrap:wrap}
+  .tmpl-card li b{color:var(--text);font-weight:600}
+  .tmpl-card li em{flex:1 1 100%;font-style:normal;font-size:12.5px;color:var(--dim);line-height:1.6;margin-top:1px}
 
   /* Env */
   .env-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
@@ -766,7 +769,6 @@
   .tl-toggle .tl-caret{display:inline-block;margin-left:8px;transition:transform .25s}
   .tl-toggle[aria-expanded="true"] .tl-caret{transform:rotate(180deg)}
 
-
   /* ==========================================================
      使用场景 / 安全信任 / 常见问题（采纳自 index.new.html）
      ========================================================== */
@@ -964,50 +966,43 @@
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="sec-tag">USE CASES</span>
-      <h2>谁在用 ACRPA</h2>
-      <p class="sec-desc">不用会编程。按你的角色对号入座 —— 每个场景都有内置模板、示例脚本或命令直接支撑。</p>
+      <h2>哪些重复工作可以交给 ACRPA</h2>
+      <p class="sec-desc">不会编程也能用。按任务对号入座 —— 每项都有内置模板、示例脚本或命令直接支撑。</p>
     </div>
     <div class="scene-grid">
       <div class="scene reveal">
-        <h3>🗂 办公文员 / 行政</h3>
+        <h3>🧾 票据归档（财务）</h3>
         <div class="ba">
-          <div class="after">✅ 登录、表单填写、数据采集、批量点击、定时截图归档 —— 全天的重复操作一次编好，到点自动跑。</div>
-          <div class="support">支撑：内置模板「登录流程 / 表单填写 / 数据采集 / 批量点击」</div>
-        </div>
-      </div>
-      <div class="scene reveal">
-        <h3>💰 财务 / 网银对账</h3>
-        <div class="ba">
-          <div class="after">✅ 网银票据下载、发票 OCR 识别录入、对账数据在系统与 Excel 之间自动搬运，不再手动抄行。</div>
+          <div class="after">✅ 下载网银票据 → OCR 识别 → 写入 Excel → 归档，整条链路自动跑，不再逐行手抄。</div>
           <div class="support">支撑：识别文字 / 等待文字 / 点击文字 命令 + 网银票据示例脚本</div>
         </div>
       </div>
       <div class="scene reveal">
-        <h3>📊 日报与定时监控</h3>
+        <h3>🌐 网页填表</h3>
         <div class="ba">
-          <div class="after">✅ 定时截屏存档、日报自动生成发送、按每天 / 每周 / 固定间隔自动执行，人不在也能跑。</div>
-          <div class="support">支撑：定时任务调度 + 截屏 / 发送邮件 示例脚本</div>
+          <div class="after">✅ 打开页面 → 读取 Excel → 自动填入 → 失败重试，登录与表单类流程一次配置反复用。</div>
+          <div class="support">支撑：打开网页 / 浏览器输入 / 等待元素 + 「登录流程 / 表单填写」模板</div>
         </div>
       </div>
       <div class="scene reveal">
-        <h3>🖥 内网多机运维</h3>
+        <h3>📊 日报发送</h3>
         <div class="ba">
-          <div class="after">✅ 一台电脑监控内网多台 ACRPA 的运行状态，批量推送脚本「推完即运行」，手机浏览器也能看进度。</div>
+          <div class="after">✅ 定时启动 → 采集数据 → 生成报告 → 发送邮件，到点自动执行，人不在也能出结果。</div>
+          <div class="support">支撑：定时调度 + 发送邮件 / 截屏 示例脚本</div>
+        </div>
+      </div>
+      <div class="scene reveal">
+        <h3>🖱 批量点击</h3>
+        <div class="ba">
+          <div class="after">✅ 商品批量上下架、定时改价、库存巡检，把成百上千次重复点击交给脚本。</div>
+          <div class="support">支撑：批量点击 / 表单填写 模板 + 定时任务</div>
+        </div>
+      </div>
+      <div class="scene reveal">
+        <h3>🖥 内网分发</h3>
+        <div class="ba">
+          <div class="after">✅ 把脚本推送到内网多台机器 → 推完即运行 → 手机浏览器看进度与日志。</div>
           <div class="support">支撑：NetLink 多设备互联（零新增依赖）</div>
-        </div>
-      </div>
-      <div class="scene reveal">
-        <h3>🧑‍💻 开发者 / 极客</h3>
-        <div class="ba">
-          <div class="after">✅ Python 命令三级权限（sandbox / trusted / full）、插件 API、AI 生成脚本、断点 / 单步 / 变量监视调试器。</div>
-          <div class="support">支撑：Python 扩展 + 插件系统 + 内置调试器</div>
-        </div>
-      </div>
-      <div class="scene reveal">
-        <h3>🛒 电商运营 · 批量上下架</h3>
-        <div class="ba">
-          <div class="after">✅ 多平台商品信息批量录入、定时改价、库存巡检、订单状态自动同步到 Excel，把重复点击交给脚本。</div>
-          <div class="support">支撑：批量点击 / 表单填写 / Excel 读写 / 定时任务示例脚本</div>
         </div>
       </div>
     </div>
@@ -1044,35 +1039,31 @@
         <div class="showcase-text">
           <span class="num">01 · 脚本编辑</span>
           <h3>Excel 表格即脚本</h3>
-          <p>A 列命令、B–J 列参数，无需编程即可编排自动化流程；支持内联编辑、复制粘贴、断点标记，表格即脚本，上手零门槛。</p>
-          <div class="hint">🖱 点击图片查看大图</div>
+          <p>A 列命令、B–J 列参数，双击单元格就能改 —— 脚本就是一张随时可改的表格。</p>
         </div>
       </div>
       <div class="showcase-item reveal rev" data-full="img/image2.png" data-cap="执行编辑">
         <div class="showcase-img"><img src="img/image2.png" loading="lazy" decoding="async" alt="执行编辑界面" width="1390" height="918"></div>
         <div class="showcase-text">
           <span class="num">02 · 执行编辑</span>
-          <h3>运行控制与调试中枢</h3>
-          <p>运行 / 暂停 / 停止 / 单步控制，断点与条件断点、变量监视器、调用栈与执行耗时统计，运行状态一目了然。</p>
-          <div class="hint">🖱 点击图片查看大图</div>
+          <h3>跑到一半可以停下来</h3>
+          <p>暂停 / 继续 / 单步在工具条上一键切换，跑偏了立刻停住看现场。</p>
         </div>
       </div>
       <div class="showcase-item reveal" data-full="img/image3.png" data-cap="工作流">
         <div class="showcase-img"><img src="img/image3.png" loading="lazy" decoding="async" alt="工作流界面" width="1399" height="921"></div>
         <div class="showcase-text">
           <span class="num">03 · 工作流</span>
-          <h3>多脚本串联编排</h3>
-          <p>可视化流程图（节点 / 连线 / 拖拽），支持脚本、并行、条件、等待四种步骤类型，执行节点实时高亮。</p>
-          <div class="hint">🖱 点击图片查看大图</div>
+          <h3>节点拖成流程图</h3>
+          <p>脚本 / 并行 / 条件 / 等待四种步骤，连线的先后就是执行顺序。</p>
         </div>
       </div>
       <div class="showcase-item reveal rev" data-full="img/image4.png" data-cap="设置导航">
         <div class="showcase-img"><img src="img/image4.png" loading="lazy" decoding="async" alt="设置导航界面" width="1797" height="822"></div>
         <div class="showcase-text">
           <span class="num">04 · 设置导航</span>
-          <h3>分类设置卡片</h3>
-          <p>基础执行 / AI 增强 / 定时调度 / 日志 / 高级设置分卡管理、独立保存；模型下拉自动匹配 API 端点。</p>
-          <div class="hint">🖱 点击图片查看大图</div>
+          <h3>设置按用途分卡</h3>
+          <p>基础执行 / AI 增强 / 定时调度 / 日志 / 高级各占一卡，改完独立保存。</p>
         </div>
       </div>
       <div class="showcase-item reveal" data-full="img/image5.png" data-cap="暗黑模式">
@@ -1080,8 +1071,7 @@
         <div class="showcase-text">
           <span class="num">05 · 暗黑模式</span>
           <h3>亮暗主题一键切换</h3>
-          <p>深色主题与 Mini Bar 折叠状态条，托盘常驻后台运行，夜间长时间自动化更舒适、更护眼。</p>
-          <div class="hint">🖱 点击图片查看大图</div>
+          <p>深色与浅色即时切换，夜间跑长脚本更省眼。</p>
         </div>
       </div>
     </div>
@@ -1097,21 +1087,12 @@
       <p class="sec-desc">从基础自动化到智能工作流，ACRPA 覆盖桌面自动化的完整链路。</p>
     </div>
     <div class="cards" id="featureGrid">
-      <div class="card reveal"><div class="ico">📦</div><h3>Excel 脚本驱动</h3><p>以 <b>.xls</b> 表格作为脚本文件，A 列命令、B–J 列参数，无需编程即可编排自动化流程，学习成本极低。</p></div>
-      <div class="card reveal"><div class="ico">🖱</div><h3>图像识别定位</h3><p>基于 OpenCV / Pillow 的图像识别，支持全屏与区域找图、灰度加速匹配，精准定位并点击任意界面元素。</p></div>
-      <div class="card reveal"><div class="ico">🪟</div><h3>窗口管理</h3><p>直接操作 Windows 窗口：激活、关闭、最小化、等待窗口出现/消失，支持窗口相对坐标，比图像识别快 10–100 倍。</p></div>
-      <div class="card reveal"><div class="ico">🎬</div><h3>录制回放</h3><p>录制鼠标键盘操作（含拖拽、滚轮、窗口激活），自动插入等待间隔，一键回放，重复操作从此告别手工。</p></div>
-      <div class="card reveal"><div class="ico">⏱</div><h3>定时任务</h3><p>支持每天 / 每周 / 间隔 / 一次性多种调度模式，后台静默执行，配合系统托盘与 Mini Bar 常驻运行。</p></div>
-      <div class="card reveal"><div class="ico">⚡</div><h3>DD 驱动增强</h3><p>可选内核级高性能输入后端，模拟真实键鼠、难以被检测，支持 direct / simulate / auto 三种写入模式并自动回退。</p></div>
-      <div class="card reveal"><div class="ico">🧩</div><h3>工作流编排</h3><p>多脚本串联编排，可视化流程图（节点 / 连线 / 拖拽），支持脚本、并行、条件、等待四种步骤类型。</p></div>
-      <div class="card reveal"><div class="ico">📊</div><h3>变量系统</h3><p>设置变量、读取剪贴板、字符串截取/替换、数学运算，${var} 语法贯穿全程，处理复杂数据得心应手。</p></div>
-      <div class="card reveal"><div class="ico">🔍</div><h3>OCR 识别</h3><p>屏幕区域文字识别、等待文字出现、点击文字，兼容 PaddleOCR / Windows OCR / Tesseract，动态界面也能自动化。</p></div>
-      <div class="card reveal"><div class="ico">🐞</div><h3>专业调试器</h3><p>断点 / 条件断点、单步执行、变量监视器、调用栈、执行耗时统计、运行到光标、跳过行，问题一目了然。</p></div>
-      <div class="card reveal"><div class="ico">🌓</div><h3>深色模式</h3><p>亮 / 暗主题一键切换；系统托盘、Mini Bar 悬浮状态条，让自动化任务在后台安静地跑。</p></div>
-      <div class="card reveal"><div class="ico">📜</div><h3>日志与市场</h3><p>结构化分级日志、按日轮转、自动清理、一键导出；内置脚本市场（离线模式可用），持续扩展脚本生态。</p></div>
-      <div class="card reveal"><div class="ico">🔄</div><h3>自动更新</h3><p>启动自检新版本，多源降级获取清单（GitHub Releases → 原始清单 → CDN 镜像）；下载带进度与 sha256 校验，镜像返回旧包自动换源，一键重启完成替换，不动配置与脚本。<span class="tag-new" data-ver></span></p></div>
-      <div class="card reveal"><div class="ico">🌐</div><h3>浏览器自动化</h3><p>内置 Playwright 网页操作：打开网页、点击、输入、等待元素、整页 / 元素截图，桌面流程与网页流程可串在同一条脚本里。</p></div>
-      <div class="card reveal"><div class="ico">🛡️</div><h3>安全守护</h3><p>失控保护（鼠标徒手甩动即中止）、最长执行时间限制、出错即停与失败重试策略，无人值守也能安全收尾。</p></div>
+      <div class="card reveal"><div class="ico">✍️</div><h3>写脚本</h3><p><b>Excel 即脚本</b>：A 列命令、B–J 列参数，无需编程；也可用<b>录制</b>跑一遍自动生成，或直接写 <b>Python</b>（sandbox / trusted / full 三级权限）。</p></div>
+      <div class="card reveal"><div class="ico">🎯</div><h3>找元素</h3><p>四种定位方式各取所长：<b>图像识别</b>（OpenCV / Pillow、区域与灰度加速）、<b>窗口相对坐标</b>（快 10–100 倍）、<b>OCR</b> 按文字定位、<b>AI</b> 用大白话描述元素。</p></div>
+      <div class="card reveal"><div class="ico">🔁</div><h3>跑流程</h3><p><b>条件 / 循环</b> + <b>工作流编排</b>（脚本 / 并行 / 条件 / 等待四类步骤）+ <b>定时与触发器</b>（每天 / 每周 / 间隔 / 开机 / 热键）。</p></div>
+      <div class="card reveal"><div class="ico">🌐</div><h3>连网页</h3><p>内置 <b>Playwright</b>：打开、点击、输入、等待元素、标签页、下载、Cookie、抓包监听，可与桌面步骤串在同一条脚本里。</p></div>
+      <div class="card reveal"><div class="ico">🖥️</div><h3>管多机</h3><p><b>NetLink</b> 多设备互联：一台电脑实时监控内网多机、批量分发脚本、远程控制，手机浏览器也能看进度 —— 零新增依赖。</p></div>
+      <div class="card reveal"><div class="ico">🐞</div><h3>可调试</h3><p>断点 / 单步 / 变量监视 / 调用栈 / 耗时统计；结构化日志、异常处理、出错即停与失控保护，无人值守也能安全收尾。</p></div>
     </div>
   </div>
 </section>
@@ -1139,6 +1120,11 @@
       <div class="card reveal"><div class="ico">🛡️</div><h3>TLS 可选加密</h3><p>基于 stdlib <b>ssl</b> 的自签证书加密通道，对端证书 sha256 指纹 <b>TOFU 固定</b>，指纹不符直接拒连；默认关闭，按需启用。</p></div>
     </div>
 
+    <div class="ai-note reveal" style="margin-top:28px">
+      <b>启用条件</b>：控制端与被控端同处一个内网（LAN），彼此能通 TCP；默认开启 UDP 自动发现（端口 19711），发现不到时可手动填 <code>IP:端口</code> 兜底；配对认证默认开启（6 位配对码 600 秒内有效），首次远程操控需被控端弹框确认；浏览器只读面板默认关闭，开启后监听 <code>19712</code>；TLS 加密默认关闭，按需启用。<br>
+      <b>适用范围</b>：内网内固定机器群的批量执行与值守 —— 工位机、测试机、机房终端。跨公网、NAT 穿透、集中式调度平台这类场景不在其列。
+    </div>
+
     <!-- NetLink 截图区 -->
     <div class="showcase" style="margin-top:48px">
       <div class="showcase-item reveal" data-full="img/netlink-devices.png" data-cap="多设备互联 · 设备列表与实时进度">
@@ -1148,17 +1134,17 @@
         <div class="showcase-text">
           <span class="num">NL 01 · 设备互联</span>
           <h3>多机进度与日志一览</h3>
-          <p>设备列表、运行状态、当前脚本、第几行 / 第几循环 / 已运行时长与实时日志流集中在一个窗口，无需切换机器即可掌握全局。</p>
+          <p>设备列表、当前脚本、第几行 / 第几循环 / 已运行时长与实时日志，集中在一个窗口。</p>
         </div>
       </div>
-      <div class="showcase-item reveal rev" data-full="img/netlink-pairing.png" data-cap="多设备互联 · 配对认证与首次操控确认">
+      <div class="showcase-item reveal rev" data-full="img/netlink-pairing.png" data-cap="多设备互联 · 配对认证">
         <div class="showcase-img nl-shot-wrap">
-          <img src="img/netlink-pairing.png" loading="lazy" decoding="async" alt="多设备互联 · 配对认证与首次操控确认" width="1587" height="814">
+          <img src="img/netlink-pairing.png" loading="lazy" decoding="async" alt="多设备互联 · 配对认证" width="1587" height="814">
         </div>
         <div class="showcase-text">
           <span class="num">NL 02 · 配对认证</span>
-          <h3>PIN + 挑战应答 + 凭据库</h3>
-          <p>被控端生成 6 位配对码，控制端输入即完成配对；密钥永不写入 config.json，配对后免 PIN 重连，首次操控还需被控端弹框确认。</p>
+          <h3>配对只需输一次码</h3>
+          <p>被控端出 6 位码、控制端输码即完成配对；密钥进 Windows 凭据库，之后免 PIN 重连。</p>
         </div>
       </div>
       <div class="showcase-item reveal" data-full="img/netlink-webui.png" data-cap="多设备互联 · 浏览器只读面板">
@@ -1168,7 +1154,7 @@
         <div class="showcase-text">
           <span class="num">NL 03 · 浏览器面板</span>
           <h3>手机浏览器也能看</h3>
-          <p>内置只读网页面板（默认端口 19712，默认关闭），手机 / 平板扫码或输入地址即可查看多机进度与日志，面板不含任何写操作。</p>
+          <p>内置只读面板（默认 19712 端口、默认关闭），手机或平板输入地址即可看进度与日志。</p>
         </div>
       </div>
     </div>
@@ -1181,10 +1167,10 @@
     <div class="sec-head reveal">
       <span class="sec-tag">COMMAND SYSTEM</span>
       <h2>命令系统 · 88 条内置命令</h2>
-      <p class="sec-desc">88 条内置命令，一行一条写进 Excel 即可直接使用（下方速查表收录其中 51 条），点击命令或示例可复制；完整说明见 <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a></p>
+      <p class="sec-desc">88 条内置命令，一行一条写进 Excel 即可直接使用（下方速查表按 9 大类完整列出），点击命令或示例可复制；完整说明见 <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a></p>
     </div>
     <details class="cmd-fold">
-      <summary>展开「命令速查表」· 7 大类 · 收录 51 条<span style="color:var(--dim);font-weight:400;font-size:13px">完整文档见 <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a></span></summary>
+      <summary>展开「命令速查表」· 9 大类 · 88 条<span style="color:var(--dim);font-weight:400;font-size:13px">完整文档见 <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a></span></summary>
     <div class="cmd-tabs reveal">
       <div class="cmd-tab on" data-tab="t1">🎯 基础操作</div>
       <div class="cmd-tab" data-tab="t2">🪟 窗口管理</div>
@@ -1193,6 +1179,8 @@
       <div class="cmd-tab" data-tab="t5">🤖 AI 增强</div>
       <div class="cmd-tab" data-tab="t6">🧩 工作流</div>
       <div class="cmd-tab" data-tab="t7">🌐 浏览器自动化</div>
+      <div class="cmd-tab" data-tab="t8">📁 文件与系统</div>
+      <div class="cmd-tab" data-tab="t9">🔗 数据与网络</div>
     </div>
 
     <div class="cmd-panel on" id="t1">
@@ -1210,6 +1198,7 @@
         <tr><td><code>按下 / 释放</code></td><td>长按与松开按键，实现按住拖动等复杂操作</td><td class="ex">按下, a</td></tr>
         <tr><td><code>复制 / 粘贴</code></td><td>内置快捷键组合（Ctrl+A+C / Ctrl+A+V）</td><td class="ex">复制</td></tr>
         <tr><td><code>代码</code></td><td>执行指定 txt 文件中的 Python 代码（可调用程序内置库）</td><td class="ex">代码, my_code</td></tr>
+        <tr><td><code>Python</code></td><td>在单元格内直接执行 Python 代码，受权限与 AST 预检约束，可调用内置库</td><td class="ex">Python, <b>${x}+1</b>, sandbox</td></tr>
         <tr><td><code>截屏</code></td><td>截图保存，文件名自动附带时间戳</td><td class="ex">截屏, shot, E:/ACRPA/截图</td></tr>
       </table>
     </div>
@@ -1219,10 +1208,11 @@
         <tr><th class="col-cmd">命令</th><th class="col-desc">说明</th><th>示例</th></tr>
         <tr><td><code>激活窗口</code></td><td>激活指定标题的窗口，支持模糊匹配</td><td class="ex">激活窗口, 记事本</td></tr>
         <tr><td><code>关闭窗口</code></td><td>关闭指定窗口</td><td class="ex">关闭窗口, 无标题 - 记事本</td></tr>
-        <tr><td><code>最小化 / 最大化窗口</code></td><td>窗口最小化到任务栏 / 最大化显示</td><td class="ex">最小化窗口, 计算器</td></tr>
+        <tr><td><code>最小化窗口 / 最大化窗口</code></td><td>窗口最小化到任务栏 / 最大化显示</td><td class="ex">最小化窗口, 计算器</td></tr>
         <tr><td><code>获取窗口位置</code></td><td>获取窗口坐标与大小并保存到变量</td><td class="ex">获取窗口位置, 记事本, x, y, w, h</td></tr>
         <tr><td><code>等待窗口</code></td><td>等待窗口出现或消失，可设超时</td><td class="ex">等待窗口, Chrome, 10, 存在</td></tr>
         <tr><td><code>窗口坐标</code></td><td>相对于窗口左上角点击，窗口移动后依然准确 ★</td><td class="ex">窗口坐标, 记事本, 100, 50</td></tr>
+        <tr><td><code>设置窗口样式</code></td><td>设置指定窗口置顶 / 透明度 / 隐藏或显示</td><td class="ex">设置窗口样式, 记事本, <b>200</b>, 是</td></tr>
       </table>
     </div>
 
@@ -1254,8 +1244,8 @@
         <tr><td><code>AI找图</code></td><td>用自然语言描述界面元素，AI 分析截图并定位（点击 / 悬停 / 仅查找）</td><td class="ex">AI找图, 登录按钮, 0.8, click</td></tr>
         <tr><td><code>AI识别界面</code></td><td>AI 分析当前屏幕所有 UI 元素，结果存入 ${前缀}_elements 变量</td><td class="ex">AI识别界面, ui</td></tr>
         <tr><td><code>AI优化建议</code></td><td>AI 分析历史执行数据，给出脚本优化建议</td><td class="ex">AI优化建议, log</td></tr>
-        <tr><td><code>[AI] 调试</code></td><td>自然语言向 AI 提问，AI 分析日志并回答调试问题</td><td class="ex">点击 [AI] 调试按钮</td></tr>
       </table>
+      <p class="cmd-note">除命令外，脚本编辑界面还提供 <code>[AI] 调试</code> 按钮：用自然语言向 AI 提问，AI 分析执行日志并回答调试问题。</p>
     </div>
 
     <div class="cmd-panel" id="t6">
@@ -1274,8 +1264,53 @@
         <tr><td><code>浏览器输入</code></td><td>向指定输入框填入文本（选择器定位）</td><td class="ex">浏览器输入, #username, admin</td></tr>
         <tr><td><code>等待元素</code></td><td>等待网页元素出现 / 消失，可设超时</td><td class="ex">等待元素, .result, 10, 出现</td></tr>
         <tr><td><code>浏览器截图</code></td><td>整页或指定元素截图保存</td><td class="ex">浏览器截图, result, page</td></tr>
+        <tr><td><code>浏览器执行JS / 执行JS</code></td><td>在页面执行 JS 并把返回值写入变量（两者互为别名）</td><td class="ex">浏览器执行JS, document.title, title</td></tr>
+        <tr><td><code>浏览器读取Cookie</code></td><td>导出当前上下文 Cookie 到变量或文件，支持 json / header / netscape 三种格式</td><td class="ex">浏览器读取Cookie, cookie, <b>json</b></td></tr>
+        <tr><td><code>浏览器设置Cookie</code></td><td>从变量或文件注入 Cookie，可指定生效域名</td><td class="ex">浏览器设置Cookie, cookie, <b>example.com</b></td></tr>
+        <tr><td><code>切换框架 / 返回主框架</code></td><td>进入 iframe（按定位表达式或索引），或回到顶层文档</td><td class="ex">切换框架, <b>0</b></td></tr>
+        <tr><td><code>新建标签页</code></td><td>新建标签页并切换为活动页，可直接带网址打开</td><td class="ex">新建标签页, https://example.com</td></tr>
+        <tr><td><code>切换标签页</code></td><td>按序号 / 标题 / URL 切换活动标签页</td><td class="ex">切换标签页, <b>2</b></td></tr>
+        <tr><td><code>关闭标签页</code></td><td>关闭当前或指定序号的标签页</td><td class="ex">关闭标签页</td></tr>
+        <tr><td><code>等待下载</code></td><td>等待浏览器下载完成并保存文件，可按文件名匹配、超时与写回变量</td><td class="ex">等待下载, E:/ACRPA/下载, <b>*.xls</b>, 60, file_path</td></tr>
+        <tr><td><code>浏览器上传</code></td><td>对 input[type=file] 设置本地文件，支持一次选择多个</td><td class="ex">浏览器上传, #file, <b>E:/a.png</b></td></tr>
+        <tr><td><code>连接已开浏览器 / 接管浏览器</code></td><td>通过 CDP 端点接管已运行的浏览器（需 --remote-debugging-port）</td><td class="ex">连接已开浏览器, http://127.0.0.1:9222</td></tr>
+        <tr><td><code>开始监听</code></td><td>监听网络响应并入队（抓包），支持 URL 匹配与资源类型过滤</td><td class="ex">开始监听, <b>*/api/*</b></td></tr>
+        <tr><td><code>等待数据包</code></td><td>等待并取回命中的数据包，可写回变量或导出落盘</td><td class="ex">等待数据包, */api/*, 1, 30, <b>resp</b></td></tr>
+        <tr><td><code>停止监听</code></td><td>停止监听并清空队列</td><td class="ex">停止监听</td></tr>
+        <tr><td><code>启动浏览器录制</code></td><td>调用 Playwright codegen 录制网页操作，并转为 DSL 追加到脚本</td><td class="ex">启动浏览器录制</td></tr>
       </table>
       <p class="cmd-note">浏览器命令基于 <code>Playwright</code> 实现，按需安装（约 155 MB，不随主程序打包）；未安装时命令会提示安装方法。桌面流程与网页流程可在同一条脚本中串行编排。</p>
+    </div>
+
+    <div class="cmd-panel" id="t8">
+      <table class="cmd-table">
+        <tr><th class="col-cmd">命令</th><th class="col-desc">说明</th><th>示例</th></tr>
+        <tr><td><code>复制文件</code></td><td>复制文件或目录（相对路径按脚本目录解析），可覆盖并回写结果变量</td><td class="ex">复制文件, data.csv, <b>backup/data.csv</b>, 是</td></tr>
+        <tr><td><code>移动文件</code></td><td>移动文件或目录，同目录即为重命名</td><td class="ex">移动文件, a.txt, <b>b.txt</b></td></tr>
+        <tr><td><code>删除文件</code></td><td>删除文件或目录，默认送回收站，失败时回退永久删除</td><td class="ex">删除文件, E:/tmp/old, 是, <b>是</b></td></tr>
+        <tr><td><code>创建目录</code></td><td>创建目录，支持一次创建多级</td><td class="ex">创建目录, <b>E:/ACRPA/out/report</b></td></tr>
+        <tr><td><code>列出目录</code></td><td>列出目录内容，结果按行写入变量，支持通配与排序</td><td class="ex">列出目录, E:/ACRPA, <b>*.xls</b>, 名, files</td></tr>
+        <tr><td><code>读取文本文件</code></td><td>读取文本文件内容到变量，可指定编码或自动识别</td><td class="ex">读取文本文件, note.txt, <b>auto</b>, content</td></tr>
+        <tr><td><code>写入文本文件</code></td><td>原子写入文本文件，支持覆盖 / 追加</td><td class="ex">写入文本文件, log.txt, ${result}, <b>追加</b>, utf-8</td></tr>
+        <tr><td><code>文件是否存在</code></td><td>判断文件或目录是否存在，结果 1 / 0 写入变量</td><td class="ex">文件是否存在, E:/a.png, <b>exists</b></td></tr>
+        <tr><td><code>启动程序</code></td><td>启动外部程序 / 文档 / URL，可等待结束或隐藏窗口</td><td class="ex">启动程序, <b>notepad.exe</b>, , , 否, 否</td></tr>
+        <tr><td><code>结束进程</code></td><td>按进程名结束进程，内置系统关键进程白名单防误杀</td><td class="ex">结束进程, notepad.exe, 否, <b>是</b></td></tr>
+        <tr><td><code>打开系统面板</code></td><td>打开系统面板（白名单固定项：任务管理器 / 服务 / 注册表 / 控制面板 / 设备管理器等）</td><td class="ex">打开系统面板, <b>任务管理器</b></td></tr>
+        <tr><td><code>电源操作</code></td><td>关机 / 重启 / 注销 / 锁屏 / 待机 / 休眠，支持延迟与预演</td><td class="ex">电源操作, 关机, <b>60</b>, 否, 是</td></tr>
+        <tr><td><code>音量控制</code></td><td>设置 / 增减音量，切换静音</td><td class="ex">音量控制, 设置, <b>50</b></td></tr>
+        <tr><td><code>磁盘空间</code></td><td>查询磁盘总容量 / 可用容量 / 使用率并写入变量</td><td class="ex">磁盘空间, <b>C:</b>, disk_total, disk_free, disk_percent</td></tr>
+      </table>
+    </div>
+
+    <div class="cmd-panel" id="t9">
+      <table class="cmd-table">
+        <tr><th class="col-cmd">命令</th><th class="col-desc">说明</th><th>示例</th></tr>
+        <tr><td><code>HTTP 请求</code></td><td>发送 HTTP(S) 请求，响应体与状态码写入变量，可保存到文件</td><td class="ex">HTTP 请求, GET, <b>https://api.example.com/data</b>, , , 30, resp, code</td></tr>
+        <tr><td><code>JSON 取值</code></td><td>按路径表达式从变量 / 文件 / JSON 文本中取值，可设默认值</td><td class="ex">JSON 取值, ${resp}, <b>data.items[0].name</b>, , name</td></tr>
+        <tr><td><code>Base64 编解码</code></td><td>Base64 编码或解码</td><td class="ex">Base64 编解码, 编码, ${text}, <b>b64</b></td></tr>
+        <tr><td><code>URL 编解码</code></td><td>URL 百分号编码或解码</td><td class="ex">URL 编解码, 编码, ${keyword}, <b>url</b></td></tr>
+        <tr><td><code>哈希值</code></td><td>计算文本或文件的 MD5 / SHA1 / SHA256</td><td class="ex">哈希值, <b>sha256</b>, 文件, E:/a.exe, hash</td></tr>
+      </table>
     </div>
     </details>
   </div>
@@ -1318,6 +1353,10 @@
         <div class="wf-item reveal"><div class="dot2">📝</div><div><b>节点级控制</b><p>命令 / 变量 / 循环 / 日志四类新节点，统一编辑表单，支持启用禁用、注释、克隆、复制粘贴、上移下移。</p></div></div>
         <div class="wf-item reveal"><div class="dot2">🎯</div><div><b>执行高亮</b><p>运行中节点实时高亮、结果跟踪，出错节点红色标记，调试直观高效。</p></div></div>
       </div>
+      <div class="ai-note reveal" style="margin-top:22px">
+        <b>启用条件</b>：无需额外安装或授权，随程序内置；工作流存为 <code>.json</code> 或 <code>.yaml</code>（yaml 走内置简易解析，不依赖 pyyaml），用 <code>运行工作流</code> 命令指定路径调用，也可在「工作流」标签页拖好节点后直接运行。<br>
+        <b>适用范围</b>：需要按顺序 / 并行 / 条件分支把多个脚本串成一条流水线的多步骤任务。一个脚本单趟就能跑完的事不必上工作流，直接执行更快。
+      </div>
     </div>
   </div>
 </section>
@@ -1336,7 +1375,8 @@
       <div class="ai-card reveal"><div class="aico">🚨</div><h3>AI 异常检测</h3><p>运行过程中 AI 持续检测异常画面与状态，及时预警，避免错误操作扩散。</p></div>
       <div class="ai-card reveal"><div class="aico">💬</div><h3>自然语言调试</h3><p>直接向 AI 提问日志与执行问题，AI 分析后给出结论与优化建议，调试零门槛。</p></div>
     </div>
-    <div class="ai-note reveal">💡 AI 功能需在设置中填写 API Key（支持 DeepSeek / Qwen / GPT / Claude），模型下拉框自动匹配正确 API 端点，无需手工配置。</div>
+    <div class="ai-note reveal">💡 <b>启用条件</b>：先在「设置」里填写 API Key（支持 DeepSeek / Qwen / GPT / Claude，也可自定义 BaseURL 与模型名），模型下拉框自动匹配正确端点；Key 存入 Windows 凭据库，不写 config.json、不进日志。其中<b>智能重试</b>与<b>异常检测</b>默认关闭，需在设置中单独开启。未填 Key 时 AI 命令不可用，其余功能不受影响。<br>
+      <b>适用范围</b>：图像 / 坐标 / OCR 都定位不住时用 AI 找图补位，界面元素盘点用 AI 识别界面，脚本跑完要调优时用 AI 优化建议。常规找图、找色、OCR 更稳也更省时 —— 能用就别上 AI。</div>
   </div>
 </section>
 
@@ -1346,38 +1386,38 @@
     <div class="sec-head reveal">
       <span class="sec-tag">TEMPLATES</span>
       <h2>示例脚本库 · 开箱即用</h2>
-      <p class="sec-desc">10 个即用型模板覆盖办公、系统与交互三大场景，导入即可运行；配合条件、循环与 AI 生成，可快速改造为复杂流程。</p>
+      <p class="sec-desc">10 个内置片段，名称、行数与用途都和程序内片段库一一对应 —— 插入后把找图特征名、坐标和输入内容换成自己的就能跑。</p>
     </div>
     <div class="tmpl-grid">
       <div class="tmpl-card reveal">
         <h3><span class="tmpl-badge t-basic">办公</span> Office · 日常事务</h3>
         <ul>
-          <li>登录流程</li>
-          <li>表单填写</li>
-          <li>数据采集</li>
-          <li>文本编辑</li>
+          <li><b>登录流程</b><em>找图定位账号 / 密码 / 登录按钮，输入后点击；换掉参数即可套到自家系统（10 行）。</em></li>
+          <li><b>表单填写</b><em>点开字段 → 输入 → Tab 跳到下一个，连填三个字段后点提交（9 行）。</em></li>
+          <li><b>数据采集</b><em>点导出 → 复制 → Alt+Tab 切窗口 → 粘贴，把目标系统的数据搬出来（8 行）。</em></li>
+          <li><b>文本编辑</b><em>复制 → Ctrl+A → Delete → 粘贴，整段替换当前文本（8 行）。</em></li>
         </ul>
       </div>
       <div class="tmpl-card reveal">
         <h3><span class="tmpl-badge t-adv">系统</span> System · 系统操作</h3>
         <ul>
-          <li>页面截图</li>
-          <li>文件下载</li>
-          <li>窗口切换</li>
+          <li><b>页面截图</b><em>截一张存进 screenshots 目录 → 滚轮下翻 → 再截一张，留下一整页留痕（6 行）。</em></li>
+          <li><b>文件下载</b><em>点下载按钮 → 等保存框弹出 → 方向键 + 回车确认，免去手选路径（6 行）。</em></li>
+          <li><b>窗口切换</b><em>Alt+Tab 切到目标窗口后再点图定位，为跨窗口流程起头（4 行）。</em></li>
         </ul>
       </div>
       <div class="tmpl-card reveal">
-        <h3><span class="tmpl-badge t-ai">交互</span> Interaction · 界面操作</h3>
+        <h3><span class="tmpl-badge t-ai">其他</span> Other · 界面交互</h3>
         <ul>
-          <li>批量点击</li>
-          <li>滚动浏览</li>
-          <li>右键菜单</li>
+          <li><b>批量点击</b><em>同一目标连点三次、每次间隔 0.3 秒，可直接套进循环做翻页点击（5 行）。</em></li>
+          <li><b>滚动浏览</b><em>滚轮下翻两屏再回滚一屏，模拟人工翻看页面（6 行）。</em></li>
+          <li><b>右键菜单</b><em>坐标右键唤出菜单 → 方向键 + 回车选中条目（5 行）。</em></li>
         </ul>
       </div>
     </div>
     <div class="reveal" style="margin-top:22px;font-size:13.5px;color:var(--muted);border:1px solid var(--border);border-radius:12px;padding:16px 20px;background:var(--card)">
-      📂 快速开始：选择模板 → 「文件」→「导入脚本」选择 .xls → 修改窗口标题与参数 → 点击「运行」（或按 F5）查看效果。<br>
-      <span style="color:var(--dim)">附赠业务示例：发送邮件、网银票据、间隔点击、脚本模板等 .xls 同样随程序内置，可直接导入使用。</span>
+      📂 导入步骤：打开程序 → 工具栏点<b>片段</b>打开片段库 → 在「办公 / 系统 / 其他」分类里选中模板 → 选择<b>追加</b> / <b>插入到选中行前</b> / <b>替换全部</b> → 把找图特征名、坐标与输入内容改成自己的 → 按 F5 运行。<br>
+      <span style="color:var(--dim)">上面 10 个就是片段库里的内置片段，行数与程序内一致，离线可用；随包另附 .xls 业务示例（发送邮件、网银票据、间隔点击等），可通过「文件 → 导入脚本」直接打开。</span>
     </div>
   </div>
 </section>
@@ -1440,7 +1480,7 @@
       <div class="tl-item reveal"><div class="tl-ver">v0.1.26</div><div class="tl-date">2026-09-13</div><p>更新机制重构：修复打包后版本号失真（EXE 永远自报旧版本，导致更新判断与「关于」页全部失效）；检查更新改为多源降级（GitHub Releases → 原始清单 → CDN 镜像），任一可用即返回，某个来源报出的版本不够新时继续探测其余来源取最高者，不再因镜像缓存落后或网络异常而误报「已是最新」；版本比较支持 v 前缀、位数不齐与预发布后缀；网络传输双栈（requests → 系统证书库），修复企业 TLS 拦截环境下的静默失效；下载支持多候选直链逐个重试、流式进度、sha256 与体积校验，并复核包内 VERSION，镜像返回旧包时自动换源；新增应用内更新窗口与便携版一键重启自更新，只替换主程序与 VERSION，配置、脚本、模板、日志一律不动。另修复「命令失败静默成功」与 <code>stop_on_error</code> / 重试失效问题。</p></div>
       <div class="tl-item reveal"><div class="tl-ver">v0.1.25</div><div class="tl-date">2026-08-10</div><p>工作流 Tab 深度定制：操作库分类树 + 搜索 + 最近使用；新增 command / variable / loop / log 节点，统一配置表单，右键复制 / 粘贴 / 禁用 / 注释；外层循环次数与最长执行时间控制；执行高亮与变量管理；版本号全局统一管理。</p></div>
       <div class="tl-item reveal"><div class="tl-ver">v0.1.24</div><div class="tl-date">2026-08-09</div><p>设置页新增高级设置（最大执行时间 / 全局绑定窗口 / 录制模式 / OCR 后端 / 浏览器无头模式等）；每张设置卡独立「应用 ✓」；模型下拉框统一注册表（DeepSeek / Qwen / GPT / Claude）；修复 DD DLL 路径不生效、Claude 端点映射错误。</p></div>
-      <div class="tl-item reveal"><div class="tl-ver">v0.1.23</div><div class="tl-date">2026-07-20</div><p>模板选择对话框上下布局；托盘切换异常保护；恢复默认设置按钮；修复录制后脚本未加载、card_log 变量名冲突等问题。</p></div>
+      <div class="tl-item reveal"><div class="tl-ver">v0.1.23</div><div class="tl-date">2026-07-20</div><p>模板选择对话框上下布局；托盘切换异常保护；恢复默认设置按钮；修复录制后脚本未加载、<code>card_log</code> 变量名冲突等问题。</p></div>
       <div class="tl-item reveal"><div class="tl-ver">v0.1.22</div><div class="tl-date">2026-07-20</div><p>结构化日志升级（LogLevel 分级 / 时间戳 / 每日轮转 / 自动清理）；设置页重构为 6 张独立卡片；脚本编辑工具栏新增录制按钮。</p></div>
       <div class="tl-item reveal"><div class="tl-ver">v0.1.21</div><div class="tl-date">2026-07-18</div><p>系统托盘图标与气泡通知、右键菜单；Mini Bar 折叠模式（置顶悬浮状态条），可拖拽、主题同步、状态实时更新。</p></div>
       <div class="tl-item reveal"><div class="tl-ver">v0.1.20</div><div class="tl-date">2026-07-17</div><p>工作流流程图可视化（节点 + 连线 + 拖拽）；窗口相对坐标体系；录制增强（拖拽 / 滚轮 / 窗口激活）；条件断点 UI 增强、图像缓存 LRU 淘汰。</p></div>

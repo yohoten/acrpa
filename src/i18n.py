@@ -86,7 +86,7 @@ CATALOG = {
         "exec.label_choose": "选择脚本",
         "exec.no_file": "没有选择文件",
         "exec.label_loops": "次数:",
-        "exec.loop_infinite": "无限循环",
+        "exec.loop_infinite": "∞",
         "exec.loop_custom": "自定义…",
         "exec.label_maxmin": "最长:",
         "exec.label_minute": "分",

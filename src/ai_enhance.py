@@ -291,7 +291,7 @@ def ai_smart_retry(cmd_type, cmd_args, error_msg, script_dir, attempt, max_attem
 坐标: X, Y, 按键(左/右), 次数, 间隔
 等待: 秒数
 按键: 键名, 次数, 间隔
-热键: 修饰键, 功能键
+热键: 按键1, 按键2, 按键3(可选), 按键4(可选) — 按顺序依次按下, 如 ctrl, shift, alt, a
 输入: 文本内容
 激活窗口: 窗口标题
 等待窗口: 窗口标题, 超时, 存在/不存在

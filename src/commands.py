@@ -264,6 +264,13 @@ def validate(name, args):
             errors.append("参数『{}』取值应为 {} 之一, 收到 {!r}".format(
                 p["name"], "/".join(p["choices"]), s))
         normalized.append(val)
+    # 按命令名的补充校验 (schema 表达不了的跨参数约束)
+    if name == "热键":
+        # 组合键至少要 2 个有效按键 (engine._hotkey 运行期同样会报错)
+        n_keys = sum(1 for v in args[:4] if _clean(v))
+        if n_keys < 2:
+            errors.append("至少需要 2 个非空按键参数 (如 ctrl, a), 实收 {} 个".format(
+                n_keys))
     # 变长参数: 展开剩余位置 (用该变长项自身的类型/枚举做校验)
     vi = _variadic_index(name)
     if vi >= 0:
@@ -304,7 +311,7 @@ register("区域找图", "限定范围找图(更快)",          "图片名, 精�
 register("点图",     "找到图片并点击",              "图片名, 精度(默认0.96)")
 register("区域点图", "限定范围找图并点击",          "图片名, 精度, 左, 上, 宽, 高, 灰度, 按键, 次数")
 register("按键",     "模拟键盘按键",                "按键名, 次数(默认1), 间隔(默认0.1)")
-register("热键",     "组合键操作",                  "按键1, 按键2")
+register("热键",     "组合键操作(2~4个按键)",       "按键1, 按键2, 按键3(可选), 按键4(可选)")
 register("输入",     "剪贴板方式输入文本",          "内容")
 register("写入",     "模拟真实键盘逐字输入（支持DD驱动）", "内容, 按键间隔(秒), 模式(auto/direct/simulate)")
 register("等待",     "延时等待(秒)",                "秒数")

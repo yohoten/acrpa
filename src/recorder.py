@@ -98,8 +98,17 @@ def _record_key(key):
     state.recorded_actions.append(sd)
 
 
-def _record_hotkey(mod, key):
-    sd = ScriptData("热键", [mod, key, "1", "0.1", "", "", "", "", ""])
+def _record_hotkey(mods, key):
+    """录制热键: mods 可为单个修饰键名, 也可为修饰键名列表 (按首次按下顺序)。
+
+    写入 9 参数格式: 修饰键占参数1..N, 主键紧跟其后, 其余留空。
+    (旧版把 "1"/"0.1" 写进参数3/4, 与「热键」多键语义冲突, 改为留空。)
+    """
+    if isinstance(mods, str):
+        mods = [mods]
+    keys = [str(m) for m in (mods or []) if m] + [str(key)]
+    keys = keys[:4]
+    sd = ScriptData("热键", keys + [""] * (9 - len(keys)))
     state.recorded_actions.append(sd)
 
 
@@ -225,8 +234,8 @@ _kbd_consumers = []                 # [fn(vk, is_down, injected)] 常驻消费�
 _hook_state = {
     "lbtn_down": False,      # 左键是否按下 (拖拽起点)
     "drag_start": None,      # (x, y) 按下位置
-    "mod_active": None,      # 当前修饰键名 ("ctrl"/"alt"/"shift")
-    "mod_vk": 0,             # 当前修饰键 vk
+    "mod_active": [],        # 当前按下的修饰键名列表 (按首次按下顺序, 如 ["ctrl","shift"])
+    "mod_vks": [],           # 当前按下的修饰键 vk 列表 (与 mod_active 同序)
     "prev_keys": {},         # vk → bool 按键去重 (自动重复过滤)
     "last_action_time": 0.0, # 上一次动作时间 (间隔 >0.5s 插入等待)
 }
@@ -265,8 +274,8 @@ def _reset_hook_state():
     st = _hook_state
     st["lbtn_down"] = False
     st["drag_start"] = None
-    st["mod_active"] = None
-    st["mod_vk"] = 0
+    st["mod_active"] = []
+    st["mod_vks"] = []
     st["prev_keys"] = {}
     st["last_action_time"] = time.time()
 
@@ -275,11 +284,20 @@ def _on_key_event(vk, is_down):
     """处理键盘钩子事件 (按下/抬起)。"""
     st = _hook_state
     if vk in MOD_VK_SET:
-        # 修饰键: 按下记录 mod，抬起清除
+        # 修饰键: 按下累加 (保留首次按下顺序), 抬起移除; 支持多修饰键
+        name = MOD_VK[vk]
         if is_down and not st["prev_keys"].get(vk):
-            st["mod_active"] = MOD_VK[vk]; st["mod_vk"] = vk
-        elif not is_down and st["mod_vk"] == vk:
-            st["mod_active"] = None; st["mod_vk"] = 0
+            if vk not in st["mod_vks"]:
+                st["mod_vks"].append(vk)
+            if name not in st["mod_active"]:
+                st["mod_active"].append(name)
+        elif not is_down:
+            if vk in st["mod_vks"]:
+                st["mod_vks"].remove(vk)
+            # LShift/RShift 同名: 另一个仍按住时不清除
+            if not any(MOD_VK[x] == name for x in st["mod_vks"]):
+                if name in st["mod_active"]:
+                    st["mod_active"].remove(name)
         st["prev_keys"][vk] = is_down
         return
     if not is_down:
@@ -294,7 +312,7 @@ def _on_key_event(vk, is_down):
     gap = time.time() - st["last_action_time"]
     if gap > 0.5: _record_wait(round(gap, 1))
     if st["mod_active"]:
-        _record_hotkey(st["mod_active"], name)
+        _record_hotkey(list(st["mod_active"]), name)
     else:
         _record_key(name)
     st["last_action_time"] = time.time()
@@ -492,7 +510,7 @@ def _polling_loop():
 
     prev_lbtn = False; prev_rbtn = False
     prev_keys = {}
-    mod_active = None; mod_vk = 0
+    mod_active = []          # 按下的修饰键 vk 列表 (按首次按下顺序, 支持多修饰键)
     last_action_time = time.time()
     drag_active = False
     drag_start_x = 0; drag_start_y = 0
@@ -534,9 +552,10 @@ def _polling_loop():
             last_action_time = now
         prev_lbtn = lbtn; prev_rbtn = rbtn
 
-        if mod_active is not None:
-            if not (user32.GetAsyncKeyState(mod_vk) & 0x8000):
-                mod_active = None; mod_vk = 0
+        # 修饰键校准: 已抬起的逐个移除 (保留仍按住的, 顺序不变)
+        for mvk in list(mod_active):
+            if not (user32.GetAsyncKeyState(mvk) & 0x8000):
+                mod_active.remove(mvk)
 
         for vk in _SCAN_RANGES:
             if vk in MOD_VK_SET: continue
@@ -547,8 +566,8 @@ def _polling_loop():
                 if name:
                     gap = now - last_action_time
                     if gap > 0.5: _record_wait(round(gap, 1))
-                    if mod_active is not None:
-                        _record_hotkey(mod_active, name)
+                    if mod_active:
+                        _record_hotkey([MOD_VK[v] for v in mod_active], name)
                     else:
                         _record_key(name)
                     last_action_time = now
@@ -557,7 +576,8 @@ def _polling_loop():
         for vk in MOD_VK_SET:
             state_ = user32.GetAsyncKeyState(vk) & 0x8000
             was_down = prev_keys.get(vk, False)
-            if state_ and not was_down: mod_active = MOD_VK[vk]; mod_vk = vk
+            if state_ and not was_down and vk not in mod_active:
+                mod_active.append(vk)
             prev_keys[vk] = state_
 
 

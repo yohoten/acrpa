@@ -263,9 +263,9 @@
     },
     {
       "name": "热键",
-      "description": "组合键操作",
-      "params_text": "按键1, 按键2",
-      "signature": "按键1, 按键2",
+      "description": "组合键操作(2~4个按键)",
+      "params_text": "按键1, 按键2, 按键3(可选), 按键4(可选)",
+      "signature": "按键1, 按键2, 按键3?, 按键4?",
       "params": [
         {
           "name": "按键1",
@@ -283,6 +283,24 @@
           "choices": [],
           "default": null,
           "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "按键3",
+          "raw": "按键3(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "按键4",
+          "raw": "按键4(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
           "variadic": false
         }
       ],

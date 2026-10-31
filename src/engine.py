@@ -1674,10 +1674,33 @@ class ExecutionEngine:
         log1("等待结束")
 
     def _hotkey(self,row,z):
+        """热键 — 组合键操作 """
         self._chk()
+        keys = []
+        for i in (1, 2, 3, 4):
+            v = getattr(row[i], "value", None)
+            s = "" if v is None else str(v).strip()
+            if not s or s.lower() in ("none", "null", "-"):
+                continue
+            keys.append(s)
+        # 兼容旧录制器产物 `热键,ctrl,s,1,0.1` (旧版把次数/间隔写进了第3/4列)。
+        # 旧 .xls 里这两列可能是数值单元格, 经 script_io._norm_arg 归一化后会变成
+        # "1.0"/"0.1", 故用数值比较; 转换失败(非数字)一律视为不命中, 不影响合法 3 键输入。
+        if len(keys) == 4:
+            try:
+                _legacy_fmt = float(keys[2]) == 1 and float(keys[3]) == 0.1
+            except (ValueError, TypeError):
+                _legacy_fmt = False
+            if _legacy_fmt:
+                log1("热键: 检测到旧录制格式, 已忽略第 3/4 列({}, {}), 仅使用前两个按键".format(
+                    keys[2], keys[3]), "warning")
+                keys = keys[:2]
+        if len(keys) < 2:
+            log1("错误: 热键命令缺少按键参数(至少 2 个, 如 ctrl, a)", "error")
+            return False
         pa = get_pyautogui()
-        pa.hotkey(row[1].value,row[2].value)
-        log1("按下了{}+{}键".format(row[1].value,row[2].value))
+        pa.hotkey(*keys)
+        log1("按下了{}键".format("+".join(keys)))
 
     def _coord(self, row, z):
         self._chk()

@@ -256,6 +256,7 @@ def build_ai_prompt(user_description):
 输入,cmd,None,None,None,None,None,None,None,None
 按键,enter,None,None,None,None,None,None,None,None
 热键,ctrl,s,None,None,None,None,None,None,None
+热键,ctrl,shift,t,None,None,None,None,None,None
 ```
 
 注意：上例仅为展示格式，实际输出时不要包含 ```csv 标记。"""
@@ -268,7 +269,7 @@ def build_ai_prompt(user_description):
 ### 一、键盘操作（优先使用热键组合）
 | 命令 | 参数说明 | 示例 |
 |------|----------|------|
-| 热键 | 修饰键(ctrl/alt/shift/win), 功能键 | `热键,win,r,None,...` 打开运行 |
+| 热键 | 按键1, 按键2, 按键3(可选), 按键4(可选) | `热键,win,r,None,...` 打开运行；`热键,ctrl,shift,t,None,...` 三键组合 |
 | 按键 | 单键名, 次数, 间隔 | `按键,enter,1,0.1,None,...` |
 | 输入 | 文本内容（推荐） | `输入,Hello World,None,...` |
 | 写入 | 文本, 每字间隔(秒) | `写入,Hello,0.05,None,...` |
@@ -281,6 +282,7 @@ def build_ai_prompt(user_description):
 - `热键,alt,tab` - 切换窗口
 - `热键,alt,f4` - 关闭当前窗口
 - `热键,ctrl,c` / `ctrl,v` / `ctrl,a` / `ctrl,s`
+- `热键,ctrl,shift,t` - 三键组合（Ctrl+Shift+T），支持最多 4 个按键
 
 ### 二、图像识别（优先使用区域限定）
 | 命令 | 参数说明 | 示例 |

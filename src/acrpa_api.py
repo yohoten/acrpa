@@ -155,12 +155,30 @@ class AcrpaAPI(object):
             return False
 
     def key_press(self, key):
-        """按键；含 '+' 视为组合键（直调 engine._key / _hotkey）。"""
+        """按键；含 '+' 视为组合键（直调 engine._key / _hotkey）。
+
+        组合键最多 4 段（对应「热键」命令的参数1~参数4），超出部分会被
+        截断并记一条 warning；末尾的 '+' 视为「加号键」本身，例如
+        ``"ctrl++"`` → ``["ctrl", "+"]``（Ctrl + 加号）。
+        """
         try:
             s = str(key)
             if "+" in s:
-                parts = s.split("+", 1)
-                return self._call_engine("_hotkey", ["热键", parts[0], parts[1]],
+                raw = s.split("+")
+                # 结尾的 '+' 表示「加号键」本身 (pyautogui 支持 '+' 作为键名),
+                # split 后它落在末尾空段, 需还原为 "+" 而非当作空段丢弃。
+                if s.endswith("+") and raw and raw[-1] == "":
+                    raw[-1] = "+"
+                parts = [p.strip() for p in raw if p.strip()]
+                if len(parts) > 4:
+                    _log("key_press: 组合键最多 4 段, 已截断 %r → %r"
+                         % ("+".join(parts), "+".join(parts[:4])), "warning")
+                    parts = parts[:4]
+                if len(parts) < 2:
+                    _log("key_press: 组合键参数不足(至少 2 段): %r" % s,
+                         "warning")
+                    return False
+                return self._call_engine("_hotkey", ["热键"] + parts,
                                          "key_press")
             return self._call_engine("_key", ["按键", s, 1, 0.1], "key_press")
         except Exception as e:

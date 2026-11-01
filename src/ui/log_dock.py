@@ -239,8 +239,10 @@ def build(parent, *, log_dir, colors, fonts, deps=None):
     tkinter.Button(lt, text="下一个", font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"],
         activebackground=C["acl"], relief="flat", bd=1, cursor="hand2", padx=6, pady=1,
         command=lambda: search_next(reset=False)).pack(side="left", padx=2)
-    ui_theme.roled(tkinter.Button(lt, text="导出", font=FONT_SMALL, bg=C["ac"], fg="white",
-        activebackground=C["ach"], relief="flat", bd=1, cursor="hand2", padx=6, pady=1,
+    ui_theme.roled(tkinter.Button(lt, text="导出", font=FONT_SMALL, bg=C["ac"],
+        fg=ui_theme.text_on(C["ac"]),
+        activebackground=C["ach"], activeforeground=ui_theme.text_on(C["ach"]),
+        relief="flat", bd=1, cursor="hand2", padx=6, pady=1,
         command=lambda: export_view()), "ac").pack(side="right", padx=2)
     tkinter.Button(lt, text="清空", font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"],
         activebackground=C["acl"], relief="flat", bd=1, cursor="hand2", padx=6, pady=1,
@@ -256,7 +258,13 @@ def build(parent, *, log_dir, colors, fonts, deps=None):
         wrap="word", relief="flat", bd=0, padx=6, pady=4, insertbackground=C["fgt"],
         selectbackground=C["acl"], selectforeground=C["fgt"], undo=True, maxundo=50)
     rz.grid(row=0, column=0, sticky="nsew")
-    scroll = tkinter.Scrollbar(log_frame, width=6, relief="flat", elementborderwidth=0,
+    # 滚动条厚度统一取 TOKENS["sb_w"] (D10); 本模块不 import utils, 故运行时惰性取
+    try:
+        from utils import sp as _sp
+        _sb_w = _sp("sb_w")
+    except Exception:
+        _sb_w = 8
+    scroll = tkinter.Scrollbar(log_frame, width=_sb_w, relief="flat", elementborderwidth=0,
         bg=C["bd"], activebackground=C["fgm"], troughcolor=C["logbg"])
     scroll.grid(row=0, column=1, sticky="ns")
 
@@ -410,6 +418,27 @@ def _on_log_sash_release(event=None):
             _log_dock_state["h"] = max(60, _parent_dock.winfo_height())
     except Exception:
         pass
+
+
+def is_visible():
+    """日志面板当前是否展开 (供宿主做高度断点判定)。"""
+    return bool(_log_dock_state.get("visible", False))
+
+
+def set_visible(visible):
+    """按需展开/收起日志面板, **幂等** (状态未变则什么都不做)。
+
+    宿主用它实现「窗口变矮自动收起、变高自动展开」的高度断点 (v3 §2.1 断点表),
+    不用关心当前状态, 也不会因重复调用而反复 add/forget pane。
+    """
+    want = bool(visible)
+    if want == is_visible():
+        return want
+    try:
+        _toggle_log_dock()
+    except Exception:
+        return is_visible()
+    return is_visible()
 
 
 def set_toggle_button(btn):

@@ -140,6 +140,7 @@ __all__ = [
     "get_tab_workflow", "get_wf_toolbar", "get_wf_toolbar_outer", "get_wf_canvas",
     "get_wf_scrollbar", "get_wf_loop_var", "get_wf_maxmin_var", "get_wf_name_var",
     "get_wf_tree", "get_wf_paned", "get_wf_flow_canvas", "get_wf_flow_frame",
+    "get_wf_outer_paned",
     "get_show_flow", "get_view_btn", "get_flow_colors",
     # 行为函数 (原名保留)
     "_wf_update_overflow", "_wf_on_wheel", "_wf_flow_on_wheel",
@@ -182,6 +183,7 @@ wf_maxmin_var = None
 wf_name_var = None
 wf_name_entry = None
 wf_main = None
+wf_outer_paned = None      # 外层横向 PanedWindow (操作库 ↔ 步骤列表+流程图), 操作库可拉伸
 wf_lib_frame = None
 wf_lib_search = None
 wf_lib_tree = None
@@ -453,18 +455,20 @@ def _root():
 # 构建 (原 ACRPA.build_app 内 "TAB 4: 工作流" 段: :5139-5381)
 # ══════════════════════════════════════════════════════════════════════
 
-def build(parent, *, colors, fonts, deps=None):
+def build(parent, *, colors, fonts, deps=None, tab=None):
     """构建工作流 Tab (notebook 内), 返回控件句柄 dict (= get_widgets())。
 
     parent : Tab 容器 (notebook; 本模块在其内创建并 add 工作流 Tab)。
     colors : 当前主题色板 (utils.C / ui.theme.colors())。
     fonts  : {"title","body","small","button","small_bold","log"} → 绑定模块级 FONT_*。
     deps   : 依赖注入字典 (键见模块 docstring)。
+    tab    : 已由宿主创建并 add 进 notebook 的空 Tab 容器 —— 延迟构建时传入, 本模块
+             直接在它内部填充控件 (不再新建/重复 add)。None → 旧行为 (自建 Tab)。
     """
     global C, tab_workflow, wf_toolbar_outer, wf_canvas, wf_scrollbar, wf_toolbar, \
         wf_toolbar_overflow_hint, wf_loop_var, wf_maxmin_var, wf_name_var, wf_name_entry, \
-        wf_main, wf_lib_frame, wf_lib_search, wf_lib_tree, wf_lib_sy, wf_recent_label, \
-        wf_recent_list, wf_paned, wf_list_frame, wf_tree, wf_sy, wf_flow_frame, \
+        wf_main, wf_outer_paned, wf_lib_frame, wf_lib_search, wf_lib_tree, wf_lib_sy, \
+        wf_recent_label, wf_recent_list, wf_paned, wf_list_frame, wf_tree, wf_sy, wf_flow_frame, \
         wf_flow_canvas, wf_flow_scroll_y, wf_flow_check_lbl, _wf_show_flow, \
         _wf_view_btn, _WF_LIB_ACTIONS
 
@@ -489,8 +493,16 @@ def build(parent, *, colors, fonts, deps=None):
     # ======================================================================
     # TAB 4: 工作流
     # ======================================================================
-    tab_workflow = tkinter.Frame(notebook, bg=C["bg"])
-    notebook.add(tab_workflow, text="  工作流  ")   # 第2个Tab (执行控制已升级为常驻工具栏)
+    if tab is not None:
+        # 延迟构建 (v3 §5.2 P1): 宿主已建好空 Tab 并 add 进 notebook, 这里只填充内容
+        tab_workflow = tab
+        try:
+            tab_workflow.configure(bg=C["bg"])
+        except Exception:
+            pass
+    else:
+        tab_workflow = tkinter.Frame(notebook, bg=C["bg"])
+        notebook.add(tab_workflow, text="  工作流  ")   # 第2个Tab (执行控制已升级为常驻工具栏)
     # 设置已分离为独立窗口 (settings_window.open_settings_window)，不再占用 Tab
     tab_workflow.columnconfigure(0, weight=1)
     tab_workflow.rowconfigure(0, weight=0)
@@ -505,7 +517,7 @@ def build(parent, *, colors, fonts, deps=None):
     wf_canvas = tkinter.Canvas(wf_toolbar_outer, bg=C["bg"],
         height=ctrl_h("ctrl_h_lg"), highlightthickness=0, bd=0)
     wf_scrollbar = tkinter.Scrollbar(wf_toolbar_outer, orient="horizontal",
-        command=wf_canvas.xview, width=sp(6))
+        command=wf_canvas.xview, width=sp("sb_w_thin"))
     wf_toolbar = tkinter.Frame(wf_canvas, bg=C["bg"])
 
     # 溢出提示「⇄」: 内容宽度超过可视宽度时显示 (三 Tab 一致)
@@ -580,23 +592,34 @@ def build(parent, *, colors, fonts, deps=None):
         bg=C["ebg"], fg=C["fgb"], insertbackground=C["fgt"])
     wf_name_entry.pack(side="left", padx=(8, 4))
 
-    # ── 主内容区: [操作库 | PanedWindow(列表 + 流程图)] ──
+    # ── 主内容区: PanedWindow[操作库 | PanedWindow(列表 + 流程图)] ──
+    #   外层 wf_outer_paned 提供操作库侧边栏的拉伸 sash; 内层 wf_paned 管理列表↔流程图分屏。
     wf_main = tkinter.Frame(tab_workflow, bg=C["bg"])
     wf_main.grid(row=1, column=0, sticky="nsew", padx=6, pady=(0, 4))
-    wf_main.columnconfigure(1, weight=1)
+    wf_main.columnconfigure(0, weight=1)
     wf_main.rowconfigure(0, weight=1)
 
+    wf_outer_paned = tkinter.PanedWindow(wf_main, orient="horizontal",
+        bg=C["bd"], sashwidth=sp("sash"), sashrelief="raised", opaqueresize=True, bd=0)
+    wf_outer_paned.grid(row=0, column=0, sticky="nsew")
+
     # ── 左侧: 操作库 (树形分类, 双击/拖拽添加) ──
-    wf_lib_frame = tkinter.Frame(wf_main, bg=C["bgc"],
-        highlightbackground=C["bd"], highlightthickness=1, width=180)
-    wf_lib_frame.grid(row=0, column=0, sticky="ns")
-    wf_lib_frame.grid_propagate(False)
+    #   宽度由 PanedWindow 的 minsize/width 管理 (默认 180, 最小 120, 可拖拽拉伸)。
+    wf_lib_frame = tkinter.Frame(wf_outer_paned, bg=C["bgc"],
+        highlightbackground=C["bd"], highlightthickness=1)
     wf_lib_frame.columnconfigure(0, weight=1)
     wf_lib_frame.rowconfigure(2, weight=1)
 
-    # 操作库标题
-    tkinter.Label(wf_lib_frame, text="⊞ 操作库", font=FONT_TITLE,
-        bg=C["bgc"], fg=C["fgt"]).grid(row=0, column=0, sticky="ew", padx=8, pady=(6, 2))
+    # 操作库标题 (fgt 强对比, 登记 fg token 以免换肤降级为 fgm)
+    _wf_lib_title = tkinter.Label(wf_lib_frame, text="⊞ 操作库", font=FONT_TITLE,
+        bg=C["bgc"], fg=C["fgt"])
+    _ut_lib = _CTX.get("ui_theme")
+    if _ut_lib is not None:
+        try:
+            _ut_lib.set_fg_token(_wf_lib_title, "fgt")
+        except Exception:
+            pass
+    _wf_lib_title.grid(row=0, column=0, sticky="ew", padx=8, pady=(6, 2))
 
     # 搜索框
     wf_lib_search = tkinter.Entry(wf_lib_frame, font=FONT_SMALL,
@@ -609,23 +632,23 @@ def build(parent, *, colors, fonts, deps=None):
     wf_lib_tree = ttk.Treeview(wf_lib_frame, show="tree", selectmode="browse")
     wf_lib_tree.grid(row=2, column=0, sticky="nsew", padx=2, pady=(0, 2))
     wf_lib_sy = tkinter.Scrollbar(wf_lib_frame, orient="vertical",
-        command=wf_lib_tree.yview, width=6, relief="flat",
+        command=wf_lib_tree.yview, width=sp("sb_w"), relief="flat",
         bg=C["bd"], troughcolor=C["bgc"])
     wf_lib_sy.grid(row=2, column=1, sticky="ns", pady=(0, 2))
     wf_lib_tree.configure(yscrollcommand=wf_lib_sy.set)
 
     # 最近使用
     wf_recent_label = tkinter.Label(wf_lib_frame, text="最近使用", font=FONT_SMALL,
-        bg=C["bgc"], fg=C["fgm"]).grid(row=3, column=0, sticky="w", padx=8, pady=(4, 0))
+        bg=C["bgc"], fg=C["fgm"])
+    wf_recent_label.grid(row=3, column=0, sticky="w", padx=8, pady=(4, 0))
     wf_recent_list = tkinter.Listbox(wf_lib_frame, font=FONT_SMALL, height=4,
-        bg=C["ebg"], fg=C["fgb"], selectbackground=C["ac"], selectforeground="white")
+        bg=C["ebg"], fg=C["fgb"], selectbackground=C["acl"], selectforeground=C["fgt"])
     wf_recent_list.grid(row=4, column=0, columnspan=2, sticky="ew", padx=6, pady=(2, 6))
     wf_recent_list.bind("<Double-1>", lambda e: _wf_add_recent_clicked())
 
-    # ── 右侧: 步骤列表 + 流程图 (PanedWindow 分屏) ──
-    wf_paned = tkinter.PanedWindow(wf_main, orient="horizontal",
-        bg=C["bd"], sashwidth=3, sashrelief="raised")
-    wf_paned.grid(row=0, column=1, sticky="nsew")
+    # ── 右侧: 步骤列表 + 流程图 (内层 PanedWindow 分屏) ──
+    wf_paned = tkinter.PanedWindow(wf_outer_paned, orient="horizontal",
+        bg=C["bd"], sashwidth=sp("sash"), sashrelief="raised", opaqueresize=True, bd=0)
 
     # 左侧: Treeview 步骤列表
     wf_list_frame = tkinter.Frame(wf_paned, bg=C["bgc"],
@@ -643,7 +666,7 @@ def build(parent, *, colors, fonts, deps=None):
     wf_tree.column("detail", width=200, minwidth=100)
 
     wf_sy = tkinter.Scrollbar(wf_list_frame, orient="vertical", command=wf_tree.yview,
-        width=8, relief="flat", bg=C["bd"], troughcolor=C["bgc"])
+        width=sp("sb_w"), relief="flat", bg=C["bd"], troughcolor=C["bgc"])
     wf_tree.configure(yscrollcommand=wf_sy.set)
     wf_tree.grid(row=0, column=0, sticky="nsew")
     wf_sy.grid(row=0, column=1, sticky="ns")
@@ -659,7 +682,7 @@ def build(parent, *, colors, fonts, deps=None):
     wf_flow_canvas = tkinter.Canvas(wf_flow_frame, bg=C["flowbg"] if "flowbg" in C else "#F8FAFC",
         highlightthickness=0, bd=0)
     wf_flow_scroll_y = tkinter.Scrollbar(wf_flow_frame, orient="vertical",
-        command=wf_flow_canvas.yview, width=8, relief="flat",
+        command=wf_flow_canvas.yview, width=sp("sb_w"), relief="flat",
         bg=C["bd"], troughcolor=C["bgc"])
     wf_flow_canvas.configure(yscrollcommand=wf_flow_scroll_y.set)
     wf_flow_canvas.grid(row=0, column=0, sticky="nsew")
@@ -670,6 +693,15 @@ def build(parent, *, colors, fonts, deps=None):
         bg=C["bgc"], fg=C["fgm"], anchor="w", justify="left",
         highlightthickness=0, wraplength=380)
     wf_flow_check_lbl.grid(row=1, column=0, columnspan=2, sticky="ew", padx=6, pady=(2, 4))
+    # wraplength 随容器宽度自适应 (操作库拉伸 / sash 拖拽时流程图宽度变化)
+    def _wf_check_lbl_resize(event=None):
+        try:
+            w = wf_flow_frame.winfo_width()
+            if w > 20:
+                wf_flow_check_lbl.configure(wraplength=max(60, w - 16))
+        except Exception:
+            pass
+    wf_flow_frame.bind("<Configure>", _wf_check_lbl_resize)
 
     wf_flow_canvas.bind("<MouseWheel>", _wf_flow_on_wheel)
 
@@ -683,6 +715,10 @@ def build(parent, *, colors, fonts, deps=None):
         pass
 
     wf_paned.add(wf_flow_frame, minsize=200, width=400)
+
+    # 将操作库与右侧分屏加入外层 PanedWindow (操作库可拖拽拉伸, 最小 120, 默认 180)
+    wf_outer_paned.add(wf_lib_frame, minsize=120, width=180)
+    wf_outer_paned.add(wf_paned, minsize=300)
 
     # 操作库显示名 → 节点构造器 `_WF_LIB_ACTIONS`: S0-04 起提到**模块级**定义
     #   (见 `_WF_LIB_CATEGORIES` 之后的同名赋值) —— 兜底路径与"命令名 ↔ 显示名"反查需要在
@@ -720,6 +756,8 @@ def refresh_theme(dark=None, colors=None, prev=None):
 
     · 流程图画布底色 flowbg (原 _walk 内对 wf_flow_canvas 的特判);
     · 步骤树标签颜色 + 重绘流程图 (原 _refresh_theme 末尾 _wf_refresh_tree() 具名回填)。
+    · PanedWindow sash 颜色 + 侧边栏 Frame/Label/Entry/Scrollbar/Listbox 配色回填
+      (通用 _walk 对 PanedWindow 无分支, 切换暗色后 sash/边框仍为旧主题色)。
     """
     global C
     Cc = colors if isinstance(colors, dict) else _CTX.get("colors")
@@ -735,6 +773,81 @@ def refresh_theme(dark=None, colors=None, prev=None):
         pass
     try:
         _wf_refresh_tree()
+    except Exception:
+        pass
+
+    # ── PanedWindow sash + 容器 Frame 配色回填 ──
+    # tk.PanedWindow.winfo_class() == "PanedWindow", 通用 _walk 无此分支 → bg/sash 不刷新。
+    _paned_list = []
+    try:
+        if wf_outer_paned is not None:
+            _paned_list.append(wf_outer_paned)
+    except Exception:
+        pass
+    try:
+        if wf_paned is not None:
+            _paned_list.append(wf_paned)
+    except Exception:
+        pass
+    for _pw in _paned_list:
+        try:
+            _pw.configure(bg=Cc["bd"], sashrelief="raised")
+        except Exception:
+            pass
+
+    # ── 侧边栏各 Frame / Label / Entry / Scrollbar / Listbox 配色回填 ──
+    _frame_list = []
+    for _name in ("wf_main", "wf_lib_frame", "wf_list_frame", "wf_flow_frame"):
+        try:
+            _f = globals().get(_name)
+            if _f is not None:
+                _frame_list.append(_f)
+        except Exception:
+            pass
+    for _f in _frame_list:
+        try:
+            ht = int(_f.cget("highlightthickness"))
+            if ht > 0:
+                _f.configure(bg=Cc["bgc"], highlightbackground=Cc["bd"])
+            else:
+                _f.configure(bg=Cc["bg"])
+        except Exception:
+            pass
+
+    # 操作库内子控件: 搜索框 Entry / 标题 Label / 滚动条 / 最近使用 Listbox
+    try:
+        if wf_lib_search is not None:
+            wf_lib_search.configure(bg=Cc["ebg"], fg=Cc["fgb"],
+                insertbackground=Cc["fgt"])
+    except Exception:
+        pass
+    try:
+        if wf_lib_sy is not None:
+            wf_lib_sy.configure(bg=Cc["bd"], troughcolor=Cc["bgc"],
+                activebackground=Cc["fgm"])
+    except Exception:
+        pass
+    try:
+        if wf_sy is not None:
+            wf_sy.configure(bg=Cc["bd"], troughcolor=Cc["bgc"],
+                activebackground=Cc["fgm"])
+    except Exception:
+        pass
+    try:
+        if wf_flow_scroll_y is not None:
+            wf_flow_scroll_y.configure(bg=Cc["bd"], troughcolor=Cc["bgc"],
+                activebackground=Cc["fgm"])
+    except Exception:
+        pass
+    try:
+        if wf_recent_list is not None:
+            wf_recent_list.configure(bg=Cc["ebg"], fg=Cc["fgb"],
+                selectbackground=Cc["acl"], selectforeground=Cc["fgt"])
+    except Exception:
+        pass
+    try:
+        if wf_flow_check_lbl is not None:
+            wf_flow_check_lbl.configure(bg=Cc["bgc"], fg=Cc["fgm"])
     except Exception:
         pass
 
@@ -1186,9 +1299,10 @@ def _wf_library_context_menu(event):
     action = _wf_library_action_name(iid)
     if not action or wf_lib_tree.get_children(iid):
         return
+    # 高亮条 acl+fgt: ac+white 在暗色下为浅底白字, 不可读
     menu = tkinter.Menu(_root(), tearoff=0, bg=_wf_lib_color("bgc", "white"),
-        fg=_wf_lib_color("fgt", "black"), activebackground=_wf_lib_color("ac", "blue"),
-        activeforeground="white")
+        fg=_wf_lib_color("fgt", "black"), activebackground=_wf_lib_color("acl", "#CCE4F7"),
+        activeforeground=_wf_lib_color("fgt", "black"))
     menu.add_command(label="添加到末尾",
         command=lambda: _wf_lib_insert_by_name(action))
     try:
@@ -1530,7 +1644,8 @@ def _wf_render_flowchart_legacy(*args):
             x + 8, y + _NODE_H // 2,
             text=display, anchor="w",
             font=FONT_SMALL_BOLD,
-            fill="white", tags=("node", "node_{}".format(i)))
+            fill=(_flow_canvas.text_color_on(color) if _flow_canvas is not None else "white"),
+            tags=("node", "node_{}".format(i)))
 
         # 节点阴影效果 (深色半透明 — 根据主题切换颜色)
         state = _CTX.get("state")
@@ -1571,13 +1686,45 @@ def _wf_render_flowchart_legacy(*args):
             lambda e, idx=i: _wf_drag_end(e, idx))
 
 
-def _draw_arrow(canvas, x1, y1, x2, y2, color="#94A3B8"):
-    """绘制带箭头的连线"""
+def _draw_arrow(canvas, x1, y1, x2, y2, color=None):
+    """绘制带箭头的连线 (color 缺省取当前主题 fgm, 不写死浅灰)。"""
+    if not color:
+        color = (C or {}).get("fgm", "#94A3B8")
     canvas.create_line(x1, y1, x2, y2 - 6, fill=color, width=2, tags="arrow")
     # 箭头三角形
     canvas.create_polygon(
         x2 - 5, y2 - 6, x2 + 5, y2 - 6, x2, y2,
         fill=color, outline=color, tags="arrow")
+
+
+def _wf_btn(parent, text, role, command=None, font=None, **kw):
+    """语义按钮工厂 (对话框用): 建时登记 ui_theme 角色, 换肤按角色回填。
+
+    旧实现各分支直接 `tkinter.Button(..., bg=C["ac"], fg="white")` 且未登记角色,
+    主题切换后会被 _walk 的「无角色」分支刷成中性灰 (按钮失去语义色)。
+    """
+    _C = C or {}
+    _bg = _C.get(role, "#3B82F6")
+    _abg = _C.get("ach", _bg)
+    _ut = _CTX.get("ui_theme")
+    # 语义底色的明度跨主题翻转 → 字色建窗时即按亮度自适应 (避免浅底白字)
+    _fg = _ut.text_on(_bg) if _ut is not None else "white"
+    _afg = _ut.text_on(_abg) if _ut is not None else "white"
+    b = tkinter.Button(parent, text=text,
+                       font=font if font is not None else FONT_BUTTON,
+                       bg=_bg, fg=_fg, command=command,
+                       activebackground=_abg,
+                       activeforeground=_afg,
+                       disabledforeground=_C.get("fgm", "#888888"),
+                       relief="flat", bd=1, cursor="hand2",
+                       padx=kw.pop("padx", 12), pady=kw.pop("pady", 3),
+                       **kw)
+    if _ut is not None:
+        try:
+            _ut.set_role(b, role)
+        except Exception:
+            pass
+    return b
 
 
 def _wf_edit_step_by_index(idx):
@@ -1930,14 +2077,12 @@ def _wf_edit_step(event=None):
                 if _wf_file and os.path.commonprefix([fp, os.path.dirname(_wf_file)]):
                     fp = os.path.relpath(fp, os.path.dirname(_wf_file))
                 path_var.set(fp.replace("\\", "/"))
-        tkinter.Button(pf, text="浏览", command=_browse, font=FONT_SMALL,
-            bg=C["ac"], fg="white").pack(side="left")
+        _wf_btn(pf, "浏览", "ac", command=_browse, font=FONT_SMALL).pack(side="left")
         def _save_script():
             step["path"] = path_var.get()
             _wf_refresh_tree()
             dlg.destroy()
-        tkinter.Button(dlg, text="确定", command=_save_script,
-            font=FONT_BUTTON, bg=C["ac"], fg="white").pack(pady=10)
+        _wf_btn(dlg, "确定", "ac", command=_save_script).pack(pady=10)
 
     elif stype == "parallel":
         sub_steps = step.get("steps", [])
@@ -1946,7 +2091,7 @@ def _wf_edit_step(event=None):
         sf = tkinter.Frame(dlg, bg=C["bgc"])
         sf.pack(fill="both", expand=True, padx=10, pady=4)
         sub_list = tkinter.Listbox(sf, font=FONT_BODY, bg=C["ebg"], fg=C["fgb"],
-            selectbackground=C["ac"], selectforeground="white", height=6)
+            selectbackground=C["acl"], selectforeground=C["fgt"], height=6)
         sub_list.pack(side="left", fill="both", expand=True)
         for s in sub_steps:
             sub_list.insert("end", s.get("path", str(s)))
@@ -1966,16 +2111,13 @@ def _wf_edit_step(event=None):
                 sub_list.delete(idx_s)
         bf = tkinter.Frame(dlg, bg=C["bgc"])
         bf.pack()
-        tkinter.Button(bf, text="+ 添加", command=_add_sub,
-            font=FONT_SMALL, bg=C["ac"], fg="white").pack(side="left", padx=2, pady=4)
-        tkinter.Button(bf, text="- 删除", command=_del_sub,
-            font=FONT_SMALL, bg=C["dg"], fg="white").pack(side="left", padx=2, pady=4)
+        _wf_btn(bf, "+ 添加", "ac", command=_add_sub, font=FONT_SMALL).pack(side="left", padx=2, pady=4)
+        _wf_btn(bf, "- 删除", "dg", command=_del_sub, font=FONT_SMALL).pack(side="left", padx=2, pady=4)
         def _save_parallel():
             step["steps"] = sub_steps
             _wf_refresh_tree()
             dlg.destroy()
-        tkinter.Button(dlg, text="确定", command=_save_parallel,
-            font=FONT_BUTTON, bg=C["ac"], fg="white").pack(pady=4)
+        _wf_btn(dlg, "确定", "ac", command=_save_parallel).pack(pady=4)
 
     elif stype == "condition":
         tkinter.Label(dlg, text="条件表达式:", bg=C["bgc"], fg=C["fgb"]).pack(pady=(10, 2))
@@ -2001,8 +2143,7 @@ def _wf_edit_step(event=None):
             step["else"] = else_var.get() if else_var.get() else ""
             _wf_refresh_tree()
             dlg.destroy()
-        tkinter.Button(dlg, text="确定", command=_save_cond,
-            font=FONT_BUTTON, bg=C["ac"], fg="white").pack(pady=10)
+        _wf_btn(dlg, "确定", "ac", command=_save_cond).pack(pady=10)
 
     elif stype == "wait":
         tkinter.Label(dlg, text="等待秒数:", bg=C["bgc"], fg=C["fgb"]).pack(pady=(10, 4))
@@ -2017,8 +2158,7 @@ def _wf_edit_step(event=None):
                 step["seconds"] = 1
             _wf_refresh_tree()
             dlg.destroy()
-        tkinter.Button(dlg, text="确定", command=_save_wait,
-            font=FONT_BUTTON, bg=C["ac"], fg="white").pack(pady=10)
+        _wf_btn(dlg, "确定", "ac", command=_save_wait).pack(pady=10)
 
     elif stype == "command":
         # 命令节点: 命令名下拉 + schema 驱动的参数表单 (ui.param_form)
@@ -2063,8 +2203,7 @@ def _wf_edit_step(event=None):
             step["params"] = _pf_state["get"]() if _pf_state["get"] else [""] * 9
             _wf_refresh_tree()
             dlg.destroy()
-        tkinter.Button(dlg, text="确定", command=_save_command,
-            font=FONT_BUTTON, bg=C["ac"], fg="white").pack(pady=10)
+        _wf_btn(dlg, "确定", "ac", command=_save_command).pack(pady=10)
 
     elif stype == "loop":
         # 循环节点: 次数/条件 + 子步骤
@@ -2082,7 +2221,7 @@ def _wf_edit_step(event=None):
         sf = tkinter.Frame(dlg, bg=C["bgc"])
         sf.pack(fill="both", expand=True, padx=10, pady=2)
         sub_list = tkinter.Listbox(sf, font=FONT_BODY, bg=C["ebg"], fg=C["fgb"],
-            selectbackground=C["ac"], selectforeground="white", height=4)
+            selectbackground=C["acl"], selectforeground=C["fgt"], height=4)
         sub_list.pack(side="left", fill="both", expand=True)
         for s in sub_steps:
             sub_list.insert("end", s.get("path", s.get("cmd", str(s))))
@@ -2102,10 +2241,8 @@ def _wf_edit_step(event=None):
                 sub_list.delete(idx_s)
         bf = tkinter.Frame(dlg, bg=C["bgc"])
         bf.pack()
-        tkinter.Button(bf, text="+ 添加", command=_add_sub,
-            font=FONT_SMALL, bg=C["ac"], fg="white").pack(side="left", padx=2, pady=2)
-        tkinter.Button(bf, text="- 删除", command=_del_sub,
-            font=FONT_SMALL, bg=C["dg"], fg="white").pack(side="left", padx=2, pady=2)
+        _wf_btn(bf, "+ 添加", "ac", command=_add_sub, font=FONT_SMALL).pack(side="left", padx=2, pady=2)
+        _wf_btn(bf, "- 删除", "dg", command=_del_sub, font=FONT_SMALL).pack(side="left", padx=2, pady=2)
         def _save_loop():
             if not sub_steps:
                 messagebox.showwarning("提示", "循环节点至少需要 1 个子步骤，请先添加")
@@ -2114,8 +2251,7 @@ def _wf_edit_step(event=None):
             step["steps"] = sub_steps
             _wf_refresh_tree()
             dlg.destroy()
-        tkinter.Button(dlg, text="确定", command=_save_loop,
-            font=FONT_BUTTON, bg=C["ac"], fg="white").pack(pady=4)
+        _wf_btn(dlg, "确定", "ac", command=_save_loop).pack(pady=4)
 
     elif stype == "variable":
         # 变量节点
@@ -2134,8 +2270,7 @@ def _wf_edit_step(event=None):
             step["var_value"] = vv_var.get()
             _wf_refresh_tree()
             dlg.destroy()
-        tkinter.Button(dlg, text="确定", command=_save_var,
-            font=FONT_BUTTON, bg=C["ac"], fg="white").pack(pady=10)
+        _wf_btn(dlg, "确定", "ac", command=_save_var).pack(pady=10)
 
     elif stype == "log":
         # 日志节点
@@ -2150,8 +2285,7 @@ def _wf_edit_step(event=None):
             step["text"] = lg_var.get()
             _wf_refresh_tree()
             dlg.destroy()
-        tkinter.Button(dlg, text="确定", command=_save_log,
-            font=FONT_BUTTON, bg=C["ac"], fg="white").pack(pady=10)
+        _wf_btn(dlg, "确定", "ac", command=_save_log).pack(pady=10)
 
     # ── 通用: 启用/禁用 + 备注 ──
     common_frame = tkinter.Frame(dlg, bg=C["bgc"])
@@ -2330,10 +2464,11 @@ def _wf_toggle_comment():
                 dlg.destroy()
             bf = tkinter.Frame(dlg, bg=C["bgc"])
             bf.pack(pady=6)
-            tkinter.Button(bf, text="确定", command=_save,
-                font=FONT_BUTTON, bg=C["ac"], fg="white").pack(side="left", padx=4)
+            _wf_btn(bf, "确定", "ac", command=_save).pack(side="left", padx=4)
             tkinter.Button(bf, text="取消", command=_cancel,
-                font=FONT_BUTTON, bg=C["bgc"], fg=C["fgb"]).pack(side="left", padx=4)
+                font=FONT_BUTTON, bg=C["bgc"], fg=C["fgb"],
+                activebackground=C["acl"], activeforeground=C["fgt"],
+                relief="flat", bd=1, cursor="hand2", padx=12, pady=3).pack(side="left", padx=4)
             dlg.bind("<Return>", lambda e: _save())
             dlg.bind("<Escape>", lambda e: _cancel())
         _wf_refresh_tree()
@@ -2358,7 +2493,7 @@ def _wf_export_template():
 
 def _wf_context_menu(event):
     menu = tkinter.Menu(_root(), tearoff=0, bg=C["bgc"], fg=C["fgt"],
-        activebackground=C["ac"], activeforeground="white")
+        activebackground=C["acl"], activeforeground=C["fgt"])
     menu.add_command(label="编辑", command=_wf_edit_step)
     menu.add_separator()
     menu.add_command(label="克隆", command=_wf_clone_step)
@@ -2459,7 +2594,8 @@ def _wf_open_variable_manager():
     var_tree.column("name", width=150)
     var_tree.column("value", width=200)
     var_tree.pack(side="left", fill="both", expand=True)
-    sy = tkinter.Scrollbar(lf, orient="vertical", command=var_tree.yview, width=6)
+    sy = tkinter.Scrollbar(lf, orient="vertical", command=var_tree.yview,
+                           width=sp("sb_w"))
     sy.pack(side="right", fill="y")
     var_tree.configure(yscrollcommand=sy.set)
 
@@ -3040,6 +3176,10 @@ def get_wf_paned():
     return wf_paned
 
 
+def get_wf_outer_paned():
+    return wf_outer_paned
+
+
 def get_wf_flow_canvas():
     return wf_flow_canvas
 
@@ -3075,6 +3215,7 @@ def get_widgets():
         "wf_name_var": wf_name_var,
         "wf_name_entry": wf_name_entry,
         "wf_main": wf_main,
+        "wf_outer_paned": wf_outer_paned,
         "wf_lib_frame": wf_lib_frame,
         "wf_lib_search": wf_lib_search,
         "wf_lib_tree": wf_lib_tree,

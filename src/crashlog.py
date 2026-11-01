@@ -273,7 +273,10 @@ BOOT_STAGES = (
     "single_instance",  # 单实例判定
     "config",           # 配置加载
     "log_ready",        # 日志系统就绪
-    "ui_build",         # UI 构建
+    "ui_build",         # UI 构建 (开始)
+    "ui_build_done",    # UI 构建 (骨架装配完毕, 见 v3 §4.4)
+    "ui_first_frame",   # 首帧 (第一次 idle 之后)
+    "ui_ready",         # 可交互 (主循环已能处理输入)
     "theme",            # 主题 / 缩放
     "tray",             # 托盘初始化
     "ipc",              # 单实例 IPC 接收窗口

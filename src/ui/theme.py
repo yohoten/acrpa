@@ -30,7 +30,7 @@ __all__ = [
 # ── 语义色键 (角色名白名单): 只有这些键允许作为「语义角色」登记 ──
 # 组内等价键 (ok=sc / err=dg / hover=ach / cardhover=ac) 一并列出, 便于按角色回填时
 # 直接命中创建时所用的键, 无需再做「旧值→角色」反推。
-SEMANTIC_TOKENS = ("sc", "ok", "dg", "err", "wn", "ac", "hover", "focus", "acl", "ach", "cardhover")
+SEMANTIC_TOKENS = ("sc", "ok", "dg", "err", "wn", "ac", "hover", "focus", "acl", "ach", "cardhover", "ai")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -59,6 +59,7 @@ def colors(dark=None):
             err="#FF99A4", errbg="#3a2525", ok="#6CCB5F",
             hover="#3793D4", cardhover="#4CC2FF", focus="#4CC2FF",
             flowbg="#0f172a", hlbg="#4D3B00",
+            ai="#8B5CF6",  # AI 品牌紫 (暗色模式, 与 ac/sc/dg/wn 同级语义键)
             # ── 新增键 (§6.1: surface_alt/acp/fgd/border_strong/gridline/gutter_bg/
             #    heading_hover/caption_hover/row_hover/zebra/tooltip_*/log_*/search_hit_*) ──
             surface_alt="#262626", acp="#2B7AB8", fgd="#6E6E6E",
@@ -77,6 +78,7 @@ def colors(dark=None):
         err="#C42B1C", errbg="#fff0f0", ok="#107C10",
         hover="#106EBE", cardhover="#0078D4", focus="#0078D4",
         flowbg="#f8fafc", hlbg="#FFF4CE",
+        ai="#7C3AED",  # AI 品牌紫 (亮色模式, 与 ac/sc/dg/wn 同级语义键)
         # ── 新增键 (§6.1) ──
         surface_alt="#FAFAFA", acp="#005A9E", fgd="#9A9A9A",
         border_strong="#C8C8C8", gridline="#EEEEEE", gutter_bg="#F6F6F6",
@@ -228,6 +230,31 @@ def is_claimed(win):
     return False
 
 
+# ── 语义底色上的文字色 ──
+# 实现落在 utils (被 mini_bar 等注入式模块直接 import, 避免再增注入键), 此处转出。
+# 语义色跨主题会翻转明度: 亮色 ac=#0078D4(深) 需白字, 暗色 ac=#4CC2FF(浅) 需黑字。
+from utils import rel_luminance, text_on  # noqa: E402  (置于工具函数区, 无循环依赖)
+from utils import restyle_combobox_popdown  # noqa: E402  (下拉弹窗重刷, utils 内实现)
+
+
+# ── 仅前景色 token (文字类控件) ──
+# 场景: 警示/提示文字需要「字色随主题、底色仍随父容器」, 而 set_role 会连底色一起改。
+# 约定: 登记后通用 walk 的 Label 分支只按 token 刷 fg, bg 仍取父容器。
+
+def set_fg_token(widget, token):
+    """为文字控件登记「仅前景色」语义 token (不改变底色)。幂等。"""
+    try:
+        widget._theme_fg_token = token
+    except Exception:
+        pass
+    return widget
+
+
+def get_fg_token(widget):
+    """取文字控件的「仅前景色」token; 未登记 → None。"""
+    return getattr(widget, "_theme_fg_token", None)
+
+
 def claimed_count():
     """当前存活的自管窗口数量 (自测用)。"""
     _prune_claimed()
@@ -327,38 +354,43 @@ def apply_theme(root_widget, style):
               darkcolor=[("focus", C["focus"])])
 
     # 主操作 (primary, 全窗唯一实心 ac): Action —— 取消 focuscolor="none", 保留实心强调
-    style.configure("Action.TButton", background=C["ac"], foreground="white",
+    # 前景色按底亮度自适应: 暗色模式 ac=#4CC2FF 为浅色, 固定白字会不可读。
+    style.configure("Action.TButton", background=C["ac"], foreground=text_on(C["ac"]),
                     borderwidth=1, relief="flat", bordercolor=C["ac"],
                     focuscolor=C["focus"], font=utils.FONT_BUTTON, padding=(10, 4))
     style.map("Action.TButton",
-              background=[("active", C["ach"]), ("pressed", C["acp"]),
+              background=[("active", C["ach"]), ("pressed", C.get("acp", C["ach"])),
                           ("disabled", C["fgm"])],
+              foreground=[("disabled", C["bgc"])],
               bordercolor=[("focus", C["focus"]), ("active", C["ach"])],
               lightcolor=[("focus", C["focus"])],
               darkcolor=[("focus", C["focus"])])
 
     # 语义实心按钮: 扁平 + hover「底色 + 描边」双变化 (非仅变暗); 取消 focuscolor="none"
-    style.configure("Success.TButton", background=C["sc"], foreground="white",
+    style.configure("Success.TButton", background=C["sc"], foreground=text_on(C["sc"]),
                     borderwidth=1, relief="flat", bordercolor=C["sc"],
                     focuscolor=C["focus"], font=utils.FONT_BUTTON, padding=(10, 4))
     style.map("Success.TButton",
               background=[("active", _darken(C["sc"])), ("pressed", _darken(C["sc"], 0.3))],
+              foreground=[("disabled", C["bgc"])],
               bordercolor=[("focus", C["focus"]), ("active", _darken(C["sc"]))],
               lightcolor=[("focus", C["focus"])],
               darkcolor=[("focus", C["focus"])])
-    style.configure("Danger.TButton", background=C["dg"], foreground="white",
+    style.configure("Danger.TButton", background=C["dg"], foreground=text_on(C["dg"]),
                     borderwidth=1, relief="flat", bordercolor=C["dg"],
                     focuscolor=C["focus"], font=utils.FONT_BUTTON, padding=(10, 4))
     style.map("Danger.TButton",
               background=[("active", _darken(C["dg"])), ("pressed", _darken(C["dg"], 0.3))],
+              foreground=[("disabled", C["bgc"])],
               bordercolor=[("focus", C["focus"]), ("active", _darken(C["dg"]))],
               lightcolor=[("focus", C["focus"])],
               darkcolor=[("focus", C["focus"])])
-    style.configure("Warning.TButton", background=C["wn"], foreground="white",
+    style.configure("Warning.TButton", background=C["wn"], foreground=text_on(C["wn"]),
                     borderwidth=1, relief="flat", bordercolor=C["wn"],
                     focuscolor=C["focus"], font=utils.FONT_BUTTON, padding=(10, 4))
     style.map("Warning.TButton",
               background=[("active", _darken(C["wn"])), ("pressed", _darken(C["wn"], 0.3))],
+              foreground=[("disabled", C["bgc"])],
               bordercolor=[("focus", C["focus"]), ("active", _darken(C["wn"]))],
               lightcolor=[("focus", C["focus"])],
               darkcolor=[("focus", C["focus"])])
@@ -368,3 +400,27 @@ def apply_theme(root_widget, style):
                     troughcolor=C["bg"], borderwidth=0, thickness=5)
     style.configure("Success.Horizontal.TProgressbar", background=C["sc"],
                     troughcolor=C["acl"], borderwidth=0, thickness=5)
+
+    # === Scrollbar (ttk) — 原遗漏, 暗色下保持系统浅色 ===
+    # 厚度统一 sp("sb_w")=8 (docs/UI优化方案-v3.md §5.2 D10): clam 默认 16px,
+    # 与主窗自绘 8px 滚动条并排时一粗一细。注意 `width` 仅 clam 主题生效
+    # (vista/xpnative 走原生绘制会忽略), 应用固定 `theme_use("clam")`, 故实测 9px
+    # (= 8 + 1px 边框); tk 类滚动条见各窗 `width=sp("sb_w")`。
+    _sb = utils.sp("sb_w")
+    style.configure("TScrollbar", background=C["bd"], troughcolor=C["bgc"],
+                    borderwidth=0, arrowcolor=C["fgm"], relief="flat",
+                    width=_sb, arrowsize=_sb)
+    style.map("TScrollbar",
+              background=[("active", C["fgm"])],
+              arrowcolor=[("active", C["fgt"])])
+
+    # === Combobox 下拉弹窗 (原生 Listbox, 不参与 ttk 样式) ===
+    # 只对「之后新建」的弹窗生效; 已存在的弹窗由 walker 调 restyle_combobox_popdown 重刷。
+    try:
+        root_widget.option_add("*TCombobox*Listbox.background", C["bgc"])
+        root_widget.option_add("*TCombobox*Listbox.foreground", C["fgb"])
+        root_widget.option_add("*TCombobox*Listbox.selectBackground", C["acl"])
+        root_widget.option_add("*TCombobox*Listbox.selectForeground", C["fgt"])
+        root_widget.option_add("*TCombobox*Listbox.font", utils.FONT_BODY)
+    except Exception:
+        pass

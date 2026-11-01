@@ -30,7 +30,7 @@ import tkinter.ttk as ttk
 # ══════════════════════════════════════════════════════════════════════
 # 注入位 (由 ACRPA.py 的 _bind_minibar() 填充, 可重复调用)
 # ══════════════════════════════════════════════════════════════════════
-from utils import _darken
+from utils import _darken, text_on as ui_theme_text_on
 from engine import engine
 import os
 import re
@@ -633,9 +633,12 @@ def _create_mini_bar():
         def _invoke():
             _mb_touch()
             cmd()
+        # 字色按底亮度自适应 (暗色 sc/dg/wn 均为浅色, 固定白字不可读)
         btn = tkinter.Label(inner, text=text, font=FONT_BUTTON,
-            fg="white", bg=color, padx=7, pady=_MB_BTN_PADY, anchor="center",
-            activebackground=_darken(color), activeforeground="white",
+            fg=ui_theme_text_on(color), bg=color, padx=7, pady=_MB_BTN_PADY,
+            anchor="center",
+            activebackground=_darken(color),
+            activeforeground=ui_theme_text_on(_darken(color)),
             cursor="hand2", relief="flat", bd=_MB_BTN_BD)
         btn.bind("<Button-1>", lambda e, c=_invoke: c())
         _mb_bind_hover(btn)
@@ -651,7 +654,8 @@ def _create_mini_bar():
     mb_expand = tkinter.Label(inner, text="□ 展开",
         font=FONT_BUTTON, fg=C["ac"], bg=C["acl"],
         padx=7, pady=_MB_BTN_PADY, cursor="hand2", anchor="center",
-        activebackground=C["ac"], activeforeground="white",
+        activebackground=C["ac"],
+        activeforeground=ui_theme_text_on(C["ac"]),
         relief="flat", bd=_MB_BTN_BD)
     _mb_bind_hover(mb_expand)
 
@@ -800,10 +804,17 @@ def _sync_mini_bar_status():
                 pass
             _mb_apply_form(force=True)   # 尺寸变了 → 强制重算三形态尺寸
         # 背景色 (主题切换时; outer 为顶部 1px 强调色描边)
+        try:
+            _mini_bar.configure(bg=C["bgc"])
+        except Exception:
+            pass
         w["outer"].configure(bg=C["ac"])
         w["inner"].configure(bg=C["bgc"])
         w["dot"].configure(bg=C["bgc"])
-        w["expand"].configure(bg=C["acl"], fg=C["ac"], activebackground=C["ac"])
+        # 悬停态 activebackground=ac 需配 text_on(ac), 否则字与底同色「悬停即消失」
+        w["expand"].configure(bg=C["acl"], fg=C["ac"],
+                              activebackground=C["ac"],
+                              activeforeground=ui_theme_text_on(C["ac"]))
         w["status"].configure(bg=C["bgc"])
         w["info"].configure(bg=C["bgc"])
         # D6: 前景也随主题刷新 (Unicode 回退 "⚙" 用 C["ac"]; PNG 图标时无副作用)
@@ -847,18 +858,23 @@ def _sync_mini_bar_status():
                 if w[key].winfo_ismapped():
                     w[key].pack_forget()
 
-        # ── 暂停按钮动态文本 ──
+        # ── 暂停按钮动态文本 (fg 随底亮度重算, 否则换肤后浅底白字) ──
         if state.running and not state.pause_event.is_set():
             w["pause"].configure(text="▶ 继续", bg=C["ac"],
-                activebackground=_darken(C["ac"]))
+                fg=ui_theme_text_on(C["ac"]),
+                activebackground=_darken(C["ac"]),
+                activeforeground=ui_theme_text_on(_darken(C["ac"])))
         else:
             w["pause"].configure(text="⏸ 暂停", bg=C["wn"],
-                activebackground=_darken(C["wn"]))
+                fg=ui_theme_text_on(C["wn"]),
+                activebackground=_darken(C["wn"]),
+                activeforeground=ui_theme_text_on(_darken(C["wn"])))
 
-        # ── 按钮颜色 ──
-        w["stop"].configure(bg=C["dg"], activebackground=_darken(C["dg"]))
-        w["run"].configure(bg=C["sc"], activebackground=_darken(C["sc"]))
-        w["step"].configure(bg=C["ac"], activebackground=_darken(C["ac"]))
+        # ── 按钮颜色 (bg + fg 同步, 防止换肤后对比度失配) ──
+        for _bk, _kc in (("stop", "dg"), ("run", "sc"), ("step", "ac")):
+            w[_bk].configure(bg=C[_kc], fg=ui_theme_text_on(C[_kc]),
+                activebackground=_darken(C[_kc]),
+                activeforeground=ui_theme_text_on(_darken(C[_kc])))
 
         # ── 悬停基色缓存同步: _on_leave 回填 _mb_base_bg, 主题/状态变更后必须
         # 一并刷新, 否则「悬停中切主题」→ 离开时回填旧主题基色 (陈旧色)。 ──

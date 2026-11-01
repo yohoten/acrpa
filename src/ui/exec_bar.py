@@ -114,6 +114,7 @@ _script_name_var = None     # StringVar 当前脚本名
 _script_switcher = None     # 最近脚本下拉
 _loop_count_var = None      # StringVar 运行次数
 _loop_combo = None          # 次数下拉
+_loop_last = "1"            # 上次有效次数 (默认 1 = 单次执行; 取消「自定义…」时回填)
 _exec_maxmin_var = None     # StringVar 最长执行分钟
 _exec_maxmin_sp = None      # Spinbox 最长执行分钟
 _exec_stoponerror_var = None  # BooleanVar 出错即停
@@ -251,7 +252,7 @@ def build(parent, *, notebook, colors, fonts, deps=None):
     run_canvas = tkinter.Canvas(run_bar_outer, bg=C["bgc"],
         height=ctrl_h("ctrl_h_lg"), highlightthickness=0, bd=0)
     run_scrollbar = tkinter.Scrollbar(run_bar_outer, orient="horizontal",
-        command=run_canvas.xview, width=sp(6))
+        command=run_canvas.xview, width=sp("sb_w_thin"))
     run_bar = tkinter.Frame(run_canvas, bg=C["bgc"])
     _run_canvas = run_canvas
     _run_scrollbar = run_scrollbar
@@ -283,14 +284,15 @@ def build(parent, *, notebook, colors, fonts, deps=None):
     _script_switcher.bind("<<ComboboxSelected>>", on_script_switched)
     update_recent_scripts()
 
-    ui_theme.roled(tkinter.Button(run_bar, text=i18n.t("exec.label_choose"), font=FONT_BUTTON, bg=C["ac"], fg="white",
-        activebackground=C["ach"], activeforeground="white", relief="flat", bd=1,
+    ui_theme.roled(tkinter.Button(run_bar, text=i18n.t("exec.label_choose"), font=FONT_BUTTON, bg=C["ac"], fg=ui_theme.text_on(C["ac"]),
+        activebackground=C["ach"], activeforeground=ui_theme.text_on(C["ach"]),
+        relief="flat", bd=1,
         cursor="hand2", padx=8, pady=2, command=select_script), "ac").pack(side="left", padx=(0, 4))
 
-    # 次数: 可编辑 + 预设 + 自定义
+    # 次数: 可编辑 + 预设 + 自定义 (默认「1」单次执行, 无限循环需显式选择)
     tkinter.Label(run_bar, text=i18n.t("exec.label_loops"), font=FONT_SMALL, fg=C["fgm"],
         bg=C["bgc"]).pack(side="left", padx=(6, 2))
-    loop_count_var = tkinter.StringVar(value=i18n.t("exec.loop_infinite"))
+    loop_count_var = tkinter.StringVar(value=_loop_last)
     _loop_count_var = loop_count_var
     _loop_combo = ttk.Combobox(run_bar, textvariable=loop_count_var,
         values=(i18n.t("exec.loop_infinite"), '1', '5', '10', '50',
@@ -323,37 +325,37 @@ def build(parent, *, notebook, colors, fonts, deps=None):
 
     # ✓ 校验 (运行前 dry-run; 默认只读展示问题, 不执行脚本)
     # 置于四键同组之前: 与运行相关但不参与「运行/暂停/单步/停止」状态机
-    btn_validate = ui_theme.roled(tkinter.Button(run_bar, text=i18n.t("exec.btn_validate"), font=FONT_BUTTON, bg=C["ac"], fg="black",
-        activebackground=C["ach"], activeforeground="black", disabledforeground="black",
+    btn_validate = ui_theme.roled(tkinter.Button(run_bar, text=i18n.t("exec.btn_validate"), font=FONT_BUTTON, bg=C["ac"], fg=ui_theme.text_on(C["ac"]),
+        activebackground=C["ach"], activeforeground=ui_theme.text_on(C["ach"]), disabledforeground=C["fgm"],
         relief="flat", bd=1,
         cursor="hand2", padx=sp(8), pady=sp(2), command=_call_proxy("validate_script_cb")), "ac")
     btn_validate.pack(side="left", padx=2)
     _btn_validate = btn_validate
 
     # 四键同组: ▶ 运行 / ⏸ 暂停 / ⏭ 单步 / ■ 停止
-    # (尺寸走 utils.sp 令牌; 四键文字统一黑色, 与「运行」对齐)
+    # (尺寸走 utils.sp 令牌; 四键文字统一白色, 与语义按钮一致)
     # 语义角色显式登记 (换肤按角色回填, 不再按旧颜色值反推语义组)
-    btn_run = ui_theme.roled(tkinter.Button(run_bar, text=i18n.t("exec.btn_run"), font=FONT_BUTTON, bg=C["sc"], fg="black",
-        activebackground=darken(C["sc"]), activeforeground="black", disabledforeground="black",
+    btn_run = ui_theme.roled(tkinter.Button(run_bar, text=i18n.t("exec.btn_run"), font=FONT_BUTTON, bg=C["sc"], fg=ui_theme.text_on(C["sc"]),
+        activebackground=darken(C["sc"]), activeforeground=ui_theme.text_on(darken(C["sc"])), disabledforeground=C["fgm"],
         relief="flat", bd=1,
         cursor="hand2", padx=sp(8), pady=sp(2), command=shared_run), "sc")
     btn_run.pack(side="left", padx=2)
     _btn_run = btn_run
-    btn_pause = ui_theme.roled(tkinter.Button(run_bar, text="⏸ 暂停", font=FONT_BUTTON, bg=C["wn"], fg="black",
-        activebackground=darken(C["wn"]), activeforeground="black", disabledforeground="black",
+    btn_pause = ui_theme.roled(tkinter.Button(run_bar, text="⏸ 暂停", font=FONT_BUTTON, bg=C["wn"], fg=ui_theme.text_on(C["wn"]),
+        activebackground=darken(C["wn"]), activeforeground=ui_theme.text_on(darken(C["wn"])), disabledforeground=C["fgm"],
         relief="flat", bd=1,
         cursor="hand2", padx=sp(8), pady=sp(2), command=_CTX.get("toggle_pause")), "wn")
     btn_pause.pack(side="left", padx=2)
     _btn_pause = btn_pause
 
-    btn_step = ui_theme.roled(tkinter.Button(run_bar, text=i18n.t("exec.btn_step"), font=FONT_BUTTON, bg=C["ac"], fg="black",
-        activebackground=C["ach"], activeforeground="black", disabledforeground="black",
+    btn_step = ui_theme.roled(tkinter.Button(run_bar, text=i18n.t("exec.btn_step"), font=FONT_BUTTON, bg=C["ac"], fg=ui_theme.text_on(C["ac"]),
+        activebackground=C["ach"], activeforeground=ui_theme.text_on(C["ach"]), disabledforeground=C["fgm"],
         relief="flat", bd=1,
         cursor="hand2", padx=sp(8), pady=sp(2), command=_CTX.get("step_once")), "ac")
     btn_step.pack(side="left", padx=2)
     _btn_step = btn_step
-    btn_stop = ui_theme.roled(tkinter.Button(run_bar, text=i18n.t("exec.btn_stop"), font=FONT_BUTTON, bg=C["dg"], fg="black",
-        activebackground=darken(C["dg"]), activeforeground="black", disabledforeground="black",
+    btn_stop = ui_theme.roled(tkinter.Button(run_bar, text=i18n.t("exec.btn_stop"), font=FONT_BUTTON, bg=C["dg"], fg=ui_theme.text_on(C["dg"]),
+        activebackground=darken(C["dg"]), activeforeground=ui_theme.text_on(darken(C["dg"])), disabledforeground=C["fgm"],
         relief="flat", bd=1,
         cursor="hand2", padx=sp(8), pady=sp(2), command=shared_stop), "dg")
     btn_stop.pack(side="left", padx=2)
@@ -423,7 +425,12 @@ def refresh_theme(dark=None, colors=None, prev=None):
         try:
             role = ui_theme.get_role(w) if ui_theme is not None else None
             if role:
-                w.configure(bg=C.get(role, C["bgc"]))
+                _rb = C.get(role, C["bgc"])
+                _ab = C.get("ach", _rb)
+                w.configure(bg=_rb, fg=ui_theme.text_on(_rb),
+                    activebackground=_ab,
+                    activeforeground=ui_theme.text_on(_ab),
+                    disabledforeground=C["fgm"])
         except Exception:
             pass
 
@@ -601,15 +608,19 @@ def select_script():
 
 
 def on_loop_sel(event=None):
-    """次数下拉: 选中「自定义…」时弹出输入框。"""
-    if _loop_count_var.get() == i18n.t("exec.loop_custom"):
+    """次数下拉: 选中「自定义…」时弹出输入框; 取消则回到上次有效值 (默认单次)。"""
+    global _loop_last
+    cur = _loop_count_var.get()
+    if cur == i18n.t("exec.loop_custom"):
         try:
             from tkinter import simpledialog
             n = simpledialog.askinteger(i18n.t("exec.dlg_loops_title"), i18n.t("exec.dlg_loops_prompt"),
                 parent=_CTX.get("root"), minvalue=1, maxvalue=1000000)
-            _loop_count_var.set(i18n.t("exec.loop_infinite") if n is None else str(n))
+            _loop_count_var.set(_loop_last if n is None else str(n))
         except Exception:
-            _loop_count_var.set(i18n.t("exec.loop_infinite"))
+            _loop_count_var.set(_loop_last)
+    else:
+        _loop_last = cur
 
 
 def exec_params_commit():

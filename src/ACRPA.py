@@ -419,7 +419,7 @@ def _create_recording_bar():
 
     # ── 动作计数 ──
     rb_count = tkinter.Label(inner, text="动作: 0",
-        font=("Consolas", 9, "bold"), fg=C["fgb"], bg=C["bgc"])
+        font=FONT_LOG, fg=C["fgb"], bg=C["bgc"])
     rb_count.pack(side="left", padx=(0, 8))
 
     # ── 录制模式 ──
@@ -431,19 +431,23 @@ def _create_recording_bar():
     # ── 分隔符 ──
     tkinter.Frame(inner, bg=C["bd"], width=1).pack(side="left", fill="y", padx=6, pady=4)
 
-    # ── 暂停按钮 ──
+    # ── 暂停按钮 (字色按底亮度自适应: 暗色 wn=#FCE100 需黑字) ──
     rb_pause = tkinter.Label(inner, text="⏸ 暂停", font=FONT_BUTTON,
-        fg="white", bg=C["wn"], padx=8, pady=1, cursor="hand2",
-        activebackground=_darken(C["wn"]), activeforeground="white",
+        fg=ui_theme.text_on(C["wn"]), bg=C["wn"], padx=8, pady=1, cursor="hand2",
+        activebackground=_darken(C["wn"]),
+        activeforeground=ui_theme.text_on(_darken(C["wn"])),
         relief="raised", bd=1)
+    ui_theme.set_role(rb_pause, "wn")
     rb_pause.pack(side="left", padx=2)
     rb_pause.bind("<Button-1>", lambda e: _toggle_recording_pause())
 
     # ── 停止按钮 ──
     rb_stop = tkinter.Label(inner, text="■ 停止录制", font=FONT_BUTTON,
-        fg="white", bg=C["dg"], padx=8, pady=1, cursor="hand2",
-        activebackground=_darken(C["dg"]), activeforeground="white",
+        fg=ui_theme.text_on(C["dg"]), bg=C["dg"], padx=8, pady=1, cursor="hand2",
+        activebackground=_darken(C["dg"]),
+        activeforeground=ui_theme.text_on(_darken(C["dg"])),
         relief="raised", bd=1)
+    ui_theme.set_role(rb_stop, "dg")
     rb_stop.pack(side="left", padx=2)
     rb_stop.bind("<Button-1>", lambda e: _stop_recording_from_bar())
 
@@ -691,7 +695,9 @@ def main_run():
     state.quit2=False; state.quit3=True; state.pause_event.set()
     engine.retry = state.RETRY_MAX; engine.retry_interval = state.RETRY_INTERVAL
     loop_val = str(loop_count_var.get()).strip()
-    if loop_val in ("", "无限循环"):
+    # 运行次数默认「1」单次; 仅显式选择「∞ / 无限循环」才走无限模式。
+    # 非法输入按单次执行 (旧的「按无限处理」会在误触后停不下来)。
+    if loop_val.lower() in ("∞", "inf", "infinite", "无限", "无限循环"):
         tn = 9999800001
     else:
         try:
@@ -699,8 +705,8 @@ def main_run():
             if tn <= 0:
                 tn = 9999800001
         except ValueError:
-            log1("无效的运行次数「{}」，已按无限循环处理".format(loop_val), "warning")
-            tn = 9999800001
+            log1("无效的运行次数「{}」，已按单次执行".format(loop_val), "warning")
+            tn = 1
     log1("启动任务 (最大重试:{}次, 间隔:{}s)".format(state.RETRY_MAX,state.RETRY_INTERVAL))
     
     # ── 执行增强: 窗口绑定 —   BoundWindow ──
@@ -822,7 +828,8 @@ def _show_validation_window(issues):
 
     body = tkinter.Frame(win, bg=C.get("bg"))
     body.pack(fill="both", expand=True, padx=12, pady=(0, 8))
-    sb = tkinter.Scrollbar(body, orient="vertical")
+    sb = tkinter.Scrollbar(body, orient="vertical", width=utils.sp("sb_w"),
+                           relief="flat", bg=C.get("bd"), troughcolor=C.get("bgc"))
     sb.pack(side="right", fill="y")
     lb = tkinter.Listbox(body, yscrollcommand=sb.set, font=utils.FONT_SMALL,
                          bg=C.get("ebg"), fg=C.get("fgb"),
@@ -840,8 +847,10 @@ def _show_validation_window(issues):
     bar = tkinter.Frame(win, bg=C.get("bg"))
     bar.pack(fill="x", padx=12, pady=(0, 12))
     ui_theme.roled(tkinter.Button(
-        bar, text="关闭", font=utils.FONT_BUTTON, bg=C.get("ac"), fg="white",
-        activebackground=C.get("ach"), activeforeground="white",
+        bar, text="关闭", font=utils.FONT_BUTTON, bg=C.get("ac"),
+        fg=ui_theme.text_on(C.get("ac")),
+        activebackground=C.get("ach"),
+        activeforeground=ui_theme.text_on(C.get("ach")),
         relief="flat", bd=1, cursor="hand2", padx=10, pady=2,
         command=win.destroy), "ac").pack(side="right")
     hint = tkinter.Label(bar, text="仅只读展示行号 (不做跳转)",
@@ -1133,7 +1142,10 @@ def _exit_for_update():
 PAD = {"padx":6,"pady":3}; PI = {"padx":6,"pady":2}
 
 # ── 顶部标题双击内联编辑 (仅会话内存, 绝不写入配置文件) ──────────────
-# 需求: 界面顶部标题可双击自定义; 默认文案与现状一致, 重启回默认。
+# 需求: 界面顶部标题可双击自定义; 重启回默认。
+# 默认值 = 品牌全称 (英文全称, 与原生标题栏的应用名同源语义); 用户双击可改为
+# 文档标题, 清空/全空白则回退本常量。
+# 默认值与"清空后回退"共用本常量, 避免两处字面量漂移。
 TITLE_DEFAULT_TEXT = "Adaptive Control Automation Workflow"  # 空/纯空白时回退的默认文案
 _title_edit_entry = None                            # 当前编辑态 Entry (None=非编辑态)
 
@@ -1204,68 +1216,19 @@ def toggle_pin():
     pin_btn.config(text="▲" if pin_pinned else "△",
         fg=C["ac"] if pin_pinned else C["fgm"])
 
-# 置顶按钮 tooltip (动态提示: 根据置顶状态显示不同文本)
-def _show_pin_tip(event):
-    global _tip_win
-    if _tip_win: _tip_win.destroy()
-    _tip_win = tkinter.Toplevel(root)
-    _tip_win.wm_overrideredirect(True)
-    _tip_win.wm_geometry("+{}+{}".format(event.x_root + 12, event.y_root - 8))
-    tkinter.Label(_tip_win, text="取消置顶" if pin_pinned else "置顶窗口",
-        font=FONT_SMALL, bg=C["tooltip_bg"], fg=C["fgb"], relief="flat", bd=0,
-        highlightthickness=1, highlightbackground=C["tooltip_border"], padx=6, pady=2).pack()
-# Tooltip for fold button
-def _show_fold_tip(event):
-    global _tip_win
-    if _tip_win: _tip_win.destroy()
-    _tip_win = tkinter.Toplevel(root)
-    _tip_win.wm_overrideredirect(True)
-    _tip_win.wm_geometry("+{}+{}".format(event.x_root+12, event.y_root-8))
-    tkinter.Label(_tip_win, text="折叠为 Mini Bar" if not state.folded else "展开完整窗口",
-        font=FONT_SMALL, bg=C["tooltip_bg"], fg=C["fgb"], relief="flat", bd=0,
-        highlightthickness=1, highlightbackground=C["tooltip_border"], padx=6, pady=2).pack()
+# 标题栏按钮 tooltip —— 统一组件化 (v3 §5.2 P2):
+#   全部走 utils.attach_tooltip (统一 400ms 延迟 / 浅黄底 / 1px 描边 / 位置偏移),
+#   动态文案用「返回字符串的 getter」表达, 不再每个按钮各维护一份 Toplevel。
+def _tip_pin():
+    return "取消置顶" if pin_pinned else "置顶窗口"
 
-# Simple tooltip for dark mode toggle
-_tip_win = None
-def _show_tip(event):
-    global _tip_win
-    if _tip_win: _tip_win.destroy()
-    _tip_win = tkinter.Toplevel(root)
-    _tip_win.wm_overrideredirect(True)
-    _tip_win.wm_geometry("+{}+{}".format(event.x_root+12, event.y_root-8))
-    tkinter.Label(_tip_win, text="切换暗色模式" if not state.DARK_MODE else "切换亮色模式",
-        font=FONT_SMALL, bg=C["tooltip_bg"], fg=C["fgb"], relief="flat", bd=0,
-        highlightthickness=1, highlightbackground=C["tooltip_border"], padx=6, pady=2).pack()
-def _hide_tip(event):
-    global _tip_win
-    if _tip_win: _tip_win.destroy(); _tip_win = None
-def _show_settings_tip(event):
-    global _tip_win
-    if _tip_win: _tip_win.destroy()
-    _tip_win = tkinter.Toplevel(root)
-    _tip_win.wm_overrideredirect(True)
-    _tip_win.wm_geometry("+{}+{}".format(event.x_root + 12, event.y_root - 8))
-    tkinter.Label(_tip_win, text="打开设置窗口",
-        font=FONT_SMALL, bg=C["tooltip_bg"], fg=C["fgb"], relief="flat", bd=0,
-        highlightthickness=1, highlightbackground=C["tooltip_border"], padx=6, pady=2).pack()
-def _show_help_tip(event):
-    global _tip_win
-    if _tip_win: _tip_win.destroy()
-    _tip_win = tkinter.Toplevel(root)
-    _tip_win.wm_overrideredirect(True)
-    _tip_win.wm_geometry("+{}+{}".format(event.x_root + 12, event.y_root - 8))
-    tkinter.Label(_tip_win, text="帮助 / 使用说明",
-        font=FONT_SMALL, bg=C["tooltip_bg"], fg=C["fgb"], relief="flat", bd=0,
-        highlightthickness=1, highlightbackground=C["tooltip_border"], padx=6, pady=2).pack()
-def _show_devlink_tip(event):
-    global _tip_win
-    if _tip_win: _tip_win.destroy()
-    _tip_win = tkinter.Toplevel(root)
-    _tip_win.wm_overrideredirect(True)
-    _tip_win.wm_geometry("+{}+{}".format(event.x_root + 12, event.y_root - 8))
-    tkinter.Label(_tip_win, text="设备互联",
-        font=FONT_SMALL, bg=C["tooltip_bg"], fg=C["fgb"], relief="flat", bd=0,
-        highlightthickness=1, highlightbackground=C["tooltip_border"], padx=6, pady=2).pack()
+
+def _tip_fold():
+    return "折叠为 Mini Bar" if not state.folded else "展开完整窗口"
+
+
+def _tip_dark():
+    return "切换暗色模式" if not state.DARK_MODE else "切换亮色模式"
 # 阶段二第 2 项: 语义角色不再从「旧主题颜色值」反推 (_semantic_bg_for / _SEMANTIC_GROUPS
 # 两份拷贝已删除), 改为控件创建处显式登记 (ui_theme.set_role), 换肤时按角色取色。
 
@@ -1289,20 +1252,41 @@ def _refresh_theme():
                 # 由该窗口所属模块的 ThemeBus 订阅回调负责, 避免跨窗口串扰/覆盖特化配色。
                 if cls == "Toplevel" and ui_theme.is_claimed(w):
                     continue
+                # 图例色点等: 前景色是「语义色标」(节点类型色), 不能按主题重置,
+                # 只让底色跟随父容器。创建处打 _acrpa_keep_fg 标记即可豁免。
+                if getattr(w, "_acrpa_keep_fg", False):
+                    w.configure(bg=str(p.cget("bg")))
+                    _walk(w, prev)
+                    continue
                 if cls in ("Frame", "TFrame"):
-                    # Card = has non-default highlightthickness + highlightbackground
-                    ht = int(w.cget("highlightthickness"))
-                    if ht > 0:
-                        w.configure(bg=C["bgc"], highlightbackground=C["bd"])
+                    # 有语义角色的容器 (标题条/气泡/提示条) 按角色回填;
+                    # 否则按 highlightthickness 判定卡片 (ht>0) / 普通容器。
+                    _fr_role = ui_theme.get_role(w)
+                    if _fr_role:
+                        w.configure(bg=C.get(_fr_role, C["bgc"]))
                     else:
-                        w.configure(bg=C["bg"])
+                        # Card = has non-default highlightthickness + highlightbackground
+                        ht = int(w.cget("highlightthickness"))
+                        if ht > 0:
+                            w.configure(bg=C["bgc"], highlightbackground=C["bd"])
+                        else:
+                            w.configure(bg=C["bg"])
                 elif cls in ("Label", "TLabel"):
                     # Labels on main bg have same bg as their parent
                     parent_bg = str(p.cget("bg"))
                     # 语义角色由控件创建时显式登记 (ui_theme.set_role), 未登记 → 中性灰 fgm。
                     # **不再嗅探中文文案** (旧实现按 ●/运行/就绪 猜颜色) —— 路线图 §5.2 修法②。
-                    fg_color = C.get(ui_theme.get_role(w) or "", C["fgm"])
-                    w.configure(bg=parent_bg, fg=fg_color)
+                    _lbl_role = ui_theme.get_role(w)
+                    _fg_tok = ui_theme.get_fg_token(w)
+                    if _lbl_role:
+                        # 有语义角色的 Label (如录制暂停/停止按钮): bg/fg 均按角色回填
+                        _lb = C.get(_lbl_role, parent_bg)
+                        w.configure(bg=_lb, fg=ui_theme.text_on(_lb))
+                    elif _fg_tok:
+                        # 仅前景色 token (警示/提示文字): bg 随父容器, fg 随主题
+                        w.configure(bg=parent_bg, fg=C.get(_fg_tok, C["fgm"]))
+                    else:
+                        w.configure(bg=parent_bg, fg=C["fgm"])
                 elif cls == "Text":
                     w.configure(bg=C["logbg"], fg=C["logfg"],
                         insertbackground=C["fgt"],
@@ -1315,10 +1299,17 @@ def _refresh_theme():
                     # (**不再**按旧颜色值反推语义组) —— 路线图 §5.2 修法②。
                     _role = ui_theme.get_role(w)
                     if _role:
-                        w.configure(bg=C.get(_role, C["bgc"]))
+                        _rb = C.get(_role, C["bgc"])
+                        _rf = ui_theme.text_on(_rb)
+                        w.configure(bg=_rb, fg=_rf,
+                            activebackground=C.get("ach", _rb),
+                            activeforeground=ui_theme.text_on(C.get("ach", _rb)),
+                            disabledforeground=C["fgm"])
                     else:
                         w.configure(bg=C["bgc"], fg=C["fgb"],
                             activebackground=C["acl"],
+                            activeforeground=C["fgt"],
+                            disabledforeground=C["fgm"],
                             highlightbackground=C["bd"])
                 elif cls == "Entry":
                     w.configure(bg=C["ebg"], fg=C["fgb"],
@@ -1326,13 +1317,17 @@ def _refresh_theme():
                 elif cls == "Combobox":
                     w.configure(background=C["bgc"], fieldbackground=C["bgc"],
                         foreground=C["fgb"])
+                elif cls == "TCombobox":
+                    # ttk 样式已覆盖输入框本体; 下拉弹窗是原生 Listbox, 需单独重刷
+                    ui_theme.restyle_combobox_popdown(w, C)
                 elif cls == "Canvas":
                     # 工作流流程图画布用 flowbg: 其重着色已移交 src/ui/workflow_view.py
                     # 的 ThemeBus 订阅回调 (本函数末尾 ui_theme.publish 驱动), 此处通用处理仅刷主背景。
                     w.configure(bg=C["bg"])
                 elif cls == "Listbox":
+                    # 选中态统一 acl(深底)+fgt: 旧 ac(浅蓝)+white 暗色下对比度不足
                     w.configure(bg=C["ebg"], fg=C["fgb"],
-                        selectbackground=C["ac"], selectforeground="white")
+                        selectbackground=C["acl"], selectforeground=C["fgt"])
                 elif cls == "Spinbox":
                     w.configure(bg=C["ebg"], fg=C["fgb"],
                         buttonbackground=C["bgc"], insertbackground=C["fgt"])
@@ -1344,9 +1339,13 @@ def _refresh_theme():
                         selectcolor=C["bgc"], highlightbackground=C["bd"])
                 elif cls == "Menu":
                     # D5: 下拉/右键菜单 (旧实现遗漏 → 暗色下仍是系统浅色)
+                    # 高亮条统一 acl(深底)+fgt: ac+white 在暗色下为浅底白字, 不可读。
                     w.configure(bg=C["bgc"], fg=C["fgb"],
-                        activebackground=C["ac"], activeforeground="white",
+                        activebackground=C["acl"], activeforeground=C["fgt"],
                         disabledforeground=C["fgm"])
+                elif cls == "PanedWindow":
+                    # tk.PanedWindow: sash 颜色 = bg (原遗漏 → 暗色下 sash 仍为浅色 bd)
+                    w.configure(bg=C["bd"], sashrelief="raised")
             except Exception:
                 pass
             _walk(w, prev)
@@ -1385,6 +1384,14 @@ def _refresh_theme():
     try:
         _build_sel_bar()
         _sync_sel_bars(tree)
+    except Exception:
+        pass
+    # 变量监视器 Treeview tag (state 用语义键 ai, changed 用 hlbg) —— 窗口存在时才刷
+    try:
+        _vt = getattr(_show_variables_window, "_tree", None)
+        if _vt is not None and _vt.winfo_exists():
+            _vt.tag_configure("state", foreground=C["ai"])
+            _vt.tag_configure("changed", background=C["hlbg"])
     except Exception:
         pass
 
@@ -1498,6 +1505,11 @@ def _editor_base_size():
 
 def _apply_editor_zoom(event=None):
     """按 state.EDITOR_ZOOM 重算编辑区字体与行高 (幂等, 可反复调用)。"""
+    # 缩放前落库进行中的内联编辑, 避免编辑框保留旧字号/旧行高错位
+    try:
+        _commit_inline_edit()
+    except Exception:
+        pass
     base = _editor_base_font()
     try:
         delta = int(getattr(state, "EDITOR_ZOOM", 0) or 0)
@@ -1709,7 +1721,7 @@ def _show_conditional_breakpoint_menu(event):
     
     # Create context menu
     menu = tkinter.Menu(root, tearoff=0, bg=C["bgc"], fg=C["fgt"],
-                       activebackground=C["ac"], activeforeground="white",
+                       activebackground=C["acl"], activeforeground=C["fgt"],
                        relief="solid", bd=1)
     
     def set_conditional_bp():
@@ -1752,10 +1764,14 @@ def _show_conditional_breakpoint_menu(event):
         btn_frame = tkinter.Frame(cond_win, bg=C["bgc"])
         btn_frame.pack(pady=10)
         
-        tkinter.Button(btn_frame, text="确定", command=confirm_condition,
-            bg=C["ac"], fg="white", font=FONT_BUTTON, width=10).pack(side="left", padx=5)
-        tkinter.Button(btn_frame, text="取消", command=cond_win.destroy,
-            bg=C["dg"], fg="white", font=FONT_BUTTON, width=10).pack(side="left", padx=5)
+        _ok_btn = tkinter.Button(btn_frame, text="确定", command=confirm_condition,
+            bg=C["ac"], fg=ui_theme.text_on(C["ac"]), font=FONT_BUTTON, width=10)
+        ui_theme.set_role(_ok_btn, "ac")
+        _ok_btn.pack(side="left", padx=5)
+        _cancel_btn = tkinter.Button(btn_frame, text="取消", command=cond_win.destroy,
+            bg=C["dg"], fg=ui_theme.text_on(C["dg"]), font=FONT_BUTTON, width=10)
+        ui_theme.set_role(_cancel_btn, "dg")
+        _cancel_btn.pack(side="left", padx=5)
     
     def remove_conditional_bp():
         """Remove conditional breakpoint"""
@@ -1799,29 +1815,187 @@ def _show_conditional_breakpoint_menu(event):
     finally:
         menu.grab_release()
 
+# ── 系统剪贴板互通 (TSV ↔ 行, 纯逻辑部分不依赖 Tk, 便于自测) ──
+def _rows_to_tsv(rows):
+    """ScriptData 列表 → Excel 兼容 TSV 文本 (10 列, 不含末尾换行)。"""
+    lines = []
+    for sd in rows:
+        cmd = str(getattr(sd, "cmd_type", "") or "")
+        cells = [cmd] + [str(a or "") for a in list(getattr(sd, "args", []) or [])[:9]]
+        while len(cells) < 10:
+            cells.append("")
+        lines.append("\t".join(cells))
+    return "\n".join(lines)
+
+
+def _tsv_to_rows(text):
+    """TSV / 多行文本 → (ScriptData 列表, 是否含制表符)。纯逻辑, 供粘贴与自测。
+
+    规则 (对齐 Excel):
+      - \\r\\n 与 \\r 统一为 \\n; 仅去掉末尾空行, 保留中间空行 (视为空命令行);
+      - 每行按 \\t 拆列, 最多 10 列: 第 1 列命令, 其余 9 个参数;
+      - 只有 1 列时视为「仅命令列」, 参数全部留空。
+    """
+    if not text:
+        return [], False
+    norm = str(text).replace("\r\n", "\n").replace("\r", "\n")
+    lines = norm.split("\n")
+    # 仅去掉末尾的"真空行"(来自结尾换行); 全空单元格行是 "\t\t…" 不是 "",
+    # 必须保留, 否则"复制含空行 → 粘贴"会少行。
+    while lines and lines[-1] == "":
+        lines.pop()
+    if not lines:
+        return [], False
+    has_tab = any("\t" in ln for ln in lines)
+    rows = []
+    for ln in lines:
+        cells = ln.split("\t")[:10]
+        cmd = cells[0] if cells else ""
+        args = cells[1:10]
+        while len(args) < 9:
+            args.append("")
+        rows.append(ScriptData(cmd, args))
+    return rows, has_tab
+
+
+def _clip_get_text():
+    """读系统剪贴板文本; 空/非文本/剪贴板不可用 → ''。"""
+    try:
+        return root.clipboard_get() or ""
+    except Exception:
+        return ""
+
+
+def _clip_set_text(text):
+    """写系统剪贴板; 成功返回 True (失败静默, 不影响内部剪贴板逻辑)。"""
+    try:
+        root.clipboard_clear()
+        root.clipboard_append(text)
+        return True
+    except Exception:
+        return False
+
+
+def _ensure_args9(sd):
+    """确保行的 args 恰好 9 位 (兼容 args 传短列表构造的旧/外部行数据)。"""
+    if not isinstance(getattr(sd, "args", None), list):
+        sd.args = [""] * 9
+    while len(sd.args) < 9:
+        sd.args.append("")
+    return sd
+
+
+def _editor_paste_table(start_idx, start_col, text):
+    """把多行/制表符文本写入以 (start_idx, start_col) 为左上角的单元格区。
+
+    行不够时自动追加空行; 列超出第 9 列截断。返回写入的行数 (0 = 未写入)。
+    调用方负责 _push_undo() / _editor_sync_to_tree()。
+    """
+    if _edit_blocked("粘贴表格"):
+        return
+    rows, _has_tab = _tsv_to_rows(text)
+    if not rows:
+        return 0
+    if start_idx < 0:
+        start_idx = 0
+    if start_col < 0 or start_col > 9:
+        return 0
+    while len(state._editor_rows) < start_idx + len(rows):
+        state._editor_rows.append(ScriptData(""))
+    for r, src in enumerate(rows):
+        sd = _ensure_args9(state._editor_rows[start_idx + r])
+        cells = [src.cmd_type] + list(src.args)
+        for c, val in enumerate(cells):
+            col = start_col + c
+            if col > 9:
+                break
+            if col == 0:
+                sd.cmd_type = commands.strip_display_badge(val)
+            else:
+                sd.args[col - 1] = val
+    return len(rows)
+
+
 # Keyboard shortcuts for editor
 def _kb_copy(event=None):
     sel = tree.selection()
     if not sel: return
     state._editor_clipboard = []
-    for item in sel:
-        idx = tree.index(item)
-        if idx < len(state._editor_rows):
+    # 按视觉顺序(索引升序)复制: tree.selection() 返回的是"选中先后顺序", 可能乱序
+    for idx in sorted(tree.index(item) for item in sel):
+        if 0 <= idx < len(state._editor_rows):
             sd = state._editor_rows[idx]
             state._editor_clipboard.append(ScriptData(sd.cmd_type, list(sd.args)))
-    log1("已复制 {} 行".format(len(state._editor_clipboard)))
+    # 同步写入系统剪贴板 (TSV): 可直接粘贴到 Excel / 记事本, 也供自身粘贴往返
+    if _clip_set_text(_rows_to_tsv(state._editor_clipboard)):
+        log1("已复制 {} 行 (已同步系统剪贴板)".format(len(state._editor_clipboard)))
+    else:
+        log1("已复制 {} 行 (系统剪贴板不可用)".format(len(state._editor_clipboard)), "warning")
     from utils import show_toast; show_toast(root, "已复制 {} 行".format(len(state._editor_clipboard)), "info")
+
+
 def _kb_paste(event=None):
-    if not state._editor_clipboard: return
-    _push_undo()
+    """Ctrl+V: 优先粘贴系统剪贴板 (Excel 语义), 否则用内部行剪贴板。"""
+    if _edit_blocked("粘贴行"):
+        return "break"
+    src = "内部剪贴板"
+    rows = []
+    text = _clip_get_text()
+    if text.strip():
+        parsed, _has_tab = _tsv_to_rows(text)
+        if parsed:
+            rows, src = parsed, "系统剪贴板"
+    if not rows:
+        rows = [ScriptData(sd.cmd_type, list(sd.args))
+                for sd in (state._editor_clipboard or [])]
+        src = "内部剪贴板"
+    if not rows:
+        return
     sel = tree.selection()
-    insert_at = tree.index(sel[-1]) + 1 if sel else len(state._editor_rows)
-    for sd in state._editor_clipboard:
-        state._editor_rows.insert(insert_at, ScriptData(sd.cmd_type, list(sd.args)))
+    # 插到"最靠下的选中行"之后: 选中顺序可能非视觉顺序, 不能用 sel[-1]
+    indices = [tree.index(item) for item in sel]
+    insert_at = (max(indices) + 1) if indices else len(state._editor_rows)
+    _push_undo()
+    new_ids = []
+    for sd in rows:
+        row = ScriptData(sd.cmd_type, list(sd.args))
+        state._editor_rows.insert(insert_at, row)
+        new_ids.append(getattr(row, "id", None))
         insert_at += 1
     _editor_sync_to_tree()
-    log1("已粘贴 {} 行".format(len(state._editor_clipboard)))
-    from utils import show_toast; show_toast(root, "已粘贴 {} 行".format(len(state._editor_clipboard)), "info")
+    # 粘贴后选中新行并滚动到可见 (Excel 行为)
+    picked = _select_editor_rows_by_id(new_ids)
+    if picked:
+        try:
+            tree.see(picked[0])
+        except Exception:
+            pass
+    log1("已从{}粘贴 {} 行".format(src, len(rows)))
+    from utils import show_toast; show_toast(root, "已粘贴 {} 行".format(len(rows)), "info")
+
+# ── 运行期编辑守卫 (v3 §3 D9) ──
+def _edit_blocked(action="编辑"):
+    """运行中禁止改脚本 (返回 True 表示已拦截, 调用方直接 return)。
+
+    原因: 引擎按「当前行快照」执行, 运行期改动不会生效却会留下未保存状态,
+    容易出现「改了没跑 / 跑的不是看到的」。拦截时给一次 toast + 一条 warn 日志。
+    """
+    try:
+        if not state.running:
+            return False
+    except Exception:
+        return False
+    try:
+        from utils import show_toast
+        show_toast(root, "运行中不可{}，请先停止".format(action), "warning")
+    except Exception:
+        pass
+    try:
+        log1("运行中已拦截编辑操作: {}".format(action), "warning")
+    except Exception:
+        pass
+    return True
+
 
 # ── 撤销/重做系统 ──
 def _push_undo():
@@ -1836,6 +2010,8 @@ def _push_undo():
 
 def _cmd_undo(event=None):
     """撤销 (Ctrl+Z)"""
+    if _edit_blocked("撤销"):
+        return
     if not state._undo_stack:
         return
     # 保存当前状态到重做栈
@@ -1851,6 +2027,8 @@ def _cmd_undo(event=None):
 
 def _cmd_redo(event=None):
     """重做 (Ctrl+Y)"""
+    if _edit_blocked("重做"):
+        return
     if not state._redo_stack:
         return
     _push_undo()  # 保存当前状态到撤销栈
@@ -1862,23 +2040,34 @@ def _cmd_redo(event=None):
 
 # ── 增强快捷键 (P2) ──
 def _kb_duplicate_row(event=None):
-    """Ctrl+D — 复制选中行到其后。"""
+    """Ctrl+D — 复制选中行到其后。
+
+    多行时必须按索引降序插入: 升序插入会让后续 idx 指向已插入的副本,
+    导致复制错行 (例如选中 0/1 两行, 原实现会把第 0 行复制两次)。
+    """
+    if _edit_blocked("复制行"):
+        return "break"
     sel = tree.selection()
     if not sel:
         return
+    pairs = sorted(((tree.index(item), item) for item in sel), reverse=True)
+    keep_ids = [getattr(state._editor_rows[idx], "id", None)
+                for idx, _it in pairs if 0 <= idx < len(state._editor_rows)]
     _push_undo()
-    for item in sel:
-        idx = tree.index(item)
-        if idx < len(state._editor_rows):
+    for idx, _it in pairs:
+        if 0 <= idx < len(state._editor_rows):
             sd = state._editor_rows[idx]
             state._editor_rows.insert(idx + 1, ScriptData(sd.cmd_type, list(sd.args)))
     _editor_sync_to_tree()
+    _select_editor_rows_by_id(keep_ids)   # 选择保持在原行, 便于连续 Ctrl+D
     log1("已复制 {} 行".format(len(sel)))
     return "break"
 
 
 def _kb_toggle_comment(event=None):
     """Ctrl+/ — 注释/取消注释选中行 (命令类型加 '#' 前缀，引擎自动跳过)。"""
+    if _edit_blocked("注释行"):
+        return "break"
     sel = tree.selection()
     if not sel:
         return
@@ -1929,6 +2118,8 @@ def _kb_move_down(event=None):
 # Editor row operations
 def _cmd_add_row():
     """Add a new empty row to the editor."""
+    if _edit_blocked("插入行"):
+        return
     _push_undo()
     sd = ScriptData("", [""] * 9)
     state._editor_rows.append(sd)
@@ -1946,6 +2137,8 @@ def _cmd_edit_row_dialog():
     确定后写回 sd.cmd_type / sd.args (恒 9 位), 并 _push_undo() + _update_row_inplace(idx)。
     触发: 工具栏「✎ 编辑」按钮 或 树内 F2。
     """
+    if _edit_blocked("编辑行"):
+        return
     sel = tree.selection()
     if not sel:
         log1("请先选择要编辑的行", "warning")
@@ -2036,7 +2229,7 @@ def _cmd_edit_row_dialog():
     bar = tkinter.Frame(win, bg=C["bgc"])
     bar.pack(pady=10)
     tkinter.Button(bar, text="确定", command=_ok, font=FONT_BUTTON,
-        bg=C["ac"], fg="white", relief="flat", bd=1, cursor="hand2",
+        bg=C["ac"], fg=ui_theme.text_on(C["ac"]), relief="flat", bd=1, cursor="hand2",
         padx=10, pady=2).pack(side="left", padx=4)
     tkinter.Button(bar, text="取消", command=_close, font=FONT_BUTTON,
         bg=C["bgc"], fg=C["fgb"], relief="flat", bd=1, cursor="hand2",
@@ -2084,53 +2277,139 @@ def _kb_command_palette(event=None):
 
 
 def _cmd_del_row():
-    """Delete selected rows from the editor."""
-    _push_undo()
+    """Delete selected rows from the editor.
+
+    先校验选择再入撤销栈 (避免空选择时产生"空撤销 + 误标已修改"),
+    删除后把选择落到最近的相邻行 (Excel 行为)。
+    """
+    if _edit_blocked("删除行"):
+        return
     sel = tree.selection()
     if not sel:
         log1("请先选择要删除的行", "warning")
         return
     indices = sorted([tree.index(item) for item in sel], reverse=True)
+    if not indices:
+        return
+    _push_undo()
     for idx in indices:
         if 0 <= idx < len(state._editor_rows):
             state._editor_rows.pop(idx)
+    # 落点: 首个被删行原位的新行, 若无则取其上一行
+    n = len(state._editor_rows)
+    target_id = None
+    if n:
+        pos = min(indices[-1], n - 1)
+        target_id = getattr(state._editor_rows[pos], "id", None)
     _editor_sync_to_tree()
+    picked = _select_editor_rows_by_id([target_id] if target_id else [])
+    if picked:
+        try:
+            tree.see(picked[0])
+        except Exception:
+            pass
     log1("已删除 {} 行".format(len(indices)))
     from utils import show_toast; show_toast(root, "已删除 {} 行".format(len(indices)), "warning")
 
+def _select_editor_rows_by_id(rids):
+    """按稳定 id 选中行（先清空选择）。返回实际选中的 iid 列表。"""
+    out = []
+    if not rids:
+        return out
+    try:
+        children = tree.get_children()
+        id_to_iid = {}
+        for i, sd in enumerate(state._editor_rows):
+            if i < len(children):
+                id_to_iid.setdefault(getattr(sd, "id", None), children[i])
+        try:
+            tree.selection_remove(*tree.selection())
+        except Exception:
+            pass
+        for rid in rids:
+            iid = id_to_iid.get(rid)
+            if iid:
+                tree.selection_add(iid)
+                out.append(iid)
+    except Exception:
+        pass
+    try:
+        _sync_sel_bars(tree)
+    except Exception:
+        pass
+    return out
+
+
+def _swap_breakpoints(a, b):
+    """交换两个 1-based 行的断点标志（行内容移动时断点跟随）。"""
+    try:
+        pa = a in state.breakpoints
+        pb = b in state.breakpoints
+        if pa:
+            state.breakpoints.discard(a)
+        if pb:
+            state.breakpoints.discard(b)
+        if pa:
+            state.breakpoints.add(b)
+        if pb:
+            state.breakpoints.add(a)
+    except Exception:
+        pass
+
+
 def _cmd_move_up():
-    """Move selected rows up."""
-    _push_undo()
+    """上移选中行：先校验边界再入撤销栈，断点跟随内容，选中保持，并滚动到可见。"""
+    if _edit_blocked("上移行"):
+        return
     sel = tree.selection()
-    if not sel: return
-    indices = [tree.index(item) for item in sel]
-    if not indices or min(indices) == 0: return
-    for idx in sorted(indices):
-        if idx > 0:
-            state._editor_rows[idx-1], state._editor_rows[idx] = \
-                state._editor_rows[idx], state._editor_rows[idx-1]
+    if not sel:
+        return
+    indices = sorted(tree.index(item) for item in sel)
+    if not indices or indices[0] == 0:
+        return
+    moved_ids = [getattr(state._editor_rows[i], "id", None) for i in indices]
+    _push_undo()
+    for idx in indices:
+        state._editor_rows[idx-1], state._editor_rows[idx] = \
+            state._editor_rows[idx], state._editor_rows[idx-1]
+        _swap_breakpoints(idx, idx + 1)  # 0-based idx-1↔idx → 1-based idx↔idx+1
     _editor_sync_to_tree()
-    # Reselect moved rows
-    for idx in sorted(indices):
-        if idx > 0:
-            tree.selection_add(tree.get_children()[idx-1])
+    _select_editor_rows_by_id(moved_ids)
+    try:
+        children = tree.get_children()
+        if children and indices[0] - 1 < len(children):
+            tree.see(children[indices[0] - 1])
+    except Exception:
+        pass
+    _sync_idle_bg()
+
 
 def _cmd_move_down():
-    """Move selected rows down."""
-    _push_undo()
+    """下移选中行：先校验边界再入撤销栈，断点跟随内容，选中保持，并滚动到可见。"""
+    if _edit_blocked("下移行"):
+        return
     sel = tree.selection()
-    if not sel: return
-    indices = [tree.index(item) for item in sel]
-    if not indices or max(indices) >= len(state._editor_rows) - 1: return
+    if not sel:
+        return
+    indices = sorted((tree.index(item) for item in sel), reverse=True)
+    n = len(state._editor_rows)
+    if not indices or indices[0] >= n - 1:
+        return
+    moved_ids = [getattr(state._editor_rows[i], "id", None) for i in sorted(indices)]
+    _push_undo()
     for idx in sorted(indices, reverse=True):
-        if idx < len(state._editor_rows) - 1:
-            state._editor_rows[idx], state._editor_rows[idx+1] = \
-                state._editor_rows[idx+1], state._editor_rows[idx]
+        state._editor_rows[idx], state._editor_rows[idx+1] = \
+            state._editor_rows[idx+1], state._editor_rows[idx]
+        _swap_breakpoints(idx + 1, idx + 2)  # 0-based idx↔idx+1 → 1-based idx+1↔idx+2
     _editor_sync_to_tree()
-    # Reselect moved rows
-    for idx in sorted(indices, reverse=True):
-        if idx < len(state._editor_rows) - 1:
-            tree.selection_add(tree.get_children()[idx+1])
+    _select_editor_rows_by_id(moved_ids)
+    try:
+        children = tree.get_children()
+        if children and indices[0] + 1 < len(children):
+            tree.see(children[indices[0] + 1])
+    except Exception:
+        pass
+    _sync_idle_bg()
 
 
 # Editor ops
@@ -2167,6 +2446,258 @@ _CMD_COLORS = {
     "按下":"#8B5CF6","释放":"#8B5CF6","代码":"#DC2626",
 }
 
+# ── 表格列与 tag 基建 (v3 §2.1a / §4.2) ──
+# 数据列名 (displaycolumns 的顺序即表格显示顺序); #0 是树列, 不参与该序列
+_TREE_DATA_COLS = ("cmd",) + tuple("p{}".format(i) for i in range(1, 10))
+# 逻辑列号 (0=命令, 1..9=参数) ↔ 列名
+_TREE_COL_INDEX = {name: i for i, name in enumerate(_TREE_DATA_COLS)}
+
+_TREE_AUTO_COLS = True      # 开关: False 恢复「9 个参数列恒显」的旧行为
+_TREE_COLS_AFTER = None     # <Configure> 去抖句柄
+_TREE_COLS_APPLIED = None   # 当前生效的可见列元组 (幂等判定)
+_TREE_COLS_DEBOUNCE = 150   # ms
+
+_CMD_TAGS_READY = False     # 命令配色 tag 是否已全量预配置
+
+
+def _preconfig_cmd_tags():
+    """启动期一次性配置全部命令配色 tag (v3 §4.2)。
+
+    改造前每行都要 `tree.tag_has()` + 首次命中才 `tag_configure`, 是 O(n) 次
+    Tcl 往返; 这里一次性配完 20 个 tag, 运行期只按名挂 tag、不再查询。
+    """
+    global _CMD_TAGS_READY
+    if _CMD_TAGS_READY:
+        return
+    try:
+        for name, color in _CMD_COLORS.items():
+            tree.tag_configure(name, foreground=color)
+        _CMD_TAGS_READY = True
+    except Exception:
+        # tree 尚未创建等异常: 保持未就绪, 下次调用重试
+        pass
+
+
+def _row_tags(cmd_type, index):
+    """单行的 tags: 命令配色 tag (命中才挂) + 偶数行斑马纹 (v3 §4.2)。"""
+    tags = ()
+    if cmd_type in _CMD_COLORS:
+        tags = (cmd_type,)
+    if index % 2 == 0:
+        tags = tags + ("even",)
+    return tags
+
+
+def _tree_column_plan(width):
+    """按可用宽度决定可见数据列 (纯函数, 便于自测; v3 §2.1a)。
+
+    依据: 68 条命令加权平均元数 2.24, ≤2 参数占 69% —— 窄窗口没有必要
+    为极少数 5+ 参数命令保留 9 个参数列, 否则最小窗口必然横向滚动。
+    """
+    try:
+        width = int(width)
+    except Exception:
+        width = 0
+    if width < 760:
+        n = 3
+    elif width < 1024:
+        n = 6
+    else:
+        n = 9
+    return _TREE_DATA_COLS[:n + 1]
+
+
+def _tree_visible_cols():
+    """当前显示的数据列名 (与 displaycolumns 同源)。"""
+    try:
+        dc = tree.cget("displaycolumns")
+    except Exception:
+        dc = None
+    if not dc or dc == "#all" or dc == ("#all",):
+        return _TREE_DATA_COLS
+    try:
+        cols = tuple(dc)
+    except Exception:
+        return _TREE_DATA_COLS
+    return cols or _TREE_DATA_COLS
+
+
+def _tree_logical_to_display(col):
+    """逻辑列号 (0..9) → 显示列号 (#N 的 N); 该列当前隐藏时返回 None。"""
+    if col < 0 or col > 9:
+        return None
+    try:
+        return _tree_visible_cols().index(_TREE_DATA_COLS[col]) + 1
+    except ValueError:
+        return None
+
+
+def _tree_display_to_logical(display_no):
+    """显示列号 (1 起) → 逻辑列号; 越界返回 None。"""
+    cols = _tree_visible_cols()
+    if display_no < 1 or display_no > len(cols):
+        return None
+    return _TREE_COL_INDEX.get(cols[display_no - 1])
+
+
+def _apply_tree_columns(force=False):
+    """按当前宽度应用可见列 (幂等: 仅在计划变化时才动 displaycolumns)。"""
+    global _TREE_COLS_APPLIED, _TREE_COLS_AFTER
+    _TREE_COLS_AFTER = None
+    if not _TREE_AUTO_COLS:
+        return
+    try:
+        w = int(tree.winfo_width())
+    except Exception:
+        return
+    if w <= 1:      # 布局尚未落定
+        return
+    plan = _tree_column_plan(w)
+    if not force and plan == _TREE_COLS_APPLIED:
+        return
+    try:
+        tree.configure(displaycolumns=plan)
+        _TREE_COLS_APPLIED = plan
+    except Exception:
+        pass
+
+
+def _tree_columns_on_configure(event=None):
+    """<Configure> 去抖: 宽度变化后 150ms 再决定可见列 (v3 §2.1a 性能红线)。"""
+    global _TREE_COLS_AFTER
+    if not _TREE_AUTO_COLS:
+        return
+    try:
+        if _TREE_COLS_AFTER is not None:
+            root.after_cancel(_TREE_COLS_AFTER)
+    except Exception:
+        pass
+    try:
+        _TREE_COLS_AFTER = root.after(_TREE_COLS_DEBOUNCE, _apply_tree_columns)
+    except Exception:
+        _TREE_COLS_AFTER = None
+
+
+# ── 高度断点: 窗口变矮时日志面板默认折叠 (v3 §2.1 断点表 / §5.2 P1) ──
+_LOG_AUTO_COLLAPSE = True    # 开关: False 恢复「窗口再矮也不动日志面板」
+_LOG_BREAK_H = 560           # 设计 px, 实际阈值经 utils.sp() 换算 (跟随 ui_scale)
+_LOG_COLLAPSE_AFTER = None   # <Configure> 去抖句柄 (与列策略共用 150ms)
+_LOG_COLLAPSE_APPLIED = False  # 上次折叠是否由「断点」触发 (决定变高时是否自动展开)
+
+
+def _log_break_h():
+    try:
+        return utils.sp(_LOG_BREAK_H)
+    except Exception:
+        return _LOG_BREAK_H
+
+
+def _apply_log_auto_collapse(force=False):
+    """按窗口高度收起/展开日志面板 (幂等: 状态没变就不动 pane)。
+
+    语义刻意保守: 变矮 → 自动收起; 变高 → **只在「上次是断点收起」时** 自动展开,
+    这样用户手动收起的状态不会被窗口拉伸覆盖掉。
+    """
+    global _LOG_COLLAPSE_AFTER, _LOG_COLLAPSE_APPLIED
+    _LOG_COLLAPSE_AFTER = None
+    if not _LOG_AUTO_COLLAPSE:
+        return
+    try:
+        h = int(root.winfo_height())
+    except Exception:
+        return
+    if h <= 1:                  # 布局尚未落定
+        return
+    want_collapse = h < _log_break_h()
+    try:
+        visible = ui_log_dock.is_visible()
+    except Exception:
+        return
+    if want_collapse:
+        if not visible:
+            _LOG_COLLAPSE_APPLIED = True
+            return
+        ui_log_dock.set_visible(False)
+        _LOG_COLLAPSE_APPLIED = True
+        return
+    if not _LOG_COLLAPSE_APPLIED or visible:
+        return
+    ui_log_dock.set_visible(True)
+    _LOG_COLLAPSE_APPLIED = False
+
+
+def _log_breakpoint_on_configure(event=None):
+    """<Configure> 去抖: 高度变化后 150ms 再决定日志面板显隐 (单一入口)。"""
+    global _LOG_COLLAPSE_AFTER
+    if not _LOG_AUTO_COLLAPSE:
+        return
+    if event is not None and getattr(event, "widget", None) is not root:
+        return                  # 只认主窗自身尺寸, 忽略子控件冒泡
+    try:
+        if _LOG_COLLAPSE_AFTER is not None:
+            root.after_cancel(_LOG_COLLAPSE_AFTER)
+    except Exception:
+        pass
+    try:
+        _LOG_COLLAPSE_AFTER = root.after(_TREE_COLS_DEBOUNCE,
+                                        _apply_log_auto_collapse)
+    except Exception:
+        _LOG_COLLAPSE_AFTER = None
+
+
+# ── 图例按需显示 (v3 §2.1b) ──
+_LEGEND_AUTO = True         # 开关: False 恢复「图例常驻」
+_LEGEND_GROUPS = []         # [(names_tuple, frame)] 由 build 时填充
+
+
+def _legend_used_names():
+    """当前脚本用到的命令类型集合 (供图例显隐判定)。"""
+    used = set()
+    try:
+        for sd in state._editor_rows:
+            c = getattr(sd, "cmd_type", "")
+            if c:
+                used.add(c)
+    except Exception:
+        pass
+    return used
+
+
+def _sync_legend():
+    """图例按需显示: 只留命中类别; 全无命中则整条收起, 把高度还给编辑区。"""
+    if not _LEGEND_GROUPS:
+        return
+    if not _LEGEND_AUTO:
+        for _names, f in _LEGEND_GROUPS:
+            try:
+                f.pack(side="left", padx=(2, 0))
+            except Exception:
+                pass
+        try:
+            legend_frame.grid()
+        except Exception:
+            pass
+        return
+    used = _legend_used_names()
+    hit = 0
+    for names, f in _LEGEND_GROUPS:
+        on = any(n in used for n in names)
+        try:
+            if on:
+                f.pack(side="left", padx=(2, 0))
+                hit += 1
+            else:
+                f.pack_forget()
+        except Exception:
+            pass
+    try:
+        if hit:
+            legend_frame.grid()          # grid_remove 记住了原选项, 复位即还原
+        else:
+            legend_frame.grid_remove()
+    except Exception:
+        pass
+
 
 def _row_text_for(row_num, sd=None):
     """生成 #0 列文本: 两位行号 + 断点 ● + 条件 [C:...] (row_num 为 1-based)。
@@ -2195,14 +2726,9 @@ def _update_row_inplace(index, sd=None):
         if index >= len(children):
             return
         item = children[index]
-        tag = sd.cmd_type if sd.cmd_type in _CMD_COLORS else ""
-        if tag and not tree.tag_has(tag):
-            tree.tag_configure(tag, foreground=_CMD_COLORS.get(tag, C["fgb"]))
-        tags = (tag,)
-        if index % 2 == 0:
-            tags = tags + ("even",)
+        _preconfig_cmd_tags()      # 一次性预配置, 运行期不再 tag_has/tag_configure
         tree.item(item, text=_row_text_for(index + 1, sd),
-                  values=sd.to_tuple(), tags=tags)
+                  values=sd.to_tuple(), tags=_row_tags(sd.cmd_type, index))
     except Exception:
         # 就地刷新异常 → 回退全量重建 (行为安全网)
         _editor_sync_to_tree()
@@ -2211,52 +2737,70 @@ def _update_row_inplace(index, sd=None):
 def _editor_sync_to_tree():
     """全量重建编辑器树 (结构性操作: 增/删/移动/载入/undo/redo/clear)。
 
-    重建前记录选中行的稳定 id, 重建后按 id 恢复选中 —— 使重排后仍保持原选中行。
+    重建前记录选中行的“内容签名”与“稳定 id”；重建后优先按内容签名恢复
+    （对重排/删除/undo/redo 正确），签名失配时回退按 id（对原地改注释等正确）。
     """
+    prev_sel_sigs = []
     prev_sel_ids = []
     try:
         for it in tree.selection():
+            prev_sel_sigs.append(tuple(tree.item(it, "values")))
             k = tree.index(it)
             if 0 <= k < len(state._editor_rows):
                 prev_sel_ids.append(getattr(state._editor_rows[k], "id", None))
     except Exception:
+        prev_sel_sigs = []
         prev_sel_ids = []
+    _preconfig_cmd_tags()      # 20 个命令配色 tag 一次性预配置 (v3 §4.2)
     tree.delete(*tree.get_children())
+    # 单次遍历: 插入时直接带好 tags, 并顺带建立「签名/id → iid」映射供选中恢复
+    # (改造前每行 4 次 Tcl 往返: insert + tag_has + item 读 + item 写)
+    sig_to_iid = {}
+    id_to_iid = {}
     for i, sd in enumerate(state._editor_rows):
-        tag = sd.cmd_type if sd.cmd_type in _CMD_COLORS else ""
         vals = sd.to_tuple()
         item = tree.insert("", "end", text=_row_text_for(i + 1, sd),
-                           values=vals, tags=(tag,))
-        if tag and not tree.tag_has(tag):
-            tree.tag_configure(tag, foreground=_CMD_COLORS.get(tag, C["fgb"]))
-        tags = tree.item(item, "tags")
-        if i % 2 == 0:
-            tags = tags + ("even",)
-        tree.item(item, tags=tags)
-    # 按稳定 id 恢复选中 (重建后保持原选中行; 结构性操作不再丢失选中)
-    if prev_sel_ids:
+                           values=vals, tags=_row_tags(sd.cmd_type, i))
+        sig_to_iid.setdefault(vals, item)
+        rid = getattr(sd, "id", None)
+        if rid is not None:
+            id_to_iid.setdefault(rid, item)
+    # 恢复选中: 优先内容签名, 失配时回退稳定 id
+    if prev_sel_sigs or prev_sel_ids:
         try:
-            children = tree.get_children()
-            id_to_iid = {}
-            for i, sd in enumerate(state._editor_rows):
-                rid = getattr(sd, "id", None)
-                if rid is not None and i < len(children):
-                    id_to_iid.setdefault(rid, children[i])
-            for rid in prev_sel_ids:
-                iid = id_to_iid.get(rid)
+            target = []
+            for sig in prev_sel_sigs:
+                iid = sig_to_iid.get(sig)
                 if iid:
+                    target.append(iid)
+            if not target:
+                for rid in prev_sel_ids:
+                    iid = id_to_iid.get(rid)
+                    if iid:
+                        target.append(iid)
+            if target:
+                # 重建时 delete 已清空选择, 直接逐项选中即可
+                for iid in target:
                     tree.selection_add(iid)
         except Exception:
             pass
+    _sync_legend()      # 图例与行内容同源一次判定, 不额外遍历
+    _sync_empty_hint()  # 空态指引 (零行 → 显示 Ctrl+N/O/I 提示, v3 §3 D8)
 
 
 def _cmd_clear():
+    if _edit_blocked("清空脚本"):
+        return
     if messagebox.askyesno("确认","确定要清空所有行吗？"):
         _push_undo()
         state._editor_rows=[]; state.breakpoints.clear(); tree.delete(*tree.get_children())
+        _sync_legend()
+        _sync_empty_hint()
         from utils import show_toast; show_toast(root, "已清空所有行", "warning")
 
 def _cmd_new():
+    if _edit_blocked("新建脚本"):
+        return
     if state._editor_modified and state._editor_rows:
         if not messagebox.askyesno("未保存的修改", "当前脚本有未保存的修改，是否放弃？"):
             return
@@ -2264,6 +2808,8 @@ def _cmd_new():
     state._undo_stack.clear(); state._redo_stack.clear()
     state._editor_modified=False
     tree.delete(*tree.get_children())
+    _sync_legend()
+    _sync_empty_hint()
     state.has_script=False; state.filename=None; state.script_dir=None
     script_name_var.set("新建脚本（未保存）")
     edit_file_label.config(text="未保存")
@@ -2272,6 +2818,8 @@ def _cmd_new():
     _sync_idle_bg()
 
 def _cmd_open():
+    if _edit_blocked("打开脚本"):
+        return
     if state._editor_modified and state._editor_rows:
         if not messagebox.askyesno("未保存的修改", "当前脚本有未保存的修改，是否放弃？"):
             return
@@ -2287,73 +2835,138 @@ def _cmd_open():
         from utils import show_toast; show_toast(root, "已加载: {}".format(os.path.basename(fp)), "success")
         _sync_idle_bg()
 
+# 保存对话框的过滤器与「可原地覆盖」的扩展名 (其它扩展名一律转「另存为」,
+# 避免把 xlwt 的 BIFF 内容写进 .xlsx 之类不匹配的容器)
+_SAVE_FILETYPES = [('Excel 文件', '*.xls'), ('ACRPA 脚本', '*.acrpas')]
+_SAVE_INPLACE_EXTS = (".xls", ".acrpas")
+
+
+def _script_save_dir():
+    """保存对话框的默认目录: 当前脚本所在目录 > 脚本目录 > 程序根目录。"""
+    for cand in (getattr(state, "filename", None), getattr(state, "script_dir", None)):
+        if not cand:
+            continue
+        try:
+            d = cand if os.path.isdir(cand) else os.path.dirname(os.path.abspath(cand))
+        except Exception:
+            continue
+        if d and os.path.isdir(d):
+            return d
+    return APP_ROOT
+
+
+def _persist_script(fp, action="保存"):
+    """把编辑器内容原子写盘, 并同步 state/标题/最近列表/版本快照。
+
+    ``action`` 只影响日志与提示文案 ("保存" / "另存为")。
+    返回 True 表示已成功落盘 (state.filename 随之切换为 fp)。
+    """
+    old_path = str(getattr(state, "filename", "") or "")
+    try:
+        # 统一 I/O: .acrpas → JSON; 其它 → xls(xlwt); 均经 utils.atomic_save 原子写
+        script_io.save_script(
+            fp, state._editor_rows,
+            meta={"name": os.path.splitext(os.path.basename(fp))[0]})
+    except ImportError:
+        messagebox.showerror("错误", "需要安装 xlwt: pip install xlwt")
+        return False
+    except Exception as e:
+        # Windows 上目标被 Excel/WPS 打开时 os.replace 会 PermissionError,
+        # 原子写保证原文件未半写坏 —— 明确告知用户「关掉它再存」。
+        messagebox.showerror("{}失败".format(action),
+            "{}\n(原子写入失败, 原文件未受影响)\n\n"
+            "若该文件正被 Excel / WPS 打开，请关闭后重试。".format(e))
+        try:
+            from utils import show_toast
+            show_toast(root, "{}失败: {}".format(action, e), "error")
+        except Exception:
+            pass
+        return False
+
+    state.filename = fp
+    state.has_script = True
+    state.script_dir = os.path.dirname(fp)
+    state._editor_modified = False
+    try:
+        script_name_var.set(os.path.basename(fp))
+        edit_file_label.config(text=os.path.basename(fp))
+    except Exception:
+        pass
+    log1("脚本{}: {}".format("已保存" if action == "保存" else "另存为", fp))
+    # ── 版本快照: 文件成功落盘后记录, 保证版本库与磁盘内容一致 ──
+    try:
+        from version_manager import get_version_manager
+        get_version_manager().save_version(fp, state._editor_rows, action)
+    except Exception as e:
+        log1("版本快照失败: {}".format(e), "error")
+    if os.path.normcase(old_path) != os.path.normcase(fp):
+        # 只有目标文件变化 (新建/另存为) 才写最近列表, 避免每次 Ctrl+S 都刷 recent.json
+        try:
+            _add_recent_script(fp)
+        except Exception:
+            pass
+    try:
+        from utils import show_toast
+        show_toast(root, "✓ 已保存: {} ({} 行)".format(
+            os.path.basename(fp), len(state._editor_rows)), "success")
+    except Exception:
+        pass
+    _sync_idle_bg()
+    return True
+
+
+def _commit_inline_edit():
+    """提交进行中的单元格内联编辑。
+
+    内联编辑平时靠 <FocusOut> 落库; Ctrl+S 时焦点仍在编辑框内 → 不会触发 FocusOut,
+    若不显式提交, 保存的就是编辑前的旧值 (用户看到的却是新值)。
+    """
+    fn = _inline_commit_fn
+    if fn is None or _inline_edit_widget is None:
+        return
+    try:
+        fn()          # 走 _commit 同一提交路径 (含撤销快照)
+        root.update_idletasks()
+    except Exception:
+        pass
+
+
 def _cmd_save():
-    """Save current script to disk (.acrpas → JSON, 其它 → .xls)."""
+    """保存 (Ctrl+S): 已有目标文件 → 原地覆盖不弹框; 尚未落盘 → 转为「另存为」。"""
+    _commit_inline_edit()
     if not state._editor_rows:
         messagebox.showwarning("提示", "脚本为空，无法保存")
         return
+    cur = str(getattr(state, "filename", "") or "").strip()
+    if cur and os.path.splitext(cur)[1].lower() in _SAVE_INPLACE_EXTS:
+        _persist_script(cur, "保存")
+        return
+    _cmd_save_as()
 
-    fp=filedialog.asksaveasfilename(title="保存脚本",defaultextension=".xls",
-        filetypes=[('Excel 文件','*.xls'), ('ACRPA 脚本','*.acrpas')],initialdir=APP_ROOT)
-    if fp:
-        try:
-            # 统一 I/O: .acrpas → JSON; 其它 → xls(xlwt); 均经 utils.atomic_save 原子写
-            script_io.save_script(
-                fp, state._editor_rows,
-                meta={"name": os.path.splitext(os.path.basename(fp))[0]})
-            state.filename=fp; state.has_script=True
-            state._editor_modified=False
-            script_name_var.set(os.path.basename(fp))
-            edit_file_label.config(text=os.path.basename(fp))
-            log1("脚本已保存: {}".format(fp))
-            # ── 版本快照: 文件成功落盘后记录, 保证版本库与磁盘内容一致 ──
-            try:
-                from version_manager import get_version_manager
-                vm = get_version_manager()
-                vm.save_version(fp, state._editor_rows, "保存")
-            except Exception as e:
-                log1("版本快照失败: {}".format(e), "error")
-            from utils import show_toast
-            show_toast(root, "✓ 脚本已保存 ({} 行)".format(len(state._editor_rows)), "success")
-            _sync_idle_bg()
-        except ImportError:
-            messagebox.showerror("错误","需要安装 xlwt: pip install xlwt")
-        except Exception as e:
-            messagebox.showerror("保存失败","{}\n(原子写入失败, 原文件未受影响)".format(e))
-            from utils import show_toast
-            show_toast(root, "保存失败: {}".format(e), "error")
 
 def _cmd_save_as():
-    """另存为 — 保存脚本副本到新文件（.acrpas → JSON, 其它 → .xls）"""
+    """另存为 (Ctrl+Shift+S): 总是询问新路径, 成功后该路径成为当前文件。"""
+    _commit_inline_edit()
     if not state._editor_rows:
         messagebox.showwarning("提示", "脚本为空，无法保存")
         return
-    fp=filedialog.asksaveasfilename(title="另存为",defaultextension=".xls",
-        filetypes=[('Excel 文件','*.xls'), ('ACRPA 脚本','*.acrpas')],initialdir=APP_ROOT)
-    if fp:
-        try:
-            # 统一 I/O: .acrpas → JSON; 其它 → xls(xlwt); 均经 utils.atomic_save 原子写
-            script_io.save_script(
-                fp, state._editor_rows,
-                meta={"name": os.path.splitext(os.path.basename(fp))[0]})
-            state.filename=fp; state.has_script=True
-            state._editor_modified=False
-            script_name_var.set(os.path.basename(fp))
-            edit_file_label.config(text=os.path.basename(fp))
-            log1("脚本另存为: {}".format(fp))
-            # ── 版本快照: 文件成功落盘后记录, 保证版本库与磁盘内容一致 ──
-            try:
-                from version_manager import get_version_manager
-                get_version_manager().save_version(fp, state._editor_rows, "另存为")
-            except Exception as e:
-                log1("版本快照失败: {}".format(e), "error")
-            from utils import show_toast
-            show_toast(root, "已另存为: {}".format(os.path.basename(fp)), "success")
-            _sync_idle_bg()
-        except ImportError:
-            messagebox.showerror("错误","需要安装 xlwt: pip install xlwt")
-        except Exception as e:
-            messagebox.showerror("另存为失败","{}\n(原子写入失败, 原文件未受影响)".format(e))
+    cur = str(getattr(state, "filename", "") or "").strip()
+    if cur and os.path.splitext(cur)[1].lower() in _SAVE_INPLACE_EXTS:
+        initial = os.path.basename(cur)          # 默认沿用当前文件名 (改个名即可另存)
+    else:
+        # 未落盘 (新建/模板) → 用脚本名或「未命名脚本」预填
+        initial = "{}.xls".format(
+            os.path.splitext(os.path.basename(cur))[0] if cur else "未命名脚本")
+    fp = filedialog.asksaveasfilename(
+        title="另存为", defaultextension=".xls", filetypes=_SAVE_FILETYPES,
+        initialdir=_script_save_dir(), initialfile=initial)
+    if not fp:
+        return
+    # 扩展名容错: 用户手输 "abc" → 补 .xls; 大小写归一
+    if not os.path.splitext(fp)[1]:
+        fp += ".xls"
+    _persist_script(fp, "另存为")
+
 
 # ── 版本历史管理 ──
 # 版本历史对话框已移至 dialogs.open_version_history
@@ -2397,7 +3010,7 @@ def _ask_insert_mode(n_existing):
                           ("替换全部", C["dg"], "replace"),
                           ("取消", C["bgc"], None)):
         tkinter.Button(bar, text=_txt, font=FONT_BUTTON, bg=_bg,
-            fg=("white" if _bg != C["bgc"] else C["fgb"]), relief="flat", bd=1,
+            fg=ui_theme.text_on(_bg), relief="flat", bd=1,
             padx=10, pady=3, cursor="hand2",
             command=lambda v=_v: _pick(v)).pack(side="left", padx=4)
     win.update_idletasks()
@@ -2498,10 +3111,16 @@ def _manage_snippet_dirs(on_changed=None):
         if s:
             try: os.startfile(lb.get(s[0]))
             except Exception: pass
-    tkinter.Button(bar, text="添加目录…", font=FONT_BUTTON, bg=C["ac"], fg="white",
-        relief="flat", bd=1, padx=10, pady=3, cursor="hand2", command=_add).pack(side="left", padx=(0, 6))
-    tkinter.Button(bar, text="移除选中", font=FONT_BUTTON, bg=C["dg"], fg="white",
-        relief="flat", bd=1, padx=10, pady=3, cursor="hand2", command=_remove).pack(side="left", padx=(0, 6))
+    _add_dir_btn = tkinter.Button(bar, text="添加目录…", font=FONT_BUTTON, bg=C["ac"],
+        fg=ui_theme.text_on(C["ac"]),
+        relief="flat", bd=1, padx=10, pady=3, cursor="hand2", command=_add)
+    ui_theme.set_role(_add_dir_btn, "ac")
+    _add_dir_btn.pack(side="left", padx=(0, 6))
+    _remove_dir_btn = tkinter.Button(bar, text="移除选中", font=FONT_BUTTON, bg=C["dg"],
+        fg=ui_theme.text_on(C["dg"]),
+        relief="flat", bd=1, padx=10, pady=3, cursor="hand2", command=_remove)
+    ui_theme.set_role(_remove_dir_btn, "dg")
+    _remove_dir_btn.pack(side="left", padx=(0, 6))
     tkinter.Button(bar, text="打开目录", font=FONT_BUTTON, bg=C["bgc"], fg=C["fgb"],
         relief="flat", bd=1, padx=10, pady=3, cursor="hand2", command=_open).pack(side="left")
     tkinter.Button(bar, text="关闭", font=FONT_BUTTON, bg=C["bgc"], fg=C["fgb"],
@@ -2513,6 +3132,8 @@ def _cmd_snippet():
 
     片段来源: 内置(templates.py) + 用户自定义(JSON) + 库目录 xls (默认 root/template)。
     """
+    if _edit_blocked("插入片段"):
+        return
     import snippets
     dlg = tkinter.Toplevel(root); dlg.title("片段库")
     utils.place_dialog(dlg, 840, 560); dlg.transient(root); dlg.configure(bg=C["bgc"])
@@ -2549,7 +3170,8 @@ def _cmd_snippet():
     prev_txt = tkinter.Text(pv, font=FONT_LOG, bg=C["logbg"], fg=C["logfg"], wrap="word",
         relief="flat", bd=0, padx=8, pady=6, state="disabled")
     prev_txt.grid(row=0, column=0, sticky="nsew")
-    psb = tkinter.Scrollbar(pv, orient="vertical", command=prev_txt.yview, width=8,
+    psb = tkinter.Scrollbar(pv, orient="vertical", command=prev_txt.yview,
+        width=utils.sp("sb_w"),
         relief="flat", bg=C["bd"], troughcolor=C["logbg"])
     psb.grid(row=0, column=1, sticky="ns"); prev_txt.config(yscrollcommand=psb.set)
     prev_txt.tag_configure("title", font=FONT_TITLE, foreground=C["fgt"])
@@ -2649,11 +3271,17 @@ def _cmd_snippet():
     btm = tkinter.Frame(dlg, bg=C["bgc"]); btm.grid(row=2, column=0, sticky="ew", padx=10, pady=(0, 8))
     tkinter.Label(btm, text="选中后点「插入」；占位符需改为实际值", font=FONT_SMALL,
         bg=C["bgc"], fg=C["fgm"]).pack(side="left")
-    tkinter.Button(btm, text="插入", font=FONT_BUTTON, bg=C["sc"], fg="white", relief="flat",
-        bd=1, padx=12, pady=3, cursor="hand2", command=_do_insert).pack(side="right", padx=(6, 0))
-    tkinter.Button(btm, text="存为片段", font=FONT_BUTTON, bg=C["ac"], fg="white", relief="flat",
+    _snip_insert_btn = tkinter.Button(btm, text="插入", font=FONT_BUTTON, bg=C["sc"],
+        fg=ui_theme.text_on(C["sc"]), relief="flat",
+        bd=1, padx=12, pady=3, cursor="hand2", command=_do_insert)
+    ui_theme.set_role(_snip_insert_btn, "sc")
+    _snip_insert_btn.pack(side="right", padx=(6, 0))
+    _snip_save_btn = tkinter.Button(btm, text="存为片段", font=FONT_BUTTON, bg=C["ac"],
+        fg=ui_theme.text_on(C["ac"]), relief="flat",
         bd=1, padx=10, pady=3, cursor="hand2",
-        command=lambda: _save_selection_as_snippet(default_category=_cur_cat())).pack(side="right", padx=(6, 0))
+        command=lambda: _save_selection_as_snippet(default_category=_cur_cat()))
+    ui_theme.set_role(_snip_save_btn, "ac")
+    _snip_save_btn.pack(side="right", padx=(6, 0))
     tkinter.Button(btm, text="管理目录…", font=FONT_BUTTON, bg=C["bgc"], fg=C["fgb"], relief="flat",
         bd=1, padx=10, pady=3, cursor="hand2", command=_do_manage).pack(side="right", padx=(6, 0))
 
@@ -2668,6 +3296,8 @@ def _cmd_snippet():
 
 def _cmd_template():
     """[已弃用] 旧「模板」对话框; 由 _cmd_snippet 取代 (保留兼容, 不再绑定按钮)。"""
+    if _edit_blocked("套用模板"):
+        return
     dlg=tkinter.Toplevel(root); dlg.title("选择模板"); utils.place_dialog(dlg, 540, 520)
     dlg.transient(root); dlg.grab_set(); dlg.configure(bg=C["bgc"])
     _set_window_icon(dlg)
@@ -2689,7 +3319,9 @@ def _cmd_template():
     top_outer.columnconfigure(0, weight=1)
 
     top_canvas = tkinter.Canvas(top_outer, bg=C["bgc"], highlightthickness=0, bd=0, height=40)
-    top_hscroll = tkinter.Scrollbar(top_outer, orient="horizontal", command=top_canvas.xview, width=6)
+    top_hscroll = tkinter.Scrollbar(top_outer, orient="horizontal",
+                                    command=top_canvas.xview,
+                                    width=utils.sp("sb_w_thin"))
     top_inner = tkinter.Frame(top_canvas, bg=C["bgc"])
 
     top_inner.bind("<Configure>", lambda e: top_canvas.configure(scrollregion=top_canvas.bbox("all")))
@@ -2713,7 +3345,8 @@ def _cmd_template():
     preview_txt = tkinter.Text(bottom_frame, font=FONT_LOG, bg=C["logbg"], fg=C["logfg"],
         wrap="word", relief="flat", bd=0, padx=8, pady=6, state="disabled")
     preview_txt.grid(row=0, column=0, sticky="nsew")
-    preview_scroll = tkinter.Scrollbar(bottom_frame, orient="vertical", command=preview_txt.yview, width=8,
+    preview_scroll = tkinter.Scrollbar(bottom_frame, orient="vertical",
+        command=preview_txt.yview, width=utils.sp("sb_w"),
         relief="flat", bg=C["bd"], troughcolor=C["logbg"])
     preview_scroll.grid(row=0, column=1, sticky="ns")
     preview_txt.config(yscrollcommand=preview_scroll.set)
@@ -2741,9 +3374,10 @@ def _cmd_template():
     template_names = list_templates()
     for tname in template_names:
         btn = tkinter.Button(top_inner, text=tname, font=FONT_BODY,
-            bg=C["ac"], fg="white", relief="raised", bd=1, cursor="hand2",
-            padx=8, pady=2, activebackground=C["ach"],
+            bg=C["ac"], fg=ui_theme.text_on(C["ac"]), relief="raised", bd=1,
+            cursor="hand2", padx=8, pady=2, activebackground=C["ach"],
             command=lambda n=tname: (_load_template_lazy(n), dlg.destroy()))
+        ui_theme.set_role(btn, "ac")
         btn.pack(side="left", padx=2, pady=2)
         btn.bind("<Enter>", lambda e, n=tname: _show_preview(n))
 
@@ -2777,91 +3411,298 @@ def _load_template_lazy(name):
         log1("已加载模板: {} ({} 行)".format(name,len(rows)))
 # ── 内联编辑 (模块级定义, 供 tree 双击事件使用) ──
 _inline_edit_widget = None
+_inline_commit_fn = None   # 进行中内联编辑的提交函数 (保存/运行前主动落库用)
 
-def _edit_cell():
-    """内联编辑：双击单元格直接在原位编辑"""
-    global _inline_edit_widget
-    if _inline_edit_widget:
-        _inline_edit_widget.destroy()
+def _editor_cell_step(row, col, dr, dc):
+    """Excel 式单元格步进：返回 (row, col) 或 None（到边界即停）。
+
+    dc=±1 在列间移动并跨行折返（末列→下一行首列；首列→上一行末列）；
+    dr=±1 仅在行间移动（保持同列，到边界即停）。
+    """
+    n = len(state._editor_rows)
+    r = row + dr
+    c = col + dc
+    if dc == 1 and c > 9:
+        c = 0
+        r += 1
+    elif dc == -1 and c < 0:
+        c = 9
+        r -= 1
+    if r < 0 or r >= n:
+        return None
+    return (r, c)
+
+
+def _editor_visible_logical_cols():
+    """当前可见列的「逻辑列号」升序序列 (0=命令, 1..9=参数)。"""
+    seq = []
+    for col in range(10):
+        if _tree_logical_to_display(col) is not None:
+            seq.append(col)
+    return seq or list(range(10))
+
+
+def _editor_cell_step_visible(row, col, dr, dc):
+    """同 `_editor_cell_step`, 但 Tab/Shift+Tab 跳过被隐藏的参数列 (Excel 隐藏列语义)。
+
+    列全显时行为与 `_editor_cell_step` 完全一致 (供既有回归测试继续有效)。
+    """
+    seq = _editor_visible_logical_cols()
+    if len(seq) >= 10:
+        return _editor_cell_step(row, col, dr, dc)
+    n = len(state._editor_rows)
+    if dc == 0:
+        return _editor_cell_step(row, col, dr, dc)
+    if col not in seq:
+        col = seq[0] if dc > 0 else seq[-1]
+    i = seq.index(col)
+    j = i + dc
+    if 0 <= j < len(seq):
+        return (row, seq[j])
+    # 到可见列端点 → 折行
+    r = row + (1 if dc > 0 else -1)
+    if r < 0 or r >= n:
+        return None
+    return (r, seq[0] if dc > 0 else seq[-1])
+
+
+def _editor_open_cell(idx, col):
+    """在 (idx, col) 原位打开内联编辑器（col: 0=命令列, 1..9=参数列）。"""
+    global _inline_edit_widget, _inline_commit_fn
+    if _edit_blocked("编辑单元格"):
+        return
+    if _inline_edit_widget is not None:
+        # 先提交上一处进行中的编辑（避免切换单元格时丢失已输入内容）
+        fn = _inline_commit_fn
+        try:
+            if fn:
+                fn()
+            else:
+                _inline_edit_widget.destroy()
+        except Exception:
+            try:
+                _inline_edit_widget.destroy()
+            except Exception:
+                pass
         _inline_edit_widget = None
+    _inline_commit_fn = None
 
-    sel = tree.selection()
-    if not sel: return
-    col = int(tree.identify_column(tree.winfo_pointerx()-tree.winfo_rootx()).replace("#","")) - 1
-    idx = tree.index(sel[0])
-    if idx >= len(state._editor_rows) or col < 0: return
-    sd = state._editor_rows[idx]
-    item = sel[0]
-
+    if idx < 0 or idx >= len(state._editor_rows) or col < 0 or col > 9:
+        return
+    sd = _ensure_args9(state._editor_rows[idx])
+    # 列可能被列策略隐藏 (v3 §2.1a): bbox 的 column 参数是「显示列号」, 需先映射
+    disp = _tree_logical_to_display(col)
+    if disp is None:
+        return
     try:
-        bbox = tree.bbox(item, column="#{}".format(col + 1))
-        if not bbox: return
-        x, y, w, h = bbox
+        item = tree.get_children()[idx]
+        bbox = tree.bbox(item, column="#{}".format(disp))
+        if not bbox:
+            return
+        x0, y0, w0, h0 = bbox
     except Exception:
         return
 
     cur_val = sd.cmd_type if col == 0 else sd.args[col - 1]
+    # 统一用编辑区字体 (与表格字号/缩放一致, 修复字号错位的显示 bug)
+    _font = globals().get("_editor_font") or FONT_BODY
 
     if col == 0:
-        _inline_edit_widget = ttk.Combobox(tree_frame, values=commands.display_names(),
-            state="readonly", font=FONT_BODY)
-        _inline_edit_widget.set(cur_val)
+        w = ttk.Combobox(tree_frame, values=commands.display_names(),
+            state="readonly", font=_font)
+        try:
+            w.set(cur_val)
+        except Exception:
+            pass
     else:
-        _inline_edit_widget = tkinter.Entry(tree_frame, font=FONT_BODY,
+        w = tkinter.Entry(tree_frame, font=_font,
             relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"],
             insertbackground=C["fgt"])
-        _inline_edit_widget.insert(0, cur_val)
-        _inline_edit_widget.select_range(0, "end")
+        w.insert(0, cur_val)
+        w.select_range(0, "end")
 
-    _inline_edit_widget.place(x=x, y=y, width=w + 4, height=h + 2)
-    _inline_edit_widget.focus_set()
+    # 相对 tree 左上角的偏移 (tree 在 tree_frame 中, 用 winfo_x/y 兜底修正显示位置)
+    try:
+        ox, oy = tree.winfo_x(), tree.winfo_y()
+    except Exception:
+        ox = oy = 0
+    w.place(x=x0 + ox, y=y0 + oy, width=w0 + 4, height=h0 + 2)
+    w.focus_set()
+    _inline_edit_widget = w
     _sync_idle_bg()   # 进入内联编辑 = 已退出待机态 (背景层让位给真实表格)
 
-    def _save_inline(event=None):
-        global _inline_edit_widget
-        w = _inline_edit_widget
-        # 防止竞态: 仅当全局引用与事件源一致时才保存
-        if w is None or (event and event.widget is not w):
-            return
+    def _commit(move=None):
+        global _inline_edit_widget, _inline_commit_fn
+        cur = _inline_edit_widget
+        if cur is None:
+            return "break"
+        # 先解除全局引用, 防止 destroy 触发的 FocusOut 二次提交
+        _inline_edit_widget = None
+        _inline_commit_fn = None
         _push_undo()  # 内联编辑前保存撤销快照
-        new_val = w.get()
+        new_val = cur.get()
         if col == 0:
             sd.cmd_type = commands.strip_display_badge(new_val)
         else:
-            sd.args[col - 1] = new_val
+            # args 可能来自短列表构造的行 (长度 < 9), 先补齐再按下标写入
+            _ensure_args9(sd).args[col - 1] = new_val
         # 单行数据变更: 就地刷新该行, 不再全量重建
         _update_row_inplace(idx)
-        w.destroy()
-        _inline_edit_widget = None
+        try:
+            cur.destroy()
+        except Exception:
+            pass
         _sync_idle_bg()
+        if move:
+            # 用可见列步进: 隐藏的参数列不参与 Tab 循环 (v3 §2.1a)
+            nxt = _editor_cell_step_visible(idx, col, move[0], move[1])
+            if nxt is not None:
+                try:
+                    children = tree.get_children()
+                    if nxt[0] < len(children):
+                        tree.selection_set(children[nxt[0]])
+                        tree.focus(children[nxt[0]])
+                        tree.see(children[nxt[0]])
+                        _sync_sel_bars(tree)
+                        # 确保目标行已滚动到可视区后再取 bbox（否则 bbox 为空无法开编辑）
+                        tree.update_idletasks()
+                except Exception:
+                    pass
+                _editor_open_cell(nxt[0], nxt[1])
+        return "break"
 
-    def _cancel_inline(event=None):
-        global _inline_edit_widget
-        w = _inline_edit_widget
-        if w and (not event or event.widget is w):
-            w.destroy()
+    def _cancel(event=None):
+        global _inline_edit_widget, _inline_commit_fn
+        cur = _inline_edit_widget
+        if cur is not None:
             _inline_edit_widget = None
+            _inline_commit_fn = None
+            try:
+                cur.destroy()
+            except Exception:
+                pass
 
-    _inline_edit_widget.bind("<Return>", _save_inline)
-    _inline_edit_widget.bind("<Escape>", _cancel_inline)
-
-    def _on_focus_out(event, w=_inline_edit_widget):
+    def _on_focus_out(event):
         """焦点移出内联编辑控件时保存。
 
         处理 ttk.Combobox 下拉框 (popdown) 销毁后 focus_get() 抛 KeyError 的异常:
         该时刻不保存, 等待下一次焦点移出时保存, 避免崩溃。
         """
-        if not w or event.widget is not w:
+        cur = _inline_edit_widget
+        if cur is None or event.widget is not cur:
             return
         try:
             fw = root.focus_get()
         except Exception:
             # popdown 已销毁导致 focus_get 失败 → 本次不保存, 防崩溃
             return
-        if fw is None or str(fw) != str(w):
-            _save_inline(event)
+        if fw is None or str(fw) != str(cur):
+            _commit()
 
-    _inline_edit_widget.bind("<FocusOut>", _on_focus_out)
+    w.bind("<Return>", lambda e: _commit(move=(1, 0)))       # Enter → 提交并下移
+    w.bind("<KP_Enter>", lambda e: _commit(move=(1, 0)))
+    w.bind("<Escape>", _cancel)                              # Esc → 取消编辑
+    w.bind("<FocusOut>", _on_focus_out)                      # 失焦 → 提交
+    w.bind("<Tab>", lambda e: _commit(move=(0, 1)))          # Tab → 提交并右移
+    w.bind("<Shift-Tab>", lambda e: _commit(move=(0, -1)))   # Shift+Tab → 提交并左移
+    if col != 0:
+        # 参数列（Entry）：上下方向键提交并换行（Excel 式）；命令列用下拉框，
+        # 上下键留给下拉选择，不绑定。
+        w.bind("<Up>", lambda e: _commit(move=(-1, 0)))
+        w.bind("<Down>", lambda e: _commit(move=(1, 0)))
+
+    def _on_copy(event=None):
+        """Ctrl+C：无选区时复制整个单元格值（Excel 语义）。"""
+        try:
+            if w.selection_present():
+                return None          # 有选区 → 走默认"复制选中文本"
+        except Exception:
+            pass
+        val = ""
+        try:
+            val = w.get()
+        except Exception:
+            pass
+        if val:
+            _clip_set_text(val)
+        return "break"
+
+    def _on_paste(event=None):
+        """Ctrl+V：单值走默认插入；多行/制表符文本按单元格区拆行拆列写入。"""
+        text = _clip_get_text()
+        if not text:
+            return "break"
+        if ("\n" not in text) and ("\r" not in text) and ("\t" not in text):
+            return None              # 单值 → 交给控件默认粘贴
+        _commit()                    # 先提交进行中的输入，避免内容丢失
+        _push_undo()
+        n = _editor_paste_table(idx, col, text)
+        if not n:
+            return "break"
+        new_ids = [getattr(sd, "id", None)
+                   for sd in state._editor_rows[idx:idx + n]]
+        _editor_sync_to_tree()
+        picked = _select_editor_rows_by_id(new_ids)
+        if picked:
+            try:
+                tree.see(picked[0])
+            except Exception:
+                pass
+        try:
+            log1("已拆分粘贴 {} 行 (起点 行{} 列{})".format(n, idx + 1, col + 1))
+            from utils import show_toast
+            show_toast(root, "已拆分粘贴 {} 行".format(n), "info")
+        except Exception:
+            pass
+        return "break"
+
+    w.bind("<Control-c>", _on_copy)
+    w.bind("<Control-C>", _on_copy)
+    w.bind("<Control-v>", _on_paste)
+    w.bind("<Control-V>", _on_paste)
+    w.bind("<Shift-Insert>", _on_paste)
+    _inline_commit_fn = lambda: _commit()                    # 供 Ctrl+S / 运行前主动提交
+
+
+def _edit_cell(event=None):
+    """内联编辑入口：双击单元格原位编辑（借鉴 Excel）。
+
+    优先用事件坐标定位行与列（不依赖“已选中行/全局指针”，避免错行错列）；
+    无事件时退回当前选中行的第 0 列（命令）。
+    """
+    if _edit_blocked("编辑单元格"):
+        return
+    global _inline_edit_widget, _inline_commit_fn
+    idx = -1
+    col = 0
+    if event is not None:
+        try:
+            region = tree.identify_region(event.x, event.y)
+            if region not in ("cell", "tree"):
+                return  # 表头/分隔线等区域不进入编辑
+            row_id = tree.identify_row(event.y)
+            if not row_id:
+                return  # 点在空白处
+            idx = tree.index(row_id)
+            # identify_column 返回的是「显示列号」; 列策略可能隐藏了尾部参数列,
+            # 必须先映射回逻辑列号, 否则窄窗口双击会编辑到错误的列 (v3 §2.1a)
+            disp_no = int(str(tree.identify_column(event.x)).replace("#", ""))
+            if disp_no <= 0:
+                return  # #0 行号列不可编辑
+            col = _tree_display_to_logical(disp_no)
+            if col is None:
+                return  # 越界列不可编辑
+        except Exception:
+            idx = -1
+    if idx < 0:
+        sel = tree.selection()
+        if not sel:
+            return
+        idx = tree.index(sel[0])
+        col = 0
+    if idx < 0 or idx >= len(state._editor_rows):
+        return
+    _editor_open_cell(idx, col)
 
 # === Toolbar buttons
 # === Toolbar buttons (grouped with accent strips) - Deferred initialization ──
@@ -2879,7 +3720,7 @@ def _toggle_debug_mode():
     """Toggle debug mode on/off"""
     state.debug_mode = not state.debug_mode
     if state.debug_mode:
-        btn_debug_mode.config(bg=C["ac"], fg="white")
+        btn_debug_mode.config(bg=C["ac"], fg=ui_theme.text_on(C["ac"]))
         # 显式登记语义角色 (换肤时按角色回填; 关闭时清除回中性)
         ui_theme.set_role(btn_debug_mode, "ac")
         log1("调试模式已开启", "info")
@@ -2899,7 +3740,7 @@ def _toggle_step_mode():
     
     state.step_mode = not state.step_mode
     if state.step_mode:
-        btn_step_mode.config(bg=C["ac"], fg="white")
+        btn_step_mode.config(bg=C["ac"], fg=ui_theme.text_on(C["ac"]))
         ui_theme.set_role(btn_step_mode, "ac")
         log1("单步执行模式已开启 - 每执行一行将暂停", "info")
         if state.running:
@@ -2930,9 +3771,12 @@ def _show_variables_window():
     
     # Title bar
     title_frame = tkinter.Frame(win, bg=C["ac"])
+    ui_theme.set_role(title_frame, "ac")
     title_frame.pack(fill="x")
-    tkinter.Label(title_frame, text="[V] 变量监视器", font=FONT_TITLE, 
-        fg="white", bg=C["ac"]).pack(pady=5)
+    _var_title_lbl = tkinter.Label(title_frame, text="[V] 变量监视器", font=FONT_TITLE,
+        fg=ui_theme.text_on(C["ac"]), bg=C["ac"])
+    ui_theme.set_role(_var_title_lbl, "ac")
+    _var_title_lbl.pack(pady=5)
     
     # Notebook for tabs (Variables | Call Stack)
     notebook = ttk.Notebook(win)
@@ -2949,6 +3793,8 @@ def _show_variables_window():
     
     # Create treeview for variables
     var_tree = ttk.Treeview(list_frame, columns=("name", "value"), show="headings")
+    # 供 _refresh_theme 重配 tag 色 (窗口存在时)
+    _show_variables_window._tree = var_tree
     var_tree.heading("name", text="变量名")
     # §4.5 show="headings" 降级: 选中整行 acl 底 + 加粗
     _bind_sel_bold(var_tree); _bind_row_hover(var_tree)
@@ -2988,7 +3834,8 @@ def _show_variables_window():
         for var_name, var_value in state_vars.items():
             var_tree.insert("", "end", values=(var_name, str(var_value)), tags=("state",))
         
-        var_tree.tag_configure("state", foreground="#7C3AED")
+        # 主题化: 硬编码紫 → 语义键 ai (换肤由 _refresh_theme 重配)
+        var_tree.tag_configure("state", foreground=themed("ai"))
     
     def add_var():
         """Add a new variable"""
@@ -3022,13 +3869,19 @@ def _show_variables_window():
                     refresh_vars()
             add_win.destroy()
         
-        tkinter.Button(add_win, text="确定", command=confirm_add, 
-            bg=C["ac"], fg="white", font=FONT_BUTTON).pack(pady=10)
-    
-    tkinter.Button(btn_frame, text="刷新", command=refresh_vars,
-        bg=C["ac"], fg="white", font=FONT_SMALL).pack(side="left", padx=2)
-    tkinter.Button(btn_frame, text="+ 添加", command=add_var,
-        bg=C["sc"], fg="white", font=FONT_SMALL).pack(side="left", padx=2)
+        _add_ok_btn = tkinter.Button(add_win, text="确定", command=confirm_add,
+            bg=C["ac"], fg=ui_theme.text_on(C["ac"]), font=FONT_BUTTON)
+        ui_theme.set_role(_add_ok_btn, "ac")
+        _add_ok_btn.pack(pady=10)
+
+    _var_refresh_btn = tkinter.Button(btn_frame, text="刷新", command=refresh_vars,
+        bg=C["ac"], fg=ui_theme.text_on(C["ac"]), font=FONT_SMALL)
+    ui_theme.set_role(_var_refresh_btn, "ac")
+    _var_refresh_btn.pack(side="left", padx=2)
+    _var_add_btn = tkinter.Button(btn_frame, text="+ 添加", command=add_var,
+        bg=C["sc"], fg=ui_theme.text_on(C["sc"]), font=FONT_SMALL)
+    ui_theme.set_role(_var_add_btn, "sc")
+    _var_add_btn.pack(side="left", padx=2)
     
     # Initial refresh
     refresh_vars()
@@ -3204,9 +4057,11 @@ def _show_variables_window():
 
         btn_frame = tkinter.Frame(edit_win, bg=C["bgc"])
         btn_frame.pack(pady=(0, 8))
-        tkinter.Button(btn_frame, text="确定", command=_save_edit,
-            bg=C["ac"], fg="white", font=FONT_BUTTON, padx=16, pady=3).pack(
-            side="left", padx=4)
+        _edit_ok_btn = tkinter.Button(btn_frame, text="确定", command=_save_edit,
+            bg=C["ac"], fg=ui_theme.text_on(C["ac"]), font=FONT_BUTTON,
+            padx=16, pady=3)
+        ui_theme.set_role(_edit_ok_btn, "ac")
+        _edit_ok_btn.pack(side="left", padx=4)
         tkinter.Button(btn_frame, text="取消", command=edit_win.destroy,
             bg=C["bgc"], fg=C["fgb"], font=FONT_BUTTON, padx=16, pady=3).pack(
             side="left", padx=4)
@@ -3268,7 +4123,11 @@ def _tbtn(parent, text, cmd, bg_c=None, fg_c=None, tip=None):
         bg_c, _role = C["bgc"], None
     else:
         bg_c, _role = ui_theme.resolve_bg(bg_c, C)
-    if fg_c is None: fg_c = C["fgb"]
+    if fg_c is None:
+        fg_c = C["fgb"]
+    elif str(fg_c).strip().lower() in ("white", "#ffffff", "#fff"):
+        # 字面白字在「浅语义底」(暗色 ac/wn) 上不可读 → 按底色亮度自适应
+        fg_c = ui_theme.text_on(bg_c)
     neutral = bg_c in ("white", "#ffffff", C["bgc"], C["surface_alt"])
     if neutral:
         abg = C["caption_hover"]
@@ -3325,15 +4184,15 @@ def _init_toolbar_buttons():
     _tbtn(toolbar_inner,"打开",_cmd_open,"ac","white",
           tip="打开脚本文件 (.xls/.acrpas) (Ctrl+O)").pack(side="left",padx=_P)
     _tbtn(toolbar_inner,"保存",_cmd_save,"sc","white",
-          tip="保存当前脚本 (Ctrl+S)").pack(side="left",padx=_P)
+          tip="保存 (Ctrl+S): 已有文件直接覆盖, 未落盘时另存").pack(side="left",padx=_P)
     _tbtn(toolbar_inner,"另存",_cmd_save_as,
           tip="另存为… (Ctrl+Shift+S)").pack(side="left",padx=_P)
 
     # Group 3: AI 与实用工具
     _sep(toolbar_inner)
-    _tbtn(toolbar_inner,"AI生成",open_ai_panel,"#7C3AED","white",
+    _tbtn(toolbar_inner,"AI生成",open_ai_panel,"ai","white",
           tip="AI 自然语言生成脚本").pack(side="left",padx=_P)
-    _tbtn(toolbar_inner,"AI调试",open_ai_debug_dialog,"#7C3AED","white",
+    _tbtn(toolbar_inner,"AI调试",open_ai_debug_dialog,"ai","white",
           tip="AI 自然语言调试 (由「执行控制」迁入)").pack(side="left",padx=_P)
     # 统一调色板: 仅 新建/打开(ac)、保存/运行(sc)、删除/停止(dg)、AI(紫) 着色,
     # 其余次要工具一律中性 (bgc/fgb), 三 Tab 保持一致
@@ -3516,11 +4375,75 @@ def _start_recording():
 _wf_update_overflow = ui_workflow_view.update_overflow
 _wf_on_wheel = ui_workflow_view.on_wheel
 _wf_flow_on_wheel = ui_workflow_view.flow_on_wheel
-_wf_toggle_view = ui_workflow_view.toggle_view
-_wf_refresh_tree = ui_workflow_view.refresh_tree
 _wf_update_workflow_highlight = ui_workflow_view.update_highlight
-_wf_run = ui_workflow_view.run
-_wf_stop = ui_workflow_view.stop
+# ── 工作流 Tab 延迟构建 (v3 §5.2 P1): 首次切到该 Tab 才建控件树 ──
+#   控件句柄在构建前一律为 None (占位, 供 `ACRPA.<name>` 直读不抛 AttributeError;
+#   构建成功后由 build_app() 内 _build_workflow_tab 回填真实句柄)。
+tab_workflow = None
+wf_toolbar_outer = None
+wf_canvas = None
+wf_scrollbar = None
+wf_toolbar = None
+wf_toolbar_overflow_hint = None
+wf_loop_var = None
+wf_maxmin_var = None
+wf_name_var = None
+wf_name_entry = None
+wf_main = None
+wf_lib_frame = None
+wf_lib_search = None
+wf_lib_tree = None
+wf_lib_sy = None
+wf_recent_label = None
+wf_recent_list = None
+wf_paned = None
+wf_list_frame = None
+wf_tree = None
+wf_sy = None
+wf_flow_frame = None
+wf_flow_canvas = None
+wf_flow_scroll_y = None
+_wf_show_flow = None
+_wf_view_btn = None
+_WF_LIB_ACTIONS = None
+#   `_WF_LAZY["ensure"]` 由 build_app() 注入; 下面包装的入口在「还没建」时先触发一次
+#   构建, 保证 IPC/快捷键/定时任务等**绕过 Tab 切换**的调用方也能正常执行。
+#   守卫: ensure 自身幂等 (built 标记), 重复调用不会二次构建。
+_WF_LAZY = {"built": False, "ok": False, "ensure": None}
+
+
+def _wf_ensure():
+    """确保工作流控件树已构建 (延迟构建入口; 幂等, 失败静默)。"""
+    fn = _WF_LAZY.get("ensure")
+    if fn is None:
+        return False
+    try:
+        fn()
+    except Exception:
+        pass
+    return bool(_WF_LAZY.get("built"))
+
+
+def _wf_run(*a, **k):
+    _wf_ensure()
+    return ui_workflow_view.run(*a, **k)
+
+
+def _wf_stop(*a, **k):
+    _wf_ensure()
+    return ui_workflow_view.stop(*a, **k)
+
+
+def _wf_toggle_view(*a, **k):
+    _wf_ensure()
+    return ui_workflow_view.toggle_view(*a, **k)
+
+
+def _wf_refresh_tree(*a, **k):
+    _wf_ensure()
+    return ui_workflow_view.refresh_tree(*a, **k)
+
+
 _wf_new = ui_workflow_view._wf_new
 _wf_open = ui_workflow_view._wf_open
 _wf_save = ui_workflow_view._wf_save
@@ -3669,10 +4592,13 @@ def _periodic():
     if state.folded:
         _sync_mini_bar_status()
     # 工作流执行高亮 (运行中刷新流程图当前节点)
-    try:
-        _wf_update_workflow_highlight()
-    except Exception:
-        pass
+    #   工作流 Tab 为延迟构建 (v3 §5.2 P1): 未构建时控件句柄均为 None, 直接跳过,
+    #   避免 100ms 周期内反复抛异常。
+    if _WF_LAZY["ok"]:
+        try:
+            _wf_update_workflow_highlight()
+        except Exception:
+            pass
     root.after(100,_periodic)
 
 # ══════════════════════════════════════════════════════════════════════
@@ -4194,6 +5120,18 @@ _IDLE_BG = {
     "after": None,      # <Configure> 节流的 after id
 }
 _IDLE_BG_NAME = "bg-ac.ico"
+
+# ── 编辑器空态提示 (v3 §3 D8) ──
+#   · 零行时在编辑区居中叠一行操作指引 (Ctrl+N / Ctrl+O / Ctrl+I), 有行即隐藏。
+#   · 与「待机背景层」**共存不冲突**: 提示层挂在 tab_edit 上并晚于背景层创建 →
+#     背景图显示时提示仍浮在其上; 背景特性不可用 (降级) 时同样只是提示浮在空表上。
+#   · 纯显示层: 只读 state._editor_rows 的长度, 不碰行数据。
+_EMPTY_HINT = {"label": None, "shown": False}
+_EMPTY_HINT_TEXT = ("还没有任何步骤\n"
+                    "Ctrl+N 新建脚本   ·   Ctrl+O 打开脚本   ·   Ctrl+I 插入命令")
+# 开关 (docs/UI优化方案-v3.md §4.3 / §7): True → 背景合成推迟到首帧之后的 idle;
+# False → 恢复改造前的「构建期同步合成」(回退用, 会让首帧等待 PIL 重采样)。
+_IDLE_BG_DEFER = True
 # 主窗口待机背景的不透明度: 图标本身是 256x256 的暗灰 logo (均值 alpha≈0.5)。
 # 背景图**单张居中、等比自适应（绝不放大、不平铺）**; 0.55 与图标自身 alpha
 # 相乘后约 27%, 既能"看得出是背景图", 又不至于压过工具条/图例的视觉层级。
@@ -4334,6 +5272,34 @@ def _sync_idle_bg(force=False):
         holder["shown"] = True
 
 
+def _sync_empty_hint():
+    """空态提示显隐 (v3 §3 D8): `state._editor_rows` 为空 → 显示指引, 否则隐藏。
+
+    幂等, 可在任意结构变更后调用; 只读行数, 不触碰数据。
+    """
+    holder = _EMPTY_HINT
+    label = holder.get("label")
+    if label is None:
+        return
+    try:
+        if not label.winfo_exists():
+            return
+        if state._editor_rows:
+            if holder.get("shown"):
+                label.place_forget()
+                holder["shown"] = False
+            return
+        if not holder.get("shown"):
+            label.place(relx=0.5, rely=0.5, anchor="center")
+            try:
+                label.lift()        # 待机背景图显示时也浮在其上
+            except Exception:
+                pass
+            holder["shown"] = True
+    except Exception:
+        pass
+
+
 def _idle_bg_on_configure(event=None):
     """tab_edit / tree_frame / 背景层 <Configure>: 尺寸变化时节流 (120ms) 重绘。
 
@@ -4459,6 +5425,7 @@ def build_app():
         except Exception:
             ver = ""
         ver = str(ver).strip()
+        # return "Adaptive Control RPA v{}".format(ver) if ver else "Adaptive Control RPA"
         return "A/C RPA v{}".format(ver) if ver else "A/C RPA"
 
     # ── Windows 任务栏图标：必须在创建任何窗口之前设置 AppUserModelID ──
@@ -4482,8 +5449,8 @@ def build_app():
         pass
 
     root = tkinter.Tk()
-    # 命名字体必须在创建任何 widget 之前建立; tk scaling 改变 pt->px 换算后再刷一次
-    utils.init_fonts(root)
+    # 命名字体必须在创建任何 widget 之前建立。先设 tk scaling (pt→px 换算), 再建字体:
+    # 旧实现建两次 (scaling 前后各一次) 属重复工作, v3 §4.4 收敛为一次。
     try:
         root.tk.call("tk", "scaling", root.winfo_fpixels("1i") / 72.0)
     except Exception:
@@ -4571,7 +5538,9 @@ def build_app():
     title_bar.grid(row=0,column=0,sticky="ew",padx=utils.sp(10),pady=(utils.sp(6),utils.sp(2)))
     title_bar.columnconfigure(0,weight=1)
 
-    title_lbl = tkinter.Label(title_bar,text="Adaptive Control Automation Workflow",
+    # 自绘标题栏 = 「文档标题」语义 (v3 §2.1c): 默认不再是应用名 (应用名在原生标题栏,
+    # 见 _window_title()); 文案统一引用 TITLE_DEFAULT_TEXT, 避免两处字面量漂移。
+    title_lbl = tkinter.Label(title_bar,text=TITLE_DEFAULT_TEXT,
         font=FONT_TITLE,fg=C["fgt"],bg=C["bg"])
     title_lbl.grid(row=0,column=0,sticky="w")
     _title_text_session = TITLE_DEFAULT_TEXT            # 会话内标题 (模块级, 重启即复位)
@@ -4588,13 +5557,13 @@ def build_app():
     pin_btn = tkinter.Label(dark_frame,text="△",font=FONT_ICON,
         fg=C["fgm"],bg=C["bg"],cursor="hand2",padx=utils.sp(2))
     pin_btn.pack(side="left",padx=(0,utils.sp(2)))
-    pin_btn.bind("<Enter>", _show_pin_tip)
+    utils.attach_tooltip(pin_btn, _tip_pin)      # 动态文案 (置顶状态)
 
     # 折叠按钮 — 将主窗口折叠为 Mini Bar
     fold_btn = tkinter.Label(dark_frame,text="⊟",font=FONT_ICON,
         fg=C["fgm"],bg=C["bg"],cursor="hand2",padx=utils.sp(2))
     fold_btn.pack(side="left",padx=(0,utils.sp(2)))
-    fold_btn.bind("<Enter>", _show_fold_tip)
+    utils.attach_tooltip(fold_btn, _tip_fold)    # 动态文案 (折叠状态)
 
     dark_btn = tkinter.Label(dark_frame,text="◑" if state.DARK_MODE else "◐",
         font=FONT_ICON_LG,fg=C["fgm"],bg=C["bg"],cursor="hand2")
@@ -4602,31 +5571,25 @@ def build_app():
 
     # 标题栏底部 1px 发丝线 (§4.1: 1px 发丝线替代原 2px 强调条)
     tkinter.Frame(title_bar, bg=C["bd"], height=1).grid(row=1, column=0, columnspan=2, sticky="ew", pady=(utils.sp(5),0))
-    dark_btn.bind("<Enter>", _show_tip)
-    dark_btn.bind("<Leave>", _hide_tip)
-    fold_btn.bind("<Leave>", _hide_tip)
-    pin_btn.bind("<Leave>", _hide_tip)
+    utils.attach_tooltip(dark_btn, _tip_dark)    # 动态文案 (深浅色状态)
 
     # 设置按钮 — 打开独立设置窗口 (原设置 Tab 已分离，主界面入口)
     settings_btn = tkinter.Label(dark_frame, text="⚙", font=FONT_ICON_MD,
         fg=C["fgm"], bg=C["bg"], cursor="hand2", padx=utils.sp(2))
     settings_btn.pack(side="left", padx=(0, utils.sp(2)))
-    settings_btn.bind("<Enter>", _show_settings_tip)
-    settings_btn.bind("<Leave>", _hide_tip)
+    utils.attach_tooltip(settings_btn, "打开设置窗口")
 
     # 帮助按钮 — 「?」图标, 与设置图标并列且位于其后 (原「执行控制」底部「? 帮助」上移)
     help_btn = tkinter.Label(dark_frame, text="?", font=FONT_ICON_MD,
         fg=C["fgm"], bg=C["bg"], cursor="hand2", padx=utils.sp(2))
     help_btn.pack(side="left", padx=(0, utils.sp(2)))
-    help_btn.bind("<Enter>", _show_help_tip)
-    help_btn.bind("<Leave>", _hide_tip)
+    utils.attach_tooltip(help_btn, "帮助 / 使用说明")
 
     # 互联按钮 — 打开「设备互联」独立窗口 (与设置按钮同级样式)
     devlink_btn = tkinter.Label(dark_frame, text="⊕", font=FONT_ICON_MD,
         fg=C["fgm"], bg=C["bg"], cursor="hand2", padx=utils.sp(2))
     devlink_btn.pack(side="left", padx=(0, utils.sp(2)))
-    devlink_btn.bind("<Enter>", _show_devlink_tip)
-    devlink_btn.bind("<Leave>", _hide_tip)
+    utils.attach_tooltip(devlink_btn, "设备互联")
 
     # ── 可达性补齐 (路线图 §5.5): 图标 Label → 可 Tab 聚焦 + 可键盘激活 + 可访问名 ──
     # 在 <Enter>/<Leave> tooltip 绑定之后调用, 以免 set_accessible_name 抢先挂上 tooltip。
@@ -4679,7 +5642,7 @@ def build_app():
     toolbar_canvas = tkinter.Canvas(tb_scroll, bg=C["bg"],
         height=utils.ctrl_h("ctrl_h_lg"), highlightthickness=0, bd=0)
     toolbar_scrollbar = tkinter.Scrollbar(tb_scroll, orient="horizontal",
-        command=toolbar_canvas.xview, width=utils.sp(6))
+        command=toolbar_canvas.xview, width=utils.sp("sb_w_thin"))
     toolbar_inner = tkinter.Frame(toolbar_canvas, bg=C["bg"])
 
     # 溢出提示「⇄」: 内容宽度超过可视宽度时显示 (与执行控制一致)
@@ -4730,17 +5693,44 @@ def build_app():
         show="tree headings",selectmode="browse")
     tree.grid(row=0,column=0,sticky="nsew")
     tree.heading("#0",text="#"); tree.column("#0",width=32,minwidth=32,stretch=False)
-    tree.heading("cmd",text="命令类型"); tree.column("cmd",width=100,minwidth=80)
+    # 列策略 (v3 §2.1a): 显式 stretch 让可见列均分剩余宽度;
+    # 尾部参数列的显隐由 _apply_tree_columns() 按窗口宽度决定 (默认全显)。
+    tree.heading("cmd",text="命令类型")
+    tree.column("cmd",width=100,minwidth=80,stretch=True)
     for i in range(1,10):
         c="p{}".format(i); tree.heading(c,text="参数{}".format(i))
-        tree.column(c,width=65,minwidth=50)
+        tree.column(c,width=65,minwidth=50,stretch=True)
+    _preconfig_cmd_tags()      # 命令配色 tag 一次性预配置 (v3 §4.2)
+    tree.bind("<Configure>", _tree_columns_on_configure, add=True)
+    # 高度断点 (v3 §2.1): 窗口变矮自动收起日志面板, 变高再展开; 与列策略同一条 150ms 去抖
+    root.bind("<Configure>", _log_breakpoint_on_configure, add=True)
+    try:
+        root.after_idle(_apply_log_auto_collapse)
+        root.after(300, _apply_log_auto_collapse)
+    except Exception:
+        pass
 
     tsy=tkinter.Scrollbar(tree_frame,orient="vertical",command=tree.yview,
-        width=8,relief="flat",elementborderwidth=0,bg=C["bd"],troughcolor=C["bgc"])
+        width=utils.sp("sb_w"),relief="flat",elementborderwidth=0,bg=C["bd"],troughcolor=C["bgc"])
     tsx=tkinter.Scrollbar(tree_frame,orient="horizontal",command=tree.xview,
-        width=8,relief="flat",elementborderwidth=0,bg=C["bd"],troughcolor=C["bgc"])
+        width=utils.sp("sb_w"),relief="flat",elementborderwidth=0,bg=C["bd"],troughcolor=C["bgc"])
     tree.configure(yscrollcommand=tsy.set,xscrollcommand=tsx.set)
     tsy.grid(row=0,column=1,sticky="ns"); tsx.grid(row=1,column=0,sticky="ew")
+
+    # ── 空态提示层 (v3 §3 D8): 零行时浮在空表格 / 待机背景图上方 ──
+    #   挂在 tab_edit 上 (不用 grid, 只 place 居中) 且晚于待机背景层创建 →
+    #   背景图显示时提示仍可见; tree_frame 被 grid_remove 也不影响本层。
+    _empty_hint = tkinter.Label(tab_edit, text=_EMPTY_HINT_TEXT,
+        font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"], justify="center",
+        bd=0, padx=utils.sp(14), pady=utils.sp(10),
+        highlightthickness=1, highlightbackground=C["bd"])
+    _EMPTY_HINT["label"] = _empty_hint
+    _EMPTY_HINT["shown"] = False      # 重建 (build_app 可被多次调用) 后按当前行数重新判定
+    try:
+        root.after_idle(_sync_empty_hint)
+    except Exception:
+        pass
+
     _EDITOR_ZOOM_MIN, _EDITOR_ZOOM_MAX = -4, 12
     _editor_font = tkinter.font.Font(root=root, name="ACRPA_EDITOR_TABLE", exists=False,
                                      family="Microsoft YaHei UI", size=10)
@@ -4760,14 +5750,20 @@ def build_app():
     legend_frame.grid(row=2, column=0, sticky="ew", padx=utils.sp(3), pady=(0, utils.sp(2)))
     legend_inner = tkinter.Frame(legend_frame, bg=C["bg"])
     legend_inner.pack(anchor="w")
+    _LEGEND_GROUPS.clear()
     for label, color in _LEGEND_ITEMS:
         f = tkinter.Frame(legend_inner, bg=C["bg"])
         f.pack(side="left", padx=(2, 0))
-        # 图例圆点同样登记 "fgm" 角色 (旧实现按「含 ●」嗅探 → fg=fgm)
-        ui_theme.roled(tkinter.Label(f, text="●", font=FONT_ICON,
-            fg=color, bg=C["bg"]), "fgm").pack(side="left")
-        tkinter.Label(f, text=label, font=FONT_TINY,
-            fg=C["fgm"], bg=C["bg"]).pack(side="left")
+        # 图例圆点的前景 = 节点类型色 (语义色标), 不能登记成 "fgm" 角色 ——
+        # 那会让换肤把它刷成中性灰/浅灰底白字。底色随父容器, 前景保持不变。
+        _dot = tkinter.Label(f, text="●", font=FONT_ICON, fg=color, bg=C["bg"])
+        _dot._acrpa_keep_fg = True
+        _dot.pack(side="left")
+        _lbl = tkinter.Label(f, text=label, font=FONT_TINY, fg=C["fgm"], bg=C["bg"])
+        ui_theme.set_fg_token(_lbl, "fgm")
+        _lbl.pack(side="left")
+        # 分组名: "找图/区域找图" → ("找图","区域找图"), 供按需显隐判定 (v3 §2.1b)
+        _LEGEND_GROUPS.append((tuple(n for n in label.split("/") if n), f))
 
     # tree double-click binding is set after _edit_cell is defined below
     tree.tag_configure("even", background=C["zebra"])   # §4.5 斑马纹 (不再用 acl)
@@ -4836,7 +5832,7 @@ def build_app():
     tree.bind("<F2>", lambda e: _cmd_edit_row_dialog())
 
     # 将双击绑定放在 _edit_cell 定义之后
-    tree.bind("<Double-1>", lambda e: _edit_cell())
+    tree.bind("<Double-1>", lambda e: _edit_cell(e))
 
     # ── 待机背景: 编辑区的任何"操作"立即退出待机态 ──
     #   全部用 add=True 追加绑定 (不覆盖上面既有的 click/double-click/快捷键回调);
@@ -4969,55 +5965,97 @@ def build_app():
     # 日志/快速操作/高级设置/系统卡片已移至 settings_window
 
     # ======================================================================
-    # TAB 4: 工作流
-    #   构建 / 行为 / 换肤订阅已整体抽到 src/ui/workflow_view.py (阶段二第 3 项第 3 步):
-    #   宿主在此仅注入依赖并取回控件句柄 (转发别名: tab_workflow / wf_* / _wf_show_flow /
-    #   _wf_view_btn)。领域层 src/workflow.py 不迁、不改。
+    # TAB 4: 工作流 —— **延迟构建** (v3 §5.2 P1)
+    #   启动时只建一个空 Tab 并 add 进 notebook (主题回填 / notebook 顺序需要真实句柄),
+    #   控件树 (工具栏 + 操作库 + 步骤树 + 流程图, 百余个控件) 推迟到
+    #   **第一次切到该 Tab** 才构建。
+    #   触发点: ① <<NotebookTabChanged>> (懒切换) ② ACRPA._wf_ensure() (IPC / 快捷键 /
+    #   定时任务等绕过 Tab 切换的入口)。守卫: _WF_LAZY["built"] 幂等, 不会二次构建。
+    #   构建 / 行为 / 换肤订阅真源仍在 src/ui/workflow_view.py (阶段二第 3 项第 3 步);
+    #   领域层 src/workflow.py 不迁、不改。
     # ======================================================================
-    ui_workflow_view.build(
-        notebook, colors=C,
-        fonts={"title": FONT_TITLE, "body": FONT_BODY,
-               "small": FONT_SMALL, "button": FONT_BUTTON,
-               "small_bold": FONT_SMALL_BOLD, "log": FONT_LOG},
-        deps={"ui_theme": ui_theme, "tbtn": _tbtn, "sep": _sep,
-              "sp": utils.sp, "ctrl_h": utils.ctrl_h, "darken": _darken,
-              "btn": _btn, "state": state, "log1": log1,
-              "show_toast": utils.show_toast, "messagebox": messagebox,
-              "filedialog": filedialog, "app_root": APP_ROOT, "root": root,
-              "exec_maxmin_var": exec_maxmin_var,
-              "set_window_icon": _set_window_icon,
-              "bind_sel_bold": _bind_sel_bold, "bind_row_hover": _bind_row_hover,
-              "load_pil": _load_pil, "get_image_grab": lambda: ImageGrab})
-    # ── 转发别名: 既有直读 ACRPA.<name> 的引用 (_setup_scroll_bindings / tools /
-    #    _periodic) 契约不变; 真源在 ui_workflow_view ──
-    _wfh = ui_workflow_view.get_widgets()
-    tab_workflow = _wfh["tab_workflow"]
-    wf_toolbar_outer = _wfh["wf_toolbar_outer"]
-    wf_canvas = _wfh["wf_canvas"]
-    wf_scrollbar = _wfh["wf_scrollbar"]
-    wf_toolbar = _wfh["wf_toolbar"]
-    wf_toolbar_overflow_hint = _wfh["wf_toolbar_overflow_hint"]
-    wf_loop_var = _wfh["wf_loop_var"]
-    wf_maxmin_var = _wfh["wf_maxmin_var"]
-    wf_name_var = _wfh["wf_name_var"]
-    wf_name_entry = _wfh["wf_name_entry"]
-    wf_main = _wfh["wf_main"]
-    wf_lib_frame = _wfh["wf_lib_frame"]
-    wf_lib_search = _wfh["wf_lib_search"]
-    wf_lib_tree = _wfh["wf_lib_tree"]
-    wf_lib_sy = _wfh["wf_lib_sy"]
-    wf_recent_label = _wfh["wf_recent_label"]
-    wf_recent_list = _wfh["wf_recent_list"]
-    wf_paned = _wfh["wf_paned"]
-    wf_list_frame = _wfh["wf_list_frame"]
-    wf_tree = _wfh["wf_tree"]
-    wf_sy = _wfh["wf_sy"]
-    wf_flow_frame = _wfh["wf_flow_frame"]
-    wf_flow_canvas = _wfh["wf_flow_canvas"]
-    wf_flow_scroll_y = _wfh["wf_flow_scroll_y"]
-    _wf_show_flow = _wfh["_wf_show_flow"]
-    _wf_view_btn = _wfh["_wf_view_btn"]
-    _WF_LIB_ACTIONS = _wfh["_WF_LIB_ACTIONS"]
+    tab_workflow = tkinter.Frame(notebook, bg=C["bg"])
+    notebook.add(tab_workflow, text="  工作流  ")   # 第2个Tab (执行控制已升级为常驻工具栏)
+    # 设置已分离为独立窗口 (settings_window.open_settings_window)，不再占用 Tab
+
+    def _build_workflow_tab(*_a, **_kw):
+        """首次切到「工作流」Tab 时构建其内容 (幂等; 异常只记一次, 不重试)。"""
+        global _WF_LIB_ACTIONS, _wf_show_flow, _wf_view_btn, wf_canvas, wf_flow_canvas, \
+            wf_flow_frame, wf_flow_scroll_y, wf_lib_frame, wf_lib_search, wf_lib_sy, \
+            wf_lib_tree, wf_list_frame, wf_loop_var, wf_main, wf_maxmin_var, \
+            wf_name_entry, wf_name_var, wf_paned, wf_recent_label, wf_recent_list, \
+            wf_scrollbar, wf_sy, wf_toolbar, wf_toolbar_outer, \
+            wf_toolbar_overflow_hint, wf_tree
+        if _WF_LAZY["built"]:
+            return
+        _WF_LAZY["built"] = True
+        try:
+            ui_workflow_view.build(
+                notebook, tab=tab_workflow, colors=C,
+                fonts={"title": FONT_TITLE, "body": FONT_BODY,
+                       "small": FONT_SMALL, "button": FONT_BUTTON,
+                       "small_bold": FONT_SMALL_BOLD, "log": FONT_LOG},
+                deps={"ui_theme": ui_theme, "tbtn": _tbtn, "sep": _sep,
+                      "sp": utils.sp, "ctrl_h": utils.ctrl_h, "darken": _darken,
+                      "btn": _btn, "state": state, "log1": log1,
+                      "show_toast": utils.show_toast, "messagebox": messagebox,
+                      "filedialog": filedialog, "app_root": APP_ROOT, "root": root,
+                      "exec_maxmin_var": exec_maxmin_var,
+                      "set_window_icon": _set_window_icon,
+                      "bind_sel_bold": _bind_sel_bold, "bind_row_hover": _bind_row_hover,
+                      "load_pil": _load_pil, "get_image_grab": lambda: ImageGrab})
+        except Exception as exc:      # 构建失败 → 保留空 Tab, 不影响其余功能
+            try:
+                log1("工作流 Tab 构建失败: %s" % (exc,), "error")
+            except Exception:
+                pass
+            return
+        # ── 转发别名: 既有直读 ACRPA.<name> 的引用 (tools / _periodic) 契约不变 ──
+        _wfh = ui_workflow_view.get_widgets()
+        wf_toolbar_outer = _wfh["wf_toolbar_outer"]
+        wf_canvas = _wfh["wf_canvas"]
+        wf_scrollbar = _wfh["wf_scrollbar"]
+        wf_toolbar = _wfh["wf_toolbar"]
+        wf_toolbar_overflow_hint = _wfh["wf_toolbar_overflow_hint"]
+        wf_loop_var = _wfh["wf_loop_var"]
+        wf_maxmin_var = _wfh["wf_maxmin_var"]
+        wf_name_var = _wfh["wf_name_var"]
+        wf_name_entry = _wfh["wf_name_entry"]
+        wf_main = _wfh["wf_main"]
+        wf_lib_frame = _wfh["wf_lib_frame"]
+        wf_lib_search = _wfh["wf_lib_search"]
+        wf_lib_tree = _wfh["wf_lib_tree"]
+        wf_lib_sy = _wfh["wf_lib_sy"]
+        wf_recent_label = _wfh["wf_recent_label"]
+        wf_recent_list = _wfh["wf_recent_list"]
+        wf_paned = _wfh["wf_paned"]
+        wf_list_frame = _wfh["wf_list_frame"]
+        wf_tree = _wfh["wf_tree"]
+        wf_sy = _wfh["wf_sy"]
+        wf_flow_frame = _wfh["wf_flow_frame"]
+        wf_flow_canvas = _wfh["wf_flow_canvas"]
+        wf_flow_scroll_y = _wfh["wf_flow_scroll_y"]
+        _wf_show_flow = _wfh["_wf_show_flow"]
+        _wf_view_btn = _wfh["_wf_view_btn"]
+        _WF_LIB_ACTIONS = _wfh["_WF_LIB_ACTIONS"]
+        # 工具栏滚轮绑定: 原由 _setup_scroll_bindings (启动 after(10)) 完成, 此处延后补上
+        try:
+            _bind_scroll_recursive(wf_toolbar, _wf_on_wheel)
+            wf_canvas.bind("<MouseWheel>", _wf_on_wheel)
+        except Exception:
+            pass
+        _WF_LAZY["ok"] = True
+
+    def _on_wf_tab_changed(_event=None):
+        """notebook 切换: 命中「工作流」Tab 时才构建 (其余 Tab 切换零成本)。"""
+        try:
+            if notebook.select() == str(tab_workflow):
+                _build_workflow_tab()
+        except Exception:
+            pass
+
+    notebook.bind("<<NotebookTabChanged>>", _on_wf_tab_changed, add="+")
+    _WF_LAZY["ensure"] = _build_workflow_tab
 
     # Wire scheduler to GUI (设置窗口为独立窗口: 勾选变量在此创建并复用，下次执行标签由设置窗口注入)
     state._sched_enabled_var = tkinter.BooleanVar(value=state.SCHED_ENABLED)
@@ -5128,10 +6166,21 @@ def build_app():
 
     root.after(10, _setup_scroll_bindings)
 
-    # ── 待机背景图: 首次同步 (布局尚未落定时靠 tree_frame 的 <Configure> 兜底) ──
+    # ── 待机背景图: 首帧后再合成 (v3 §4.3) ──
+    # 同步合成会让首帧等待 PIL open + LANCZOS 重采样; 改为 idle 之后再做,
+    # 300ms 兜底一次 (布局真正落定后尺寸才准), 行为与原来一致但不再阻塞首帧。
     try:
-        _sync_idle_bg()
-        root.after(300, _sync_idle_bg)
+        if _IDLE_BG_DEFER:
+            root.after_idle(_sync_idle_bg)
+            root.after(300, _sync_idle_bg)
+        else:
+            _sync_idle_bg()      # 回退: 构建期同步合成 (旧行为)
+    except Exception:
+        pass
+
+    # ── 布局落定后的首次列策略 / 图例判定 (v3 §2.1) ──
+    try:
+        root.after(0, lambda: (_apply_tree_columns(force=True), _sync_legend()))
     except Exception:
         pass
 

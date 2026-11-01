@@ -156,16 +156,30 @@ def _show_danger_dialog(root, cmd, detail, timeout):
             dlg.attributes("-topmost", True)
         except Exception:
             pass
-        body = tkinter.Frame(dlg, padx=16, pady=12)
+        # 取主窗口当前主题色板 (暗色下不再弹系统浅色框)
+        C = getattr(ACRPA, "C", {}) or {}
+        _bgc = C.get("bgc", "#ffffff")
+        _fgb = C.get("fgb", "#000000")
+        _fgm = C.get("fgm", "#666666")
+        dlg.configure(bg=_bgc)
+        body = tkinter.Frame(dlg, padx=16, pady=12, bg=_bgc)
         body.pack(fill="both", expand=True)
         tkinter.Label(body, text="即将执行高危命令：{}".format(cmd),
-                      font=("Microsoft YaHei UI", 10, "bold"),
-                      anchor="w").pack(fill="x")
+                      font=getattr(utils, "FONT_TITLE", "ACRPA_TITLE"),
+                      bg=_bgc, fg=_fgb, anchor="w").pack(fill="x")
         tkinter.Label(body, text=str(detail or "")[:400], justify="left",
-                      wraplength=420, anchor="w").pack(fill="x", pady=(6, 4))
-        tkinter.Label(body, text="{} 秒内未确认将视为拒绝".format(int(timeout)),
-                      fg="#b45309", anchor="w").pack(fill="x", pady=(0, 8))
-        btns = tkinter.Frame(body)
+                      wraplength=420, anchor="w",
+                      bg=_bgc, fg=_fgb).pack(fill="x", pady=(6, 4))
+        # 警示文字: 仅前景色随主题 (wn), 底色仍随容器
+        _warn_lbl = tkinter.Label(body, text="{} 秒内未确认将视为拒绝".format(int(timeout)),
+                      fg=C.get("wn", "#b45309"), bg=_bgc, anchor="w")
+        try:
+            from ui import theme as _ui_theme
+            _ui_theme.set_fg_token(_warn_lbl, "wn")
+        except Exception:
+            pass
+        _warn_lbl.pack(fill="x", pady=(0, 8))
+        btns = tkinter.Frame(body, bg=_bgc)
         btns.pack(fill="x")
 
         def _done(ok):
@@ -257,6 +271,8 @@ def build():
     _install_boot_probes()
     _mark("ui_build")
     ACRPA.build_app()
+    # v3 §4.4: 构建结束单独埋点, 使「骨架装配」与「首帧/可交互」可分别度量
+    _mark("ui_build_done")
     _finish_build(ACRPA)
     return ACRPA
 
@@ -291,6 +307,15 @@ def _finish_build(rt):
 def main():
     """构建应用并进入 Tk 主循环 (run.py 打包入口调用)。"""
     build()
+    # v3 §4.4: 首帧 / 可交互两个标记, 用于「启动性能」前后对比
+    # (ui_first_frame = 第一次 idle 完成; ui_ready = 主循环已能处理输入)
+    try:
+        root = ACRPA.root
+        root.after_idle(lambda: _mark("ui_first_frame"))
+        root.after(120, lambda: _mark("ui_ready"))
+    except Exception:
+        pass
+    _mark("main_loop")
     ACRPA.root.mainloop()
 
 

@@ -125,6 +125,26 @@ def blend(color, other, ratio):
     return "#{:02X}{:02X}{:02X}".format(r, g, b)
 
 
+def text_color_on(bg, light="#FFFFFF", dark="#1A1A1A"):
+    """按底色相对亮度选前景色 (WCAG; 与 utils.text_on 同口径, 本模块零依赖故内置)。
+
+    节点填充随类型色/主题变化 (禁用态还会与 flowbg 混色变浅), 单一常量字色
+    必然在其中一侧对比不足 —— 逐节点按填充色计算。
+    """
+    c = str(bg or "").strip().lstrip("#")
+    if len(c) == 3:
+        c = "".join(ch * 2 for ch in c)
+    if len(c) != 6:
+        return light
+    try:
+        rgb = [int(c[i:i + 2], 16) / 255.0 for i in (0, 2, 4)]
+    except ValueError:
+        return light
+    lin = [v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4 for v in rgb]
+    lum = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+    return dark if lum > 0.45 else light
+
+
 def resolve_style(ctx):
     """合并 ctx["style"] (真源) 与模块回退默认值 → 完整结构色表 (P0-3)。
 
@@ -383,7 +403,8 @@ def _draw_node(canvas, node, colors, fonts, ctx, *, zoom=1.0, sp=None, style=Non
     shadow_id = canvas.create_rectangle(x + 2, y + 2, x + w + 2, y + h + 2,
                                         fill=style["shadow"], outline="", tags=("shadow",))
 
-    text_on = style["text_on_node"]
+    # 字色按「本节点实际填充色」算: 禁用节点已与 flowbg 混浅, 固定白字会不可读
+    text_on = text_color_on(color) if _is_color(color) else style["text_on_node"]
     shape_id = None
     if typ == "condition":
         shape_id = canvas.create_polygon(

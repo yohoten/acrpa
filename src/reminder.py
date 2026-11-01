@@ -35,6 +35,7 @@ import time
 
 import i18n
 import state
+from utils import text_on
 
 
 def _log_tick_error(key, msg, level="error", interval=60.0):
@@ -351,7 +352,7 @@ class ReminderPopup(object):
         btn_stop = tkinter.Button(
             bar, text=i18n.t("reminder.close"),
             font=_font("FONT_SMALL", "Microsoft YaHei UI 8"),
-            bg=colors["ac"], fg="white", relief="flat", bd=1,
+            bg=colors["ac"], fg=text_on(colors["ac"]), relief="flat", bd=1,
             padx=10, pady=2, cursor="hand2", command=self._do_stop_task)
         btn_stop.pack(side="right")
         self.buttons["stop_task"] = btn_stop

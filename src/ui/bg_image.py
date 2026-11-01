@@ -53,6 +53,16 @@ def _load_pil():
 _cache = {}
 _CACHE_MAX = 8
 
+# 二级缓存 (docs/UI优化方案-v3.md §4.3 第 3 条, P1):
+#   _src_cache : path -> 已裁透明留白的 RGBA 源图。省掉每次 Image.open(ico 多帧) + getbbox。
+#   _tile_cache: (path, 缩放后尺寸, alpha) -> 已 LANCZOS 缩放并乘过 alpha 的 RGBA 图块。
+#     拖动窗口时高度小改而宽度不变 → 目标图块尺寸通常不变, 这里直接复用,
+#     只剩下「画布合成 + PhotoImage」这一步, 不再重复重采样。
+# 两者都由 clear_cache() 一并清空 (主题/底色变化后必须失效)。
+_src_cache = {}
+_tile_cache = {}
+_TILE_CACHE_MAX = 16
+
 # 最近一次失败原因：供调用方写日志（打包后无控制台，必须能自证原因）
 _last_error = ""
 
@@ -72,11 +82,95 @@ def get_last_error():
 
 
 def clear_cache():
-    """清空合成缓存（主题切换 / 底色变化后调用）。"""
+    """清空缓存（主题切换 / 底色变化 / 图标文件变化后调用）。"""
+    for holder in (_cache, _src_cache, _tile_cache):
+        try:
+            holder.clear()
+        except Exception:
+            pass
+
+
+def _cached_source(path):
+    """取「已裁透明留白」的 RGBA 源图（按 path 缓存，省掉 ico 解析 + getbbox）。
+
+    返回的是**共享对象**，调用方只能读、不能就地修改（要用就先 copy）。
+    """
     try:
-        _cache.clear()
+        src = _src_cache.get(path)
+    except Exception:
+        src = None
+    if src is not None:
+        return src
+    src = _trim_transparent(_open_rgba(path))
+    if src is None:
+        return None
+    try:
+        if len(_src_cache) >= 4:
+            _src_cache.clear()
+        _src_cache[path] = src
     except Exception:
         pass
+    return src
+
+
+def _fit_target_size(src_size, box):
+    """等比缩小到放进 box 的目标尺寸（**绝不放大**）；非法尺寸返回 None。
+
+    与 `_fit_no_upscale()` 同一套取整规则，抽出来是为了**先拿到尺寸再查缓存**。
+    """
+    try:
+        w, h = int(box[0]), int(box[1])
+        sw, sh = int(src_size[0]), int(src_size[1])
+    except Exception:
+        return None
+    if w <= 0 or h <= 0 or sw <= 0 or sh <= 0:
+        return None
+    if sw <= w and sh <= h:
+        return (sw, sh)
+    try:
+        scale = min(float(w) / float(sw), float(h) / float(sh))
+        nw = max(1, int(round(sw * scale)))
+        nh = max(1, int(round(sh * scale)))
+    except Exception:
+        return None
+    if nw == sw and nh == sh:
+        return (sw, sh)
+    return (nw, nh)
+
+
+def _cached_tile(path, src, tsize, a):
+    """按 (path, 图块尺寸, alpha) 缓存的「可直接贴到画布上的图块」(共享只读)。
+
+    图块内容与改造前逐像素一致：先按 `_paste_clipped` 的语义把源图幂乘到透明底上
+    （RGB 预乘 alpha），再整体乘 alpha。这样**每次调用只需「贴图 + 与底色合成」**，
+    不再对整幅画布做 alpha 通道运算；同尺寸反复调用时连缩放也省掉。
+    """
+    key = (path, int(tsize[0]), int(tsize[1]), round(float(a), 3))
+    try:
+        hit = _tile_cache.get(key)
+    except Exception:
+        hit = None
+    if hit is not None:
+        return hit
+    try:
+        tile = (src if tuple(src.size) == tuple(tsize)
+                else src.resize(tuple(tsize), Image.LANCZOS))
+        if tile is None:
+            return None
+        canvas = Image.new("RGBA", tile.size, (0, 0, 0, 0))
+        canvas.paste(tile, (0, 0), tile)
+        if a < 1.0:
+            ch = canvas.getchannel("A").point(lambda v: int(round(v * a)))
+            canvas.putalpha(ch)
+    except Exception:
+        return None
+    try:
+        if len(_tile_cache) >= _TILE_CACHE_MAX:
+            _tile_cache.clear()
+        _tile_cache[key] = canvas
+    except Exception:
+        pass
+    return canvas
 
 
 def _name_variants(name):
@@ -342,25 +436,50 @@ def load_bg_photo(res_dir, name="bg-ac.ico", alpha=0.4, bg_color="#FFFFFF",
         pass
 
     try:
-        img = _open_rgba(path)
-        if img is None:
+        src = _cached_source(path)
+        if src is None:
             return None
-        if mode == "tile":
-            img = _tile_to_size(img, (w, h))
-        elif mode == "cover":
-            img = _cover_resize(img, (w, h))
+        if mode == "cover":
+            # cover 极少用: 保留原实现, 只共享已裁留白的源图
+            img = _cover_resize(src, (w, h))
+            if img is None:
+                return None
+            if a < 1.0:
+                try:
+                    ch = img.getchannel("A").point(lambda v: int(round(v * a)))
+                    img.putalpha(ch)
+                except Exception:
+                    return None
         else:
-            img = _contain_center(img, (w, h))
-        if img is None:
-            return None
-        # 40% 透明: 与图标自身的 alpha 相乘（保留挖空区域）
-        if a < 1.0:
+            # contain / tile: 图块按 (path, 尺寸, alpha) 缓存 (已预乘 + 已乘 alpha),
+            # 命中时每次只剩「贴图 + 与底色合成」, 不再缩放、不再整幅画布做 alpha 运算。
+            tsize = _fit_target_size(src.size, (w, h))
+            if not tsize:
+                return None
+            tile = _cached_tile(path, src, tsize, a)
+            if tile is None:
+                return None
             try:
-                ch = img.getchannel("A").point(
-                    lambda v: int(round(v * a)))
-                img.putalpha(ch)
+                canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
             except Exception:
                 return None
+            if mode == "tile":
+                tw, th = tile.size
+                if tw <= 0 or th <= 0:
+                    return None
+                start_x = -((w % tw) // 2) if w > tw else 0
+                start_y = -((h % th) // 2) if h > th else 0
+                y = start_y
+                while y < h:
+                    x = start_x
+                    while x < w:
+                        canvas.paste(tile, (x, y))     # 图块已预乘, 无需 mask
+                        x += tw
+                    y += th
+            else:
+                canvas.paste(tile, ((w - tile.size[0]) // 2,
+                                    (h - tile.size[1]) // 2))
+            img = canvas
         # 与主题底色合成成不透明位图（Tk 才能直接显示）
         try:
             base = Image.new("RGBA", (w, h), bg)

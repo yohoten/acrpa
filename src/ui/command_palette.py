@@ -193,6 +193,7 @@ def open_palette(parent, colors, fonts, on_pick, initial_query="",
                          selectforeground=_c("fgt", "#000000"),
                          highlightthickness=0, bd=0)
     sb = tkinter.Scrollbar(mid, orient="vertical", command=lb.yview,
+                           width=utils.sp("sb_w"),
                            bg=_c("bd", "#E1E1E1"),
                            troughcolor=_c("bgc", "#FFFFFF"), relief="flat")
     lb.configure(yscrollcommand=sb.set)

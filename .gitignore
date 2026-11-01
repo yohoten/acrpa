@@ -105,3 +105,10 @@ ci-test-results.json
 # 内置脚本编辑模板资源（res/template/ 需随包分发，勿忽略）
 !res/template/
 !res/template/*.xlsx
+
+# 单实例 IPC 密钥：每次启动按本机生成（single_instance.py），属本机状态而非源码，
+# 入库会让每台机器启动后都变脏，且密钥本身不应跨机器共享。
+.ipc_key
+
+# 脚本版本历史库（version_manager.py 的 SQLite）：纯运行时数据，随机器/使用累积。
+script_versions.db

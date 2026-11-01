@@ -52,7 +52,6 @@ _toggle_fold = None      # Mini Bar 折叠切换回调
 _main_run = None         # 运行脚本回调 (定时调度保存)
 _win = None              # 当前打开的设置窗口
 _prev_colors = None      # 上次刷新时的主题色表快照
-_tip_win = None          # tooltip 窗口
 _sched_next_label = None # 定时调度「下次执行」标签 (供主程序周期刷新)
 
 # ── 统一即时保存框架 (控件改动 600ms 防抖后自动保存) ──
@@ -184,16 +183,26 @@ def refresh_theme(prev=None):
             try:
                 cls = w.winfo_class()
                 if cls in ("Frame", "TFrame"):
-                    ht = int(w.cget("highlightthickness"))
-                    if ht > 0:
-                        w.configure(bg=C["bgc"], highlightbackground=C["bd"])
+                    _fr_role = _ui_theme.get_role(w)
+                    if _fr_role:
+                        w.configure(bg=C.get(_fr_role, C["bgc"]))
                     else:
-                        w.configure(bg=C["bg"])
+                        ht = int(w.cget("highlightthickness"))
+                        if ht > 0:
+                            w.configure(bg=C["bgc"], highlightbackground=C["bd"])
+                        else:
+                            w.configure(bg=C["bg"])
                 elif cls in ("Label", "TLabel"):
                     parent_bg = str(p.cget("bg"))
                     # 语义角色由控件创建时显式登记 (ui.theme.set_role); 未登记 → fgm。
-                    fg_color = C.get(_ui_theme.get_role(w) or "", C["fgm"])
-                    w.configure(bg=parent_bg, fg=fg_color)
+                    _lbl_role = _ui_theme.get_role(w)
+                    _fg_tok = _ui_theme.get_fg_token(w)
+                    if _lbl_role:
+                        _lb = C.get(_lbl_role, parent_bg)
+                        w.configure(bg=_lb, fg=_ui_theme.text_on(_lb))
+                    else:
+                        w.configure(bg=parent_bg,
+                            fg=C.get(_fg_tok or "", C["fgm"]))
                 elif cls == "Text":
                     w.configure(bg=C["logbg"], fg=C["logfg"],
                         insertbackground=C["fgt"],
@@ -203,10 +212,16 @@ def refresh_theme(prev=None):
                 elif cls == "Button":
                     _role = _ui_theme.get_role(w)
                     if _role:
-                        w.configure(bg=C.get(_role, C["bgc"]))
+                        _rb = C.get(_role, C["bgc"])
+                        w.configure(bg=_rb, fg=_ui_theme.text_on(_rb),
+                            activebackground=C.get("ach", _rb),
+                            activeforeground=_ui_theme.text_on(C.get("ach", _rb)),
+                            disabledforeground=C["fgm"])
                     else:
                         w.configure(bg=C["bgc"], fg=C["fgb"],
                             activebackground=C["acl"],
+                            activeforeground=C["fgt"],
+                            disabledforeground=C["fgm"],
                             highlightbackground=C["bd"])
                 elif cls == "Entry":
                     w.configure(bg=C["ebg"], fg=C["fgb"],
@@ -214,6 +229,8 @@ def refresh_theme(prev=None):
                 elif cls == "Combobox":
                     w.configure(background=C["bgc"], fieldbackground=C["bgc"],
                         foreground=C["fgb"])
+                elif cls == "TCombobox":
+                    _ui_theme.restyle_combobox_popdown(w, C)
                 elif cls == "Canvas":
                     w.configure(bg=C["bg"])
                 elif cls == "Listbox":
@@ -228,9 +245,12 @@ def refresh_theme(prev=None):
                         activebackground=_pbg, activeforeground=C["fgt"],
                         selectcolor=C["bgc"], highlightbackground=C["bd"])
                 elif cls == "Menu":
+                    # 高亮条 acl+fgt (ac+white 暗色下为浅底白字)
                     w.configure(bg=C["bgc"], fg=C["fgb"],
                         activebackground=C["acl"], activeforeground=C["fgt"],
                         disabledforeground=C["fgm"])
+                elif cls == "PanedWindow":
+                    w.configure(bg=C["bd"], sashrelief="raised")
             except Exception:
                 pass
             _walk(w, prev)
@@ -395,13 +415,13 @@ def _make_collapsible_card(parent, title, icon):
 
     title_frame = tkinter.Frame(card, bg=C["bgc"])
     title_frame.grid(row=0, column=0, sticky="ew",
-        padx=sp("card_pad"), pady=(sp("sp_xs"), sp("sp_xs")))
+        padx=sp("sp_md"), pady=(sp("sp_sm"), sp("sp_sm")))
     title_frame.columnconfigure(1, weight=1)
 
     # 图标用统一图标字体 (Segoe UI Symbol 单色字形), 与标题正文分离 (§3.1/§3.2)
     tkinter.Label(title_frame, text=icon, font=FONT_ICON_MD,
-        bg=C["bgc"], fg=C["fgt"]).grid(row=0, column=0, sticky="w",
-        padx=(0, sp("gap_tight")))
+        bg=C["bgc"], fg=C["ac"]).grid(row=0, column=0, sticky="w",
+        padx=(0, sp("sp_sm")))
 
     tkinter.Label(title_frame, text=title, font=FONT_TITLE,
         bg=C["bgc"], fg=C["fgt"]).grid(row=0, column=1, sticky="w")
@@ -444,6 +464,16 @@ _NAV_ITEMS = [
     ("market",   "⛁", "脚本市场"),
     ("extensions", "⧉", "扩展"),
 ]
+
+# 导航分组 (目标信息架构 §4.1): 组内顺序 = 导航项显示顺序; 12 key 不重不漏。
+_NAV_GROUPS = [
+    ("常用",       ("exec", "quick", "record", "log")),
+    ("自动化能力", ("ai", "sched", "advanced")),
+    ("互联与扩展", ("netlink", "python", "market", "extensions")),
+    ("系统",       ("system",)),
+]
+
+_NAV_ITEMS_LOOKUP = {k: (i, t) for k, i, t in _NAV_ITEMS}  # key -> (icon, label)
 
 
 def _register_nav_card(key, card_widget):
@@ -499,69 +529,139 @@ def open_settings_window():
     # 声明自管换肤: 通用 walk (ACRPA._walk / dialogs.refresh_theme) 不再跨入本窗口,
     # 换肤由薄壳订阅回调 _on_theme_publish → on_theme_publish 负责 (阶段二第 2/4 项)。
     _ui_theme.claim_window(_win, "settings_window")
-    _win.title("设置 — ACRPA")
     # 记忆上次位置/尺寸 (config.json win_geometry): 非空且经虚拟屏越界校验
     # (utils.geometry_in_screen) 通过才应用; 空或越界一律回退居中 680x680。
+    saved_geo = ""
     try:
         saved_geo = getattr(state, "WIN_GEOMETRY", "") or ""
-        if saved_geo and utils.geometry_in_screen(_win, saved_geo):
-            _win.geometry(saved_geo)
-        else:
-            rx, ry = root.winfo_x(), root.winfo_y()
-            rw = max(root.winfo_width(), 680); rh = max(root.winfo_height(), 680)
-            sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
-            x = min(max(rx + (rw - 680) // 2, 0), max(sw - 680, 0))
-            y = min(max(ry + (rh - 680) // 2, 0), max(sh - 680, 0))
-            _win.geometry("680x680+{}+{}".format(x, y))
     except Exception:
-        utils.place_dialog(_win, 680, 680)
-    _win.minsize(580, 500)
-    _win.configure(bg=C["bg"])
-    _set_window_icon(_win)
+        pass
+    try:
+        geo_ok = bool(saved_geo) and bool(utils.geometry_in_screen(_win, saved_geo))
+    except Exception:
+        geo_ok = False
+    # 外壳 (底色/标题/图标/尺寸/最小尺寸/居中) 统一走 window_shell; 本窗仍是
+    # 自管的「导航栏 + 内容区」grid 布局, 因此不套 content 层。
+    try:
+        from ui.window_shell import apply_window_chrome
+        apply_window_chrome(_win, title="设置 — ACRPA", size=(680, 680),
+                            min_size=(580, 500), parent=root, bg_key="bg",
+                            colors=C, icon_setter=_set_window_icon,
+                            geometry=saved_geo if geo_ok else None,
+                            center=not geo_ok)
+    except Exception:
+        _win.title("设置 — ACRPA")
+        _win.minsize(580, 500)
+        _win.configure(bg=C["bg"])
+        _set_window_icon(_win)
+        try:
+            if geo_ok:
+                _win.geometry(saved_geo)
+            else:
+                utils.place_dialog(_win, 680, 680)
+        except Exception:
+            pass
     _win.columnconfigure(0, weight=0)  # 导航栏 (固定宽度)
     _win.columnconfigure(1, weight=1)  # 内容区 (可伸缩)
-    _win.rowconfigure(0, weight=1)
+    _win.rowconfigure(0, weight=0)     # 顶部状态条 (固定高)
+    _win.rowconfigure(1, weight=1)     # 滚动内容区 (可伸缩)
     _win.protocol("WM_DELETE_WINDOW", _close)
 
     # ── 左侧导航栏 ──
-    nav_panel = tkinter.Frame(_win, bg=C["bg"], width=140)
-    nav_panel.grid(row=0, column=0, sticky="ns")
+    nav_panel = tkinter.Frame(_win, bg=C["bg"], width=150)
+    nav_panel.grid(row=0, column=0, rowspan=2, sticky="ns")
     nav_panel.grid_propagate(False)
     nav_panel.columnconfigure(0, weight=1)
 
     tkinter.Label(nav_panel, text="设置导航", font=FONT_TITLE,
         bg=C["bg"], fg=C["fgt"]).grid(row=0, column=0, sticky="ew",
-        padx=8, pady=(10, 6))
+        padx=sp("sp_sm"), pady=(sp("sp_md"), sp("gap_tight")))
+
+    # 搜索框: 过滤导航项 (匹配 key / 显示名); 空则全部显示
+    _nav_search_var = tkinter.StringVar()
+    search_entry = tkinter.Entry(nav_panel, textvariable=_nav_search_var,
+        font=FONT_SMALL, relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"],
+        insertbackground=C["fgt"])
+    search_entry.grid(row=1, column=0, sticky="ew", padx=sp("sp_sm"),
+        pady=(0, sp("gap_tight")))
+    _group_headers = []  # [(keys tuple, group_header_label)]
+
+    def _on_nav_search(*_a):
+        q = _nav_search_var.get().strip().lower()
+        for _keys, _hdr in _group_headers:
+            any_visible = False
+            for k in _keys:
+                _icon, _text = _NAV_ITEMS_LOOKUP.get(k, ("", k))
+                hit = (q == "") or (q in k.lower()) or (q in _text.lower())
+                lbl = _nav_labels.get(k)
+                if lbl is None:
+                    continue
+                (lbl.grid() if hit else lbl.grid_remove())
+                any_visible = any_visible or hit
+            (_hdr.grid() if (q == "" or any_visible) else _hdr.grid_remove())
+
+    _nav_search_var.trace_add("write", lambda *_: _on_nav_search())
+
     tkinter.Frame(nav_panel, bg=C["bd"], height=sp("hairline")).grid(
-        row=1, column=0, sticky="ew", padx=sp("gap_tight"), pady=(0, sp("sp_xs")))
+        row=2, column=0, sticky="ew", padx=sp("gap_tight"), pady=(0, sp("sp_xs")))
 
     _nav_items_frame = tkinter.Frame(nav_panel, bg=C["bg"])
-    _nav_items_frame.grid(row=2, column=0, sticky="nsew")
+    _nav_items_frame.grid(row=3, column=0, sticky="nsew")
     _nav_items_frame.columnconfigure(0, weight=1)
-    nav_panel.rowconfigure(2, weight=1)
+    nav_panel.rowconfigure(3, weight=1)
 
     _nav_row_idx = 0
-    for key, icon, label_text in _NAV_ITEMS:
-        _nav_items_frame.rowconfigure(_nav_row_idx, minsize=ctrl_h("ctrl_h_lg"))
-        nav_lbl = tkinter.Label(_nav_items_frame,
-            text="  {}  {}".format(icon, label_text),
-            font=FONT_BODY, bg=C["bg"], fg=C["fgm"],
-            anchor="w", padx=sp("sp_sm"), pady=sp("sp_xs"), cursor="hand2",
-            takefocus=True, highlightthickness=sp("focus_w"),
-            highlightbackground=C["bg"], highlightcolor=C["focus"])
-        nav_lbl.grid(row=_nav_row_idx, column=0, sticky="ew",
-            padx=sp("gap_tight"), pady=sp("hairline"))
-        nav_lbl.bind("<Button-1>", lambda e, k=key: _on_nav_click(k))
-        nav_lbl.bind("<Enter>", lambda e, l=nav_lbl, k=key:
-            l.configure(bg=C["row_hover"]) if _nav_active_key != k else None)
-        nav_lbl.bind("<Leave>", lambda e, l=nav_lbl, k=key:
-            l.configure(bg=C["bg"]) if _nav_active_key != k else None)
-        _nav_labels[key] = nav_lbl
+    for group_title, keys in _NAV_GROUPS:
+        grp_lbl = tkinter.Label(_nav_items_frame, text=group_title,
+            font=FONT_SMALL_BOLD, bg=C["bg"], fg=C["fgm"], anchor="w",
+            padx=sp("sp_sm"))
+        grp_lbl.grid(row=_nav_row_idx, column=0, sticky="ew",
+            pady=(sp("sp_sm"), sp("gap_tight")))
         _nav_row_idx += 1
+        _group_headers.append((keys, grp_lbl))
+
+        for key in keys:
+            _icon, label_text = _NAV_ITEMS_LOOKUP[key]
+            _nav_items_frame.rowconfigure(_nav_row_idx, minsize=ctrl_h("ctrl_h_lg"))
+            nav_lbl = tkinter.Label(_nav_items_frame,
+                text="  {}  {}".format(_icon, label_text),
+                font=FONT_BODY, bg=C["bg"], fg=C["fgm"],
+                anchor="w", padx=sp("sp_sm"), pady=sp("sp_xs"), cursor="hand2",
+                takefocus=True, highlightthickness=sp("focus_w"),
+                highlightbackground=C["bg"], highlightcolor=C["focus"])
+            nav_lbl.grid(row=_nav_row_idx, column=0, sticky="ew",
+                padx=sp("gap_tight"), pady=sp("hairline"))
+            nav_lbl.bind("<Button-1>", lambda e, k=key: _on_nav_click(k))
+            nav_lbl.bind("<Enter>", lambda e, l=nav_lbl, k=key:
+                l.configure(bg=C["row_hover"]) if _nav_active_key != k else None)
+            nav_lbl.bind("<Leave>", lambda e, l=nav_lbl, k=key:
+                l.configure(bg=C["bg"]) if _nav_active_key != k else None)
+            _nav_labels[key] = nav_lbl
+            _nav_row_idx += 1
+
+    # ── 顶部全局状态条 (只读: 需重启项数 + 保存约定) ──
+    status_bar = tkinter.Frame(_win, bg=C["bg"])
+    status_bar.grid(row=0, column=1, sticky="ew")
+    status_bar.columnconfigure(1, weight=1)
+    _restart_count = [0]
+    _restart_lbl = tkinter.Label(status_bar, text="✓ 全部即时生效",
+        font=FONT_SMALL, bg=C["bg"], fg=C["sc"])
+    _restart_lbl.grid(row=0, column=0, sticky="w", padx=sp("sp_md"),
+        pady=(sp("sp_sm"), 0))
+    tkinter.Label(status_bar, text="改动自动保存 · 随时关闭",
+        font=FONT_SMALL, bg=C["bg"], fg=C["fgm"]).grid(row=0, column=2,
+        sticky="e", padx=sp("sp_md"), pady=(sp("sp_sm"), 0))
+    tkinter.Frame(status_bar, bg=C["bd"], height=sp("hairline")).grid(
+        row=1, column=0, columnspan=3, sticky="ew", pady=(sp("sp_sm"), 0))
+
+    def _note_restart():
+        _restart_count[0] += 1
+        _restart_lbl.configure(
+            text="⏱ {} 项需重启".format(_restart_count[0]), fg=C["wn"])
 
     # ── 右侧内容区 (滚动) ──
     _nav_canvas = tkinter.Canvas(_win, bg=C["bg"], highlightthickness=0, bd=0)
-    _scrollbar = tkinter.Scrollbar(_win, orient="vertical", width=8,
+    _scrollbar = tkinter.Scrollbar(_win, orient="vertical", width=utils.sp("sb_w"),
         relief="flat", bg=C["bd"], troughcolor=C["bg"], command=_nav_canvas.yview)
     _inner = tkinter.Frame(_nav_canvas, bg=C["bg"])
     _inner.columnconfigure(0, weight=1)
@@ -576,8 +676,8 @@ def open_settings_window():
     _nav_canvas.configure(yscrollcommand=_scrollbar.set)
     _nav_canvas.bind("<Configure>", _on_canvas_configure, add="+")
 
-    _nav_canvas.grid(row=0, column=1, sticky="nsew")
-    _scrollbar.grid(row=0, column=2, sticky="ns")
+    _nav_canvas.grid(row=1, column=1, sticky="nsew")
+    _scrollbar.grid(row=1, column=2, sticky="ns")
 
     def _on_wheel(event):
         _nav_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
@@ -595,6 +695,7 @@ def open_settings_window():
         C=C,
         FONT_TITLE=FONT_TITLE, FONT_BODY=FONT_BODY,
         FONT_SMALL=FONT_SMALL, FONT_BUTTON=FONT_BUTTON,
+        FONT_SMALL_BOLD=FONT_SMALL_BOLD,   # record 卡角标用 (ctx 缺项会导致卡片构建抛 AttributeError)
         APP_ROOT=APP_ROOT, root=root, win=_win, state=state, PAD=PAD,
         make_collapsible_card=_make_collapsible_card,
         make_badge=_make_badge,
@@ -605,6 +706,7 @@ def open_settings_window():
         flash_saved=_flash_saved,
         set_window_icon=_set_window_icon,
         set_sched_label=_register_sched_label,
+        note_restart=_note_restart,
         btn=_btn, create_card=create_card, show_toast=show_toast, log1=log1,
         darken=_darken, attach_tooltip=attach_tooltip, sp=sp, ctrl_h=ctrl_h,
         ui_theme=_ui_theme,

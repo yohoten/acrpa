@@ -235,13 +235,23 @@ class MarketWindow:
             _ui_theme.claim_window(dlg, "market_window")
         except Exception:
             pass
-        dlg.title("脚本市场 — ACRPA")
-        dlg.geometry("{}x{}+{}+{}".format(
-            tk_px(660), tk_px(560), tk_px(340), tk_px(80)))
-        dlg.minsize(tk_px(640), tk_px(520))
-        dlg.transient(self.parent)
-        dlg.configure(bg=themed("bgc"))
-        _try_set_icon(dlg)
+        # 外壳 (底色/标题/尺寸/最小尺寸/父窗居中/图标) 统一走 window_shell,
+        # 内部仍是本窗自管的 row0~row3 布局: 不塞 content 层, 避免打乱既有行权重。
+        try:
+            from ui.window_shell import apply_window_chrome
+            apply_window_chrome(dlg, title="脚本市场 — ACRPA", size=(660, 560),
+                                min_size=(640, 520), parent=self.parent,
+                                bg_key="bgc", icon_setter=_try_set_icon)
+        except Exception:
+            # 骨架不可用时退回最小实现, 市场窗仍能打开
+            dlg.title("脚本市场 — ACRPA")
+            if not utils.place_dialog(dlg, 660, 560, self.parent):
+                dlg.geometry(utils.center_geometry(
+                    self.parent, tk_px(660), tk_px(560)))
+            dlg.minsize(tk_px(640), tk_px(520))
+            dlg.transient(self.parent)
+            dlg.configure(bg=themed("bgc"))
+            _try_set_icon(dlg)
         dlg.columnconfigure(0, weight=1)
         dlg.rowconfigure(2, weight=1)   # body 占满
 
@@ -311,7 +321,15 @@ class MarketWindow:
             "bg": themed("bgc"), "fg": themed("fgb"),
             "activebackground": themed("acl"), "activeforeground": themed("fgt")})
         self.tag_btn.grid(row=0, column=5, rowspan=2, padx=(gap("sp_sm"), 0))
-        self.tag_menu = tkinter.Menu(self.tag_btn, tearoff=0)
+        self.tag_menu = tkinter.Menu(
+            self.tag_btn, tearoff=0, bd=0,
+            bg=themed("bgc"), fg=themed("fgb"),
+            activebackground=themed("acl"), activeforeground=themed("fgt"),
+            disabledforeground=themed("fgm"))
+        self._reg(self.tag_menu, lambda: {
+            "bg": themed("bgc"), "fg": themed("fgb"),
+            "activebackground": themed("acl"), "activeforeground": themed("fgt"),
+            "disabledforeground": themed("fgm")})
         self.tag_btn.configure(menu=self.tag_menu)
 
         self.search_var.trace_add("write", lambda *a: self.rebuild())
@@ -421,7 +439,8 @@ class MarketWindow:
         self.canvas = tkinter.Canvas(self.frm_list, highlightthickness=0, bd=0)
         self._reg(self.canvas, lambda: {"bg": themed("bgc")})
         self.scrollbar = tkinter.Scrollbar(self.frm_list, orient="vertical",
-                                           command=self.canvas.yview)
+                                           command=self.canvas.yview,
+                                           width=sp("sb_w"))
         self._reg(self.scrollbar, lambda: {
             "bg": themed("bd"), "troughcolor": themed("logbg"),
             "activebackground": themed("fgm")})
@@ -1010,7 +1029,11 @@ class MarketWindow:
 
     def _post_account_menu(self, event):
         logged = self._logged_providers()
-        menu = tkinter.Menu(self.dlg, tearoff=0)
+        menu = tkinter.Menu(
+            self.dlg, tearoff=0, bd=0,
+            bg=themed("bgc"), fg=themed("fgb"),
+            activebackground=themed("acl"), activeforeground=themed("fgt"),
+            disabledforeground=themed("fgm"))
         menu.add_command(label="使用 Gitee 登录",
                          command=lambda: self._open_token_dialog("gitee"))
         menu.add_command(label="使用 GitHub 登录",
@@ -1168,6 +1191,11 @@ class MarketWindow:
                 frm.configure(bg=themed("bgc"))
             except Exception:
                 pass
+        # 分类下拉的弹窗是原生 Listbox, 不受 ttk 样式控制
+        try:
+            utils.restyle_combobox_popdown(self.cat_combo)
+        except Exception:
+            pass
         self.rebuild()
 
     # ────────────────────────────────────────────────────────────────

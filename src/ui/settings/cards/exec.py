@@ -2,6 +2,9 @@
 """ui.settings.cards.exec — ⚙ 基础执行卡 (原 settings_window open_settings_window 内
 767-890 行段)。
 
+布局: 采用 cards/_layout.py 的「分节 + 表单行」——重试/执行模式/安全更新三个 section,
+单行只放一个控件, 说明文字落到控件下方 help 行 (替代旧「行尾塞灰字」)。
+
 导出:
     build(parent, ctx) -> handles     # 构建卡片, 返回句柄 (含该卡 Variables)
     apply(ctx, handles) -> None       # 等价原 _apply_exec_settings, 写回 state
@@ -12,12 +15,15 @@ from tkinter import ttk, messagebox
 import state
 from utils import FONT_TINY, FONT_ICON
 
+from ui.settings.cards._layout import section, row
+
 CARD_KEY = "exec"
 ROW = 0
 
 
 def build(parent, ctx):
     C = ctx.C
+    sp = ctx.sp
     # 工厂显式绑定 (等价原闭包; 便于静态断言按 _track_card_vars("exec", ...) 匹配)
     _make_collapsible_card = ctx.make_collapsible_card
     _make_badge = ctx.make_badge
@@ -25,49 +31,50 @@ def build(parent, ctx):
     _validate_number = ctx.validate_number
     _track_card_vars = ctx.track_card_vars
 
-    card, content, title, _ = _make_collapsible_card(parent, "基础执行", "⚙")
+    card, content, title, _arrow = _make_collapsible_card(parent, "基础执行", "⚙")
     card.grid(row=ROW, column=0, sticky="ew", **ctx.PAD)
     _make_badge(CARD_KEY, title)
     _register_nav_card(CARD_KEY, card)
 
-    # === Retry settings row ──
-    retry_frame = tkinter.Frame(content, bg=C["bgc"])
-    retry_frame.grid(row=0, column=0, sticky="ew", padx=8, pady=2)
+    _r = 0
 
-    tkinter.Label(retry_frame, text="重试:", font=ctx.FONT_BODY, fg=C["fgb"],
-        bg=C["bgc"]).pack(side="left", padx=(0,4))
+    def _add(w, pady=None):
+        nonlocal _r
+        w.grid(row=_r, column=0, sticky="ew",
+               pady=(sp("row_gap") if pady is None else pady))
+        _r += 1
+        return w
+
+    def _sec(name, first=False):
+        return _add(section(content, ctx, name),
+                    pady=(sp("sp_sm") if first else sp("section_gap"), 0))
+
+    # ── 分节: 重试与超时 ──
+    _sec("重试与超时", first=True)
+
     retry_var = tkinter.StringVar(value=str(state.RETRY_MAX))
-    retry_entry = _validate_number(tkinter.Entry(retry_frame, textvariable=retry_var, width=6,
-        font=ctx.FONT_BODY, relief="solid", bd=1,
-        bg=C["ebg"], fg=C["fgb"]), retry_var, "重试次数", 3, int, 0, card_key="exec")
-    retry_entry.pack(side="left", padx=(0,6))
+    _add(row(content, ctx, "重试次数", lambda p: _validate_number(
+        tkinter.Entry(p, textvariable=retry_var, width=6, font=ctx.FONT_BODY,
+            relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"]),
+        retry_var, "重试次数", 3, int, 0, card_key="exec"),
+        unit="次", help="脚本失败后自动重试的最大次数"))
 
-    tkinter.Label(retry_frame, text="间隔:", font=ctx.FONT_BODY, fg=C["fgb"],
-        bg=C["bgc"]).pack(side="left", padx=(0,4))
     interval_var = tkinter.StringVar(value=str(state.RETRY_INTERVAL))
-    interval_entry = _validate_number(tkinter.Entry(retry_frame, textvariable=interval_var, width=6,
-        font=ctx.FONT_BODY, relief="solid", bd=1,
-        bg=C["ebg"], fg=C["fgb"]), interval_var, "重试间隔", 1.0, float, 0, card_key="exec")
-    interval_entry.pack(side="left", padx=(0,6))
+    _add(row(content, ctx, "重试间隔", lambda p: _validate_number(
+        tkinter.Entry(p, textvariable=interval_var, width=6, font=ctx.FONT_BODY,
+            relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"]),
+        interval_var, "重试间隔", 1.0, float, 0, card_key="exec"),
+        unit="秒", help="两次重试之间的等待时间"))
 
-    tkinter.Label(retry_frame, text="识图超时:", font=ctx.FONT_BODY, fg=C["fgb"],
-        bg=C["bgc"]).pack(side="left", padx=(0,4))
     timeout_var = tkinter.StringVar(value=str(state.IMAGE_TIMEOUT))
-    timeout_entry = _validate_number(tkinter.Entry(retry_frame, textvariable=timeout_var, width=6,
-        font=ctx.FONT_BODY, relief="solid", bd=1,
-        bg=C["ebg"], fg=C["fgb"]), timeout_var, "识图超时", 5.0, float, 0, card_key="exec")
-    timeout_entry.pack(side="left")
+    _add(row(content, ctx, "识图超时", lambda p: _validate_number(
+        tkinter.Entry(p, textvariable=timeout_var, width=6, font=ctx.FONT_BODY,
+            relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"]),
+        timeout_var, "识图超时", 5.0, float, 0, card_key="exec"),
+        unit="秒", help="图片识别等待时间，超时自动跳过（默认 5 秒）"))
 
-    # 识图超时说明
-    tkinter.Label(retry_frame, text="图片识别等待时间，超时自动跳过", font=FONT_TINY,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(4, 0))
-
-    # === 执行模式选择 (P1-6: Radiobutton 替代 DD 复选框) ──
-    mode_frame = tkinter.Frame(content, bg=C["bgc"])
-    mode_frame.grid(row=1, column=0, sticky="ew", padx=8, pady=(2, 2))
-
-    tkinter.Label(mode_frame, text="执行模式:", font=ctx.FONT_BODY,
-        fg=C["fgb"], bg=C["bgc"]).grid(row=0, column=0, sticky="w", padx=(0, 8), pady=(0, 4))
+    # ── 分节: 执行模式 ──
+    _sec("执行模式")
 
     _INPUT_MODE_LABELS = {
         "sendinput":  "前台模式 (SendInput) — 兼容性好，需窗口在前台",
@@ -75,17 +82,10 @@ def build(parent, ctx):
         "sendmessage": "后台模式 (SendMessage) — 可后台操作，兼容性较差",
     }
     input_mode_var = tkinter.StringVar(value=getattr(state, 'INPUT_MODE', 'sendinput'))
-    _mode_row = 1
-    for mode_key, mode_label in _INPUT_MODE_LABELS.items():
-        rb = ttk.Radiobutton(mode_frame, text=mode_label, variable=input_mode_var,
-            value=mode_key)
-        rb.grid(row=_mode_row, column=0, sticky="w", padx=(0, 8), pady=1)
-        _mode_row += 1
-
-    # DD 驱动信息按钮
-    dd_info_btn = tkinter.Label(mode_frame, text="  ⓘ DD 驱动详情", font=FONT_TINY,
-        fg=C["ac"], bg=C["bgc"], cursor="hand2")
-    dd_info_btn.grid(row=_mode_row, column=0, sticky="w", pady=(2, 4))
+    for _mode_key, _mode_label in _INPUT_MODE_LABELS.items():
+        _add(row(content, ctx, "",
+                 lambda p, k=_mode_key, t=_mode_label:
+                     ttk.Radiobutton(p, text=t, variable=input_mode_var, value=k)))
 
     def _show_dd_info(event):
         messagebox.showinfo("DD 驱动信息",
@@ -98,31 +98,26 @@ def build(parent, ctx):
             "• 需要以管理员身份运行\n"
             "• 仅支持 Windows 系统\n"
             "• 加载失败会自动回退到 PyAutoGUI")
+
+    dd_info_btn = tkinter.Label(content, text="  ⓘ DD 驱动详情", font=FONT_TINY,
+        fg=C["ac"], bg=C["bgc"], cursor="hand2", anchor="w")
     dd_info_btn.bind("<Button-1>", _show_dd_info)
+    _add(dd_info_btn)
 
-    # === Hint + App protection ──
-    hint_frame = tkinter.Frame(content, bg=C["bgc"])
-    hint_frame.grid(row=3, column=0, sticky="ew", padx=8, pady=(0,4))
-
-    tkinter.Label(hint_frame, text="(默认5秒，超时自动跳过)", font=ctx.FONT_SMALL,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left")
+    # ── 分节: 安全与更新 ──
+    _sec("安全与更新")
 
     app_protect_var = tkinter.BooleanVar(value=state.APP_PROTECT)
-    ttk.Checkbutton(hint_frame, text="关闭时确认", variable=app_protect_var).pack(side="right")
+    _add(row(content, ctx, "", lambda p: ttk.Checkbutton(
+        p, text="关闭时确认", variable=app_protect_var),
+        help="关闭主窗口前弹出确认对话框"))
+
     check_update_var = tkinter.BooleanVar(value=state.CHECK_UPDATE)
-    ttk.Checkbutton(hint_frame, text="检查更新", variable=check_update_var).pack(side="right", padx=(8,0))
-
-    # Fail-safe setting
-    failsafe_frame = tkinter.Frame(content, bg=C["bgc"])
-    failsafe_frame.grid(row=2, column=0, sticky="ew", padx=10, pady=(4, 4))
-
-    tkinter.Label(failsafe_frame, text="安全设置:", font=ctx.FONT_BODY,
-        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0, 6))
+    _add(row(content, ctx, "", lambda p: ttk.Checkbutton(
+        p, text="检查更新", variable=check_update_var),
+        help="启动时检查新版本"))
 
     failsafe_var = tkinter.BooleanVar(value=getattr(state, 'FAILSAFE', True))
-    failsafe_cb = ttk.Checkbutton(failsafe_frame, text="启用 PyAutoGUI 故障保护 (鼠标移角落停止)",
-        variable=failsafe_var)
-    failsafe_cb.pack(side="left", padx=(0, 8))
 
     def _show_failsafe_info(event):
         info = (
@@ -137,10 +132,18 @@ def build(parent, ctx):
         )
         messagebox.showinfo("故障保护说明", info)
 
-    failsafe_info_btn = tkinter.Label(failsafe_frame, text="ⓘ", font=FONT_ICON,
-        fg=C["ac"], bg=C["bgc"], cursor="hand2")
-    failsafe_info_btn.pack(side="left")
-    failsafe_info_btn.bind("<Button-1>", _show_failsafe_info)
+    def _mk_failsafe(p):
+        f = tkinter.Frame(p, bg=C["bgc"])
+        ttk.Checkbutton(f, text="启用 PyAutoGUI 故障保护（鼠标移角落停止）",
+                        variable=failsafe_var).pack(side="left")
+        ib = tkinter.Label(f, text="ⓘ", font=FONT_ICON,
+            fg=C["ac"], bg=C["bgc"], cursor="hand2")
+        ib.pack(side="left", padx=(6, 0))
+        ib.bind("<Button-1>", _show_failsafe_info)
+        return f
+
+    _add(row(content, ctx, "", _mk_failsafe,
+        help="调试时建议启用；长时间 RPA 任务可禁用"))
 
     # 绑定防抖保存 (基础执行卡)
     _track_card_vars("exec", (retry_var, interval_var, timeout_var,

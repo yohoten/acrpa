@@ -11,6 +11,8 @@ from tkinter import ttk, messagebox
 import state
 from utils import FONT_TINY, FONT_ICON
 
+from ui.settings.cards._layout import section, row, help_line
+
 CARD_KEY = "ai"
 ROW = 1
 
@@ -30,33 +32,29 @@ def build(parent, ctx):
     _track_card_vars = ctx.track_card_vars
     _win = ctx.win
     root = ctx.root
+    sp = ctx.sp
 
     card, content, title, _ = _make_collapsible_card(parent, "AI 增强", "✦")
     card.grid(row=ROW, column=0, sticky="ew", **ctx.PAD)
     _make_badge(CARD_KEY, title)
     _register_nav_card(CARD_KEY, card)
 
-    ai_frame = tkinter.Frame(content, bg=C["bgc"])
-    ai_frame.grid(row=0, column=0, sticky="ew", padx=8, pady=(4, 2))
+    _r = 0
 
-    tkinter.Label(ai_frame, text="AI增强:", font=ctx.FONT_BODY,
-        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0, 6))
+    def _add(w, pady=None):
+        nonlocal _r
+        w.grid(row=_r, column=0, sticky="ew",
+               pady=(sp("row_gap") if pady is None else pady))
+        _r += 1
+        return w
 
-    ai_smart_retry_var = tkinter.BooleanVar(value=state.AI_SMART_RETRY)
-    ai_smart_cb = ttk.Checkbutton(ai_frame, text="智能重试 (失败时AI分析调整)",
-        variable=ai_smart_retry_var)
-    ai_smart_cb.pack(side="left", padx=(0, 8))
+    def _sec(name, first=False):
+        return _add(section(content, ctx, name),
+                    pady=(sp("sp_sm") if first else sp("section_gap"), 0))
 
-    # AI 智能重试说明
-    ai_desc_frame = tkinter.Frame(content, bg=C["bgc"])
-    ai_desc_frame.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 2))
-    tkinter.Label(ai_desc_frame, text="失败时 AI 分析截图并给出修正建议（需配置 API Key）", font=FONT_TINY,
-        fg=C["fgm"], bg=C["bgc"]).pack(anchor="w")
-
-    ai_anomaly_var = tkinter.BooleanVar(value=state.AI_ANOMALY_DETECT)
-    ai_anomaly_cb = ttk.Checkbutton(ai_frame, text="异常检测 (AI监控执行)",
-        variable=ai_anomaly_var)
-    ai_anomaly_cb.pack(side="left", padx=(0, 8))
+    def _entry(p, var, w, show=None):
+        return tkinter.Entry(p, textvariable=var, width=w, show=show,
+            font=ctx.FONT_SMALL, relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"])
 
     def _show_ai_info(event):
         info = (
@@ -71,16 +69,29 @@ def build(parent, ctx):
         )
         messagebox.showinfo("AI 增强功能", info)
 
-    ai_info_btn = tkinter.Label(ai_frame, text="ⓘ", font=FONT_ICON,
-        fg=C["ac"], bg=C["bgc"], cursor="hand2")
-    ai_info_btn.pack(side="left")
-    ai_info_btn.bind("<Button-1>", _show_ai_info)
+    # ── 增强开关 ──
+    _sec("增强开关", first=True)
+    ai_smart_retry_var = tkinter.BooleanVar(value=state.AI_SMART_RETRY)
 
-    # === API config row (自定义 AI 提供商 / 模型 / BaseURL / Key  PR-4) ──
-    api_frame = tkinter.Frame(content, bg=C["bgc"])
-    api_frame.grid(row=1, column=0, sticky="ew", padx=8, pady=(2,6))
-    api_frame.columnconfigure(0, weight=0); api_frame.columnconfigure(1, weight=1)
+    def _mk_smart(p):
+        f = tkinter.Frame(p, bg=C["bgc"])
+        ttk.Checkbutton(f, text="智能重试 (失败时AI分析调整)",
+            variable=ai_smart_retry_var).pack(side="left", padx=(0, 6))
+        _info = tkinter.Label(f, text="ⓘ", font=FONT_ICON,
+            fg=C["ac"], bg=C["bgc"], cursor="hand2")
+        _info.pack(side="left")
+        _info.bind("<Button-1>", _show_ai_info)
+        return f
 
+    _add(row(content, ctx, "", _mk_smart,
+        help="失败时 AI 分析截图并给出修正建议（需配置 API Key）"))
+
+    ai_anomaly_var = tkinter.BooleanVar(value=state.AI_ANOMALY_DETECT)
+    _add(row(content, ctx, "", lambda p: ttk.Checkbutton(
+        p, text="异常检测 (AI监控执行)", variable=ai_anomaly_var),
+        help="每 10 条命令自动检测一次，后台静默运行，无需手动干预"))
+
+    # === API config (自定义 AI 提供商 / 模型 / BaseURL / Key) ──
     try:
         import ai_client as _aic
     except Exception:
@@ -105,49 +116,43 @@ def build(parent, ctx):
     _init_p = _prov_by_id.get(_init_pid, {})
 
     # 提供商
-    tkinter.Label(api_frame, text="提供商", font=ctx.FONT_BODY,
-        fg=C["fgb"], bg=C["bgc"]).grid(row=0, column=0, sticky="w", padx=(0,6), pady=2)
+    _sec("API 配置")
     _prov_var = tkinter.StringVar(
         value=_init_p.get("label", _prov_labels[0] if _prov_labels else ""))
-    _prov_combo = ttk.Combobox(api_frame, textvariable=_prov_var, width=26,
-        values=_prov_labels, state="readonly")
-    _prov_combo.grid(row=0, column=1, sticky="ew", pady=2)
+    _prov_combo = None
+
+    def _mk_prov(p):
+        nonlocal _prov_combo
+        _prov_combo = ttk.Combobox(p, textvariable=_prov_var, width=26,
+            values=_prov_labels, state="readonly")
+        return _prov_combo
+
+    _add(row(content, ctx, "提供商", _mk_prov))
 
     # 模型（可编辑）
-    tkinter.Label(api_frame, text="模型", font=ctx.FONT_BODY,
-        fg=C["fgb"], bg=C["bgc"]).grid(row=1, column=0, sticky="w", padx=(0,6), pady=2)
     try:
         _init_model = _aic.resolve_model() if _aic is not None else state.API_MODEL
     except Exception:
         _init_model = state.API_MODEL
     api_model_var = tkinter.StringVar(value=_init_model)
-    api_model_entry = tkinter.Entry(api_frame, textvariable=api_model_var, width=28,
-        font=ctx.FONT_SMALL, relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"])
-    api_model_entry.grid(row=1, column=1, sticky="ew", pady=2)
+    _add(row(content, ctx, "模型", lambda p: _entry(p, api_model_var, 28)))
 
     # BaseURL
-    tkinter.Label(api_frame, text="BaseURL", font=ctx.FONT_BODY,
-        fg=C["fgb"], bg=C["bgc"]).grid(row=2, column=0, sticky="w", padx=(0,6), pady=2)
     _init_base = (getattr(state, "AI_BASE_URL", "") or "").strip() or _init_p.get("base_url", "")
     api_base_var = tkinter.StringVar(value=_init_base)
-    api_base_entry = tkinter.Entry(api_frame, textvariable=api_base_var, width=28,
-        font=ctx.FONT_SMALL, relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"])
-    api_base_entry.grid(row=2, column=1, sticky="ew", pady=2)
+    _add(row(content, ctx, "BaseURL", lambda p: _entry(p, api_base_var, 28)))
 
     # API Key（掩码显示）
-    tkinter.Label(api_frame, text="API Key", font=ctx.FONT_BODY,
-        fg=C["fgb"], bg=C["bgc"]).grid(row=3, column=0, sticky="w", padx=(0,6), pady=2)
     try:
         _init_key = (_aic.get_provider_key(_init_pid) if _aic is not None else None) \
             or getattr(state, "API_KEY", "")
     except Exception:
         _init_key = getattr(state, "API_KEY", "")
     api_key_var = tkinter.StringVar(value=_init_key)
-    api_key_entry = tkinter.Entry(api_frame, textvariable=api_key_var, width=22,
-        font=ctx.FONT_SMALL, show="*", relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"])
-    api_key_entry.grid(row=3, column=1, sticky="ew", pady=2)
 
-    # 显示/隐藏切换 (眼睛图标)
+    api_key_entry = None
+    api_eye_btn = None
+
     def _toggle_api_key_visibility():
         if api_key_entry.cget("show") == "*":
             api_key_entry.config(show="")
@@ -155,15 +160,24 @@ def build(parent, ctx):
         else:
             api_key_entry.config(show="*")
             api_eye_btn.config(text="○")
-    api_eye_btn = tkinter.Label(api_frame, text="○", font=FONT_ICON,
-        bg=C["bgc"], fg=C["fgm"], cursor="hand2")
-    api_eye_btn.grid(row=3, column=2, padx=(4, 0))
-    api_eye_btn.bind("<Button-1>", lambda e: _toggle_api_key_visibility())
-    _attach_tooltip(api_eye_btn, "显示/隐藏 API Key")
+
+    def _mk_key(p):
+        nonlocal api_key_entry, api_eye_btn
+        f = tkinter.Frame(p, bg=C["bgc"])
+        api_key_entry = tkinter.Entry(f, textvariable=api_key_var, width=22,
+            font=ctx.FONT_SMALL, show="*", relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"])
+        api_key_entry.pack(side="left", padx=(0, 4))
+        api_eye_btn = tkinter.Label(f, text="○", font=FONT_ICON,
+            bg=C["bgc"], fg=C["fgm"], cursor="hand2")
+        api_eye_btn.pack(side="left")
+        api_eye_btn.bind("<Button-1>", lambda e: _toggle_api_key_visibility())
+        _attach_tooltip(api_eye_btn, "显示/隐藏 API Key")
+        return f
+
+    _add(row(content, ctx, "API Key", _mk_key))
 
     # 测试连接 + 结果标签
-    ai_test_result = tkinter.Label(api_frame, text="", font=ctx.FONT_SMALL,
-        fg=C["fgm"], bg=C["bgc"], anchor="w")
+    ai_test_result = None
 
     def _on_test_connection():
         try:
@@ -195,12 +209,20 @@ def build(parent, ctx):
         except Exception:
             pass
 
-    ai_test_btn = tkinter.Button(api_frame, text="测试连接", font=ctx.FONT_SMALL,
-        bg=C["bgc"], fg=C["fgb"], relief="raised", bd=1, padx=8, pady=1,
-        cursor="hand2", activebackground=_darken(C["bgc"]), activeforeground=C["fgb"],
-        highlightbackground=C["bd"], highlightthickness=1, command=_on_test_connection)
-    ai_test_btn.grid(row=4, column=0, sticky="w", pady=(2, 0))
-    ai_test_result.grid(row=4, column=1, columnspan=2, sticky="ew", pady=(2, 0))
+    def _mk_test(p):
+        nonlocal ai_test_result
+        f = tkinter.Frame(p, bg=C["bgc"])
+        _tbtn = tkinter.Button(f, text="测试连接", font=ctx.FONT_SMALL,
+            bg=C["bgc"], fg=C["fgb"], relief="raised", bd=1, padx=8, pady=1,
+            cursor="hand2", activebackground=_darken(C["bgc"]), activeforeground=C["fgb"],
+            highlightbackground=C["bd"], highlightthickness=1, command=_on_test_connection)
+        _tbtn.pack(side="left", padx=(0, 8))
+        ai_test_result = tkinter.Label(f, text="", font=ctx.FONT_SMALL,
+            fg=C["fgm"], bg=C["bgc"], anchor="w")
+        ai_test_result.pack(side="left")
+        return f
+
+    _add(row(content, ctx, "", _mk_test))
 
     # 添加自定义提供商（自绘 Toplevel）
     def _open_custom_provider_dialog():
@@ -314,8 +336,10 @@ def build(parent, ctx):
         btn_row = tkinter.Frame(frm, bg=C["bgc"])
         btn_row.grid(row=6, column=0, columnspan=2, sticky="e", pady=(10, 0))
         _ui_theme.roled(tkinter.Button(btn_row, text="添加/更新", font=ctx.FONT_SMALL, bg=C["sc"],
-            fg="white", relief="raised", bd=1, padx=12, pady=3, cursor="hand2",
-            activebackground=_darken(C["sc"]), activeforeground="white",
+            fg=_ui_theme.text_on(C["sc"]), relief="raised", bd=1, padx=12, pady=3,
+            cursor="hand2",
+            activebackground=_darken(C["sc"]),
+            activeforeground=_ui_theme.text_on(_darken(C["sc"])),
             command=_do_add), "sc").pack(side="left", padx=(0, 6))
         tkinter.Button(btn_row, text="关闭", font=ctx.FONT_SMALL, bg=C["bgc"],
             fg=C["fgb"], relief="raised", bd=1, padx=12, pady=3, cursor="hand2",
@@ -326,12 +350,14 @@ def build(parent, ctx):
         _refresh_options()
         _refresh_list()
 
-    ai_custom_btn = tkinter.Button(api_frame, text="添加自定义提供商", font=ctx.FONT_SMALL,
-        bg=C["bgc"], fg=C["fgb"], relief="raised", bd=1, padx=8, pady=1,
-        cursor="hand2", activebackground=_darken(C["bgc"]), activeforeground=C["fgb"],
-        highlightbackground=C["bd"], highlightthickness=1,
-        command=_open_custom_provider_dialog)
-    ai_custom_btn.grid(row=5, column=0, columnspan=3, sticky="w", pady=(4, 0))
+    def _mk_custom_btn(p):
+        return tkinter.Button(p, text="添加自定义提供商", font=ctx.FONT_SMALL,
+            bg=C["bgc"], fg=C["fgb"], relief="raised", bd=1, padx=8, pady=1,
+            cursor="hand2", activebackground=_darken(C["bgc"]), activeforeground=C["fgb"],
+            highlightbackground=C["bd"], highlightthickness=1,
+            command=_open_custom_provider_dialog)
+
+    _add(row(content, ctx, "", _mk_custom_btn))
 
     # 切换提供商：自动带出 BaseURL/模型（不覆盖用户手填）+ 载入已存密钥
     def _on_provider_change(event=None):

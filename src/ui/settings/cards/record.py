@@ -9,7 +9,7 @@ import tkinter
 from tkinter import ttk
 
 import state
-from utils import FONT_TINY, place_dialog
+from utils import FONT_TINY, place_dialog, text_on
 
 CARD_KEY = "record"
 ROW = 3
@@ -59,7 +59,7 @@ def build(parent, ctx):
         fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0, 8))
     rec_stop_hk_var = tkinter.StringVar(value=getattr(state, 'RECORDING_STOP_HOTKEY', 'Ctrl+Alt+F12'))
     rec_stop_hk_lbl = tkinter.Label(rec_hotkey_frame, textvariable=rec_stop_hk_var,
-        font=("Consolas", 8, "bold"), bg=C["ac"], fg="white",
+        font=ctx.FONT_SMALL_BOLD, bg=C["ac"], fg=text_on(C["ac"]),
         padx=6, pady=2, relief="raised", bd=1)
     rec_stop_hk_lbl.pack(side="left", padx=(0, 6))
 

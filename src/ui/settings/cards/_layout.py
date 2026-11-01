@@ -1,0 +1,121 @@
+# -*- coding: utf-8 -*-
+"""ui.settings.cards._layout — 设置卡「表单化」纯布局工厂。
+
+解决设置页「一行塞 3~5 个控件 + 3~5 个灰说明」导致的过于紧凑/难扫视问题。
+提供三类原语 (均只做布局, 不碰 state / 不碰保存; 密度走 utils.TOKENS, 不硬编码):
+
+    section(parent, ctx, title) -> Frame                卡内分节 (小标题 + hairline 分隔线)
+    row(parent, ctx, label, builder, ...) -> Frame      表单行 (标签列 | 控件列 | 单位 |
+                                                        需重启徽标 | 换行的帮助文本)
+    help_line(parent, ctx, text, level=...) -> Frame    卡内整行提示 (FONT_TINY 灰)
+
+契约:
+    · row() 的 builder 是「以行内 Frame 为父」创建控件的回调: builder(fr) -> widget。
+      widget 由 row() 负责 grid 进控件列 (col1 / 开关行占 col0+col1)。
+    · 外层网格行号仍由各卡自行管理 (本工厂只负责「行内」三列布局)。
+    · 颜色/字体全部取自 ctx (C / FONT_SMALL), 主题切换由 window.refresh_theme 递归 walk 覆盖。
+"""
+import tkinter
+
+from utils import FONT_TINY, FONT_SMALL_BOLD
+
+__all__ = ["section", "row", "help_line"]
+
+
+def _C(ctx):
+    return ctx.C
+
+
+def _sp(ctx, key):
+    return ctx.sp(key)
+
+
+def section(parent, ctx, title):
+    """卡内分节: 小标题 + 1px 发丝分隔线。"""
+    C = _C(ctx)
+    fr = tkinter.Frame(parent, bg=C["bgc"])
+    fr.columnconfigure(0, weight=1)
+    tkinter.Label(fr, text=title, font=FONT_SMALL_BOLD,
+        bg=C["bgc"], fg=C["fgt"], anchor="w").grid(
+        row=0, column=0, sticky="ew")
+    tkinter.Frame(fr, bg=C["bd"], height=_sp(ctx, "hairline")).grid(
+        row=1, column=0, sticky="ew", pady=(_sp(ctx, "gap_tight"), _sp(ctx, "sp_sm")))
+    return fr
+
+
+def row(parent, ctx, label, builder, help=None, unit=None, restart=False, indent=False):
+    """标准表单行 (builder 模式)。
+
+    label   : 左侧标签文本 (传 "" / None 表示开关行, 控件直接顶到最左)。
+    builder : builder(fr) -> widget, 以行内 Frame 为父创建控件 (不自行 grid)。
+    help    : 关键说明, 换行置于控件下方 (FONT_TINY 灰, 替代旧「行尾塞灰字」)。
+    unit    : 单位/范围, 置于控件右 (FONT_TINY 灰, 如 "px (380–900)")。
+    restart : True 时在行尾加 ⏱ (U+23F1)「需重启生效」徽标, 并汇总到状态条计数。
+    indent  : True 时整行左侧缩进 (联动子行, 相对父开关/父选项)。
+
+    返回行容器 (indent 时返回外包缩进容器, 否则返回行 Frame), 由调用方 grid 到内容区。
+    """
+    C = _C(ctx)
+
+    container = parent
+    if indent:
+        # 联动子行: 先造外包容器, 行 Frame 以其为父 → 左缩进不影响标签列对齐
+        container = tkinter.Frame(parent, bg=C["bgc"])
+        container.columnconfigure(0, weight=1)
+
+    fr = tkinter.Frame(container, bg=C["bgc"])
+    fr.columnconfigure(0, minsize=_sp(ctx, "form_label_w"))
+    fr.columnconfigure(1, weight=1)
+    if indent:
+        fr.grid(row=0, column=0, sticky="ew", padx=(_sp(ctx, "sp_xl"), 0))
+
+    widget = builder(fr)
+
+    if label:
+        tkinter.Label(fr, text=label, font=ctx.FONT_SMALL,
+            bg=C["bgc"], fg=C["fgm"], anchor="w").grid(
+            row=0, column=0, sticky="w", padx=(0, _sp(ctx, "sp_sm")))
+        widget.grid(row=0, column=1, sticky="w")
+    else:
+        # 开关/复选框行: 控件自带文案, 直接占据标签列 + 控件列
+        widget.grid(row=0, column=0, columnspan=2, sticky="w")
+
+    tail_col = 2
+    if unit:
+        tkinter.Label(fr, text=unit, font=FONT_TINY,
+            bg=C["bgc"], fg=C["fgm"]).grid(row=0, column=tail_col, sticky="w",
+            padx=(_sp(ctx, "sp_sm"), 0))
+        tail_col += 1
+    if restart:
+        tkinter.Label(fr, text="⏱", font=ctx.FONT_SMALL,
+            bg=C["bgc"], fg=C["fgm"]).grid(row=0, column=tail_col, sticky="w",
+            padx=(_sp(ctx, "sp_sm"), 0))
+        tail_col += 1
+        # 汇总到窗口顶部状态条「需重启项数」徽标
+        _note = getattr(ctx, "note_restart", None)
+        if _note:
+            try:
+                _note()
+            except Exception:
+                pass
+
+    if help:
+        tkinter.Label(fr, text=help, font=FONT_TINY,
+            bg=C["bgc"], fg=C["fgm"], anchor="w", justify="left",
+            wraplength=_sp(ctx, "help_wrap")).grid(
+            row=1, column=0, columnspan=max(tail_col, 2), sticky="w",
+            pady=(_sp(ctx, "gap_tight"), 0))
+
+    return container if indent else fr
+
+
+def help_line(parent, ctx, text, level="info"):
+    """卡内整行提示行 (机制/副作用说明, 不参与保存)。level: info(dim) / warn(黄) / err(红)。"""
+    C = _C(ctx)
+    fg = {"info": C["fgm"], "warn": C["wn"], "err": C["dg"]}.get(level, C["fgm"])
+    fr = tkinter.Frame(parent, bg=C["bgc"])
+    fr.columnconfigure(0, weight=1)
+    tkinter.Label(fr, text=text, font=FONT_TINY, bg=C["bgc"], fg=fg,
+        anchor="w", justify="left", wraplength=_sp(ctx, "help_wrap")).grid(
+        row=0, column=0, sticky="w")
+    return fr

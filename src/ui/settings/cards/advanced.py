@@ -15,6 +15,8 @@ from tkinter import ttk, filedialog, messagebox
 import state
 from utils import FONT_TINY
 
+from ui.settings.cards._layout import section, row, help_line
+
 CARD_KEY = "advanced"
 ROW = 7
 
@@ -54,75 +56,76 @@ def build(parent, ctx):
     _make_badge = ctx.make_badge
     _register_nav_card = ctx.register_nav_card
     _track_card_vars = ctx.track_card_vars
+    sp = ctx.sp
 
     card, adv_content, adv_title, _ = _make_collapsible_card(parent, "高级设置", "⚒")
     card.grid(row=ROW, column=0, sticky="ew", **ctx.PAD)
     _make_badge(CARD_KEY, adv_title)
     _register_nav_card(CARD_KEY, card)
 
-    # === 行0：执行时限（数值） ===
-    adv_exec_frame = tkinter.Frame(adv_content, bg=C["bgc"])
-    adv_exec_frame.grid(row=0, column=0, sticky="ew", padx=8, pady=(2, 1))
+    _r = 0
+
+    def _add(w, pady=None):
+        nonlocal _r
+        w.grid(row=_r, column=0, sticky="ew",
+               pady=(sp("row_gap") if pady is None else pady))
+        _r += 1
+        return w
+
+    def _sec(name, first=False):
+        return _add(section(adv_content, ctx, name),
+                    pady=(sp("sp_sm") if first else sp("section_gap"), 0))
+
+    def _spin(p, var, frm, to, inc, w, key, fb, lo, hi):
+        return _validate_number(tkinter.Spinbox(p, textvariable=var, from_=frm, to=to,
+            increment=inc, width=w, font=ctx.FONT_SMALL, bg=C["ebg"], fg=C["fgb"],
+            relief="solid", bd=1), var, key, fb, int, lo, hi, card_key="advanced")
+
+    def _entry(p, var, w, show=None, tiny=False):
+        return tkinter.Entry(p, textvariable=var, width=w, show=show,
+            font=(FONT_TINY if tiny else ctx.FONT_SMALL), bg=C["ebg"], fg=C["fgb"],
+            relief="solid", bd=1)
+
+    _sec("执行与绑定", first=True)
+
     max_minutes_var = tkinter.StringVar(value=str(state.MAX_EXECUTION_MINUTES))
-    tkinter.Label(adv_exec_frame, text="最大执行:", font=ctx.FONT_BODY,
-        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0,4))
-    max_minutes_spin = _validate_number(tkinter.Spinbox(adv_exec_frame, textvariable=max_minutes_var, from_=0, to=1440, width=5,
-        font=ctx.FONT_BODY, bg=C["ebg"], fg=C["fgb"],
-        relief="solid", bd=1), max_minutes_var, "最大执行时间", 0, int, 0, 1440, card_key="advanced")
-    max_minutes_spin.pack(side="left", padx=(0,4))
-    tkinter.Label(adv_exec_frame, text="分钟 (0=不限，到达时限后自动停止)", font=ctx.FONT_SMALL,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left")
-
-    # === 行1：绑定窗口（文本） ===
-    adv_bind_frame = tkinter.Frame(adv_content, bg=C["bgc"])
-    adv_bind_frame.grid(row=1, column=0, sticky="ew", padx=8, pady=1)
-    tkinter.Label(adv_bind_frame, text="绑定窗口:", font=ctx.FONT_BODY,
-        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0,4))
+    _add(row(adv_content, ctx, "最大执行", lambda p: _spin(
+        p, max_minutes_var, 0, 1440, 1, 5, "最大执行时间", 0, 0, 1440),
+        unit="分钟", help="0=不限，到达时限后自动停止"))
     bound_window_var = tkinter.StringVar(value=state.BOUND_WINDOW_TITLE)
-    tkinter.Entry(adv_bind_frame, textvariable=bound_window_var, width=26,
-        font=ctx.FONT_SMALL, bg=C["ebg"], fg=C["fgb"],
-        relief="solid", bd=1).pack(side="left", padx=(0,4))
-    tkinter.Label(adv_bind_frame, text="(标题包含即匹配，空=不绑定)", font=ctx.FONT_SMALL,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left")
-
-    # === 行2：出错处理（开关） ===
-    adv_opt_frame = tkinter.Frame(adv_content, bg=C["bgc"])
-    adv_opt_frame.grid(row=2, column=0, sticky="ew", padx=8, pady=(1, 2))
+    _add(row(adv_content, ctx, "绑定窗口", lambda p: _entry(
+        p, bound_window_var, 26), help="标题包含即匹配，空=不绑定"))
     stop_on_error_var = tkinter.BooleanVar(value=state.STOP_ON_ERROR)
-    ttk.Checkbutton(adv_opt_frame, text="出错立即停止", variable=stop_on_error_var).pack(side="left")
+    _add(row(adv_content, ctx, "", lambda p: ttk.Checkbutton(
+        p, text="出错立即停止", variable=stop_on_error_var)))
 
-    # === OCR 后端行 (P1-5 增强) ===
-    adv_ocr_frame = tkinter.Frame(adv_content, bg=C["bgc"])
-    adv_ocr_frame.grid(row=3, column=0, sticky="ew", padx=8, pady=(2, 1))
-    tkinter.Label(adv_ocr_frame, text="OCR后端:", font=ctx.FONT_BODY,
-        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0,4))
+    _sec("OCR 识别")
     _backend_label = {v: k for k, v in _OCR_BACKEND_MAP.items()}
-    ocr_backend_var = tkinter.StringVar(value=_backend_label.get(state.OCR_PREFERRED_BACKEND, "自动"))
-    ttk.Combobox(adv_ocr_frame, textvariable=ocr_backend_var,
+    ocr_backend_var = tkinter.StringVar(
+        value=_backend_label.get(state.OCR_PREFERRED_BACKEND, "自动"))
+    _add(row(adv_content, ctx, "OCR 后端", lambda p: ttk.Combobox(
+        p, textvariable=ocr_backend_var,
         values=("自动", "PaddleOCR", "PaddleOCR.dll", "Windows OCR", "Tesseract"),
-        state="readonly", width=13).pack(side="left", padx=(0,8))
-    tkinter.Label(adv_ocr_frame, text="Paddle模型目录:", font=ctx.FONT_BODY,
-        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0,4))
-    ocr_paddle_var = tkinter.StringVar(value=state.OCR_PADDLE_DIR)
-    tkinter.Entry(adv_ocr_frame, textvariable=ocr_paddle_var, width=22,
-        font=ctx.FONT_SMALL, bg=C["ebg"], fg=C["fgb"],
-        relief="solid", bd=1).pack(side="left", padx=(0,4))
-    _ocr_browse_btn = _btn(adv_ocr_frame, "浏览", lambda: ocr_paddle_var.set(filedialog.askdirectory(
-        title="选择 PaddleOCR 模型目录", initialdir=APP_ROOT) or ocr_paddle_var.get()),
-        C["ac"], "white", tip="选择 PaddleOCR 模型目录")
-    _ocr_browse_btn.pack(side="left")
+        state="readonly", width=13),
+        help="自动=按可用性探测；PaddleOCR.dll 需在下方开关勾选"))
 
-    # === 行4：OCR 状态（只读状态行 + 动作，不参与保存） ===
-    ocr_status_frame = tkinter.Frame(adv_content, bg=C["bgc"])
-    ocr_status_frame.grid(row=4, column=0, sticky="ew", padx=8, pady=1)
+    ocr_paddle_var = tkinter.StringVar(value=state.OCR_PADDLE_DIR)
+
+    def _mk_paddle_dir(p):
+        f = tkinter.Frame(p, bg=C["bgc"])
+        tkinter.Entry(f, textvariable=ocr_paddle_var, width=22,
+            font=ctx.FONT_SMALL, bg=C["ebg"], fg=C["fgb"],
+            relief="solid", bd=1).pack(side="left", padx=(0, 4))
+        _btn(f, "浏览", lambda: ocr_paddle_var.set(filedialog.askdirectory(
+            title="选择 PaddleOCR 模型目录", initialdir=APP_ROOT) or ocr_paddle_var.get()),
+            C["ac"], "white", tip="选择 PaddleOCR 模型目录").pack(side="left")
+        return f
+
+    _add(row(adv_content, ctx, "Paddle 模型目录", _mk_paddle_dir,
+        help="pip 版 PaddleOCR 的模型目录"))
+
+    # OCR 状态（只读状态行 + 动作，不参与保存）
     ocr_status_var = tkinter.StringVar(value="检测中…")
-    tkinter.Label(ocr_status_frame, text="OCR 状态:", font=ctx.FONT_SMALL,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 6))
-    # wraplength 保持 330（不加大卡宽）: 失败原因较长时换行显示即可，
-    # 卡片本身可纵向滚动，加大 wraplength 会把 reqwidth 顶宽导致窗宽 680 时横向裁剪。
-    tkinter.Label(ocr_status_frame, textvariable=ocr_status_var, font=ctx.FONT_SMALL,
-        fg=C["sc"], bg=C["bgc"], wraplength=330,
-        justify="left").pack(side="left", padx=(0, 8))
 
     def _ocr_unavailable_reason():
         """无可用后端时的**可读原因**（复用 capabilities / ocr_backend 的 reason）。
@@ -192,34 +195,30 @@ def build(parent, ctx):
             _show_toast(root, "OCR 后端重置失败: {}".format(e), "error")
         _refresh_ocr_status()
 
-    _btn(ocr_status_frame, "刷新状态", _refresh_ocr_status, "ac", "white",
-        tip="重新检测当前可用的 OCR 后端").pack(side="left", padx=(0, 6))
-    _btn(ocr_status_frame, "应用并重载", _reload_ocr, "ac", "white",
-        tip="清空已缓存的 OCR 引擎，下次识别按新设置重新加载").pack(side="left")
+    def _mk_ocr_status(p):
+        f = tkinter.Frame(p, bg=C["bgc"])
+        tkinter.Label(f, textvariable=ocr_status_var, font=ctx.FONT_SMALL,
+            fg=C["sc"], bg=C["bgc"], wraplength=330,
+            justify="left").pack(side="left", padx=(0, 8))
+        _btn(f, "刷新状态", _refresh_ocr_status, "ac", "white",
+            tip="重新检测当前可用的 OCR 后端").pack(side="left", padx=(0, 6))
+        _btn(f, "应用并重载", _reload_ocr, "ac", "white",
+            tip="清空已缓存的 OCR 引擎，下次识别按新设置重新加载").pack(side="left")
+        return f
 
-    # === 行5：OCR 预热 + CPU 线程（数值/开关） ===
-    ocr_pref_frame = tkinter.Frame(adv_content, bg=C["bgc"])
-    ocr_pref_frame.grid(row=5, column=0, sticky="ew", padx=8, pady=(1, 2))
+    _add(row(adv_content, ctx, "OCR 状态", _mk_ocr_status))
+
     ocr_preload_var = tkinter.BooleanVar(value=getattr(state, 'OCR_PRELOAD', False))
-    ttk.Checkbutton(ocr_pref_frame, text="启动时预热", variable=ocr_preload_var).pack(side="left", padx=(0, 12))
-    tkinter.Label(ocr_pref_frame, text="CPU线程:", font=ctx.FONT_SMALL,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
+    _add(row(adv_content, ctx, "", lambda p: ttk.Checkbutton(
+        p, text="启动时预热", variable=ocr_preload_var)))
     ocr_threads_var = tkinter.StringVar(value=str(getattr(state, 'OCR_THREADS', 8)))
-    ocr_threads_spin = _validate_number(tkinter.Spinbox(ocr_pref_frame, textvariable=ocr_threads_var,
-        from_=1, to=32, width=4, font=ctx.FONT_SMALL,
-        bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1), ocr_threads_var,
-        "OCR 线程数", 8, int, 1, 32, card_key="advanced")
-    ocr_threads_spin.pack(side="left", padx=(0,4))
-    tkinter.Label(ocr_pref_frame, text="(1-32，pip 版与 DLL 后端共用)", font=FONT_TINY,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left")
+    _add(row(adv_content, ctx, "CPU 线程", lambda p: _spin(
+        p, ocr_threads_var, 1, 32, 1, 4, "OCR 线程数", 8, 1, 32),
+        unit="1-32", help="pip 版与 DLL 后端共用"))
 
-    # === 行8：PaddleOCR.dll 开关 + 「DLL 自检」（结论就地显示 + 逐项清单） ===
-    adv_pdll_frame = tkinter.Frame(adv_content, bg=C["bgc"])
-    adv_pdll_frame.grid(row=8, column=0, sticky="ew", padx=8, pady=(4, 1))
+    _sec("PaddleOCR.dll（原生后端）")
     paddle_dll_enabled_var = tkinter.BooleanVar(
         value=bool(getattr(state, "PADDLE_DLL_ENABLED", False)))
-    ttk.Checkbutton(adv_pdll_frame, text="启用 PaddleOCR.dll",
-        variable=paddle_dll_enabled_var).pack(side="left", padx=(0,8))
     pdll_status_var = tkinter.StringVar(value="未自检")
 
     def _format_self_check(report):
@@ -281,119 +280,116 @@ def build(parent, ctx):
             messagebox.showinfo("PaddleOCR.dll 自检", text, parent=_win)
         except Exception:                  # noqa: BLE001 — 无 GUI 环境下只留日志
             pass
-    _btn(adv_pdll_frame, "DLL 自检", _check_paddle_dll, "ac", "white",
-        tip="静态检查 DLL/4 个依赖/模型文件与路径编码，并逐项列出缺失文件").pack(
-            side="left", padx=(0,8))
-    tkinter.Label(adv_pdll_frame, textvariable=pdll_status_var, font=FONT_TINY,
-        fg=C["fgm"], bg=C["bgc"], wraplength=320,
-        justify="left").pack(side="left")
+    def _mk_pdll_enable(p):
+        f = tkinter.Frame(p, bg=C["bgc"])
+        ttk.Checkbutton(f, text="启用 PaddleOCR.dll",
+            variable=paddle_dll_enabled_var).pack(side="left", padx=(0, 8))
+        _btn(f, "DLL 自检", _check_paddle_dll, "ac", "white",
+            tip="静态检查 DLL/4 个依赖/模型文件与路径编码，并逐项列出缺失文件").pack(
+                side="left", padx=(0, 8))
+        tkinter.Label(f, textvariable=pdll_status_var, font=FONT_TINY,
+            fg=C["fgm"], bg=C["bgc"], wraplength=320,
+            justify="left").pack(side="left")
+        return f
 
-    # === 行9：PaddleOCR.dll 路径（目录类） ===
-    adv_pdll_path = tkinter.Frame(adv_content, bg=C["bgc"])
-    adv_pdll_path.grid(row=9, column=0, sticky="ew", padx=8, pady=1)
-    tkinter.Label(adv_pdll_path, text="DLL目录:", font=ctx.FONT_BODY,
-        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0,4))
+    _add(row(adv_content, ctx, "", _mk_pdll_enable))
+
     paddle_dll_dir_var = tkinter.StringVar(value=getattr(state, "PADDLE_DLL_DIR", ""))
-    tkinter.Entry(adv_pdll_path, textvariable=paddle_dll_dir_var, width=18,
-        font=ctx.FONT_SMALL, bg=C["ebg"], fg=C["fgb"],
-        relief="solid", bd=1).pack(side="left", padx=(0,4))
-    _pdll_dir_btn = _btn(adv_pdll_path, "浏览", lambda: paddle_dll_dir_var.set(filedialog.askdirectory(
-        title="选择含 PaddleOCR.dll 的目录", initialdir=APP_ROOT) or paddle_dll_dir_var.get()),
-        C["ac"], "white", tip="包含 PaddleOCR.dll 与 4 个依赖 DLL 的纯英文路径目录(空=lib/paddle_ocr)")
-    _pdll_dir_btn.pack(side="left", padx=(0,8))
-    tkinter.Label(adv_pdll_path, text="模型目录:", font=ctx.FONT_BODY,
-        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0,4))
-    paddle_dll_model_dir_var = tkinter.StringVar(value=getattr(state, "PADDLE_DLL_MODEL_DIR", ""))
-    tkinter.Entry(adv_pdll_path, textvariable=paddle_dll_model_dir_var, width=18,
-        font=ctx.FONT_SMALL, bg=C["ebg"], fg=C["fgb"],
-        relief="solid", bd=1).pack(side="left", padx=(0,4))
-    _pdll_model_btn = _btn(adv_pdll_path, "浏览", lambda: paddle_dll_model_dir_var.set(filedialog.askdirectory(
-        title="选择模型目录 (含 inference.json + inference.pdiparams)",
-        initialdir=paddle_dll_dir_var.get() or APP_ROOT) or paddle_dll_model_dir_var.get()),
-        C["ac"], "white", tip="模型集合目录(如 inference/)，空=在 DLL 目录下自动查找")
-    _pdll_model_btn.pack(side="left")
 
-    # === 行10：PaddleOCR.dll 高级参数（JSON / 授权 / 调用原型） ===
-    adv_pdll_adv = tkinter.Frame(adv_content, bg=C["bgc"])
-    adv_pdll_adv.grid(row=10, column=0, sticky="ew", padx=8, pady=(1, 2))
-    tkinter.Label(adv_pdll_adv, text="推理参数:", font=ctx.FONT_BODY,
-        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0,4))
+    def _mk_pdll_dir(p):
+        f = tkinter.Frame(p, bg=C["bgc"])
+        tkinter.Entry(f, textvariable=paddle_dll_dir_var, width=18,
+            font=ctx.FONT_SMALL, bg=C["ebg"], fg=C["fgb"],
+            relief="solid", bd=1).pack(side="left", padx=(0, 4))
+        _btn(f, "浏览", lambda: paddle_dll_dir_var.set(filedialog.askdirectory(
+            title="选择含 PaddleOCR.dll 的目录", initialdir=APP_ROOT) or paddle_dll_dir_var.get()),
+            C["ac"], "white",
+            tip="包含 PaddleOCR.dll 与 4 个依赖 DLL 的纯英文路径目录(空=lib/paddle_ocr)").pack(
+                side="left")
+        return f
+
+    _add(row(adv_content, ctx, "DLL 目录", _mk_pdll_dir,
+        help="含 PaddleOCR.dll 与 4 个依赖 DLL 的纯英文路径（空=lib/paddle_ocr）"))
+
+    paddle_dll_model_dir_var = tkinter.StringVar(value=getattr(state, "PADDLE_DLL_MODEL_DIR", ""))
+
+    def _mk_pdll_model(p):
+        f = tkinter.Frame(p, bg=C["bgc"])
+        tkinter.Entry(f, textvariable=paddle_dll_model_dir_var, width=18,
+            font=ctx.FONT_SMALL, bg=C["ebg"], fg=C["fgb"],
+            relief="solid", bd=1).pack(side="left", padx=(0, 4))
+        _btn(f, "浏览", lambda: paddle_dll_model_dir_var.set(filedialog.askdirectory(
+            title="选择模型目录 (含 inference.json + inference.pdiparams)",
+            initialdir=paddle_dll_dir_var.get() or APP_ROOT) or paddle_dll_model_dir_var.get()),
+            C["ac"], "white",
+            tip="模型集合目录(如 inference/)，空=在 DLL 目录下自动查找").pack(side="left")
+        return f
+
+    _add(row(adv_content, ctx, "模型目录", _mk_pdll_model,
+        help="模型集合目录（如 inference/），空=在 DLL 目录下自动查找"))
+
     paddle_dll_config_var = tkinter.StringVar(value=getattr(state, "PADDLE_DLL_CONFIG", ""))
-    tkinter.Entry(adv_pdll_adv, textvariable=paddle_dll_config_var, width=20,
-        font=FONT_TINY, bg=C["ebg"], fg=C["fgb"],
-        relief="solid", bd=1).pack(side="left", padx=(0,4))
-    tkinter.Label(adv_pdll_adv, text="JSON(空=用自带)", font=FONT_TINY,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0,10))
-    tkinter.Label(adv_pdll_adv, text="授权串:", font=ctx.FONT_BODY,
-        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0,4))
+    _add(row(adv_content, ctx, "推理参数", lambda p: _entry(
+        p, paddle_dll_config_var, 20, tiny=True), help="JSON（空=用自带）"))
     paddle_dll_license_var = tkinter.StringVar(value=getattr(state, "PADDLE_DLL_LICENSE", ""))
-    tkinter.Entry(adv_pdll_adv, textvariable=paddle_dll_license_var, width=10, show="*",
-        font=FONT_TINY, bg=C["ebg"], fg=C["fgb"],
-        relief="solid", bd=1).pack(side="left", padx=(0,10))
-    tkinter.Label(adv_pdll_adv, text="调用原型:", font=ctx.FONT_BODY,
-        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0,4))
+    _add(row(adv_content, ctx, "授权串", lambda p: _entry(
+        p, paddle_dll_license_var, 10, show="*", tiny=True)))
+
     paddle_dll_proto_init_var = tkinter.StringVar(
         value=getattr(state, "PADDLE_DLL_PROTO_INIT", "json5"))
-    tkinter.Entry(adv_pdll_adv, textvariable=paddle_dll_proto_init_var, width=8,
-        font=FONT_TINY, bg=C["ebg"], fg=C["fgb"],
-        relief="solid", bd=1).pack(side="left", padx=(0,2))
-    tkinter.Label(adv_pdll_adv, text="/", font=FONT_TINY,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left")
     paddle_dll_proto_detect_var = tkinter.StringVar(
         value=getattr(state, "PADDLE_DLL_PROTO_DETECT", "ptr_byte"))
-    tkinter.Entry(adv_pdll_adv, textvariable=paddle_dll_proto_detect_var, width=9,
-        font=FONT_TINY, bg=C["ebg"], fg=C["fgb"],
-        relief="solid", bd=1).pack(side="left")
+
+    def _mk_proto(p):
+        f = tkinter.Frame(p, bg=C["bgc"])
+        tkinter.Entry(f, textvariable=paddle_dll_proto_init_var, width=8,
+            font=FONT_TINY, bg=C["ebg"], fg=C["fgb"],
+            relief="solid", bd=1).pack(side="left", padx=(0, 2))
+        tkinter.Label(f, text="/", font=FONT_TINY,
+            fg=C["fgm"], bg=C["bgc"]).pack(side="left")
+        tkinter.Entry(f, textvariable=paddle_dll_proto_detect_var, width=9,
+            font=FONT_TINY, bg=C["ebg"], fg=C["fgb"],
+            relief="solid", bd=1).pack(side="left")
+        return f
+
+    _add(row(adv_content, ctx, "调用原型", _mk_proto, help="init / detect 调用原型"))
 
     # OCR 状态首次检测放到窗口显示后执行（避免打开时阻塞）
     _win.after(500, _refresh_ocr_status)
 
-    # === 浏览器行 ===
-    adv_br_frame = tkinter.Frame(adv_content, bg=C["bgc"])
-    adv_br_frame.grid(row=6, column=0, sticky="ew", padx=8, pady=(4, 1))
+    _sec("浏览器")
     browser_headless_var = tkinter.BooleanVar(value=state.BROWSER_HEADLESS)
-    ttk.Checkbutton(adv_br_frame, text="浏览器无头模式", variable=browser_headless_var).pack(side="left", padx=(0,16))
-    tkinter.Label(adv_br_frame, text="慢放:", font=ctx.FONT_BODY,
-        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0,4))
+    _add(row(adv_content, ctx, "", lambda p: ttk.Checkbutton(
+        p, text="浏览器无头模式", variable=browser_headless_var)))
     browser_slowmo_var = tkinter.StringVar(value=str(state.BROWSER_SLOW_MO))
-    browser_slowmo_spin = _validate_number(tkinter.Spinbox(adv_br_frame, textvariable=browser_slowmo_var, from_=0, to=5000,
-        increment=50, width=6, font=ctx.FONT_BODY,
-        bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1), browser_slowmo_var,
-        "浏览器慢放", 0, int, 0, 5000, card_key="advanced")
-    browser_slowmo_spin.pack(side="left", padx=(0,4))
-    tkinter.Label(adv_br_frame, text="ms (0=最快)", font=ctx.FONT_SMALL,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left")
+    _add(row(adv_content, ctx, "慢放", lambda p: _spin(
+        p, browser_slowmo_var, 0, 5000, 50, 6, "浏览器慢放", 0, 0, 5000),
+        unit="ms", help="0=最快"))
 
-    # === 定时轮询 + DD DLL 行 ===
-    adv_sys_frame = tkinter.Frame(adv_content, bg=C["bgc"])
-    adv_sys_frame.grid(row=7, column=0, sticky="ew", padx=8, pady=(1, 2))
-    tkinter.Label(adv_sys_frame, text="调度轮询:", font=ctx.FONT_BODY,
-        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0,4))
+    _sec("调度与驱动")
     sched_poll_var = tkinter.StringVar(value=str(state.SCHED_POLL_INTERVAL))
-    sched_poll_spin = _validate_number(tkinter.Spinbox(adv_sys_frame, textvariable=sched_poll_var, from_=5, to=600,
-        increment=5, width=5, font=ctx.FONT_BODY,
-        bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1), sched_poll_var,
-        "调度轮询间隔", 30, int, 5, 600, card_key="advanced")
-    sched_poll_spin.pack(side="left", padx=(0,4))
-    tkinter.Label(adv_sys_frame, text="秒", font=ctx.FONT_SMALL,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0,12))
-    tkinter.Label(adv_sys_frame, text="DD DLL路径:", font=ctx.FONT_BODY,
-        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0,4))
-    dd_dll_path_var = tkinter.StringVar(value=state.DD_DLL_PATH)
-    tkinter.Entry(adv_sys_frame, textvariable=dd_dll_path_var, width=20,
-        font=ctx.FONT_SMALL, bg=C["ebg"], fg=C["fgb"],
-        relief="solid", bd=1).pack(side="left", padx=(0,4))
-    _dd_browse_btn = _btn(adv_sys_frame, "浏览", lambda: dd_dll_path_var.set(filedialog.askopenfilename(
-        title="选择 DD 驱动 DLL", filetypes=[("DLL", "*.dll"), ("All", "*.*")],
-        initialdir=APP_ROOT) or dd_dll_path_var.get()),
-        C["ac"], "white", tip="选择 DD 驱动 DLL 文件")
-    _dd_browse_btn.pack(side="left")
+    _add(row(adv_content, ctx, "调度轮询", lambda p: _spin(
+        p, sched_poll_var, 5, 600, 5, 5, "调度轮询间隔", 30, 5, 600),
+        unit="秒", help="定时任务检查间隔"))
 
-    tkinter.Label(adv_content,
-        text="提示：以上设置大多在下次识别/启动时生效；卡片角标显示「✔ 已保存」表示已落盘，"
-             "若显示「⚠ 保存失败」可点击查看原因并重试",
-        font=ctx.FONT_SMALL, bg=C["bgc"], fg=C["fgm"], wraplength=560,
-        justify="left").grid(row=11, column=0, sticky="w", padx=10, pady=(2, 6))
+    dd_dll_path_var = tkinter.StringVar(value=state.DD_DLL_PATH)
+
+    def _mk_dd(p):
+        f = tkinter.Frame(p, bg=C["bgc"])
+        tkinter.Entry(f, textvariable=dd_dll_path_var, width=20,
+            font=ctx.FONT_SMALL, bg=C["ebg"], fg=C["fgb"],
+            relief="solid", bd=1).pack(side="left", padx=(0, 4))
+        _btn(f, "浏览", lambda: dd_dll_path_var.set(filedialog.askopenfilename(
+            title="选择 DD 驱动 DLL", filetypes=[("DLL", "*.dll"), ("All", "*.*")],
+            initialdir=APP_ROOT) or dd_dll_path_var.get()),
+            C["ac"], "white", tip="选择 DD 驱动 DLL 文件").pack(side="left")
+        return f
+
+    _add(row(adv_content, ctx, "DD DLL 路径", _mk_dd, help="DD 驱动 DLL 文件路径"))
+
+    _add(help_line(adv_content, ctx,
+        "提示：以上设置大多在下次识别/启动时生效；卡片角标显示「✔ 已保存」表示已落盘，"
+        "若显示「⚠ 保存失败」可点击查看原因并重试"))
 
     # 绑定防抖保存 (高级设置卡)
     _track_card_vars("advanced", (max_minutes_var, bound_window_var, stop_on_error_var,

@@ -33,8 +33,8 @@ from tkinter import filedialog
 import state
 
 import utils
-from utils import (scaled, center_geometry, geometry_in_screen, log1,
-                   attach_tooltip, show_toast)
+from utils import (scaled, sp, center_geometry, geometry_in_screen, log1,
+                   attach_tooltip, show_toast, text_on)
 
 # 字体角色（命名字体，随 ui_scale 自动重配；直接引用角色名即可）
 FONT_TITLE = utils.FONT_TITLE
@@ -64,7 +64,7 @@ _CONTACT_SECTION_ID = "contact"
 _CONTACT_ICON_NAME = "bg-ac.ico"
 
 # 内置资源：脚本编辑模板（相对 res/；res/ 已被整体打包，冻结首启释放到 <exe>/res）
-_TEMPLATE_RES_REL = "template/ACRPA脚本编辑模板.xlsx"
+_TEMPLATE_RES_REL = "template/ACRPA脚本编辑模板与说明.xlsx"
 
 # 模块级单实例
 _instance = None
@@ -299,9 +299,9 @@ class _HelpWindow(object):
         self._close_btn.pack(side="right")
         self._copy_btn = tkinter.Button(
             self._bar_frame, text="复制本章", font=self.f_small, bg=C["ac"],
-            fg="white", relief="flat", bd=1, cursor="hand2",
+            fg=text_on(C["ac"]), relief="flat", bd=1, cursor="hand2",
             padx=scaled(12), pady=scaled(3), activebackground=C["ach"],
-            activeforeground="white", command=self._copy_current)
+            activeforeground=text_on(C["ach"]), command=self._copy_current)
         self._copy_btn.pack(side="right", padx=(0, scaled(6)))
         attach_tooltip(self._copy_btn, "复制当前章节为纯文本到剪贴板")
         self._dl_btn = tkinter.Button(
@@ -321,12 +321,12 @@ class _HelpWindow(object):
         self._nav_frame.columnconfigure(0, weight=1)
         self.nav = tkinter.Listbox(
             self._nav_frame, font=self.f_body, activestyle="none",
-            bg=C["bgc"], fg=C["fgb"], selectbackground=C["ac"],
-            selectforeground="white", highlightthickness=0, bd=0,
+            bg=C["bgc"], fg=C["fgb"], selectbackground=C["acl"],
+            selectforeground=C["fgt"], highlightthickness=0, bd=0,
             exportselection=False, width=18)
         self.nav.grid(row=0, column=0, sticky="nsew")
         nav_scroll = tkinter.Scrollbar(
-            self._nav_frame, width=scaled(7), relief="flat", bg=C["bd"],
+            self._nav_frame, width=sp("sb_w"), relief="flat", bg=C["bd"],
             troughcolor=C["logbg"], elementborderwidth=0,
             activebackground=C["fgm"])
         nav_scroll.grid(row=0, column=1, sticky="ns")
@@ -349,7 +349,7 @@ class _HelpWindow(object):
             selectbackground=C["acl"], selectforeground=C["fgt"], cursor="arrow")
         self.text.grid(row=0, column=0, sticky="nsew")
         txt_scroll = tkinter.Scrollbar(
-            self._txt_frame, width=scaled(7), relief="flat", bg=C["bd"],
+            self._txt_frame, width=sp("sb_w"), relief="flat", bg=C["bd"],
             troughcolor=C["logbg"], elementborderwidth=0,
             activebackground=C["fgm"])
         txt_scroll.grid(row=0, column=1, sticky="ns")
@@ -379,6 +379,7 @@ class _HelpWindow(object):
             return False
 
     def _apply_geometry(self):
+        """几何 / 最小尺寸 / 最大化统一走 window_shell 外壳 (尺寸按设计 px 只缩放一次)。"""
         try:
             geom = getattr(state, "HELP_GEOMETRY", "") or ""
         except Exception:
@@ -387,11 +388,22 @@ class _HelpWindow(object):
             maxed = bool(getattr(state, "HELP_MAXIMIZED", False))
         except Exception:
             maxed = False
-        w, h = scaled(900), scaled(640)
         try:
-            ok = geometry_in_screen(self.root, geom)
+            ok = bool(geom) and bool(geometry_in_screen(self.root, geom))
         except Exception:
             ok = False
+        try:
+            from ui.window_shell import apply_window_chrome
+            apply_window_chrome(
+                self.win, size=(900, 640), min_size=(560, 400),
+                parent=self.root, bg_key="bgc", colors=self.colors,
+                geometry=geom if ok else None, center=not ok,
+                maximized=maxed)
+            return
+        except Exception:
+            pass
+        # 回退: 骨架不可用时保持旧行为
+        w, h = scaled(900), scaled(640)
         if ok:
             try:
                 self.win.geometry(geom)
@@ -443,7 +455,8 @@ class _HelpWindow(object):
                         lmargin1=scaled(8), lmargin2=scaled(8))
         t.tag_configure("hr", font=self.f_body, foreground=C["bd"],
                         spacing1=scaled(4), spacing3=scaled(4))
-        t.tag_configure("hit", background=C["ac"], foreground="white")
+        t.tag_configure("hit", background=C["ac"],
+                        foreground=text_on(C["ac"]))
         t.tag_configure("copyhint", font=self.f_tiny, foreground=C["fgm"],
                         underline=True)
         # 已有链接标签按新主题重刷
@@ -493,7 +506,7 @@ class _HelpWindow(object):
             pass
         try:
             self.nav.configure(bg=C["bgc"], fg=C["fgb"],
-                               selectbackground=C["ac"], selectforeground="white")
+                               selectbackground=C["acl"], selectforeground=C["fgt"])
         except Exception:
             pass
         try:
@@ -515,9 +528,11 @@ class _HelpWindow(object):
         except Exception:
             pass
         try:
-            self._copy_btn.configure(bg=C["ac"], fg="white",
+            # 字色按底亮度重算 (暗色 ac=#4CC2FF 为浅色, 白字不可读)
+            from utils import text_on as _text_on
+            self._copy_btn.configure(bg=C["ac"], fg=_text_on(C["ac"]),
                                      activebackground=C["ach"],
-                                     activeforeground="white")
+                                     activeforeground=_text_on(C["ach"]))
         except Exception:
             pass
         try:

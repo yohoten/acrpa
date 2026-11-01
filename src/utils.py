@@ -66,6 +66,51 @@ def _darken(hex_color, factor=0.15):
         return C["acl"]
 
 
+def _srgb_to_lin(c):
+    """sRGB 8bit 通道 → 线性光 (WCAG 定义)。"""
+    c = c / 255.0
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def rel_luminance(hex_color):
+    """WCAG 相对亮度 (0=黑, 1=白); 解析失败返回 0.5 (中性)。"""
+    try:
+        s = str(hex_color).strip().lstrip("#")
+        if len(s) == 3:
+            s = "".join(ch * 2 for ch in s)
+        r, g, b = (int(s[i:i + 2], 16) for i in (0, 2, 4))
+    except Exception:
+        return 0.5
+    return (0.2126 * _srgb_to_lin(r) + 0.7152 * _srgb_to_lin(g)
+            + 0.0722 * _srgb_to_lin(b))
+
+
+def text_on(bg, light="#FFFFFF", dark="#1A1A1A"):
+    """按背景相对亮度返回可读前景色 (WCAG 对比度更优者)。
+
+    语义色跨主题会翻转明度 (亮色 ac=#0078D4 深底白字 / 暗色 ac=#4CC2FF 浅底黑字),
+    因此语义底色上的文字色不能写死, 必须按底色计算。
+    """
+    return dark if rel_luminance(bg) > 0.45 else light
+
+
+def restyle_combobox_popdown(widget, colors=None):
+    """重刷 ttk.Combobox 的下拉弹窗配色。
+
+    下拉列表是原生 `tkinter.Listbox` (路径 `<combobox>.popdown.f.l`), 不参与 ttk 样式,
+    只能单独 configure; 否则暗色主题下弹出层仍是系统白底黑字。
+    """
+    try:
+        C = colors or _colors()
+        path = widget.tk.call("ttk::combobox::PopdownWindow", str(widget))
+        lb = widget.nametowidget(str(path) + ".f.l")
+        lb.configure(background=C["bgc"], foreground=C["fgb"],
+                     selectbackground=C["acl"], selectforeground=C["fgt"],
+                     font=FONT_BODY)
+    except Exception:
+        pass
+
+
 # === Toast Notification System ===
 
 def show_toast(root, message, msg_type="info", duration=2000):
@@ -82,13 +127,10 @@ def show_toast(root, message, msg_type="info", duration=2000):
     # §3.1 Emoji → Segoe UI Symbol 单色码位: ℹ→ⓘ, ✓→✔, ✗→✘, ⚠ 去 VS16 保留 ⚠
     icon_map = {"info": "ⓘ", "success": "✔", "warning": "⚠", "error": "✘"}
     bg_map = {"info": C["ac"], "success": C["sc"], "warning": C["wn"], "error": C["dg"]}
-    # warning 的琥珀色在深浅两套配色下都偏亮，白字对比不足，改用深色文字；
-    # info/success/error 三色饱和度足够，白字在两种主题下均清晰可读。
-    if msg_type == "warning":
-        fg_color = C["bg"] if state.DARK_MODE else C["fgt"]
-    else:
-        fg_color = "white"
     bg_color = bg_map.get(msg_type, bg_map["info"])
+    # 语义色跨主题明度翻转 (暗色 sc=#6CCB5F / wn=#FCE100 偏亮) → 字色按亮度自适应,
+    # 不再写死白字 (暗色模式下白字在浅底上对比不足)。
+    fg_color = text_on(bg_color)
     icon = icon_map.get(msg_type, icon_map["info"])
     
     # Create toast window
@@ -166,6 +208,8 @@ FONT_TINY       = "ACRPA_TINY"
 FONT_ICON       = "ACRPA_ICON"
 FONT_ICON_MD    = "ACRPA_ICON_MD"
 FONT_ICON_LG    = "ACRPA_ICON_LG"
+# 配对码/验证码这类「等宽大号数字」专用角色 (原为 netlink 内联 ("Consolas",28,"bold"))
+FONT_PIN        = "ACRPA_PIN"
 
 # 字体角色表: 角色名 -> (字族, 基准 pt, 字重) —— 全项目唯一字体定义源
 _FONT_SPECS = {
@@ -182,6 +226,7 @@ _FONT_SPECS = {
     "ACRPA_ICON":       ("Segoe UI Symbol",    9,  "normal"),
     "ACRPA_ICON_MD":    ("Segoe UI Symbol",   11,  "normal"),
     "ACRPA_ICON_LG":    ("Segoe UI Symbol",   12,  "normal"),
+    "ACRPA_PIN":        ("Consolas",           28,  "bold"),
 }
 
 # ── UI 缩放 (pt 制) ──
@@ -357,7 +402,12 @@ def _btn(parent, text, cmd, bg_c=None, fg_c=None, tip=None):
         bg_c, _role = C["bgc"], None
     else:
         bg_c, _role = _theme.resolve_bg(bg_c, C)
-    if fg_c is None: fg_c = C["fgb"]
+    if fg_c is None:
+        fg_c = C["fgb"]
+    elif str(fg_c).strip().lower() in ("white", "#ffffff", "#fff"):
+        # 字面白字在「浅语义底」(暗色主题 ac=#4CC2FF / wn=#FCE100) 上不可读 →
+        # 按底色相对亮度自适应, 调用方无需再逐一改 fg。
+        fg_c = _theme.text_on(bg_c)
     # hover 底色分三类 (§4.9.2): 中性底 → caption_hover; 强调底 → ach;
     #   语义色底 (sc/dg/wn) → 自加深, 不得再用中性灰 hover 造成串色。
     _neutral = bg_c in ("white", "#ffffff", C["bgc"], C["surface_alt"])
@@ -426,15 +476,64 @@ def _show_tooltip(event, getter):
         tkinter.Label(_tip_win, text=txt, font=FONT_SMALL,
             bg=C["tooltip_bg"], fg=C["fgb"], relief="flat", bd=0,
             highlightthickness=1, highlightbackground=C["tooltip_border"],
-            padx=6, pady=2).pack()
+            padx=sp("sp_sm"), pady=max(1, sp("sp_xs") // 2)).pack()
     except Exception:
         pass
 
-def attach_tooltip(widget, text):
-    """为控件绑定悬停提示。text 可为字符串或返回字符串的可调用对象(动态提示)。"""
+# 悬停提示延迟 (ms, docs/UI优化方案-v3.md §5.2 D12): 全应用统一, 避免一碰就弹
+# 又不会显得没反应; 数字不经 scaled() (时间不是像素)。
+TOOLTIP_DELAY_MS = 400
+
+
+def _cancel_tip_job(widget):
+    """取消控件上待触发的 tooltip 定时器 (重复 <Enter>/离开时调用)。"""
+    job = getattr(widget, "_tooltip_job", None)
+    if job is not None:
+        try:
+            widget.after_cancel(job)
+        except Exception:
+            pass
+        try:
+            widget._tooltip_job = None
+        except Exception:
+            pass
+
+
+def attach_tooltip(widget, text, delay=None):
+    """为控件绑定悬停提示。text 可为字符串或返回字符串的可调用对象(动态提示)。
+
+    delay: 悬停多久后弹出 (ms); None → `TOOLTIP_DELAY_MS` (400)。传 0 立即弹出。
+    """
     getter = text if callable(text) else (lambda t=text: t)
-    widget.bind("<Enter>", lambda e: _show_tooltip(e, getter))
-    widget.bind("<Leave>", _hide_tooltip)
+    try:
+        wait = TOOLTIP_DELAY_MS if delay is None else max(0, int(delay))
+    except Exception:
+        wait = TOOLTIP_DELAY_MS
+
+    def _on_enter(event):
+        _cancel_tip_job(widget)
+        if wait <= 0:
+            _show_tooltip(event, getter)
+            return
+        try:
+            widget._tooltip_job = widget.after(
+                wait, lambda: (_set_job_none(widget), _show_tooltip(event, getter)))
+        except Exception:
+            _show_tooltip(event, getter)
+
+    def _on_leave(_event=None):
+        _cancel_tip_job(widget)
+        _hide_tooltip()
+
+    widget.bind("<Enter>", _on_enter)
+    widget.bind("<Leave>", _on_leave)
+
+
+def _set_job_none(widget):
+    try:
+        widget._tooltip_job = None
+    except Exception:
+        pass
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -632,6 +731,10 @@ class ThreadSafeLog:
     # P0 Optimization #5: Batch configuration
     BATCH_SIZE = 10          # Write after accumulating N messages
     FLUSH_INTERVAL = 1.0     # Or write every N seconds
+
+    # UI 侧批量渲染 (v3 §4.1): 单次 flush 最多推给控件的条数。
+    # 超出部分留在队列里给下一个 tick, 保证一次 flush 的重绘成本有上界。
+    GUI_BATCH_MAX = 400
     
     def __init__(self, widget, log_dir=None):
         self._q = queue.Queue()
@@ -664,53 +767,90 @@ class ThreadSafeLog:
         self._q.put((msg, tag, caller_file, caller_func, level))
 
     def flush(self, root_widget):
-        """Flush queue to GUI widget and batched file write with LogLevel filtering."""
+        """Flush queue to GUI widget and batched file write with LogLevel filtering.
+
+        v3 §4.1: GUI 侧改为「整批拼接 + 一次 insert + 一次 see/update_idletasks」。
+        逐条 update() 会在刷屏时做成 N 次强制同步重绘, 是日志卡顿的根因。
+        消息顺序/级别过滤/徽标/落盘时机与改造前完全一致。
+        """
         # P1 Enhancement: Check daily rotation on each flush cycle
         self._check_daily_rotation()
 
-        while not self._q.empty():
+        # 控件可能已随窗口销毁 (关窗后仍有日志涌入): 只停 GUI 侧, 文件侧照常
+        gui_ok = True
+        try:
+            if self._w is None or not self._w.winfo_exists():
+                gui_ok = False
+        except Exception:
+            gui_ok = False
+
+        parts = []          # GUI 文本片段
+        spans = []          # [(tag, start, end)] 相对整批文本的字符偏移
+        offset = 0
+        drain = 0
+
+        while drain < self.GUI_BATCH_MAX:
             try:
                 msg, tag, caller_file, caller_func, level = self._q.get_nowait()
+            except queue.Empty:
+                break
+            drain += 1
 
-                # Add to in-memory buffer for export
-                self._buffer.append((msg, tag))
+            # Add to in-memory buffer for export
+            self._buffer.append((msg, tag))
 
-                # Update GUI widget immediately (always show all levels in GUI)
-                s = self._w.index("end-1c")
-                # UI Enhancement: GUI 日志 = "[HH:MM:SS] [LEVEL] msg"。
-                # §2.5: 四级 (INFO/SUCCESS/WARNING/ERROR) **均**带级别徽标, 且徽标**由 tag 判定**
-                # (log1(msg,"success") 的 int 级别实为 LOG_INFO, 但徽标须为 [SUCCESS])。
+            # ── GUI 渲染: 只累积, 循环外一次性提交 ──
+            # UI Enhancement: GUI 日志 = "[HH:MM:SS] [LEVEL] msg"。
+            # §2.5: 四级 (INFO/SUCCESS/WARNING/ERROR) **均**带级别徽标, 且徽标**由 tag 判定**
+            # (log1(msg,"success") 的 int 级别实为 LOG_INFO, 但徽标须为 [SUCCESS])。
+            if gui_ok:
                 ts = time.strftime("%H:%M:%S")
                 badge = _log_badge(tag, level)
-                display_msg = "[{}] [{}] {}".format(ts, badge, msg)
-                self._w.insert("end", "{}\n".format(display_msg))
-                if tag: self._w.tag_add(tag, s, "end-1c")
-                self._w.update(); self._w.see(tkinter.END)
+                line = "[{}] [{}] {}\n".format(ts, badge, msg)
+                parts.append(line)
+                if tag:
+                    # 相邻同 tag 合并成一段, 减少 tag_add 次数
+                    if spans and spans[-1][0] == tag and spans[-1][2] == offset:
+                        spans[-1][2] = offset + len(line)
+                    else:
+                        spans.append([tag, offset, offset + len(line)])
+                offset += len(line)
 
-                # P1 Enhancement: File write with LogLevel filtering + structured format
-                if self._log_file and self._check_log_saving_enabled():
-                    # Check LogLevel filter
-                    if level < self._get_min_log_level():
-                        continue
+            # P1 Enhancement: File write with LogLevel filtering + structured format
+            if self._log_file and self._check_log_saving_enabled():
+                # Check LogLevel filter
+                if level < self._get_min_log_level():
+                    continue
 
-                    # Structured format: [2026-07-20 11:13:48] INFO: message [file:function]
-                    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-                    level_name = _LOG_LEVEL_NAMES.get(level, "INFO")
-                    caller_info = ""
-                    if caller_file and caller_func:
-                        caller_info = " [{}:{}]".format(caller_file, caller_func)
-                    elif caller_file:
-                        caller_info = " [{}]".format(caller_file)
-                    self._file_buffer.append(
-                        "[{}] {}: {}{}\n".format(timestamp, level_name, msg, caller_info))
+                # Structured format: [2026-07-20 11:13:48] INFO: message [file:function]
+                timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+                level_name = _LOG_LEVEL_NAMES.get(level, "INFO")
+                caller_info = ""
+                if caller_file and caller_func:
+                    caller_info = " [{}:{}]".format(caller_file, caller_func)
+                elif caller_file:
+                    caller_info = " [{}]".format(caller_file)
+                self._file_buffer.append(
+                    "[{}] {}: {}{}\n".format(timestamp, level_name, msg, caller_info))
 
-                    # Check if we should flush to disk
-                    now = time.time()
-                    if (len(self._file_buffer) >= self.BATCH_SIZE or
-                        now - self._last_flush >= self.FLUSH_INTERVAL):
-                        self._flush_to_disk()
+                # Check if we should flush to disk
+                now = time.time()
+                if (len(self._file_buffer) >= self.BATCH_SIZE or
+                    now - self._last_flush >= self.FLUSH_INTERVAL):
+                    self._flush_to_disk()
 
-            except queue.Empty: break
+        # ── 整批提交 (一次 insert + 一次见底/刷新) ──
+        if gui_ok and parts:
+            try:
+                anchor = self._w.index("end-1c")
+                self._w.insert("end", "".join(parts))
+                for tag, s, e in spans:
+                    self._w.tag_add(tag, "{}+{}c".format(anchor, s),
+                                    "{}+{}c".format(anchor, e))
+                self._w.see(tkinter.END)
+                self._w.update_idletasks()
+            except Exception:
+                pass
 
     def _flush_to_disk(self):
         """Write buffered logs to disk (batched I/O)."""
@@ -841,12 +981,28 @@ TOKENS = {
     # bar_h: 文档 §3 建议 10, 但该键当前被市场窗口「分类色条」宽度消费
     # (market_window.py:600 sp("bar_h")), 改动会影响既有布局几何 → 保持原值 4 (见结果偏差说明)。
     "card_min_h": 84, "bar_h": 4,
+    # 设置页表单布局密度 (docs/设置窗口布局重构方案 §3.3):
+    # 标签列最小宽 / 行距 / 分节间距 / 帮助文本折行宽 —— 供 cards/_layout.py 消费。
+    # 独立 token, 不改 ctrl_h 全局值 (避免主窗口/市场/工作流连锁回归)。
+    # help_wrap: 折行宽必须 < 内容列宽 (默认窗 680 − 导航 ~128 − 卡内留白), 否则
+    # 最长的一条提示会把整张卡的 reqwidth 顶宽, 在默认窗宽下被横向裁掉。
+    "form_label_w": 110, "row_gap": 8, "section_gap": 12, "help_wrap": 480,
     # 窗口尺寸 (设计 px, 路线图 §5.5): 主窗口默认几何 / 最小尺寸经 sp() 派生,
     # 使 set_ui_scale() 真正影响窗口尺寸 (而非只缩放字体)。
     "win_w": 1000, "win_h": 680, "win_min_w": 640, "win_min_h": 520,
     # 紧凑模式 (=Mini Bar 折叠前旧布局) 尺寸
     "win_compact_w": 500, "win_compact_h": 625,
     "win_compact_min_w": 450, "win_compact_min_h": 550,
+    # 从窗口通用尺寸 (docs/UI优化方案-v3.md §2.3): 供 ui/window_shell 消费,
+    # 使 set_ui_scale() 对设置/帮助/市场/互联等从窗口同样生效。
+    "dlg_sm_w": 420, "dlg_sm_h": 320,
+    "dlg_md_w": 560, "dlg_md_h": 480,
+    "dlg_lg_w": 720, "dlg_lg_h": 600,
+    "dlg_xl_w": 880, "dlg_xl_h": 680,
+    "dlg_min_w": 360, "dlg_min_h": 240,
+    # 滚动条厚度 (docs/UI优化方案-v3.md §5.2 D10): 垂直 8 / 横向内嵌工具条 6,
+    # 一律由此派生, 禁写 width=6/8/16 裸数字 (ttk 默认 16px 是最离谱的一处)。
+    "sb_w": 8, "sb_w_thin": 6,
 }
 
 

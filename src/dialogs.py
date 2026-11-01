@@ -19,7 +19,8 @@ from tkinter import ttk, filedialog, messagebox
 import state
 from engine import engine
 from utils import (_btn, _darken, log1, show_toast, attach_tooltip, themed,
-                   bind_sel_bold, place_dialog, FONT_LOG, FONT_TINY)
+                   bind_sel_bold, place_dialog, FONT_LOG, FONT_TINY,
+                   sp, gap)
 # UI 基础层 (阶段二第 2 项): 语义角色登记 + 换肤事件总线订阅
 from ui import theme as _ui_theme
 
@@ -77,13 +78,28 @@ def _retheme_window(win, prev, palette):
             try:
                 cls = w.winfo_class()
                 if cls in ("Frame", "TFrame"):
-                    if int(w.cget("highlightthickness")) > 0:
+                    _fr_role = _ui_theme.get_role(w)
+                    if _fr_role:
+                        # 有语义角色的容器 (消息气泡 / 脚本卡片 / 提示条) 按角色回填,
+                        # 否则 highlightthickness 判定会把用户气泡刷成普通卡片色。
+                        w.configure(bg=palette.get(_fr_role, palette["bgc"]))
+                    elif int(w.cget("highlightthickness")) > 0:
                         w.configure(bg=palette["bgc"], highlightbackground=palette["bd"])
                     else:
                         w.configure(bg=palette["bg"])
                 elif cls in ("Label", "TLabel"):
-                    w.configure(bg=str(p.cget("bg")),
-                                fg=palette.get(_ui_theme.get_role(w) or "", palette["fgm"]))
+                    # 有语义角色的 Label (徽标/标题条/拟按钮) → bg/fg 均按角色回填;
+                    # 未登记 → 与父容器同底 + 中性灰字 (不按文案嗅探)。
+                    _lbl_role = _ui_theme.get_role(w)
+                    _fg_tok = _ui_theme.get_fg_token(w)
+                    if _lbl_role:
+                        _lb = palette.get(_lbl_role, palette["bgc"])
+                        w.configure(bg=_lb, fg=_ui_theme.text_on(_lb))
+                    elif _fg_tok:
+                        w.configure(bg=str(p.cget("bg")),
+                                    fg=palette.get(_fg_tok, palette["fgm"]))
+                    else:
+                        w.configure(bg=str(p.cget("bg")), fg=palette["fgm"])
                 elif cls == "Text":
                     w.configure(bg=palette["logbg"], fg=palette["logfg"],
                                 insertbackground=palette["fgt"],
@@ -95,10 +111,18 @@ def _retheme_window(win, prev, palette):
                 elif cls == "Button":
                     _role = _ui_theme.get_role(w)
                     if _role:
-                        w.configure(bg=palette.get(_role, palette["bgc"]))
+                        _rb = palette.get(_role, palette["bgc"])
+                        _rf = _ui_theme.text_on(_rb)
+                        w.configure(bg=_rb, fg=_rf,
+                                    activebackground=palette.get("ach", _rb),
+                                    activeforeground=_ui_theme.text_on(
+                                        palette.get("ach", _rb)),
+                                    disabledforeground=palette["fgm"])
                     else:
                         w.configure(bg=palette["bgc"], fg=palette["fgb"],
                                     activebackground=palette["acl"],
+                                    activeforeground=palette["fgt"],
+                                    disabledforeground=palette["fgm"],
                                     highlightbackground=palette["bd"])
                 elif cls == "Entry":
                     w.configure(bg=palette["ebg"], fg=palette["fgb"],
@@ -106,11 +130,17 @@ def _retheme_window(win, prev, palette):
                 elif cls == "Combobox":
                     w.configure(background=palette["bgc"], fieldbackground=palette["bgc"],
                                 foreground=palette["fgb"])
+                elif cls == "TCombobox":
+                    # ttk 本体走样式; 下拉弹窗是原生 Listbox, 需单独重刷
+                    _ui_theme.restyle_combobox_popdown(w, palette)
                 elif cls == "Canvas":
                     w.configure(bg=palette["bg"])
                 elif cls == "Listbox":
+                    # 选中态用 acl(focus 深底)+fgt, 与 Treeview/settings 口径统一;
+                    # 旧 ac(浅蓝)+white 在暗色下对比度不足。
                     w.configure(bg=palette["ebg"], fg=palette["fgb"],
-                                selectbackground=palette["ac"], selectforeground="white")
+                                selectbackground=palette["acl"],
+                                selectforeground=palette["fgt"])
                 elif cls == "Spinbox":
                     w.configure(bg=palette["ebg"], fg=palette["fgb"],
                                 buttonbackground=palette["bgc"],
@@ -123,8 +153,11 @@ def _retheme_window(win, prev, palette):
                                 highlightbackground=palette["bd"])
                 elif cls == "Menu":
                     w.configure(bg=palette["bgc"], fg=palette["fgb"],
-                                activebackground=palette["ac"], activeforeground="white",
+                                activebackground=palette["acl"],
+                                activeforeground=palette["fgt"],
                                 disabledforeground=palette["fgm"])
+                elif cls == "PanedWindow":
+                    w.configure(bg=palette["bd"], sashrelief="raised")
             except Exception:
                 pass
             _walk(w)
@@ -313,9 +346,11 @@ def _show_help_dialog_legacy():
                     _open_doc(doc_path)
                 else:
                     log1("无法打开使用说明（无网络且本地无文件）", "warning")
-        _doc_btn = tkinter.Button(btn_row, text="打开使用说明", font=FONT_SMALL, bg=C["ac"], fg="white",
+        _doc_btn = tkinter.Button(btn_row, text="打开使用说明", font=FONT_SMALL, bg=C["ac"],
+            fg=_ui_theme.text_on(C["ac"]),
             relief="flat", bd=1, cursor="hand2", padx=12, pady=3,
-            activebackground=C["ach"], activeforeground="white",
+            activebackground=C["ach"],
+            activeforeground=_ui_theme.text_on(C["ach"]),
             command=_open_doc_online)
         _ui_theme.set_role(_doc_btn, "ac")   # 语义角色登记 (换肤按角色回填)
         _doc_btn.pack(side="left", padx=(0,4))
@@ -359,7 +394,7 @@ def _show_help_dialog_legacy():
             selectbackground=C["acl"], selectforeground=C["fgt"], cursor="arrow")
         help_txt.grid(row=0, column=0, sticky="nsew")
 
-        help_scroll = tkinter.Scrollbar(txt_frame, width=6, relief="flat", elementborderwidth=0,
+        help_scroll = tkinter.Scrollbar(txt_frame, width=sp("sb_w"), relief="flat", elementborderwidth=0,
             bg=C["bd"], activebackground=C["fgm"], troughcolor=C["logbg"])
         help_scroll.grid(row=0, column=1, sticky="ns")
         help_txt.config(yscrollcommand=help_scroll.set); help_scroll.config(command=help_txt.yview)
@@ -407,31 +442,30 @@ def open_version_history():
     vm = get_version_manager()
 
     dlg = tkinter.Toplevel(root)
-    dlg.title("版本历史 — {}".format(os.path.basename(state.filename)))
-    place_dialog(dlg, 680, 480)
-    dlg.minsize(500, 350)
-    dlg.transient(root)
-    dlg.configure(bg=C["bgc"])
-    _set_window_icon(dlg)
-    dlg.columnconfigure(0, weight=1)
-    dlg.rowconfigure(0, weight=0)
-    dlg.rowconfigure(1, weight=1)
-    dlg.rowconfigure(2, weight=0)
+    # v3 §2.3 试点: 骨架统一负责 底色/标题/尺寸/最小尺寸/居中/模态,
+    # 留白全部走 utils token (原先 680x480 / minsize(500,350) / padx=8 等字面量)
+    from ui.window_shell import apply_window_shell
+    shell = apply_window_shell(
+        dlg, "版本历史 — {}".format(os.path.basename(state.filename)),
+        size="lg", min_size=("dlg_sm_w", "dlg_sm_h"), parent=root,
+        icon_setter=_set_window_icon, colors=C)
+    vh_body = shell.content
 
     # 工具栏
-    vh_toolbar = tkinter.Frame(dlg, bg=C["bgc"])
-    vh_toolbar.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 4))
+    vh_toolbar = tkinter.Frame(vh_body, bg=C["bgc"])
+    vh_toolbar.grid(row=0, column=0, sticky="ew")
     tkinter.Label(vh_toolbar, text="脚本版本历史", font=FONT_TITLE, bg=C["bgc"],
         fg=C["fgt"]).pack(side="left")
     tkinter.Label(vh_toolbar, text="(自动保存每次 Ctrl+S 的快照)", font=FONT_SMALL,
-        bg=C["bgc"], fg=C["fgm"]).pack(side="left", padx=(8, 0))
+        bg=C["bgc"], fg=C["fgm"]).pack(side="left", padx=(sp("sp_sm"), 0))
     vh_status = tkinter.StringVar(value="")
     tkinter.Label(vh_toolbar, textvariable=vh_status, font=FONT_SMALL,
         bg=C["bgc"], fg=C["ac"]).pack(side="right")
 
     # 版本列表
-    vh_list_frame = tkinter.Frame(dlg, bg=C["bgc"], highlightbackground=C["bd"], highlightthickness=1)
-    vh_list_frame.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 4))
+    vh_list_frame = tkinter.Frame(vh_body, bg=C["bgc"], highlightbackground=C["bd"], highlightthickness=1)
+    vh_list_frame.grid(row=1, column=0, sticky="nsew",
+                       pady=(gap("gap_tight"), gap("gap_tight")))
     vh_list_frame.columnconfigure(0, weight=1)
     vh_list_frame.rowconfigure(0, weight=1)
 
@@ -449,14 +483,14 @@ def open_version_history():
     bind_sel_bold(vh_tree)
 
     vh_sy = tkinter.Scrollbar(vh_list_frame, orient="vertical", command=vh_tree.yview,
-        width=8, relief="flat", bg=C["bd"], troughcolor=C["bgc"])
+        width=sp("sb_w"), relief="flat", bg=C["bd"], troughcolor=C["bgc"])
     vh_tree.configure(yscrollcommand=vh_sy.set)
     vh_tree.grid(row=0, column=0, sticky="nsew")
     vh_sy.grid(row=0, column=1, sticky="ns")
 
     # 底部操作按钮
-    vh_btn_frame = tkinter.Frame(dlg, bg=C["bgc"])
-    vh_btn_frame.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 8))
+    vh_btn_frame = tkinter.Frame(vh_body, bg=C["bgc"])
+    vh_btn_frame.grid(row=2, column=0, sticky="ew")
 
     def _vh_refresh():
         for item in vh_tree.get_children():
@@ -510,7 +544,8 @@ def open_version_history():
         dtxt = tkinter.Text(dd, font=FONT_LOG, bg=C["logbg"], fg=C["logfg"],
             wrap="none", relief="flat", bd=0, padx=10, pady=8)
         dtxt.grid(row=0, column=0, sticky="nsew")
-        ds = tkinter.Scrollbar(dd, orient="vertical", command=dtxt.yview, width=6)
+        ds = tkinter.Scrollbar(dd, orient="vertical", command=dtxt.yview,
+                               width=sp("sb_w"))
         ds.grid(row=0, column=1, sticky="ns")
         dtxt.config(yscrollcommand=ds.set)
         dtxt.insert("1.0", diff_text)
@@ -534,171 +569,503 @@ def open_version_history():
 # AI 脚本生成器
 # ======================================================================
 def open_ai_panel():
-    """Open AI script generation dialog with new layout."""
+    """Open AI script generation dialog with conversational (chat-style) layout.
+
+    借鉴 AI Agent 对话界面:
+    · 主区域为对话消息流 (用户消息 + AI 回复交替展示)
+    · 底部为聊天式输入栏 (输入框 + 发送按钮一体化, Enter 发送)
+    · 快速示例变为建议提示词 (suggested prompts)
+    · AI 生成的脚本以结构化卡片形式展示, 附带操作按钮
+    """
     dlg = tkinter.Toplevel(root)
     dlg.title("AI 脚本生成器")
-    place_dialog(dlg, 500, 600)
-    dlg.minsize(400, 500)
+    place_dialog(dlg, 660, 720)
+    dlg.minsize(500, 560)
     dlg.transient(root)
     dlg.grab_set()
-    dlg.configure(bg=C["bgc"])
+    dlg.configure(bg=C["bg"])
     _set_window_icon(dlg)
 
-    # Configure grid for the main container
+    # ── 布局: 顶部状态栏(行0) + 对话流(行1, weight=1) + 输入栏(行2) ──
     dlg.columnconfigure(0, weight=1)
-    dlg.rowconfigure(4, weight=1)  # Preview area expands
+    dlg.rowconfigure(1, weight=1)  # 对话流随窗口扩展
 
-    # === Row 0: Title Label ===
-    title_label = tkinter.Label(dlg, text="描述你要实现的操作",
-        font=FONT_TITLE,
+    from ai_client import has_ai_key, resolve_model
+    _ai_ready = has_ai_key()
+    _model_name = resolve_model() or "默认"
+
+    # ═══ Row 0: 顶部状态栏 (标题 + API 状态 + 清空对话) ═══
+    top_bar = tkinter.Frame(dlg, bg=C["bgc"],
+        highlightbackground=C["bd"], highlightthickness=1)
+    top_bar.grid(row=0, column=0, sticky="ew")
+    top_bar.columnconfigure(1, weight=1)
+
+    # 左: 标题 (fgt 强对比, 换肤时保持)
+    _title_lbl = tkinter.Label(top_bar, text="  AI 脚本生成器", font=FONT_TITLE,
         bg=C["bgc"], fg=C["fgt"])
-    title_label.grid(row=0, column=0, sticky="w", padx=16, pady=(12, 4))
+    _ui_theme.set_fg_token(_title_lbl, "fgt")
+    _title_lbl.grid(row=0, column=0, sticky="w", pady=6)
 
-    # === Row 1: Input Text Area ===
-    prompt_txt = tkinter.Text(dlg, height=4, font=FONT_BODY,
-        bg=C["logbg"], fg=C["logfg"], wrap="word", relief="solid", bd=1,
-        padx=8, pady=6)
-    prompt_txt.grid(row=1, column=0, sticky="ew", padx=16, pady=(0, 8))
-    prompt_txt.insert("1.0", "快速示例：打开记事本程序，输入'Hello World'，然后保存文件到桌面")
-    prompt_txt.tag_add("placeholder", "1.0", "end")
-    prompt_txt.tag_configure("placeholder", foreground=themed("fgm"))
+    # 中: 模型 + API 状态 (可点击配置)
+    info_frame = tkinter.Frame(top_bar, bg=C["bgc"])
+    info_frame.grid(row=0, column=1, sticky="ew")
 
-    def _on_prompt_focus_in(event):
-        if prompt_txt.tag_ranges("placeholder"):
-            prompt_txt.delete("1.0", "end")
-            prompt_txt.tag_remove("placeholder", "1.0", "end")
+    api_dot = "●" if _ai_ready else "○"
+    api_color = C["sc"] if _ai_ready else C["dg"]
+    api_text = " {} ".format(api_dot)
+    api_lbl = tkinter.Label(info_frame, text=api_text,
+        font=FONT_SMALL, bg=C["bgc"], fg=api_color, cursor="hand2")
+    # 状态点绿/红需保持语义 → 仅前景色 token
+    _ui_theme.set_fg_token(api_lbl, "sc" if _ai_ready else "dg")
+    api_lbl.pack(side="left")
 
-    def _on_prompt_focus_out(event):
-        if not prompt_txt.get("1.0", "end-1c").strip():
-            prompt_txt.insert("1.0", "快速示例：打开记事本程序，输入'Hello World'，然后保存文件到桌面")
-            prompt_txt.tag_add("placeholder", "1.0", "end")
+    model_lbl = tkinter.Label(info_frame,
+        text="模型: {}  ".format(_model_name),
+        font=FONT_TINY, bg=C["bgc"], fg=C["fgm"], cursor="hand2")
+    model_lbl.pack(side="left")
 
-    prompt_txt.bind("<FocusIn>", _on_prompt_focus_in)
-    prompt_txt.bind("<FocusOut>", _on_prompt_focus_out)
+    def _open_settings():
+        try:
+            from ui.settings.window import open_settings_window
+            open_settings_window()
+        except Exception:
+            pass
+    api_lbl.bind("<Button-1>", lambda e: _open_settings())
+    model_lbl.bind("<Button-1>", lambda e: _open_settings())
+    attach_tooltip(api_lbl, "点击打开设置 → AI 增强卡" if not _ai_ready
+        else "已配置, 点击修改设置")
+    attach_tooltip(model_lbl, "当前模型: {}\n点击修改设置".format(_model_name))
 
-    # === Quick Example Buttons Frame ===
-    quick_frame = tkinter.Frame(dlg, bg=C["bgc"])
-    quick_frame.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 6))
-    quick_frame.columnconfigure(0, weight=1)
+    # 右: 清空对话按钮
+    clear_chat_btn = tkinter.Button(top_bar, text="✕ 清空对话", font=FONT_TINY,
+        bg=C["bgc"], fg=C["fgm"], relief="flat", bd=0, cursor="hand2",
+        activebackground=C["acl"], activeforeground=C["ach"],
+        highlightthickness=0, padx=8, pady=1)
+    clear_chat_btn.grid(row=0, column=2, sticky="e", padx=(0, 8))
 
-    def _set_quick_example(example_text):
-        prompt_txt.delete("1.0", "end")
-        prompt_txt.insert("1.0", example_text)
-        prompt_txt.tag_remove("placeholder", "1.0", "end")
+    # ═══ Row 1: 对话消息流 (Canvas + Scrollbar, 支持消息气泡) ═══
+    chat_frame = tkinter.Frame(dlg, bg=C["bg"])
+    chat_frame.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
+    chat_frame.columnconfigure(0, weight=1)
+    chat_frame.rowconfigure(0, weight=1)
 
-    from templates import AI_QUICK_PROMPTS
-    example_names = list(AI_QUICK_PROMPTS.keys())[:4]  # Show first 4 examples
+    chat_canvas = tkinter.Canvas(chat_frame, bg=C["bg"],
+        highlightthickness=0, bd=0)
+    chat_canvas.grid(row=0, column=0, sticky="nsew")
 
-    btn_frame = tkinter.Frame(quick_frame, bg=C["bgc"])
-    btn_frame.grid(row=0, column=0, sticky="w")
+    chat_scroll = tkinter.Scrollbar(chat_frame, orient="vertical",
+        command=chat_canvas.yview, width=sp("sb_w"), relief="flat",
+        bg=C["bd"], troughcolor=C["bg"])
+    chat_scroll.grid(row=0, column=1, sticky="ns")
+    chat_canvas.configure(yscrollcommand=chat_scroll.set)
 
-    for i, name in enumerate(example_names):
-        btn = tkinter.Button(btn_frame, text=name, font=FONT_TINY,
-            bg=C["bgc"], fg=C["ac"], relief="flat", bd=1, cursor="hand2",
-            activebackground=C["acl"], activeforeground=C["ach"],
-            command=lambda n=name: _set_quick_example(AI_QUICK_PROMPTS[n]))
-        btn.grid(row=0, column=i, padx=2, sticky="w")
+    # 消息容器 (所有消息气泡挂在此 Frame 内)
+    chat_inner = tkinter.Frame(chat_canvas, bg=C["bg"])
+    chat_inner.bind("<Configure>",
+        lambda e: chat_canvas.configure(scrollregion=chat_canvas.bbox("all")))
+    chat_win_id = chat_canvas.create_window((0, 0), window=chat_inner, anchor="nw")
 
-    # === Row 3: Preview Label ===
-    preview_label = tkinter.Label(dlg, text="生成的脚本预览",
-        font=FONT_BODY, fg=C["fgm"], bg=C["bgc"])
-    preview_label.grid(row=3, column=0, sticky="w", padx=16, pady=(8, 2))
+    def _on_chat_canvas_configure(event):
+        # 让内部 Frame 宽度跟随 Canvas, 消息气泡才能正确 wrap
+        chat_canvas.itemconfig(chat_win_id, width=event.width)
+    chat_canvas.bind("<Configure>", _on_chat_canvas_configure)
 
-    # === Row 4: Preview Text Area (expands) ===
-    result_txt = tkinter.Text(dlg, height=12, font=FONT_LOG,
-        bg=C["logbg"], fg=C["logfg"], wrap="word", relief="solid", bd=1,
-        padx=8, pady=6)
-    result_txt.grid(row=4, column=0, sticky="nsew", padx=16, pady=(0, 8))
+    # 鼠标滚轮滚动对话流
+    def _on_chat_wheel(event):
+        chat_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+    chat_canvas.bind("<MouseWheel>", _on_chat_wheel)
+    # 鼠标进入对话区时绑定滚轮 (防止被其他控件抢走)
+    def _on_chat_enter(event):
+        chat_canvas.bind_all("<MouseWheel>", _on_chat_wheel)
+    def _on_chat_leave(event):
+        chat_canvas.unbind_all("<MouseWheel>")
+    chat_canvas.bind("<Enter>", _on_chat_enter)
+    chat_canvas.bind("<Leave>", _on_chat_leave)
 
-    # === Row 5: Progress Bar ===
-    progress_frame = tkinter.Frame(dlg, bg=C["bgc"])
-    progress_frame.grid(row=5, column=0, sticky="ew", padx=16, pady=(0, 4))
-    progress_frame.columnconfigure(0, weight=1)
+    # ── 对话消息管理 ──
+    _msg_widgets = []     # 所有消息行 (用于清空)
+    _last_script = [None] # 最近一次生成的脚本内容 (供插入按钮使用)
 
-    progress_var = tkinter.DoubleVar(value=0)
-    progress_bar = ttk.Progressbar(progress_frame, variable=progress_var,
-        maximum=100, mode='indeterminate', length=400)
-    progress_bar.grid(row=0, column=0, sticky="ew")
+    def _scroll_to_bottom():
+        dlg.update_idletasks()
+        chat_canvas.yview_moveto(1.0)
 
-    # === Row 6: Status Text ===
-    status_var = tkinter.StringVar(value="输入操作描述后点击生成（支持Ctrl+Enter快捷生成）")
-    status_label = tkinter.Label(dlg, textvariable=status_var,
-        font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"])
-    status_label.grid(row=6, column=0, sticky="w", padx=16, pady=(0, 8))
+    def _add_message(role, text, script_content=None):
+        """向对话流添加一条消息。
 
-    # === Row 7: Action Buttons ===
-    button_frame = tkinter.Frame(dlg, bg=C["bgc"])
-    button_frame.grid(row=7, column=0, sticky="ew", padx=16, pady=(0, 14))
-    button_frame.columnconfigure(1, weight=1)
+        role: "user" / "ai" / "system"
+        text: 消息文本
+        script_content: 若提供, 在消息下方追加脚本预览卡片 + 操作按钮
+        """
+        msg_frame = tkinter.Frame(chat_inner, bg=C["bg"])
+        msg_frame.pack(fill="x", padx=12, pady=(4, 4))
+        _msg_widgets.append(msg_frame)
 
-    # Generate button
-    gen_btn = tkinter.Button(button_frame, text="▶ 生成脚本",
-        font=FONT_BUTTON, bg=C["ac"], fg="white",
-        relief="flat", bd=1, padx=16, pady=4, cursor="hand2",
-        activebackground=C["ach"], activeforeground="white")
-    _ui_theme.set_role(gen_btn, "ac")
-    gen_btn.grid(row=0, column=0, padx=(0, 6))
-    attach_tooltip(gen_btn, "根据描述生成脚本 (Ctrl+Enter)")
+        # 消息气泡容器
+        if role == "user":
+            # 用户消息: 右对齐, 强调色边框
+            bubble_bg = C["acl"]
+            bubble_fg = C["fgt"]
+            tag_text = "你"
+            tag_fg = C["ac"]
+            anchor = "e"
+        elif role == "ai":
+            # AI 消息: 左对齐, 常规底色
+            bubble_bg = C["bgc"]
+            bubble_fg = C["fgb"]
+            tag_text = "AI"
+            tag_fg = C["sc"] if _ai_ready else C["ac"]
+            anchor = "w"
+        else:
+            # 系统消息: 居中, 灰色
+            bubble_bg = C["bg"]
+            bubble_fg = C["fgm"]
+            tag_text = ""
+            tag_fg = C["fgm"]
+            anchor = "center"
 
-    # Spacer to push buttons to right
-    spacer = tkinter.Frame(button_frame, bg=C["bgc"])
-    spacer.grid(row=0, column=1, sticky="ew")
+        # 角色标签
+        if tag_text:
+            tag_frame = tkinter.Frame(msg_frame, bg=C["bg"])
+            tag_frame.pack(fill="x")
+            tkinter.Label(tag_frame, text=tag_text, font=FONT_TINY,
+                bg=C["bg"], fg=tag_fg).pack(side="left" if role == "ai" else "right",
+                    padx=4)
 
-    # Insert button
-    insert_btn = tkinter.Button(button_frame, text="↓ 插入表格",
-        font=FONT_BUTTON, bg=C["sc"], fg="white",
-        relief="flat", bd=1, padx=16, pady=4, cursor="hand2",
-        activebackground=_darken(C["sc"]), activeforeground="white")
-    _ui_theme.set_role(insert_btn, "sc")
-    insert_btn.grid(row=0, column=2, padx=3)
-    attach_tooltip(insert_btn, "将生成的脚本插入编辑器表格")
+        # 气泡 Frame
+        bubble_frame = tkinter.Frame(msg_frame, bg=bubble_bg,
+            highlightbackground=C["bd"] if role != "system" else C["bg"],
+            highlightthickness=1 if role != "system" else 0,
+            bd=0)
+        # 气泡底色登记角色: 换肤时不会被「ht>0 → bgc」判定刷成普通卡片色
+        if role == "user":
+            _ui_theme.set_role(bubble_frame, "acl")
+        elif role == "ai":
+            _ui_theme.set_role(bubble_frame, "bgc")
+        if anchor == "e":
+            bubble_frame.pack(side="right", anchor="e", padx=(60, 0))
+        elif anchor == "w":
+            bubble_frame.pack(side="left", anchor="w", padx=(0, 60))
+        else:
+            bubble_frame.pack(anchor="center", padx=60)
 
-    # Cancel button
-    cancel_btn = tkinter.Button(button_frame, text="取消",
-        font=FONT_BUTTON, bg=C["bgc"], fg=C["fgb"],
-        relief="flat", bd=1, padx=16, pady=4, cursor="hand2",
-        activebackground=_darken(C["bgc"]), activeforeground=C["fgb"],
-        highlightbackground=C["bd"], highlightthickness=1,
-        command=dlg.destroy)
-    cancel_btn.grid(row=0, column=3, padx=(6, 0))
+        bubble_frame.columnconfigure(0, weight=1)
 
-    # Define generate function
+        # 消息文本
+        msg_lbl = tkinter.Label(bubble_frame, text=text, font=FONT_BODY,
+            bg=bubble_bg, fg=bubble_fg, justify="left", anchor="w",
+            wraplength=520, padx=10, pady=6)
+        msg_lbl.pack(fill="x")
+        _ui_theme.set_role(msg_lbl, "bgc" if role == "ai" else "acl")
+
+        # wraplength 随气泡宽度自适应 (窗口缩放时文本正确折行)
+        def _adjust_wrap(event, lbl=msg_lbl):
+            try:
+                w = bubble_frame.winfo_width()
+                if w > 40:
+                    lbl.configure(wraplength=max(60, w - 24))
+            except Exception:
+                pass
+        bubble_frame.bind("<Configure>", _adjust_wrap)
+
+        # 脚本预览卡片 (仅 AI 生成结果)
+        if script_content:
+            _last_script[0] = script_content
+
+            card_frame = tkinter.Frame(bubble_frame, bg=C["logbg"],
+                highlightbackground=C["ac"], highlightthickness=1)
+            _ui_theme.set_role(card_frame, "logbg")
+            card_frame.pack(fill="x", padx=8, pady=(4, 8))
+
+            # 卡片标题行
+            card_header = tkinter.Frame(card_frame, bg=C["logbg"])
+            _ui_theme.set_role(card_header, "logbg")
+            card_header.pack(fill="x", padx=8, pady=(6, 2))
+            tkinter.Label(card_header, text="📋 生成的脚本", font=FONT_SMALL,
+                bg=C["logbg"], fg=C["ac"]).pack(side="left")
+
+            # 行数统计
+            line_count = len([l for l in script_content.split("\n")
+                              if l.strip() and not l.startswith("操作")])
+            tkinter.Label(card_header, text="{} 行命令".format(line_count),
+                font=FONT_TINY, bg=C["logbg"], fg=C["fgm"]).pack(side="right")
+
+            # 脚本内容 (Text widget, 带滚动条, 限高)
+            script_txt = tkinter.Text(card_frame, font=FONT_LOG,
+                bg=C["logbg"], fg=C["logfg"], wrap="none", relief="flat", bd=0,
+                padx=8, pady=4, height=min(12, max(4, line_count + 1)),
+                insertbackground=C["fgt"],
+                selectbackground=C["acl"], selectforeground=C["fgt"])
+            script_txt.pack(fill="x", padx=8, pady=(0, 4))
+            script_txt.insert("1.0", script_content)
+            script_txt.configure(state="disabled")
+
+            # 卡片操作按钮行
+            card_btns = tkinter.Frame(card_frame, bg=C["logbg"])
+            _ui_theme.set_role(card_btns, "logbg")
+            card_btns.pack(fill="x", padx=8, pady=(0, 6))
+
+            insert_card_btn = tkinter.Button(card_btns, text="↓ 插入表格",
+                font=FONT_SMALL, bg=C["sc"], fg=_ui_theme.text_on(C["sc"]),
+                relief="flat", bd=1, padx=10, pady=2, cursor="hand2",
+                activebackground=_darken(C["sc"]),
+                activeforeground=_ui_theme.text_on(_darken(C["sc"])),
+                command=lambda c=script_content: _insert_script(c))
+            _ui_theme.set_role(insert_card_btn, "sc")
+            insert_card_btn.pack(side="left")
+
+            copy_card_btn = tkinter.Button(card_btns, text="📋 复制",
+                font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"],
+                relief="flat", bd=1, padx=8, pady=2, cursor="hand2",
+                activebackground=_darken(C["bgc"]), activeforeground=C["fgb"],
+                highlightbackground=C["bd"], highlightthickness=1,
+                command=lambda c=script_content: _copy_script(c))
+            copy_card_btn.pack(side="left", padx=4)
+
+        _scroll_to_bottom()
+
+    def _copy_script(content):
+        """复制脚本内容到剪贴板。"""
+        try:
+            dlg.clipboard_clear()
+            dlg.clipboard_append(content)
+            show_toast(root, "已复制到剪贴板", "success")
+        except Exception:
+            show_toast(root, "复制失败", "error")
+
+    def _clear_chat():
+        """清空对话消息流。"""
+        for w in _msg_widgets:
+            try:
+                w.destroy()
+            except Exception:
+                pass
+        _msg_widgets.clear()
+        _last_script[0] = None
+        _add_welcome()
+
+    clear_chat_btn.config(command=_clear_chat)
+
+    # ── 欢迎消息 + 建议提示词 ──
+    def _add_welcome():
+        _add_message("ai",
+            "你好！我是 ACRPA AI 脚本助手。\n\n"
+            "用自然语言描述你想要实现的自动化操作，我会生成对应的 RPA 脚本。\n\n"
+            "你可以试试下方的建议示例，或者直接输入你的需求。")
+
+        # 建议提示词卡片
+        suggest_frame = tkinter.Frame(chat_inner, bg=C["bg"])
+        suggest_frame.pack(fill="x", padx=12, pady=(4, 8))
+        _msg_widgets.append(suggest_frame)
+
+        tkinter.Label(suggest_frame, text="💡 建议试试:", font=FONT_SMALL,
+            bg=C["bg"], fg=C["fgm"]).pack(anchor="w", padx=4, pady=(0, 4))
+
+        from templates import AI_QUICK_PROMPTS
+        suggestions_frame = tkinter.Frame(suggest_frame, bg=C["bg"])
+        suggestions_frame.pack(fill="x", padx=4)
+
+        # 两列布局展示建议
+        names = list(AI_QUICK_PROMPTS.keys())[:8]
+        for i, name in enumerate(names):
+            row = i // 2
+            col = i % 2
+            chip = tkinter.Button(suggestions_frame, text=name, font=FONT_SMALL,
+                bg=C["bgc"], fg=C["ac"], relief="flat", bd=1, cursor="hand2",
+                activebackground=C["acl"], activeforeground=C["ach"],
+                highlightbackground=C["bd"], highlightthickness=1,
+                padx=8, pady=3, anchor="w",
+                command=lambda n=name: _use_suggestion(AI_QUICK_PROMPTS[n]))
+            chip.grid(row=row, column=col, sticky="ew", padx=(0, 4) if col == 0 else (4, 0),
+                      pady=2)
+            _ui_theme.set_role(chip, "ac")
+        suggestions_frame.columnconfigure(0, weight=1)
+        suggestions_frame.columnconfigure(1, weight=1)
+
+        _scroll_to_bottom()
+
+    def _use_suggestion(text):
+        """点击建议提示词 → 填入输入框并聚焦。"""
+        prompt_entry.delete("1.0", "end")
+        prompt_entry.insert("1.0", text)
+        prompt_entry.focus_set()
+        _update_send_state()
+
+    # ═══ Row 2: 底部输入栏 (聊天式: 输入框 + 发送按钮) ═══
+    input_bar = tkinter.Frame(dlg, bg=C["bgc"],
+        highlightbackground=C["bd"], highlightthickness=1)
+    input_bar.grid(row=2, column=0, sticky="ew")
+    input_bar.columnconfigure(0, weight=1)
+
+    # 输入框容器
+    input_container = tkinter.Frame(input_bar, bg=C["bgc"])
+    input_container.grid(row=0, column=0, sticky="ew", padx=8, pady=8)
+    input_container.columnconfigure(0, weight=1)
+
+    prompt_entry = tkinter.Text(input_container, height=3, font=FONT_BODY,
+        bg=C["ebg"], fg=C["fgb"], wrap="word", relief="flat", bd=0,
+        padx=8, pady=6, insertbackground=C["fgt"],
+        selectbackground=C["acl"], selectforeground=C["fgt"],
+        highlightbackground=C["bd"], highlightthickness=1)
+    prompt_entry.grid(row=0, column=0, sticky="ew")
+
+    # 字符计数 (输入框右下角)
+    count_var = tkinter.StringVar(value="")
+    count_lbl = tkinter.Label(input_container, textvariable=count_var,
+        font=FONT_TINY, bg=C["bgc"], fg=C["fgd"])
+    count_lbl.place(relx=1.0, rely=1.0, anchor="se", x=-4, y=-2)
+
+    # 发送按钮
+    send_btn = tkinter.Button(input_container, text="发送", font=FONT_BUTTON,
+        bg=C["ac"], fg=_ui_theme.text_on(C["ac"]), relief="flat", bd=1,
+        padx=14, pady=4, cursor="hand2",
+        activebackground=C["ach"], activeforeground=_ui_theme.text_on(C["ach"]),
+        disabledforeground=C["fgm"], state="disabled")
+    _ui_theme.set_role(send_btn, "ac")
+    send_btn.grid(row=0, column=1, padx=(6, 0), sticky="ns")
+
+    # 底部提示行 (surface_alt 登记角色, 否则换肤会被 ht 判定刷成 bg/bgc)
+    hint_frame = tkinter.Frame(input_bar, bg=C["surface_alt"])
+    _ui_theme.set_role(hint_frame, "surface_alt")
+    hint_frame.grid(row=1, column=0, sticky="ew")
+    hint_var = tkinter.StringVar(value=" Enter 发送 · Ctrl+Enter 强制发送 · 输入操作描述生成 RPA 脚本")
+    tkinter.Label(hint_frame, textvariable=hint_var,
+        font=FONT_TINY, bg=C["surface_alt"], fg=C["fgm"]).pack(anchor="w", padx=8, pady=2)
+
+    # ── 输入框交互 ──
+    _placeholder_active = [True]
+    _PH_TEXT = "描述你要实现的自动化操作..."
+
+    def _show_placeholder():
+        prompt_entry.delete("1.0", "end")
+        prompt_entry.insert("1.0", _PH_TEXT)
+        prompt_entry.tag_add("ph", "1.0", "end")
+        prompt_entry.tag_configure("ph", foreground=C["fgm"])
+        _placeholder_active[0] = True
+        count_var.set("")
+
+    def _clear_placeholder():
+        if _placeholder_active[0]:
+            prompt_entry.delete("1.0", "end")
+            prompt_entry.tag_remove("ph", "1.0", "end")
+            _placeholder_active[0] = False
+
+    def _on_entry_focus_in(event):
+        _clear_placeholder()
+        _update_send_state()
+
+    def _on_entry_focus_out(event):
+        if not prompt_entry.get("1.0", "end-1c").strip():
+            _show_placeholder()
+        _update_send_state()
+
+    def _update_count(event=None):
+        if _placeholder_active[0]:
+            count_var.set("")
+            return
+        n = len(prompt_entry.get("1.0", "end-1c"))
+        count_var.set("{} 字".format(n) if n > 0 else "")
+
+    def _update_send_state(event=None):
+        """输入框有内容时启用发送按钮。"""
+        has_text = not _placeholder_active[0] and bool(prompt_entry.get("1.0", "end-1c").strip())
+        send_btn.config(state="normal" if has_text else "disabled")
+
+    prompt_entry.bind("<FocusIn>", _on_entry_focus_in)
+    prompt_entry.bind("<FocusOut>", _on_entry_focus_out)
+    prompt_entry.bind("<KeyRelease>", lambda e: (_update_count(), _update_send_state()))
+
+    # Enter 发送, Shift+Enter 换行
+    def _on_entry_return(event):
+        if event.state & 0x1:  # Shift → 换行
+            return  # 不拦截, 让 Text 正常插入换行
+        _do_generate()
+        return "break"  # 拦截默认换行
+
+    prompt_entry.bind("<Return>", _on_entry_return)
+    prompt_entry.bind("<Control-Return>", lambda e: (_do_generate(), "break"))
+
+    # ── 生成逻辑 ──
+    _is_generating = [False]
+
     def _do_generate():
-        """Generate RPA script using AI."""
-        user_input = prompt_txt.get("1.0", "end-1c").strip()
-
-        # Check if placeholder is still present
-        if "快速示例" in user_input or not user_input:
+        if _is_generating[0]:
+            return
+        user_input = prompt_entry.get("1.0", "end-1c").strip()
+        if _placeholder_active[0] or not user_input:
             show_toast(root, "请先输入操作描述", "warning")
             return
 
-        # Start progress animation
-        progress_bar.start(10)
-        status_var.set("正在生成脚本...")
-        gen_btn.config(state="disabled")
-        result_txt.delete("1.0", "end")
+        # 提前检查 API Key
+        if not has_ai_key():
+            _add_message("system", "⚠ 未配置 API Key, 请先在设置中配置 AI 密钥。")
+            if messagebox.askyesno("未配置 API Key",
+                    "尚未配置 AI 密钥, 是否打开设置窗口?"):
+                _open_settings()
+            return
+
+        # 用户消息上屏
+        _add_message("user", user_input)
+
+        # 清空输入框
+        prompt_entry.delete("1.0", "end")
+        _placeholder_active[0] = False
+        _update_send_state()
+        count_var.set("")
+
+        # AI "正在思考" 占位消息
+        _is_generating[0] = True
+        send_btn.config(state="disabled", text="思考中...")
+        hint_var.set(" AI 正在生成脚本, 请稍候... (模型: {})".format(_model_name))
+
+        # 思考动画消息
+        thinking_frame = tkinter.Frame(chat_inner, bg=C["bg"])
+        thinking_frame.pack(fill="x", padx=12, pady=4)
+        _msg_widgets.append(thinking_frame)
+        thinking_lbl = tkinter.Label(thinking_frame,
+            text="⧗ AI 正在思考...", font=FONT_SMALL,
+            bg=C["bgc"], fg=C["fgm"],
+            highlightbackground=C["bd"], highlightthickness=1, padx=10, pady=4)
+        thinking_lbl.pack(side="left", padx=(0, 60))
+        _ui_theme.set_role(thinking_lbl, "bgc")
+        _scroll_to_bottom()
+
+        # 动画: 轮换省略号
+        _dots = [0]
+        def _animate_thinking():
+            if not _is_generating[0]:
+                return
+            _dots[0] = (_dots[0] + 1) % 4
+            try:
+                thinking_lbl.configure(text="⧗ AI 正在思考" + "." * _dots[0])
+                dlg.after(400, _animate_thinking)
+            except Exception:
+                pass
+        dlg.after(400, _animate_thinking)
+
+        def _remove_thinking():
+            try:
+                thinking_frame.destroy()
+                if thinking_frame in _msg_widgets:
+                    _msg_widgets.remove(thinking_frame)
+            except Exception:
+                pass
 
         def _generate_thread():
             try:
-                from ai_client import (create_client_active, resolve_model,
+                from ai_client import (create_client_active,
                                        generate_script_content,
                                        APIError, APIAuthError, APIRateLimitError,
                                        APITimeoutError)
                 from templates import build_ai_prompt, normalize_ai_output
 
-                # Build prompt
                 prompt = build_ai_prompt(user_input)
-
-                # Create AI client（跟随自定义提供商/模型配置）
                 client = create_client_active()
 
-                # 调用 + 空正文自动放宽预算重试 + 成因诊断
-                # （推理模型会把 max_tokens 烧在 reasoning_content 上，正文为空；
-                #   细节与实测数据见 ai_client.generate_script_content 的说明）
                 def _note_retry(reason, bigger):
                     try:
-                        dlg.after(0, lambda: status_var.set(
-                            "模型思考占满输出预算，正以 {} tokens 重试…".format(bigger)))
+                        dlg.after(0, lambda: thinking_lbl.configure(
+                            text="⧗ 模型思考占满预算, 以 {} tokens 重试...".format(bigger)))
                     except Exception:
                         pass
 
@@ -708,7 +1075,6 @@ def open_ai_panel():
                     model=resolve_model(),
                     on_retry=_note_retry)
 
-                # ✦ 关键修复：使用normalize_ai_output进行规范化处理
                 generated_script = normalize_ai_output(raw_output)
 
                 if not generated_script:
@@ -716,84 +1082,79 @@ def open_ai_panel():
                         "AI 返回的内容无法解析为脚本表格"
                         "（已收到 {} 字符，规范化后为空）".format(len(raw_output)))
 
-                # Display in result text
-                result_txt.delete("1.0", "end")
-                result_txt.insert("1.0", generated_script)
-
-                # Update status
-                def _safe_progress_stop():
-                    try: progress_bar.stop()
-                    except Exception: pass
-                def _safe_gen_ok():
-                    try: progress_bar.stop()
-                    except Exception: pass
-                    status_var.set("✔ 生成成功 ({} 字符)".format(len(generated_script)))
-                    gen_btn.config(state="normal")
-                dlg.after(0, _safe_gen_ok)
+                def _on_success():
+                    _remove_thinking()
+                    _is_generating[0] = False
+                    send_btn.config(state="normal", text="发送")
+                    hint_var.set(" ✔ 生成成功 · Enter 发送 · Ctrl+Enter 强制发送")
+                    _add_message("ai",
+                        "已为你生成 RPA 脚本 ({} 字符)。\n"
+                        "请查看下方脚本卡片, 点击「插入表格」导入编辑器。".format(
+                            len(generated_script)),
+                        script_content=generated_script)
+                dlg.after(0, _on_success)
 
             except APIAuthError as e:
-                def _safe_auth(err=e):
-                    try: progress_bar.stop()
-                    except Exception: pass
-                    status_var.set("✘ 认证失败: {}".format(err))
-                    gen_btn.config(state="normal")
+                def _on_err(err=e):
+                    _remove_thinking()
+                    _is_generating[0] = False
+                    send_btn.config(state="normal", text="发送")
+                    hint_var.set(" ✘ 认证失败")
+                    _add_message("system", "✘ 认证失败: {}".format(err))
                     messagebox.showwarning("认证失败", str(err))
-                dlg.after(0, _safe_auth)
+                dlg.after(0, _on_err)
             except APIRateLimitError as e:
-                def _safe_rate(err=e):
-                    try: progress_bar.stop()
-                    except Exception: pass
-                    status_var.set("✘ 频率超限: {}".format(err))
-                    gen_btn.config(state="normal")
+                def _on_err(err=e):
+                    _remove_thinking()
+                    _is_generating[0] = False
+                    send_btn.config(state="normal", text="发送")
+                    hint_var.set(" ✘ 频率超限")
+                    _add_message("system", "✘ 请求频率超限: {}".format(err))
                     messagebox.showwarning("请求频率超限", str(err))
-                dlg.after(0, _safe_rate)
+                dlg.after(0, _on_err)
             except APITimeoutError as e:
-                def _safe_timeout(err=e):
-                    try: progress_bar.stop()
-                    except Exception: pass
-                    status_var.set("✘ 请求超时: {}".format(err))
-                    gen_btn.config(state="normal")
+                def _on_err(err=e):
+                    _remove_thinking()
+                    _is_generating[0] = False
+                    send_btn.config(state="normal", text="发送")
+                    hint_var.set(" ✘ 请求超时")
+                    _add_message("system", "✘ 请求超时: {}".format(err))
                     messagebox.showwarning("请求超时", str(err))
-                dlg.after(0, _safe_timeout)
+                dlg.after(0, _on_err)
             except APIError as e:
-                def _safe_api(err=e):
-                    try: progress_bar.stop()
-                    except Exception: pass
-                    status_var.set("✘ API 错误: {}".format(err))
-                    gen_btn.config(state="normal")
+                def _on_err(err=e):
+                    _remove_thinking()
+                    _is_generating[0] = False
+                    send_btn.config(state="normal", text="发送")
+                    hint_var.set(" ✘ API 错误")
+                    _add_message("system", "✘ API 错误: {}".format(err))
                     messagebox.showerror("API 错误", str(err))
-                dlg.after(0, _safe_api)
+                dlg.after(0, _on_err)
             except Exception as e:
-                def _safe_exc(err=e):
-                    try: progress_bar.stop()
-                    except Exception: pass
-                    status_var.set("✘ 生成失败: {}".format(err))
-                    gen_btn.config(state="normal")
+                def _on_err(err=e):
+                    _remove_thinking()
+                    _is_generating[0] = False
+                    send_btn.config(state="normal", text="发送")
+                    hint_var.set(" ✘ 生成失败")
+                    _add_message("system", "✘ 生成失败: {}".format(err))
                     messagebox.showerror("生成失败", "发生未知错误:\n{}".format(err))
-                dlg.after(0, _safe_exc)
-        # Start generation in background thread
+                dlg.after(0, _on_err)
+
         thread = threading.Thread(target=_generate_thread, daemon=True)
         thread.start()
 
-    def _insert_to_editor():
-        """Insert generated script into editor."""
-        generated_content = result_txt.get("1.0", "end-1c").strip()
+    send_btn.config(command=_do_generate)
 
-        if not generated_content:
-            show_toast(root, "没有可插入的内容", "warning")
-            return
-
+    # ── 脚本插入逻辑 ──
+    def _insert_script(script_content):
+        """将脚本内容插入编辑器表格。"""
         try:
-            # Parse CSV format
-            lines = generated_content.split("\n")
-
-            # Skip header rows (支持多种标题格式)
+            lines = script_content.split("\n")
             data_lines = []
             for line in lines:
                 line = line.strip()
                 if not line:
                     continue
-                # 跳过标题行和说明行
                 if line.startswith("操作") or line.startswith("命令类型") or line.startswith("（标题行）"):
                     continue
                 data_lines.append(line)
@@ -802,7 +1163,6 @@ def open_ai_panel():
                 show_toast(root, "未找到有效的脚本数据", "warning")
                 return
 
-            # Parse each line
             from scriptdata import ScriptData
             _push_undo()
             imported_count = 0
@@ -810,64 +1170,42 @@ def open_ai_panel():
 
             for line in data_lines:
                 parts = line.split(",")
-
-                # 检查是否有命令类型
                 if len(parts) < 1:
                     skipped_count += 1
                     continue
-
                 cmd_type = parts[0].strip()
-
-                # 确保至少有10个字段（命令类型 + 9个参数）
                 while len(parts) < 10:
                     parts.append("None")
-
-                # 处理None值：将字符串"None"转换为实际的None
                 args = []
-                for p in parts[1:10]:  # 只处理参数部分（跳过命令类型）
+                for p in parts[1:10]:
                     p_stripped = p.strip()
                     if p_stripped.lower() == 'none' or p_stripped == '':
                         args.append(None)
                     else:
                         args.append(p_stripped)
-
-                # Validate command type
                 if cmd_type in ScriptData.COMMANDS:
                     state._editor_rows.append(ScriptData(cmd_type, args))
                     imported_count += 1
                 else:
                     log1("⚠  跳过未知命令: {}".format(cmd_type), "warning")
                     skipped_count += 1
-            # Show success message
+
             msg = "✔ 已导入 {} 条命令".format(imported_count)
             if skipped_count > 0:
                 msg += " (跳过 {} 条)".format(skipped_count)
-
             log1(msg)
             show_toast(root, msg, "success")
-
-            # Sync to tree view
             _editor_sync_to_tree()
-
-            # Close dialog
-            dlg.destroy()
+            _add_message("system", msg)
 
         except Exception as e:
             messagebox.showerror("导入失败", "解析脚本时出错:\n{}".format(e))
             show_toast(root, "导入失败: {}".format(e), "error")
 
-    # Bind button commands
-    gen_btn.config(command=_do_generate)
-    insert_btn.config(command=_insert_to_editor)
-
-    # Bind Ctrl+Enter to generate
-    def _on_ctrl_enter(event):
-        if event.state & 0x4:  # Ctrl key
-            _do_generate()
-            return "break"
-
-    prompt_txt.bind("<Control-Return>", _on_ctrl_enter)
-    result_txt.bind("<Control-Return>", _on_ctrl_enter)
+    # ── 初始化: 显示欢迎消息 + 建议提示词 ──
+    _show_placeholder()
+    dlg.after(100, _add_welcome)
+    prompt_entry.focus_set()
 
 
 # ======================================================================
@@ -885,27 +1223,26 @@ def open_ai_debug_dialog():
         return
 
     dlg = tkinter.Toplevel(root)
-    dlg.title("AI 智能调试 — ACRPA")
-    place_dialog(dlg, 600, 550)
-    dlg.minsize(480, 420)
-    dlg.transient(root)
-    dlg.grab_set()
-    dlg.configure(bg=C["bgc"])
-    _set_window_icon(dlg)
-    dlg.columnconfigure(0, weight=1)
-    dlg.rowconfigure(3, weight=1)
+    # v3 §2.3 模板: 从窗口骨架统一 尺寸/最小尺寸/居中/模态/外边距 (字面量 → token)
+    from ui.window_shell import apply_window_shell
+    shell = apply_window_shell(
+        dlg, "AI 智能调试 — ACRPA", size="md",
+        min_size=("dlg_min_w", "dlg_min_h"), parent=root, modal=True,
+        icon_setter=_set_window_icon, colors=C)
+    ai_body = shell.content
+    ai_body.rowconfigure(3, weight=1)
 
     # Title
-    title_frame = tkinter.Frame(dlg, bg=C["bgc"])
-    title_frame.grid(row=0, column=0, sticky="ew", padx=12, pady=(10, 4))
+    title_frame = tkinter.Frame(ai_body, bg=C["bgc"])
+    title_frame.grid(row=0, column=0, sticky="ew", pady=(0, gap("gap_tight")))
     tkinter.Label(title_frame, text="AI 智能调试", font=FONT_TITLE, bg=C["bgc"],
         fg=C["fgt"]).pack(side="left")
     tkinter.Label(title_frame, text="用自然语言提问，AI 分析执行记录回答",
-        font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"]).pack(side="left", padx=(8, 0))
+        font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"]).pack(side="left", padx=(sp("sp_sm"), 0))
 
     # Quick questions
-    quick_frame = tkinter.Frame(dlg, bg=C["bgc"])
-    quick_frame.grid(row=1, column=0, sticky="ew", padx=12, pady=(0, 4))
+    quick_frame = tkinter.Frame(ai_body, bg=C["bgc"])
+    quick_frame.grid(row=1, column=0, sticky="ew", pady=(0, gap("gap_tight")))
     quick_questions = [
         "为什么最后一条命令失败了?",
         "哪行命令最耗时?",
@@ -920,8 +1257,8 @@ def open_ai_debug_dialog():
         btn.pack(side="left", padx=1, pady=1)
 
     # Question input
-    input_frame = tkinter.Frame(dlg, bg=C["bgc"])
-    input_frame.grid(row=2, column=0, sticky="ew", padx=12, pady=(0, 6))
+    input_frame = tkinter.Frame(ai_body, bg=C["bgc"])
+    input_frame.grid(row=2, column=0, sticky="ew", pady=(0, gap("gap_tight")))
     input_frame.columnconfigure(0, weight=1)
 
     question_var = tkinter.StringVar(value="请分析最近的执行情况，有什么问题?")
@@ -931,16 +1268,16 @@ def open_ai_debug_dialog():
     question_entry.select_range(0, "end")
 
     ask_btn = tkinter.Button(input_frame, text="▶ 提问",
-        font=FONT_BUTTON, bg=C["ac"], fg="white",
+        font=FONT_BUTTON, bg=C["ac"], fg=_ui_theme.text_on(C["ac"]),
         relief="flat", bd=1, padx=12, pady=2, cursor="hand2")
     _ui_theme.set_role(ask_btn, "ac")
     ask_btn.grid(row=0, column=1)
     attach_tooltip(ask_btn, "提交问题给 AI 分析执行日志")
 
     # Answer area
-    answer_frame = tkinter.Frame(dlg, bg=C["bgc"],
+    answer_frame = tkinter.Frame(ai_body, bg=C["bgc"],
         highlightbackground=C["bd"], highlightthickness=1)
-    answer_frame.grid(row=3, column=0, sticky="nsew", padx=12, pady=(0, 8))
+    answer_frame.grid(row=3, column=0, sticky="nsew", pady=(0, gap("gap_tight")))
     answer_frame.columnconfigure(0, weight=1)
     answer_frame.rowconfigure(0, weight=1)
 
@@ -949,7 +1286,7 @@ def open_ai_debug_dialog():
         padx=10, pady=8, state="disabled",
         selectbackground=C["acl"], selectforeground=C["fgt"])
     answer_txt.grid(row=0, column=0, sticky="nsew")
-    answer_scroll = tkinter.Scrollbar(answer_frame, width=6, relief="flat",
+    answer_scroll = tkinter.Scrollbar(answer_frame, width=sp("sb_w"), relief="flat",
         bg=C["bd"], troughcolor=C["logbg"])
     answer_scroll.grid(row=0, column=1, sticky="ns")
     answer_txt.config(yscrollcommand=answer_scroll.set)
@@ -957,13 +1294,14 @@ def open_ai_debug_dialog():
 
     # Status
     status_var = tkinter.StringVar(value="输入问题后点击提问（需要配置 API Key）")
-    status_label = tkinter.Label(dlg, textvariable=status_var, font=FONT_SMALL,
+    status_label = tkinter.Label(ai_body, textvariable=status_var, font=FONT_SMALL,
         bg=C["bgc"], fg=C["fgm"])
-    status_label.grid(row=4, column=0, sticky="w", padx=12, pady=(0, 8))
+    status_label.grid(row=4, column=0, sticky="w", pady=(0, gap("gap_tight")))
 
     # Progress bar
-    progress = ttk.Progressbar(dlg, mode="indeterminate", length=300)
-    progress.grid(row=5, column=0, sticky="ew", padx=12, pady=(0, 8))
+    progress = ttk.Progressbar(ai_body, mode="indeterminate",
+                               length=sp("dlg_sm_w") // 2)
+    progress.grid(row=5, column=0, sticky="ew", pady=(0, gap("gap_tight")))
 
     def _do_ask():
         question = question_var.get().strip()
@@ -1034,7 +1372,8 @@ def open_ai_debug_dialog():
     _copy_btn.pack(side="left")
     attach_tooltip(_copy_btn, "复制 AI 回答到剪贴板")
     _ui_theme.roled(tkinter.Button(btn_frame, text="关闭", font=FONT_BUTTON,
-        bg=C["dg"], fg="white", relief="flat", bd=1, padx=16, pady=3,
+        bg=C["dg"], fg=_ui_theme.text_on(C["dg"]),
+        relief="flat", bd=1, padx=16, pady=3,
         command=dlg.destroy), "dg").pack(side="right")
 
     dlg.bind("<Escape>", lambda e: dlg.destroy())
@@ -1498,7 +1837,7 @@ def _sched_task_dialog(parent, task=None, on_done=None, prefill=None):
             tv.set(path)
 
     _browse = tkinter.Button(tgt_frame, text="浏览", font=FONT_SMALL, bg=C["ac"],
-        fg="white", command=_browse_target)
+        fg=_ui_theme.text_on(C["ac"]), command=_browse_target)
     _ui_theme.set_role(_browse, "ac")
     _browse.grid(row=0, column=1, padx=4)
     attach_tooltip(_browse, "选择脚本 / 工作流文件")
@@ -1918,7 +2257,8 @@ def _sched_task_dialog(parent, task=None, on_done=None, prefill=None):
     bf = tkinter.Frame(dlg2, bg=C["bgc"])
     bf.pack(pady=(4, 10))
     _ui_theme.roled(tkinter.Button(bf, text="确定", command=_confirm, font=FONT_BUTTON,
-        bg=C["ac"], fg="white", padx=14, pady=3), "ac").pack(side="left", padx=4)
+        bg=C["ac"], fg=_ui_theme.text_on(C["ac"]), padx=14, pady=3),
+        "ac").pack(side="left", padx=4)
     tkinter.Button(bf, text="取消", command=dlg2.destroy, font=FONT_BUTTON,
         bg=C["bgc"], fg=C["fgb"], padx=14, pady=3).pack(side="left", padx=4)
     dlg2.bind("<Escape>", lambda e: dlg2.destroy())
@@ -1998,7 +2338,7 @@ def open_sched_manager():
     # §4.5 降级: show="headings" 无 #0 列 → 选中行加粗
     bind_sel_bold(mgr_tree)
     msy = tkinter.Scrollbar(list_f, orient="vertical", command=mgr_tree.yview,
-        width=8, relief="flat", bg=C["bd"], troughcolor=C["bgc"])
+        width=sp("sb_w"), relief="flat", bg=C["bd"], troughcolor=C["bgc"])
     mgr_tree.configure(yscrollcommand=msy.set)
     mgr_tree.grid(row=0, column=0, sticky="nsew"); msy.grid(row=0, column=1, sticky="ns")
 
@@ -2039,7 +2379,7 @@ def open_sched_manager():
         tid = sel[0]
         task = next((t for t in state.SCHED_TASKS if t["id"] == tid), None)
         menu = tkinter.Menu(dlg, tearoff=0, bg=C["bgc"], fg=C["fgt"],
-            activebackground=C["ac"], activeforeground="white")
+            activebackground=C["acl"], activeforeground=C["fgt"])
         if task:
             en = task.get("enabled", True)
             menu.add_command(label="编辑…",
@@ -2089,7 +2429,7 @@ def open_sched_manager():
             ("status","状态",70),("trigger","触发",60)]:
             log_tree.heading(c, text=t); log_tree.column(c, width=w, minwidth=40)
         lsy = tkinter.Scrollbar(lf, orient="vertical", command=log_tree.yview,
-            width=8, relief="flat", bg=C["bd"], troughcolor=C["bgc"])
+            width=sp("sb_w"), relief="flat", bg=C["bd"], troughcolor=C["bgc"])
         log_tree.configure(yscrollcommand=lsy.set)
         log_tree.grid(row=0, column=0, sticky="nsew"); lsy.grid(row=0, column=1, sticky="ns")
         log_tree.tag_configure("ok", foreground=C["sc"])

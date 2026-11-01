@@ -2,6 +2,10 @@
 """ui.settings.cards.system — ▢ 系统卡 (原 settings_window 1463-1783 行段)。
 
 自启 / 托盘 / 紧凑模式 / 帮助模态 / Mini Bar 定制 / 界面缩放 / 全局快捷键。
+
+布局: 采用 cards/_layout.py 的「分节 + 表单行」——每组相关字段归为一个 section,
+单行只放一个控件, 关键说明落在控件下方的 FONT_TINY help 行 (替代旧「行尾塞灰字」)。
+
 导出:
     build(parent, ctx) -> handles
     apply(ctx, handles) -> None       # 等价原 _apply_system_settings (整卡统一收口)
@@ -15,12 +19,15 @@ import state
 import utils
 from utils import FONT_TINY
 
+from ui.settings.cards._layout import section, row, help_line
+
 CARD_KEY = "system"
 ROW = 5
 
 
 def build(parent, ctx):
     C = ctx.C
+    sp = ctx.sp
     _flash_saved = ctx.flash_saved
     _log1 = ctx.log1
     _set_window_icon = ctx.set_window_icon
@@ -35,16 +42,29 @@ def build(parent, ctx):
     _register_nav_card = ctx.register_nav_card
     _track_card_vars = ctx.track_card_vars
 
-    card, sys_content, sys_title, _ = _make_collapsible_card(parent, "系统", "▢")
+    card, content, title, _arrow = _make_collapsible_card(parent, "系统", "▢")
     card.grid(row=ROW, column=0, sticky="ew", **ctx.PAD)
-    _make_badge(CARD_KEY, sys_title)
+    _make_badge(CARD_KEY, title)
     _register_nav_card(CARD_KEY, card)
-    content = sys_content
 
-    # 开机自启动
+    # 统一放置器: 分节/表单行依次进 content 的 grid 行, 行距走 token
+    _r = 0
+
+    def _add(w, pady=None):
+        nonlocal _r
+        w.grid(row=_r, column=0, sticky="ew",
+               pady=(sp("row_gap") if pady is None else pady))
+        _r += 1
+        return w
+
+    def _sec(name, first=False):
+        return _add(section(content, ctx, name),
+                    pady=(sp("sp_sm") if first else sp("section_gap"), 0))
+
+    # ── 分节: 启动与托盘 ──
+    _sec("启动与托盘", first=True)
+
     auto_start_var = tkinter.BooleanVar(value=state.AUTO_START)
-    auto_start_frame = tkinter.Frame(content, bg=C["bgc"])
-    auto_start_frame.grid(row=0, column=0, sticky="ew", padx=8, pady=2)
 
     def _toggle_auto_start():
         state.AUTO_START = auto_start_var.get()
@@ -79,11 +99,12 @@ def build(parent, ctx):
         except Exception as e:
             _log1("开机自启动设置失败: {}".format(e), "error")
 
-    ttk.Checkbutton(auto_start_frame, text="开机自启动", variable=auto_start_var,
-        command=_toggle_auto_start).pack(side="left", padx=(0, 16))
+    _add(row(content, ctx, "", lambda p: ttk.Checkbutton(
+        p, text="开机自启动", variable=auto_start_var, command=_toggle_auto_start),
+        help="在 Windows 启动文件夹创建 / 移除快捷方式（需 pywin32）"))
 
-    # 最小化到系统托盘
     tray_var = tkinter.BooleanVar(value=state.MINIMIZE_TO_TRAY)
+
     def _toggle_tray():
         try:
             state.MINIMIZE_TO_TRAY = tray_var.get()
@@ -102,88 +123,31 @@ def build(parent, ctx):
         except Exception as e:
             _log1("托盘切换异常: {}".format(e), "error")
 
-    ttk.Checkbutton(auto_start_frame, text="关闭时最小化到系统托盘", variable=tray_var,
-        command=_toggle_tray).pack(side="left")
+    _add(row(content, ctx, "", lambda p: ttk.Checkbutton(
+        p, text="关闭时最小化到系统托盘", variable=tray_var, command=_toggle_tray),
+        help="关闭主窗口时隐藏到系统托盘而非退出程序"))
 
-    # 紧凑模式: 勾选回到 500x625 旧布局 (重启生效)
-    compact_frame = tkinter.Frame(content, bg=C["bgc"])
-    compact_frame.grid(row=4, column=0, sticky="ew", padx=8, pady=(2, 0))
+    # ── 分节: 界面与布局 ──
+    _sec("界面与布局")
+
     compact_var = tkinter.BooleanVar(value=getattr(state, "COMPACT_MODE", False))
-    ttk.Checkbutton(compact_frame, text="紧凑模式（小屏/便携，重启生效）",
-        variable=compact_var).pack(side="left")
-    tkinter.Label(compact_frame, text="回到 500×625 旧布局", font=FONT_TINY,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(6, 0))
+    _add(row(content, ctx, "", lambda p: ttk.Checkbutton(
+        p, text="紧凑模式（小屏/便携）", variable=compact_var),
+        help="回到 500×625 旧布局", restart=True))
 
-    # 帮助窗口模态开关 (阶段1-2)
     help_modal_var = tkinter.BooleanVar(value=getattr(state, "HELP_MODAL", False))
+
     def _toggle_help_modal():
         state.HELP_MODAL = help_modal_var.get()
         state.save_config()
         _flash_saved("system")
-    ttk.Checkbutton(compact_frame, text="帮助窗口使用模态",
-        variable=help_modal_var, command=_toggle_help_modal).pack(
-            side="left", padx=(16, 0))
-    tkinter.Label(compact_frame, text="默认非模态", font=FONT_TINY,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(6, 0))
 
-    # Mini Bar 折叠模式
-    mini_bar_frame = tkinter.Frame(content, bg=C["bgc"])
-    mini_bar_frame.grid(row=1, column=0, sticky="ew", padx=8, pady=2)
+    _add(row(content, ctx, "", lambda p: ttk.Checkbutton(
+        p, text="帮助窗口使用模态", variable=help_modal_var, command=_toggle_help_modal),
+        help="默认非模态"))
 
-    mini_bar_var = tkinter.BooleanVar(value=state.MINI_BAR_ENABLED)
-    def _toggle_mini_bar():
-        state.MINI_BAR_ENABLED = mini_bar_var.get()
-        state.save_config()
-        if not state.MINI_BAR_ENABLED and state.folded:
-            if _toggle_fold:
-                _toggle_fold()
-        _flash_saved("system")
-
-    ttk.Checkbutton(mini_bar_frame, text="启用 Mini Bar 折叠（标题栏 ⊟ 按钮）",
-        variable=mini_bar_var, command=_toggle_mini_bar).pack(side="left")
-
-    # Mini Bar 定制 (P2-8): 宽度 + 高度 + 透明度
-    mb_custom_frame = tkinter.Frame(content, bg=C["bgc"])
-    mb_custom_frame.grid(row=2, column=0, sticky="ew", padx=8, pady=(2, 4))
-    tkinter.Label(mb_custom_frame, text="面板宽度:", font=ctx.FONT_SMALL,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
-    mb_width_var = tkinter.StringVar(value=str(state.MINI_BAR_WIDTH))
-    mb_width_spin = _validate_number(tkinter.Spinbox(mb_custom_frame, textvariable=mb_width_var,
-        from_=380, to=900, increment=10, width=5, font=ctx.FONT_SMALL,
-        bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1), mb_width_var,
-        "Mini Bar 宽度", 430, int, 380, 900, card_key="system")
-    mb_width_spin.pack(side="left", padx=(0, 4))
-    tkinter.Label(mb_custom_frame, text="px (380-900)", font=ctx.FONT_SMALL,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 10))
-    tkinter.Label(mb_custom_frame, text="高度:", font=ctx.FONT_SMALL,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
-    mb_height_var = tkinter.StringVar(value=str(state.MINI_BAR_HEIGHT))
-    mb_height_combo = ttk.Combobox(mb_custom_frame, textvariable=mb_height_var,
-        values=(24, 28, 30, 34, 38, 42, 48), state="readonly", width=4)
-    mb_height_combo.pack(side="left", padx=(0, 4))
-    tkinter.Label(mb_custom_frame, text="px 高度（24–48，步进 4）", font=ctx.FONT_SMALL,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 10))
-    tkinter.Label(mb_custom_frame, text="透明度:", font=ctx.FONT_SMALL,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
-    mb_opacity_var = tkinter.StringVar(value=str(state.MINI_BAR_OPACITY))
-    mb_opacity_spin = _validate_number(tkinter.Spinbox(mb_custom_frame, textvariable=mb_opacity_var,
-        from_=30, to=100, increment=5, width=4, font=ctx.FONT_SMALL,
-        bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1), mb_opacity_var,
-        "Mini Bar 透明度", 80, int, 30, 100, card_key="system")
-    mb_opacity_spin.pack(side="left", padx=(0, 4))
-    tkinter.Label(mb_custom_frame, text="% (30-100)", font=ctx.FONT_SMALL,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left")
-
-    # ── 界面缩放 (pt 制) ── 并入本卡: 走 _apply_system_settings + _track_card_vars
-    ui_scale_frame = tkinter.Frame(content, bg=C["bgc"])
-    ui_scale_frame.grid(row=6, column=0, sticky="ew", padx=8, pady=(2, 6))
-    tkinter.Label(ui_scale_frame, text="界面缩放", font=ctx.FONT_SMALL,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
     _UI_SCALE_STEPS = ("0.8", "0.9", "1.0", "1.1", "1.2", "1.3", "1.5")
     ui_scale_var = tkinter.StringVar(value=str(float(getattr(state, "UI_SCALE", 1.0))))
-    ui_scale_combo = ttk.Combobox(ui_scale_frame, textvariable=ui_scale_var,
-        values=_UI_SCALE_STEPS, state="readonly", width=5)
-    ui_scale_combo.pack(side="left", padx=(0, 8))
 
     def _on_ui_scale_selected(event=None):
         """切换档位: 立即 set_ui_scale (刷新全部命名字体) + 提示需重启才完全生效。"""
@@ -200,25 +164,56 @@ def build(parent, ctx):
         except Exception:
             pass
 
-    ui_scale_combo.bind("<<ComboboxSelected>>", _on_ui_scale_selected)
-    tkinter.Label(ui_scale_frame, text="缩放仅影响字体与关键尺寸；调整后建议重启程序。",
-        font=FONT_TINY, fg=C["fgm"], bg=C["bgc"]).pack(side="left")
+    def _make_scale_combo(p):
+        cbo = ttk.Combobox(p, textvariable=ui_scale_var, values=_UI_SCALE_STEPS,
+                           state="readonly", width=5)
+        cbo.bind("<<ComboboxSelected>>", _on_ui_scale_selected)
+        return cbo
 
-    # 快捷键列表视图 (P0-3)
-    hotkey_title_frame = tkinter.Frame(content, bg=C["bgc"])
-    hotkey_title_frame.grid(row=3, column=0, sticky="ew", padx=8, pady=(4, 2))
-    tkinter.Label(hotkey_title_frame, text="全局快捷键", font=ctx.FONT_BODY,
-        fg=C["fgb"], bg=C["bgc"]).pack(side="left")
+    _add(row(content, ctx, "界面缩放", _make_scale_combo,
+        unit="0.8-1.5", help="缩放仅影响字体与关键尺寸；部分界面需重启生效", restart=True))
 
-    # 快捷键注册表 [[功能, state_key, 默认值], ...]
-    _HOTKEY_DEFS = [
-        ("执行默认配置",   "HOTKEY_RUN",   "F5"),
-        ("单步执行",       None,           "F10"),
-        ("暂停/继续执行",  "HOTKEY_PAUSE", "F6"),
-        ("取消执行",       "HOTKEY_STOP",  "Shift+F5"),
-        ("强制关闭",       None,           "Alt+Shift+F4"),
-        ("截图",           None,           "Ctrl+Shift+A"),
-    ]
+    # ── 分节: Mini Bar ──
+    _sec("Mini Bar")
+
+    mini_bar_var = tkinter.BooleanVar(value=state.MINI_BAR_ENABLED)
+
+    def _toggle_mini_bar():
+        state.MINI_BAR_ENABLED = mini_bar_var.get()
+        state.save_config()
+        if not state.MINI_BAR_ENABLED and state.folded:
+            if _toggle_fold:
+                _toggle_fold()
+        _flash_saved("system")
+
+    _add(row(content, ctx, "", lambda p: ttk.Checkbutton(
+        p, text="启用 Mini Bar 折叠（标题栏 ⊟ 按钮）",
+        variable=mini_bar_var, command=_toggle_mini_bar)))
+
+    mb_width_var = tkinter.StringVar(value=str(state.MINI_BAR_WIDTH))
+    _add(row(content, ctx, "面板宽度", lambda p: _validate_number(
+        tkinter.Spinbox(p, textvariable=mb_width_var, from_=380, to=900,
+            increment=10, width=5, font=ctx.FONT_SMALL, bg=C["ebg"], fg=C["fgb"],
+            relief="solid", bd=1),
+        mb_width_var, "Mini Bar 宽度", 430, int, 380, 900, card_key="system"),
+        unit="px (380-900)", indent=True))
+
+    mb_height_var = tkinter.StringVar(value=str(state.MINI_BAR_HEIGHT))
+    _add(row(content, ctx, "高度", lambda p: ttk.Combobox(
+        p, textvariable=mb_height_var, values=(24, 28, 30, 34, 38, 42, 48),
+        state="readonly", width=4),
+        unit="px (24-48，步进 4)", indent=True))
+
+    mb_opacity_var = tkinter.StringVar(value=str(state.MINI_BAR_OPACITY))
+    _add(row(content, ctx, "透明度", lambda p: _validate_number(
+        tkinter.Spinbox(p, textvariable=mb_opacity_var, from_=30, to=100,
+            increment=5, width=4, font=ctx.FONT_SMALL, bg=C["ebg"], fg=C["fgb"],
+            relief="solid", bd=1),
+        mb_opacity_var, "Mini Bar 透明度", 80, int, 30, 100, card_key="system"),
+        unit="% (30-100)", indent=True))
+
+    # ── 分节: 全局快捷键 ──
+    _sec("全局快捷键")
 
     # 快捷键录制弹窗 (复用原有逻辑)
     def _record_hotkey(var, key_name):
@@ -251,9 +246,18 @@ def build(parent, ctx):
         dlg.bind("<Escape>", lambda e: dlg.destroy())
         dlg.focus_set()
 
+    # 快捷键注册表 [[功能, state_key, 默认值], ...]
+    _HOTKEY_DEFS = [
+        ("执行默认配置",   "HOTKEY_RUN",   "F5"),
+        ("单步执行",       None,           "F10"),
+        ("暂停/继续执行",  "HOTKEY_PAUSE", "F6"),
+        ("取消执行",       "HOTKEY_STOP",  "Shift+F5"),
+        ("强制关闭",       None,           "Alt+Shift+F4"),
+        ("截图",           None,           "Ctrl+Shift+A"),
+    ]
+
     # 快捷键表格
     hotkey_table = tkinter.Frame(content, bg=C["bgc"])
-    hotkey_table.grid(row=4, column=0, sticky="ew", padx=8, pady=(0, 2))
     hotkey_table.columnconfigure(1, weight=1)
 
     # 表头
@@ -265,8 +269,8 @@ def build(parent, ctx):
             row=0, column=ci, sticky="w", padx=(0, 2))
 
     # 分隔线
-    tkinter.Frame(hotkey_table, bg=C["bd"], height=ctx.sp("hairline")).grid(
-        row=1, column=0, columnspan=3, sticky="ew", pady=ctx.sp("hairline"))
+    tkinter.Frame(hotkey_table, bg=C["bd"], height=sp("hairline")).grid(
+        row=1, column=0, columnspan=3, sticky="ew", pady=sp("hairline"))
 
     # 快捷键行
     hotkey_vars = {}  # 保存 var 引用供后续绑定
@@ -283,29 +287,29 @@ def build(parent, ctx):
         var = tkinter.StringVar(value=curr_val)
         hotkey_vars[func_name] = (var, state_key)
         key_lbl = tkinter.Label(hotkey_table, textvariable=var,
-            font=("Consolas", 8, "bold"), bg=C["ac"], fg="white",
+            font=utils.FONT_SMALL_BOLD, bg=C["ac"], fg=utils.text_on(C["ac"]),
             padx=6, pady=2, relief="raised", bd=1)
         key_lbl.grid(row=r, column=1, sticky="w", padx=(0, 4))
 
         btn_frame = tkinter.Frame(hotkey_table, bg=C["bgc"])
         btn_frame.grid(row=r, column=2, sticky="w")
         rec_btn = tkinter.Label(btn_frame, text="录制", font=FONT_TINY,
-            bg=C["sc"], fg="white", padx=4, pady=1, cursor="hand2",
+            bg=C["sc"], fg=utils.text_on(C["sc"]), padx=4, pady=1, cursor="hand2",
             relief="raised", bd=1)
         rec_btn.pack(side="left", padx=1)
         rec_btn.bind("<Button-1>", lambda e, v=var, k=state_key:
             _record_hotkey(v, k or func_name))
         clr_btn = tkinter.Label(btn_frame, text="清除", font=FONT_TINY,
-            bg=C["dg"], fg="white", padx=4, pady=1, cursor="hand2",
+            bg=C["dg"], fg=utils.text_on(C["dg"]), padx=4, pady=1, cursor="hand2",
             relief="raised", bd=1)
         clr_btn.pack(side="left", padx=1)
         clr_btn.bind("<Button-1>", lambda e, v=var, k=state_key, d=default_val:
             (v.set(default_val), setattr(state, k.upper(), default_val) if k else None,
              state.save_config(), _flash_saved("system")))
 
+    _add(hotkey_table)
+
     # ── S1-04: 热键后端状态 + 热字串限制 (注册失败必须可见, 不许静默) ──
-    # 注册被其他程序占用 (ERROR_HOTKEY_ALREADY_REGISTERED=1409) 时该条已自动退回
-    # 轮询, 功能不丢; 这里把结论直接显示在「全局快捷键」表格下方。
     _hk_lines, _hk_bad = [], False
     try:
         import hotkey_win as _hkwin
@@ -317,7 +321,7 @@ def build(parent, ctx):
                 "热键后端：轮询（兼容默认）。改为 register 可启用吞键式全局热键。")
         elif _errs:
             _hk_bad = True
-            _hk_lines.append("❌ 热键注册失败（该条已退回轮询，功能仍可用）：")
+            _hk_lines.append("热键注册失败（该条已退回轮询，功能仍可用）：")
             for _a in sorted(_errs):
                 _hk_lines.append("   · {} → {}".format(_a, _errs[_a]))
         else:
@@ -327,14 +331,15 @@ def build(parent, ctx):
     except Exception:
         _hk_lines, _hk_bad = [], False
     if _hk_lines:
-        tkinter.Label(content, text="\n".join(_hk_lines), font=FONT_TINY,
-            fg=(C["dg"] if _hk_bad else C["fgm"]), bg=C["bgc"], anchor="w",
-            justify="left", wraplength=640).grid(
-            row=5, column=0, sticky="w", padx=8, pady=(0, 2))
+        _add(help_line(content, ctx, "\n".join(_hk_lines),
+                       level=("err" if _hk_bad else "info")))
 
-    # ── L5 #6: 危险动作二次确认闸门 ──
-    danger_frame = tkinter.Frame(content, bg=C["bgc"])
-    danger_frame.grid(row=7, column=0, sticky="ew", padx=8, pady=(2, 4))
+    _add(help_line(content, ctx,
+        "提示：支持 Ctrl/Alt/Shift/Win + 字母/数字/F1-F12；录制的快捷键在所有应用中全局生效"))
+
+    # ── 分节: 安全 ──
+    _sec("安全")
+
     danger_var = tkinter.BooleanVar(
         value=bool(getattr(state, "CONFIRM_DANGEROUS", True)))
 
@@ -343,27 +348,19 @@ def build(parent, ctx):
         state.save_config()
         _flash_saved("system")
 
-    ttk.Checkbutton(danger_frame, text="危险动作执行前二次确认",
-        variable=danger_var, command=_toggle_danger).pack(side="left")
-    tkinter.Label(danger_frame, text="电源操作 / 永久删除 / 结束进程；无界面时一律拒绝",
-        font=FONT_TINY, fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(6, 10))
-    tkinter.Label(danger_frame, text="确认超时:", font=FONT_TINY,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
+    _add(row(content, ctx, "", lambda p: ttk.Checkbutton(
+        p, text="危险动作执行前二次确认",
+        variable=danger_var, command=_toggle_danger),
+        help="电源操作 / 永久删除 / 结束进程；无界面时一律拒绝"))
+
     danger_timeout_var = tkinter.StringVar(
         value=str(int(getattr(state, "CONFIRM_DANGEROUS_TIMEOUT_SEC", 15) or 15)))
-    _validate_number(tkinter.Spinbox(danger_frame, textvariable=danger_timeout_var,
-        from_=1, to=600, increment=5, width=5, font=ctx.FONT_SMALL,
-        bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1), danger_timeout_var,
-        "危险动作确认超时", 15, int, 1, 600, card_key="system").pack(
-            side="left", padx=(0, 4))
-    tkinter.Label(danger_frame, text="秒（无响应视为拒绝）", font=FONT_TINY,
-        fg=C["fgm"], bg=C["bgc"]).pack(side="left")
-
-    # 底部提示
-    tkinter.Label(content,
-        text="提示：支持 Ctrl/Alt/Shift/Win + 字母/数字/F1-F12；录制的快捷键在所有应用中全局生效",
-        font=FONT_TINY, fg=C["fgm"], bg=C["bgc"]).grid(
-        row=8, column=0, sticky="w", padx=8, pady=(0, 6))
+    _add(row(content, ctx, "确认超时", lambda p: _validate_number(
+        tkinter.Spinbox(p, textvariable=danger_timeout_var, from_=1, to=600,
+            increment=5, width=5, font=ctx.FONT_SMALL, bg=C["ebg"], fg=C["fgb"],
+            relief="solid", bd=1),
+        danger_timeout_var, "危险动作确认超时", 15, int, 1, 600, card_key="system"),
+        unit="秒（无响应视为拒绝）"))
 
     # 系统卡: 任一控件改动 → 600ms 防抖后走 apply 即时落盘
     _track_card_vars("system", (auto_start_var, tray_var, compact_var, mini_bar_var,
@@ -371,7 +368,7 @@ def build(parent, ctx):
                                 ui_scale_var, danger_var, danger_timeout_var))
 
     return {
-        "card": card, "content": content, "title": sys_title,
+        "card": card, "content": content, "title": title,
         "auto_start_var": auto_start_var, "tray_var": tray_var,
         "compact_var": compact_var, "help_modal_var": help_modal_var,
         "mini_bar_var": mini_bar_var, "mb_width_var": mb_width_var,

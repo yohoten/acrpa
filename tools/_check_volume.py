@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""打包体积门禁 (方案文档 §8.2: ACRPA.exe > 15 MB 即构建失败)。
+"""打包体积门禁 (ACRPA.exe > 300 MB 即构建失败)。
 
 用法::
 
     python tools/_check_volume.py                 # 校验 dist/ 下的产物
     python tools/_check_volume.py --path X.exe    # 校验指定文件
-    python tools/_check_volume.py --max-mb 16     # 临时放宽上限
+    python tools/_check_volume.py --max-mb 320    # 临时放宽上限
 
 退出码: 0 = 通过 / 1 = 超限 / 2 = 未找到产物（CI 里通常按 0 或 1 判定，
 "没产物" 不算体积问题，所以单独一码，便于区分「忘了打包」和「包太大」）。
@@ -19,7 +19,9 @@ ROOT = os.path.dirname(_HERE)
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-DEFAULT_MAX_MB = 15.0
+# 红线 300 MB (v0.1.30 起; 原 15 MB 为「秒级分发」所设, 已放宽以容纳重量级可选后端)。
+# 与 build.py::MAX_EXE_MB 同源即可, 此处不能 import build(会触发其模块级逻辑)。
+DEFAULT_MAX_MB = 300.0
 
 
 def check(path=None, max_mb=None, root=None):

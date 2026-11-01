@@ -1,5 +1,5 @@
 """
-ACRPA 精简打包脚本 — 最小化 EXE 体积 (目标: <15 MB)
+ACRPA 精简打包脚本 — 最小化 EXE 体积 (红线: <300 MB)
 用法:
   python build.py              → 单文件 EXE（发布用）
   python build.py --clean      → 清理 + 打包
@@ -19,8 +19,12 @@ APP  = "ACRPA v{}".format(_VER) if _VER else "ACRPA"
 ICON = os.path.join(RES, "automation.ico")
 ENTRY = os.path.join(BASE, "run.py")
 
-# ── L5 #9: 体积门禁 (文档 §8.2 —— ACRPA.exe > 15 MB 即构建失败) ──
-MAX_EXE_MB = 15.0
+# ── L5 #9: 体积门禁 (ACRPA.exe > 300 MB 即构建失败) ──
+# 历史: 原红线 15 MB (文档 §8.2, 为「秒级分发 + 便携」而设)。
+# v0.1.30 起放宽到 300 MB: 允许纳入 PaddleOCR.dll / onnx 模型 / 离线依赖等
+# 重量级可选后端。**精简仍是默认取向** —— excludes 列表与体积报告继续保留,
+# 只是不再用 15 MB 卡死构建。
+MAX_EXE_MB = 300.0
 
 
 def exe_candidates():
@@ -347,7 +351,7 @@ def build(onefile=True, console=False, clean_first=False):
     PLUGINS_SRC = os.path.join(SRC, "plugins")
     if os.path.isdir(PLUGINS_SRC):
         cmd += ["--add-data", "{}{}src{}plugins".format(PLUGINS_SRC, os.pathsep, os.sep)]
-    # PaddleOCR.dll 原生后端: 依赖齐全才打包（保持 <15MB 目标）
+    # PaddleOCR.dll 原生后端: 依赖齐全才打包（红线 300 MB，体积不再拦它）
     if paddle_dll_packable():
         cmd += ["--add-data", "{}{}lib{}paddle_ocr".format(PADDLE_DLL_DIR, os.pathsep, os.sep)]
         print("[PACK] 纳入 lib/paddle_ocr (PaddleOCR.dll 原生后端)")
@@ -387,7 +391,7 @@ def build(onefile=True, console=False, clean_first=False):
     else:
         print("\n[WARN] EXE not found in {}".format(DIST))
 
-    # ── L5 #9: 体积门禁 (文档 §8.2 要求: ACRPA.exe > 15 MB 即构建失败) ──
+    # ── L5 #9: 体积门禁 (ACRPA.exe > 300 MB 即构建失败) ──
     gate_rc, gate_text = check_exe_volume()
     if gate_rc == 1:
         print("\n[FAIL] 体积门禁未通过: {}".format(gate_text))

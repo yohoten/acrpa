@@ -643,7 +643,7 @@ def t_gates():
         fake_exe = os.path.join(d, "ACRPA.exe")
         with open(fake_exe, "wb") as f:
             f.write(b"MZ" + b"\0" * 1024)
-        rc_ok, text_ok = vol_gate.check(path=fake_exe, max_mb=15)
+        rc_ok, text_ok = vol_gate.check(path=fake_exe, max_mb=vol_gate.DEFAULT_MAX_MB)
         check(rc_ok == 0, "体积门禁: 小文件通过", text_ok)
         rc_big, text_big = vol_gate.check(path=fake_exe, max_mb=0.0001)
         check(rc_big == 1, "体积门禁: 超上限返回 1", text_big)

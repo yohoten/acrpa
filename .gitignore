@@ -112,3 +112,7 @@ ci-test-results.json
 
 # 脚本版本历史库（version_manager.py 的 SQLite）：纯运行时数据，随机器/使用累积。
 script_versions.db
+
+# AI 助手会话/计划产物（.codebuddy/plans 等）：工具生成的过程性文件，内容最终
+# 落进 docs/*.md。若日后在此放团队共用的 rules/skills，再单独 `!` 例外即可。
+.codebuddy/

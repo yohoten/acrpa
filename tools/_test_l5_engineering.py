@@ -192,8 +192,12 @@ def t_payload_validation():
             state.SCHED_TASKS = old_tasks
 
     # 找不到接收方时不崩、且返回明确的「无通道」
+    # 注: hwnd=0 会 fallback 到 find_receiver() —— 开发机上正开着 ACRPA 时那里真能
+    # 找到第一实例, 断言会随环境翻转 (rc=RC_OK)。这里显式指向一个不存在的窗口句柄,
+    # 保证与「是否有实例在跑」无关。
+    _ghost_hwnd = 0x7FFFFFF0
     rc, detail = si.send_payload(si.build_payload(si.ACTION_RESTORE, token=token),
-                                 hwnd=0)
+                                 hwnd=_ghost_hwnd)
     check(rc in (si.RC_NO_CHANNEL, si.RC_REJECTED),
           "无接收窗口 → 明确的「无通道」而非异常", "{} {}".format(rc, detail))
 

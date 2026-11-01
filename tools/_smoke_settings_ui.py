@@ -231,6 +231,7 @@ def t_live():
     _pump(root)
 
     import state as state_mod
+    import utils
     import ui.settings.window as w
     import settings_window as sw  # 薄壳
     try:
@@ -271,7 +272,10 @@ def t_live():
         minw, minh = win.minsize()
     except Exception as e:
         minw = minh = "<err %r>" % (e,)
-    check((minw, minh) == (580, 500), "minsize == (580, 500)",
+    # 设计尺寸 580x500 走 window_shell → utils.sp() 缩放, 断言也按缩放后取值
+    _exp_min = (utils.sp(580), utils.sp(500))
+    check((minw, minh) == _exp_min,
+          "minsize == 设计 580x500 (缩放后 {})".format(_exp_min),
           "({}, {})".format(minw, minh))
     w_actual, h_actual = win.winfo_width(), win.winfo_height()
     emit("[GEOM] 默认打开尺寸 = {}x{}".format(w_actual, h_actual))
@@ -342,7 +346,8 @@ def t_live():
     # 实测各窗宽下的画布绘制宽
     def canvas_width_at(width):
         try:
-            win.geometry("{}x680".format(width))
+            # 三档是设计 px, 实际窗口尺寸经 utils.sp() 缩放 (与生产同口径)
+            win.geometry("{}x{}".format(utils.sp(width), utils.sp(680)))
             _pump(root, n=3)
             return canvas.winfo_width()
         except Exception:
@@ -382,9 +387,9 @@ def t_live():
                 continue
             emit("[WIDEST] 卡 {} 内最宽控件(可见): {}".format(k, _widest(cw, 3)))
 
-    # 复位到默认 680 供后续采集
+    # 复位到默认 680 供后续采集 (设计 px → sp 缩放)
     try:
-        win.geometry("680x680")
+        win.geometry("{}x{}".format(utils.sp(680), utils.sp(680)))
         _pump(root, n=3)
     except Exception:
         pass

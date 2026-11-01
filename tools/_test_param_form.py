@@ -312,8 +312,8 @@ def t_wiring_static():
     # 不得破坏既有静态断言依赖的字面量
     check('_tbtn(toolbar_inner,"+ 添加",_cmd_add_row,"ac","white"' in a,
           "「+ 添加」按钮字面量保持不变 (theme_bus 断言依赖)")
-    check("tree.bind(\"<Double-1>\", lambda e: _edit_cell())" in a,
-          "内联编辑 <Double-1> 绑定语义未被改动")
+    check("tree.bind(\"<Double-1>\", lambda e: _edit_cell(e))" in a,
+          "内联编辑 <Double-1> 绑定语义未被改动 (仍指向 _edit_cell, 且传入事件定位行列)")
 
 
 # ══════════════════════════════════════════════════════════════════════

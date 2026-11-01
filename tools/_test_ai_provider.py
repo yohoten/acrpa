@@ -421,10 +421,11 @@ def test_settings_window_ast():
     src = _read("src/ui/settings/cards/ai.py")
     ok("AI 卡含 提供商 Combobox",
        "_prov_combo = ttk.Combobox(" in src and "提供商" in src)
+    # 卡片重写后统一走 _layout 的 row()+_entry() 助手 (变量名即绑定源, 强度不降)
     ok("AI 卡含 模型 Entry",
-       "api_model_entry = tkinter.Entry(" in src)
+       'row(content, ctx, "模型"' in src and "_entry(p, api_model_var" in src)
     ok("AI 卡含 BaseURL Entry",
-       "api_base_entry = tkinter.Entry(" in src)
+       'row(content, ctx, "BaseURL"' in src and "_entry(p, api_base_var" in src)
     ok("AI 卡含 [测试连接] 按钮", 'text="测试连接"' in src)
     ok("AI 卡含 [添加自定义提供商] 按钮", 'text="添加自定义提供商"' in src)
     ok("ai 卡导出 build/apply", "def build(" in src and "def apply(" in src)

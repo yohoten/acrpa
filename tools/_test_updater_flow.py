@@ -20,6 +20,7 @@ U6 自更新助手: 脚本里必须同时具备 exe 与 zip 两条分支, 且 ex
 import io
 import json
 import os
+import re
 import sys
 import tempfile
 
@@ -39,7 +40,21 @@ _FAIL = []
 
 API_SRC = updater._RELEASE_API_SOURCES[0]
 RAW_SRC = updater._RAW_MANIFEST_SOURCES[0]
-NEW_VER = "0.1.30-beta"
+
+
+def _next_version(cur):
+    """本机版本 + 1 个补丁号 —— 测试用的「远端新版本」必须永远高于本机。
+
+    写死版本号会随发版失效 (本机升到同一版本后 `has_update` 必然为假),
+    因此从 updater.get_version() 现算。
+    """
+    m = re.match(r"^v?(\d+)\.(\d+)\.(\d+)", cur or "")
+    if not m:
+        return "999.0.0"
+    return "{}.{}.{}".format(m.group(1), m.group(2), int(m.group(3)) + 1)
+
+
+NEW_VER = _next_version(updater.VERSION)
 DIGEST = "a" * 64
 REMOTE_SHA = "b" * 64
 

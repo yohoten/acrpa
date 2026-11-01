@@ -236,6 +236,8 @@ def t_real_machine():
         rt = app.build()
         check(ACRPA.btn_run is not None, "实机: ACRPA.btn_run 非空")
         check(ACRPA.script_name_var is not None, "实机: ACRPA.script_name_var 非空")
+        # 工作流 Tab 为延迟构建 (§5.2 P1): 先触发构建再比对 StringVar 身份
+        check(ACRPA._wf_ensure() is True, "实机: _wf_ensure() 构建工作流 Tab")
         check(ACRPA.wf_maxmin_var is ACRPA.exec_maxmin_var,
               "实机: ACRPA.wf_maxmin_var is ACRPA.exec_maxmin_var (同一 StringVar)")
         import ui.exec_bar as eb

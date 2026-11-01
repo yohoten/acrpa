@@ -153,7 +153,7 @@ inference/             模型集合目录
 | [`src/ocr_backend.py`](../src/ocr_backend.py) | 注册 `paddle_dll` 后端（`_backend_order` / `_try_paddle_dll_backend` / `_ocr_paddle_dll(_with_positions)`），并复用 bbox 定位分支 |
 | [`src/settings_window.py`](../src/settings_window.py) | 高级设置：启用开关、DLL/模型目录浏览、DLL 自检按钮、后端下拉项 |
 | [`src/state.py`](../src/state.py) | 7 个配置键（默认关闭） |
-| [`build.py`](../build.py) | 仅当 `lib/paddle_ocr` 集齐 DLL+4 依赖时才打进 EXE（否则打印 `[SKIP]`，保持 <15MB 目标） |
+| [`build.py`](../build.py) | 仅当 `lib/paddle_ocr` 集齐 DLL+4 依赖时才打进 EXE（否则打印 `[SKIP]`，红线 300 MB，体积不再拦它） |
 
 **默认零影响**：`paddle_dll_enabled=false` 时后端候选顺序与旧版完全一致
 （`auto` → `paddle` → `winrt` → `tesseract`）；启用后若依赖/模型缺失或路径非 ASCII，

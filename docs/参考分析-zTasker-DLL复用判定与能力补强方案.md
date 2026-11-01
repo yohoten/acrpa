@@ -1,7 +1,7 @@
 # 参考分析：zTasker 2.3.11 DLL 复用判定与 ACRPA 能力补强方案
 
 > 分析对象：**zTasker 2.3.11** 安装目录内的 **35 个实体 DLL + 47 个 `api-ms-win-*` 垫片**
-> 对照基线：**ACRPA**（Python 3.12.10 x64 / tkinter / PyInstaller onefile，体积硬目标 < 15 MB，见 `../build.py:2`、`../build.py:21`）
+> 对照基线：**ACRPA**（Python 3.12.10 x64 / tkinter / PyInstaller onefile，体积硬目标 < 15 MB，见 `../build.py:2`、`../build.py:21`；**2026-11 注**: 红线已放宽至 300 MB，本文按 15 MB 口径的推算保留为历史依据）
 > 判定方式：zTasker 侧为 PE 头 / 导出表 / VersionInfo / License 文本的**静态实测**；ACRPA 侧为**源码只读核对**，所有结论带 `文件:行号`。
 > 写作约束：本文**只**回答"DLL 能不能复用"与"缺失能力用什么替代补上"，不复述 UI/交互/数据模型借鉴。
 

@@ -257,7 +257,7 @@
 | --- | --- | --- | --- | --- | --- |
 | M1 | `录制键鼠操作` | 录制键鼠事件生成步骤 | **已有** | `src/recorder.py`：低级钩子 `_install_hooks`(`:349`) + 事件驱动 `recorder_thread`(`:463`)，产物写 `state.recorded_actions` | 缺的是「录制 → 步骤树」的转换，见 §5.5（`recorder_to_tree`） |
 | M2 | `重放键鼠操作` | 回放录制的键鼠序列 | **已有** | 录制产物即 `ScriptData` 行，由 `engine.execute_script`（`src/engine.py:569`）顺序执行；含 `重放` 语义的还有 `浏览器录制`（`src/commands.py:385`） | 无需新增命令 |
-| M3 | `WebView2浏览器窗口` | 内嵌 Chromium 窗口 | 缺失 | — | **不做**（WebView2 Runtime 无法随 <15MB 包分发；浏览器需求已由 `browser.playwright` 22 条命令覆盖） |
+| M3 | `WebView2浏览器窗口` | 内嵌 Chromium 窗口 | 缺失 | — | **不做**（WebView2 Runtime 属系统级组件，不宜随包分发；浏览器需求已由 `browser.playwright` 22 条命令覆盖） |
 | M4 | `多字段表单` | 一次弹多个字段的输入表单 | 缺失 | — | `表单`：`标题, 字段定义(名称:类型:默认 用分号分隔), 目标变量前缀`；**M / stdlib**，详见 §4.7 |
 | M5 | `选择文件夹` | 让用户挑目录 | 缺失 | 无命令（GUI 内部有 `filedialog`） | `选择文件夹`：`初始目录, 标题, 目标变量名`；**S / stdlib** |
 | M6 | `三显示菜单`（`三` 为图标误识 → **显示菜单**） | 在光标处弹菜单选一项 | 缺失 | — | `弹出菜单`：`菜单项(竖线分隔), 标题, 目标变量名, 超时秒`；**S / stdlib**，详见 §4.10 |
@@ -1884,7 +1884,7 @@ flowchart LR
 | **菜单 / 搜索** | 一级平铺 200 项无法扫读；搜索命中过多 | **分层收纳（核心 30 + 进阶折叠 + 专家级默认隐藏）**：`tier` 分三档 —— `core` 约 30 条默认展开（`找图/点图/按键/输入/写入/等待/如果/重复/子程序/运行工作流/激活窗口/设置变量/识别文字/找色/表单/进度条` 等高频项）；`advanced` 约 90 条折叠可见；`expert` 约 80 条默认隐藏，仅在设置里打开「显示全部命令」后出现。搜索时**忽略 tier**（搜得到即可） |
 | **`command_schema.json` 维护** | 手工改注册表与 json 必然不同步（现状已发生：20 条 L2 命令不在分组里，§1.3①） | `tools/gen_command_schema.py` 单向生成（W0-2）+ CI 一致性校验；**禁止手写 json** |
 | **帮助文档** | `res/help/01-命令速查.md` 由运行时生成（`sections.json:3` 的 `dynamic: "commands"`），但 `04-工作流.md` 需手写 | 命令速查自动跟随；工作流章按节点类型分节，每节 10 行以内 |
-| **打包体积（<15MB）** | 纯 Python 新增源码约 250KB → 打包后增量 **< 200KB**；**真正的体积风险来自 pip 依赖** | 硬规则：W0/W1/W2 全部 stdlib + Pillow（已在包内）；`openpyxl` / `websocket-client` / `qrcode` / `pyzbar` 一律走 `extensions_src/` 扩展包（与 `extensions_src/cv_match/extension.json` 同一机制）。W0 完成后跑一次 `python build.py` 验证 `check_exe_volume()` 通过 |
+| **打包体积（红线 300 MB）** | 纯 Python 新增源码约 250KB → 打包后增量 **< 200KB**；**真正的体积风险来自 pip 依赖** | 硬规则：W0/W1/W2 全部 stdlib + Pillow（已在包内）；`openpyxl` / `websocket-client` / `qrcode` / `pyzbar` 一律走 `extensions_src/` 扩展包（与 `extensions_src/cv_match/extension.json` 同一机制）。W0 完成后跑一次 `python build.py` 验证 `check_exe_volume()` 通过 |
 | **i18n 字符串量** | `src/i18n.py` 需为 130 条命令描述 + 30 条 UI 文案新增词条 | 只对用户可见短串（命令名/描述/UI 标签）入 i18n；日志文本不进（现状亦然）。新增词条集中在一次提交 |
 | **测试成本** | 200 条命令 × 平均 2 条用例 = 400+ 用例 | ① S 级命令走**表驱动**单测（一张 `(命令, 参数, 期望)` 表）；② M/L 级各自专项；③ 所有命令必须有一条「非法参数不崩」用例 |
 
@@ -1897,7 +1897,7 @@ flowchart LR
 | `云状态存取`（J13） | **不做** | 依赖 Quicker 自有账号云；`src/accounts.py` 是本地账号体系，不具备云 KV 服务，自建等于新增后端服务（超出桌面工具边界） |
 | `f(x)公式识别`（J3） | **不做（延后到有明确需求）** | 成本 + 网络依赖双高：需在线公式 OCR 或本地大模型；且与 OCR 现状冲突 —— ACRPA 自带 4 个 OCR 后端在当前机器**全部不可用**（OCR 文档 §4.4），应先把基础 OCR 修好（DLL 篇 P0-3 / P1-6） |
 | `运行C#代码`（L5） | **不做** | 需 Roslyn 或 .NET 运行时；`build.py` 正在做模块排除以压体积（`build.py:206-207`），引入 .NET 直接冲突 |
-| `WebView2浏览器窗口`（M3） | **不做** | WebView2 Runtime 无法随 <15MB 包分发；浏览器需求已由 22 条 playwright 命令覆盖（§3.2.1 F9） |
+| `WebView2浏览器窗口`（M3） | **不做** | WebView2 Runtime 属系统级组件，不宜随包分发；浏览器需求已由 22 条 playwright 命令覆盖（§3.2.1 F9） |
 | `手写板`（N1） | **不做** | 场景极窄，需整套画板交互（笔迹平滑/压感/导出），投入产出比最低 |
 | `自定义窗口`（M8） | **延后** | 等价能力由 `表单`(§4.7) + `操作窗`(§4.8) 组合覆盖；全自定义窗口实质是"再造一个 Tk 设计器" |
 | `Office软件辅助` / `Excel对象操作` / `AutoCAD控制` / `Rhino软件控制` / `Adobe系列软件控制`（F2/F3/F5/F7/F11） | **不做**（Excel 文件级读写例外） | 全部依赖 COM + 目标软件安装 + pywin32；Excel 的"文件级读写"用 openpyxl 走扩展包即可满足 80% 需求（F1/F6） |

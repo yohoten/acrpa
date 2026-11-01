@@ -54,7 +54,7 @@
 | --- | --- | --- | --- |
 | 形态 | 单机任务型定时自动化工具箱 | 低代码 RPA 脚本 + 工作流 + 多机协同 | 不同物种 |
 | 技术栈 | C++ / DuiLib / WTL / 内嵌 AHK | Python / tkinter / Playwright / PaddleOCR | 各有所长，**不换栈** |
-| 分发体积 | 安装包 + `Data\Sound\` ≈5.7 MB 音频 + `Res.dll` 图标 | PyInstaller onefile ≈14.3 MiB，`build.py:2` 目标 **<15 MB** | 体积预算是 ACRPA 的硬约束 |
+| 分发体积 | 安装包 + `Data\Sound\` ≈5.7 MB 音频 + `Res.dll` 图标 | PyInstaller onefile ≈14.3 MiB，`build.py` 红线 **<300 MB**（原 15 MB） | 体积仍按精简取向控制，但不再卡死 |
 | 动作数 | 284（exe 内 `Total task types:304`） | 68 条命令（`commands.py:301-384`） | **不追数量**，追"组织方式" |
 | 调度 | 30+ 种触发器，任务库为一级公民 | 4 种 `period_type`，任务库是 `config.json` 的一个键 | **这是差距的主战场** |
 | 强项 | 触发器体系、执行语义、工程化 | 工作流、浏览器、OCR、NetLink、AI、市场 | 互补 |
@@ -458,7 +458,7 @@ Trigger（基类）
 
 | 命令 | 为什么不在 P0 | 若要做的前置条件 |
 | --- | --- | --- |
-| `发送邮件` | `ACRPA.spec:13` 的 `excludes` 目前排除了 `smtplib`（及 `email` 相关）；体积影响极小（≈300 KB），但需要同步改 spec 并加打包门禁校验 | ① 从 `excludes` 移除 `smtplib`/`email`；② 体积门禁复测仍 < 15 MB；③ 凭据走 Windows 凭据库（`state.py` 已有机制） |
+| `发送邮件` | `ACRPA.spec:13` 的 `excludes` 目前排除了 `smtplib`（及 `email` 相关）；体积影响极小（≈300 KB），但需要同步改 spec 并加打包门禁校验 | ① 从 `excludes` 移除 `smtplib`/`email`；② 体积门禁复测仍 < 300 MB；③ 凭据走 Windows 凭据库（`state.py` 已有机制） |
 | `取色 / 色匹配` | 属 `docs/参考分析-AutoClicker借鉴要点.md` §3.1 的独立批次（Pillow 即可），与本批"系统交互"不同域 | 在该文档的 P1 项里实施，避免两处重复开工 |
 
 **注册位置**：`src/commands.py` 末尾新增分节，紧接现有浏览器命令块之后（`commands.py:379-384` 之后），保持"按域分节 + 注释标题"的现有风格（如 `# ── 文件与目录命令 ──`）。
@@ -468,7 +468,7 @@ Trigger（基类）
 - 每条命令具备 `register()` + `schema()` 可解析参数 + `requires()` 声明 + `res/help/command_schema.json` 同步；
 - 20 条全部有 `tools/_test_new_commands.py` 覆盖（至少"参数校验 + 正常路径 + 失败路径"三例）；
 - `复制文件`/`结束进程`/`电源操作` 三条在 UI 上有危险标识且需二次确认（`dialogs.py` 统一确认框）；
-- `ACRPA.exe` 体积复测仍 < 15 MB。
+- `ACRPA.exe` 体积复测仍 < 300 MB。
 
 ---
 
@@ -548,7 +548,7 @@ Trigger（基类）
 
 | 方案 | 体积影响 | 结论 |
 | --- | --- | --- |
-| `pypinyin` | +≈1.5–2 MB（含数据表），且需在 `ACRPA.spec` 增 `hiddenimports` | **不推荐**（吃掉 15 MB 预算的 10%+） |
+| `pypinyin` | +≈1.5–2 MB（含数据表），且需在 `ACRPA.spec` 增 `hiddenimports` | **不推荐**（为纯展示能力引入 1.5–2 MB 数据表） |
 | 自建"首字母映射表"（只支持首字母，不支持全拼） | ≈120 KB（Unicode 区间表 + 412 个音节映射） | **推荐** |
 | 不做拼音，只做子串 + 拼音别名（用户给任务起英文名） | 0 | 备选 |
 
@@ -588,7 +588,7 @@ Trigger（基类）
 | 5 | `next_run_at` 落库 `[净新增]` | 重启不重算，支撑 #4 与列表直显 | `src/scheduler.py`、`src/state.py` | 0.5 | 无 | 低 | 重启后 `next_run_at` 保持不变（除补偿场景） |
 | 6 | 结构化启动日志 `[净新增]` | 启动问题可定位 | `run.py`、`src/app.py` | 0.5 | 无 | 低 | 冷启动恰 8 条 boot 记录 |
 
-**验收（版本级）**：上述 6 项全绿；`ACRPA.exe` 体积仍 < 15 MB；`git diff --stat` 不涉及 `engine.py` / `workflow.py` 执行逻辑。
+**验收（版本级）**：上述 6 项全绿；`ACRPA.exe` 体积仍 < 300 MB；`git diff --stat` 不涉及 `engine.py` / `workflow.py` 执行逻辑。
 
 ### 6.2 v0.1.31 —— L0 调度架构重构 + 触发器 P0 剩余项
 
@@ -618,7 +618,7 @@ Trigger（基类）
 | 5 | 危险动作二次确认（命令元数据 `danger`）`[净新增]` | 防误操作 | `src/commands.py`、`src/engine.py`、`src/dialogs.py` | 1.0 | #2、#3 | 低 | 三条高危命令必弹框 |
 | 6 | 运行历史持久化 + 任务列表多列/列宽记忆 `[合并: 执行控制tab设计方案 遗留 + 路线图 §5.4]` | 可查、可读 | `src/scheduler.py`、`src/ui/settings/cards/sched.py`、`src/state.py` | 2.0 | v0.1.31 #1 | 低 | 重启后历史可查；列宽/排序保持 |
 
-**验收（版本级）**：命令数 68 → 88；`输入, {var:x}` 生效；体积 < 15 MB；高危命令全部有确认。
+**验收（版本级）**：命令数 68 → 88；`输入, {var:x}` 生效；体积 < 300 MB；高危命令全部有确认。
 
 ### 6.4 v0.2.0 —— 事件型触发器 + UI 交互 + 语言包外部化
 
@@ -635,7 +635,7 @@ Trigger（基类）
 | 7 | 拖放文件即新建任务 `[净新增]` | 转化率 | `src/ACRPA.py`、`src/tray.py`（子类化模式） | 1.5 | 无 | 中（需主窗 HWND 子类化，注意恢复原 WNDPROC） | 拖 `.exe`/`.acrpas` 弹新建任务对话框 |
 | 8 | 绿色便携 `portable.flag` `[净新增]` | U 盘场景 | `src/state.py` | 0.5 | 无 | 低 | 见 L5 #7 验收 |
 
-**验收（版本级）**：触发器 ≥ 15 种；托盘可完成全部高频操作；语言文件可外部替换；体积仍 < 15 MB。
+**验收（版本级）**：触发器 ≥ 15 种；托盘可完成全部高频操作；语言文件可外部替换；体积仍 < 300 MB。
 
 ### 6.5 与既有路线图的合并/去重结论（速查）
 
@@ -663,7 +663,7 @@ Trigger（基类）
 | # | 否决项 | 理由 | 若坚持要做的代价 |
 | - | --- | --- | --- |
 | **1** | **内嵌 AHK 引擎** | ACRPA 已有 `Python`/`代码` 命令 + `src/safe_eval.py` + `src/py_sandbox.py`（AST 预检 + 超时 + 审计），功能是 AHK 的超集（能调 Playwright/PaddleOCR）。引入 AHK = 多一个二进制 + 一套语法 + 一条新的任意代码执行面 | 体积 +2–4 MB；许可证需再评估（AHK 为 GPL）；沙箱被绕过 |
-| **2** | **移植 DuiLib / 改 C++** | 技术栈冲突：Python 生态（PaddleOCR / Playwright / AI）是 ACRPA 的核心竞争力。改 C++ = 放弃这些 + 重写 35,500 行 + 体积预算重来 | 工程量以"人月×N"计；且 `build.py:2` 的 <15 MB 目标不可能达成（DuiLib + OpenCV + CRTP 私有化 > 30 MB） |
+| **2** | **移植 DuiLib / 改 C++** | 技术栈冲突：Python 生态（PaddleOCR / Playwright / AI）是 ACRPA 的核心竞争力。改 C++ = 放弃这些 + 重写 35,500 行 + 体积预算重来 | 工程量以"人月×N"计；且体积会显著膨胀（DuiLib + OpenCV + CRTP 私有化 > 30 MB），而工程量以「人月×N」计 |
 | **3** | **照搬 284 个动作与 13 分类** | 每条命令的真实成本是 handler + schema + requires + 帮助 + 回归 ≈ 0.5 人日；284 条里有大量 ACRPA 用 `Python` 更灵活的场景（正则、列表、播放、通知）。**维护与测试成本 >> 功能收益** | 命令表膨胀 4 倍；`commands.get_handler` 现状是 O(n) 线性扫描（路线图 §6.4），需先 dict 化；帮助文档与 i18n 同步成本翻倍 |
 | **4** | **拷贝音频素材与图标** | License 明确禁止分发最终包任何单独部分；`Data\Sound\` 含"明星语音"，可能叠加第三方声音/肖像授权 | 法务风险（不可量化）+ 体积 +5.7 MB |
 | **5** | **GBK + XML 无 encoding 声明的存储方式** | 无 encoding 声明的 XML 在跨区域设置下会误解析；与 ACRPA 全链路 UTF-8 冲突（`i18n.py`、`script_io.py`、`res/help/*.md` 均为 UTF-8） | 一旦引入，需要全链路 BOM/编码嗅探，且 `.acrpas` 的 JSON 迁移表要再加一层兼容 |
@@ -683,7 +683,7 @@ Trigger（基类）
 | 文案抄袭 | 任务模板/帮助文案直接复述 zTasker 原文 | 代码评审时对"新增长段中文文案"抽查；模板一律由 `src/templates.py` 自写 |
 | 代码子集复制 | 从 `Data\Bundle\UIA.ahk` 等借鉴代码 | 明确规则：AHK/JS 代段**一行都不许进仓库**；只允许"能力清单对照" |
 
-### 8.2 体积预算（`build.py:2` 目标 < 15 MB）
+### 8.2 体积预算（`build.py::MAX_EXE_MB` 红线 < 300 MB；原 15 MB）
 
 | 变更 | 体积影响（估） | 累计判断 |
 | --- | --- | --- |
@@ -697,7 +697,7 @@ Trigger（基类）
 | `pypinyin`（若采用） | **+1.5–2 MB** | **否决**（见 §7 #8 与 L4 取舍表） |
 | `psutil` / `watchdog` / `pywin32`（若采用） | +1–3 MB 一个 | **全部否决**，一律 ctypes |
 
-**门禁要求**：每次版本发布前跑体积门禁（路线图 P0-C 项）——`ACRPA.exe` > 15 MB 即构建失败；`excludes` 列表出现"被新命令需要"的模块时，必须显式复核。
+**门禁要求**：每次版本发布前跑体积门禁（路线图 P0-C 项）——`ACRPA.exe` > 300 MB 即构建失败；`excludes` 列表出现"被新命令需要"的模块时，必须显式复核。
 
 ### 8.3 纯 tkinter 约束
 

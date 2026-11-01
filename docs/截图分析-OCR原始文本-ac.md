@@ -751,7 +751,7 @@ HTTP 请求/HTTP 服务端/WebSocket/SMTP/AI 调用/OCR/云存储(临时图床+�
   `winrt`、`winsdk` 未安装 / `tesseract` 未安装）。想"开箱即用"，缺的是一条**无第三方安装依赖**的兜底后端。
 - 本任务能跑通，靠的是项目外的 `rapidocr_onnxruntime`（ONNX Runtime + 自带 PP-OCR 模型，纯 pip 安装、无需 DLL/模型外置）。
   这条链路**已经在 5 张截图、246 个文本框上验证可用**，可作为 `src/ocr_backend.py` 第 5 个后端的候选
-  （但注意：`ACRPA.spec` 有 <15MB 体积目标，新增 onnxruntime 会显著突破，需架构师权衡）。
+  （但注意：`ACRPA.spec` 体积红线为 300 MB（v0.1.30 起），onnxruntime（约 50–80 MB）已可容纳，仍需权衡冷启动与安装包体积）。
 - `PaddleOCR.dll` 那条原生链路的"可用前提"已被再次证实：**必须** 有 4 个同目录原生依赖 + `inference/` 模型目录，
   且路径必须纯 ASCII（本机 `D:\paddleocr_runtime` 已不存在）。
 

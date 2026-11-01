@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """gen_script_template_xlsx — 生成 ACRPA 脚本编辑模板 (.xlsx)。
 
-产物：``res/template/ACRPA脚本编辑模板.xlsx`` —— 一个供用户**学习与编辑**脚本的多工作表
+产物：``res/template/ACRPA脚本编辑模板与说明.xlsx`` —— 一个供用户**学习与编辑**脚本的多工作表
 Excel 模板，内含：
 
     * 使用指南 / 脚本编辑区 / 命令速查 / 下拉数据源 / 配色图例
@@ -44,7 +44,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCHEMA_PATH = os.path.join(ROOT, "res", "help", "command_schema.json")
 GROUPS_PATH = os.path.join(ROOT, "res", "help", "command_groups.json")
 # 内置资源真源：直接输出到 res/template/（res/ 已被整体打包）
-OUT_PATH = os.path.join(ROOT, "res", "template", "ACRPA脚本编辑模板.xlsx")
+OUT_PATH = os.path.join(ROOT, "res", "template", "ACRPA脚本编辑模板与说明.xlsx")
 
 # ── 工作表名 ──────────────────────────────────────────────────────────
 SH_GUIDE = "使用指南"
@@ -71,6 +71,10 @@ GROUP_COLORS = {
     "AI 增强": "#EC4899",
     "工作流": "#14B8A6",
     "浏览器自动化": "#6366F1",
+    # L2 动作库扩充（68→88）新增两组：取深色系以保证白字可读，
+    # 且与既有 10 组色相互相区分（橄榄绿 / 深洋红，均无重复）。
+    "文件与系统": "#4D7C0F",
+    "数据与编码": "#A21CAF",
     "其他命令": "#6B7280",
 }
 FALLBACK_GROUP = "其他命令"
@@ -213,6 +217,10 @@ def sheet_guide(wb, commands, group_of, groups_order, enum_map):
     ws = wb.create_sheet(SH_GUIDE)
     ws.column_dimensions["A"].width = 22
     ws.column_dimensions["B"].width = 110
+    # 分组数只统计「确有命令」的组：groups_order 末尾的兜底组可能为 0 条，
+    # 直接写 len(groups_order) 会让人误以为有那么多实际分组。
+    used_groups = [g for g in groups_order
+                   if any(group_of.get(c.name) == g for c in commands)]
     r = 1
     cell = ws.cell(row=r, column=1, value="ACRPA 脚本编辑模板（.xlsx）")
     cell.font = Font(bold=True, size=14, color="111827")
@@ -224,8 +232,9 @@ def sheet_guide(wb, commands, group_of, groups_order, enum_map):
         ("用途", "本模板用于**学习与编辑** ACRPA 脚本：内置全部 %d 条命令的下拉选项、"
                  "参数枚举、分组配色与说明，帮助你在 Excel 中直观地书写脚本。" % len(commands)),
         ("定位", "这是**编辑参考模板**，不是产品内置文件；可自由复制、改名、另存使用。"),
-        ("覆盖范围", "全部 %d 组 / %d 条命令（数据实时取自 res/help/command_schema.json）。"
-                   % (len(groups_order), len(commands))),
+        ("覆盖范围", "全部 %d 条命令，分布在 %d 个分组（另有兜底组『其他命令』收纳未匹配分组的命令；"
+                   "数据实时取自 res/help/command_schema.json 与 command_groups.json）。"
+                   % (len(commands), len(used_groups))),
     ]:
         r = kv_row(ws, r, k, v)
     r += 1
@@ -438,6 +447,28 @@ EXAMPLES = {
     "开始监听": "开始监听,/api/items,json",
     "等待数据包": "等待数据包,/api/items,resp,20",
     "停止监听": "停止监听",
+    # ── 文件与系统（L2 动作库扩充） ──
+    "复制文件": "复制文件,D:/in/a.xlsx,D:/out/,是,ret",
+    "移动文件": "移动文件,D:/in/a.xlsx,D:/bak/,否,ret",
+    "删除文件": "删除文件,D:/tmp/old.log,否,是",
+    "创建目录": "创建目录,D:/out/2026-10,是",
+    "列出目录": "列出目录,D:/in,*.xlsx,时间,files",
+    "读取文本文件": "读取文本文件,D:/in/a.txt,utf-8,text",
+    "写入文本文件": "写入文本文件,D:/out/r.txt,${text},覆盖,utf-8",
+    "文件是否存在": "文件是否存在,D:/out/r.txt,exists",
+    "启动程序": "启动程序,notepad.exe,D:/in/a.txt,D:/in,否,否",
+    "结束进程": "结束进程,notepad.exe,否,是",
+    "打开系统面板": "打开系统面板,任务管理器",
+    "电源操作": "电源操作,锁屏,0,否,是",
+    "音量控制": "音量控制,设置,50",
+    "磁盘空间": "磁盘空间,D:,total,free,rate",
+    "设置窗口样式": "设置窗口样式,记事本,220,是,否",
+    # ── 数据与编码（L2 动作库扩充） ──
+    "HTTP 请求": "HTTP 请求,GET,https://api.example.com/items,,,10,resp,code",
+    "JSON 取值": "JSON 取值,${resp},data.items[0].id,,item_id",
+    "Base64 编解码": "Base64 编解码,编码,${item_id},enc",
+    "URL 编解码": "URL 编解码,编码,发票 2026,urlenc",
+    "哈希值": "哈希值,sha256,文本,${enc},digest",
 }
 
 
@@ -538,6 +569,8 @@ def sheet_colors(wb, groups_order):
         "AI 增强": "AI找图/AI识别界面/AI优化建议",
         "工作流": "运行工作流/工作流变量",
         "浏览器自动化": "打开网页/点击/输入/cookie/监听/下载等",
+        "文件与系统": "复制/移动/删除/列目录、读写文本、启动程序与结束进程、电源/音量、窗口样式",
+        "数据与编码": "HTTP 请求 / JSON 取值 / Base64 与 URL 编解码 / 哈希值",
         "其他命令": "未在上述分组中列出的命令（兜底）",
     }
     r = 2
@@ -596,6 +629,29 @@ DEMOS = [
         ("浏览器截图", ["home", "E:/shots"]),
         ("否则", []),
         ("等待", ["0.5"]),
+        ("结束如果", []),
+    ]),
+    ("场景 5：文件归档与落盘（文件与系统）", [
+        ("文件是否存在", ["D:/in/2026-10.xlsx", "exists"]),
+        ("如果", ["${exists} == 1"]),
+        ("创建目录", ["D:/archive/2026-10", "是"]),
+        ("复制文件", ["D:/in/2026-10.xlsx", "D:/archive/2026-10/", "是", "copied"]),
+        ("移动文件", ["D:/in/2026-10.xlsx", "D:/bak/", "否", "moved"]),
+        ("磁盘空间", ["D:", "total", "free", "rate"]),
+        ("写入文本文件", ["D:/archive/2026-10/log.txt", "已归档 ${copied}", "追加", "utf-8"]),
+        ("否则", []),
+        ("等待", ["0.5"]),
+        ("结束如果", []),
+    ]),
+    ("场景 6：接口取数并校验（数据与编码）", [
+        ("HTTP 请求", ["GET", "https://api.example.com/items", "", "", "10", "resp", "code"]),
+        ("如果", ["${code} == 200"]),
+        ("JSON 取值", ["${resp}", "data.items[0].id", "", "item_id"]),
+        ("Base64 编解码", ["编码", "${item_id}", "enc"]),
+        ("哈希值", ["sha256", "文本", "${enc}", "digest"]),
+        ("写入文本文件", ["D:/out/items.csv", "${item_id},${digest}", "追加", "utf-8"]),
+        ("否则", []),
+        ("写入文本文件", ["D:/out/error.log", "HTTP ${code}", "追加", "utf-8"]),
         ("结束如果", []),
     ]),
 ]
@@ -862,6 +918,19 @@ def verify(path, expected):
             swatch_ok = True
             break
     check(swatch_ok, "配色图例含色块（基础操作 #3B82F6）")
+
+    # 色值唯一性：新增分组若漏配 GROUP_COLORS 会 fallback 成兜底灰，此检查可立刻暴露
+    seen_colors, dups = {}, []
+    for r in range(2, ws_color.max_row + 1):
+        title = ws_color.cell(row=r, column=1).value
+        hexc = ws_color.cell(row=r, column=3).value
+        if not title or not hexc or not str(hexc).startswith("#"):
+            continue
+        if hexc in seen_colors:
+            dups.append("%s 与 %s 同为 %s" % (title, seen_colors[hexc], hexc))
+        seen_colors[hexc] = title
+    check(not dups, "配色图例各分组色值互不相同%s"
+          % ("" if not dups else "（重复：%s）" % "；".join(dups)))
 
     out.append("回读校验结果：%s" % ("全部通过" if ok else "存在失败项"))
     return ok, out

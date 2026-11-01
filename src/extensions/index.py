@@ -26,7 +26,7 @@
 # id → {version: sha256}
 WHITELIST = {
     "cv.match": {
-        "1.0.0": "d2cd080f930c9e7b123c4c954d95aed13ef9cb1af7999099cf9ecce5c15dea8f",
+        "1.0.0": "a2c3ec152d34f22ab7622d5b7dc1e67f3c95c2afc40c56de15f74d3c9d6d5a03",
     },
 }
 

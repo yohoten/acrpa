@@ -369,6 +369,9 @@
   .t-basic{color:var(--c1);background:rgba(34,211,238,.1);border:1px solid rgba(34,211,238,.3)}
   .t-adv{color:var(--c2);background:rgba(129,140,248,.1);border:1px solid rgba(129,140,248,.35)}
   .t-ai{color:var(--c3);background:rgba(232,121,249,.1);border:1px solid rgba(232,121,249,.3)}
+  .tmpl-card li{flex-wrap:wrap}
+  .tmpl-card li b{color:var(--text);font-weight:600}
+  .tmpl-card li em{flex:1 1 100%;font-style:normal;font-size:12.5px;color:var(--dim);line-height:1.6;margin-top:1px}
 
   /* Env */
   .env-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
@@ -766,7 +769,6 @@
   .tl-toggle .tl-caret{display:inline-block;margin-left:8px;transition:transform .25s}
   .tl-toggle[aria-expanded="true"] .tl-caret{transform:rotate(180deg)}
 
-
   /* ==========================================================
      use cases / security & trust / FAQ (adopted from index.new.html)
      ========================================================== */
@@ -964,50 +966,43 @@
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="sec-tag">USE CASES</span>
-      <h2>Who Uses ACRPA</h2>
-      <p class="sec-desc">No programming required. Find your role below — every scenario is backed by built-in templates, sample scripts or dedicated commands.</p>
+      <h2>What repetitive work can ACRPA handle</h2>
+      <p class="sec-desc">No programming required. Match the task below — every one is backed by built-in templates, sample scripts or dedicated commands.</p>
     </div>
     <div class="scene-grid">
       <div class="scene reveal">
-        <h3>🗂 Office Clerks / Admin</h3>
+        <h3>🧾 Receipt filing (finance)</h3>
         <div class="ba">
-          <div class="after">✅ Login, form filling, data collection, batch clicking, scheduled screenshot archiving — script a whole day of repetitive work once and let it run on time.</div>
-          <div class="support">Backed by: built-in templates "Login Flow / Form Filling / Data Collection / Batch Click"</div>
-        </div>
-      </div>
-      <div class="scene reveal">
-        <h3>💰 Finance / Bank Reconciliation</h3>
-        <div class="ba">
-          <div class="after">✅ Download bank receipts, OCR invoice capture and entry, automatic reconciliation data transfer between systems and Excel — no more manual copy-paste row by row.</div>
+          <div class="after">✅ Download bank receipts → OCR → write to Excel → archive, fully automatic, with no manual row-by-row copying.</div>
           <div class="support">Backed by: Read Text / Wait Text / Click Text commands + bank receipt sample script</div>
         </div>
       </div>
       <div class="scene reveal">
-        <h3>📊 Daily Reports &amp; Scheduled Monitoring</h3>
+        <h3>🌐 Web form filling</h3>
         <div class="ba">
-          <div class="after">✅ Scheduled screenshot archiving, automatic daily report generation and delivery, execute daily / weekly / at fixed intervals — it runs even when you are away.</div>
-          <div class="support">Backed by: scheduled task engine + screenshot / send-mail sample scripts</div>
+          <div class="after">✅ Open the page → read from Excel → fill it in → retry on failure. Configure a login or form flow once and reuse it.</div>
+          <div class="support">Backed by: Open Page / Browser Input / Wait Element + "Login Flow / Form Filling" templates</div>
         </div>
       </div>
       <div class="scene reveal">
-        <h3>🖥 Intranet Multi-Machine Ops</h3>
+        <h3>📊 Daily report delivery</h3>
         <div class="ba">
-          <div class="after">✅ One PC monitors the running status of many ACRPA instances on the LAN, pushes scripts in bulk with "run right after push", and progress is viewable from a phone browser.</div>
+          <div class="after">✅ Scheduled start → collect data → build the report → send mail. It runs on time even when you are away.</div>
+          <div class="support">Backed by: scheduler + send-mail / screenshot sample scripts</div>
+        </div>
+      </div>
+      <div class="scene reveal">
+        <h3>🖱 Batch clicking</h3>
+        <div class="ba">
+          <div class="after">✅ Bulk listing / delisting, scheduled price changes and stock checks — hand hundreds of repeated clicks to a script.</div>
+          <div class="support">Backed by: Batch Click / Form Filling templates + scheduled tasks</div>
+        </div>
+      </div>
+      <div class="scene reveal">
+        <h3>🖥 Intranet distribution</h3>
+        <div class="ba">
+          <div class="after">✅ Push scripts to many machines on the LAN → run right after push → watch progress and logs from a phone browser.</div>
           <div class="support">Backed by: NetLink multi-device linking (zero extra dependencies)</div>
-        </div>
-      </div>
-      <div class="scene reveal">
-        <h3>🧑‍💻 Developers / Power Users</h3>
-        <div class="ba">
-          <div class="after">✅ Python command with three privilege levels (sandbox / trusted / full), plugin API, AI script generation, and a debugger with breakpoints / single-step / variable watch.</div>
-          <div class="support">Backed by: Python extension + plugin system + built-in debugger</div>
-        </div>
-      </div>
-      <div class="scene reveal">
-        <h3>🛒 E-commerce · Bulk Listing</h3>
-        <div class="ba">
-          <div class="after">✅ Bulk product entry across platforms, scheduled price updates, stock checks, and automatic order status sync to Excel — hand the repetitive clicking over to a script.</div>
-          <div class="support">Backed by: batch click / form filling / Excel read-write / scheduled task sample scripts</div>
         </div>
       </div>
     </div>
@@ -1044,44 +1039,39 @@
         <div class="showcase-text">
           <span class="num">01 · Script Editing</span>
           <h3>Your spreadsheet is the script</h3>
-          <p>Commands in column A, parameters in columns B–J — orchestrate automation without programming. Inline editing, copy-paste and breakpoint markers: the spreadsheet is the script, and there is no learning curve.</p>
-          <div class="hint">🖱 Click the image to enlarge</div>
+          <p>Commands in column A, parameters in columns B–J — double-click a cell to edit. The script is just a spreadsheet you can rewrite.</p>
         </div>
       </div>
       <div class="showcase-item reveal rev" data-full="img/image2.png" data-cap="Execution &amp; Editing">
         <div class="showcase-img"><img src="img/image2.png" loading="lazy" decoding="async" alt="Execution and editing screen" width="1390" height="918"></div>
         <div class="showcase-text">
           <span class="num">02 · Execution &amp; Editing</span>
-          <h3>Run control and debugging hub</h3>
-          <p>Run / pause / stop / single-step control, breakpoints and conditional breakpoints, variable watcher, call stack and execution time statistics — the run state is clear at a glance.</p>
-          <div class="hint">🖱 Click the image to enlarge</div>
+          <h3>Stop it halfway through</h3>
+          <p>Pause / resume / single-step right from the toolbar — when a run goes sideways, freeze it and look.</p>
         </div>
       </div>
       <div class="showcase-item reveal" data-full="img/image3.png" data-cap="Workflow">
         <div class="showcase-img"><img src="img/image3.png" loading="lazy" decoding="async" alt="Workflow screen" width="1399" height="921"></div>
         <div class="showcase-text">
           <span class="num">03 · Workflow</span>
-          <h3>Chain multiple scripts together</h3>
-          <p>Visual flow diagram (nodes / connectors / drag-and-drop) with four step types — script, parallel, condition and wait — and live highlighting of the executing node.</p>
-          <div class="hint">🖱 Click the image to enlarge</div>
+          <h3>Drag nodes into a flow diagram</h3>
+          <p>Four step types — script, parallel, condition, wait — and the connectors are the execution order.</p>
         </div>
       </div>
       <div class="showcase-item reveal rev" data-full="img/image4.png" data-cap="Settings">
         <div class="showcase-img"><img src="img/image4.png" loading="lazy" decoding="async" alt="Settings navigation screen" width="1797" height="822"></div>
         <div class="showcase-text">
           <span class="num">04 · Settings</span>
-          <h3>Settings cards by category</h3>
-          <p>Basic execution / AI enhancement / scheduling / logs / advanced settings are managed on separate cards and saved independently; the model dropdown auto-matches the correct API endpoint.</p>
-          <div class="hint">🖱 Click the image to enlarge</div>
+          <h3>Settings split by purpose</h3>
+          <p>Basic execution / AI enhancement / scheduling / logs / advanced each own a card, saved independently.</p>
         </div>
       </div>
       <div class="showcase-item reveal" data-full="img/image5.png" data-cap="Dark Mode">
         <div class="showcase-img"><img src="img/image5.png" loading="lazy" decoding="async" alt="Dark mode screen" width="1901" height="740"></div>
         <div class="showcase-text">
           <span class="num">05 · Dark Mode</span>
-          <h3>Light / dark themes, one click</h3>
-          <p>Dark theme plus a collapsible Mini Bar status strip, resident in the system tray — more comfortable and easier on the eyes during long overnight automation runs.</p>
-          <div class="hint">🖱 Click the image to enlarge</div>
+          <h3>Light and dark, one click</h3>
+          <p>Themes switch instantly, easier on the eyes during long overnight runs.</p>
         </div>
       </div>
     </div>
@@ -1097,21 +1087,12 @@
       <p class="sec-desc">From basic automation to intelligent workflows, ACRPA covers the entire desktop automation stack.</p>
     </div>
     <div class="cards" id="featureGrid">
-      <div class="card reveal"><div class="ico">📦</div><h3>Excel-driven scripts</h3><p>Uses <b>.xls</b> spreadsheets as script files — commands in column A, parameters in columns B–J. Orchestrate automation without programming; the learning cost is minimal.</p></div>
-      <div class="card reveal"><div class="ico">🖱</div><h3>Image-based localization</h3><p>Image recognition built on OpenCV / Pillow: full-screen and region-limited search, grayscale accelerated matching — locate and click any UI element precisely.</p></div>
-      <div class="card reveal"><div class="ico">🪟</div><h3>Window management</h3><p>Operate Windows directly: activate, close, minimize, wait for a window to appear or disappear. Window-relative coordinates make it 10–100× faster than image matching.</p></div>
-      <div class="card reveal"><div class="ico">🎬</div><h3>Record &amp; replay</h3><p>Record mouse and keyboard actions (including drag, scroll and window activation), with wait intervals inserted automatically. Replay in one click — repetitive work is never manual again.</p></div>
-      <div class="card reveal"><div class="ico">⏱</div><h3>Scheduled tasks</h3><p>Daily / weekly / interval / one-shot scheduling modes, executed silently in the background alongside the system tray and Mini Bar.</p></div>
-      <div class="card reveal"><div class="ico">⚡</div><h3>DD driver boost</h3><p>Optional kernel-level high-performance input backend that simulates real keyboard and mouse input and is hard to detect. Supports direct / simulate / auto write modes with automatic fallback.</p></div>
-      <div class="card reveal"><div class="ico">🧩</div><h3>Workflow orchestration</h3><p>Chain multiple scripts with a visual flow diagram (nodes / connectors / drag-and-drop) supporting four step types: script, parallel, condition and wait.</p></div>
-      <div class="card reveal"><div class="ico">📊</div><h3>Variable system</h3><p>Set variables, read the clipboard, substring / replace, math operations — ${var} syntax works throughout, so complex data is easy to handle.</p></div>
-      <div class="card reveal"><div class="ico">🔍</div><h3>OCR recognition</h3><p>Recognize text in a screen region, wait for text to appear, click on text. Compatible with PaddleOCR / Windows OCR / Tesseract — even dynamic interfaces can be automated.</p></div>
-      <div class="card reveal"><div class="ico">🐞</div><h3>Professional debugger</h3><p>Breakpoints / conditional breakpoints, single-step, variable watcher, call stack, execution timing, run-to-cursor and skip-line — problems become obvious.</p></div>
-      <div class="card reveal"><div class="ico">🌓</div><h3>Dark mode</h3><p>Switch between light and dark themes in one click. With the system tray and the Mini Bar floating status strip, automation runs quietly in the background.</p></div>
-      <div class="card reveal"><div class="ico">📜</div><h3>Logs &amp; marketplace</h3><p>Structured levelled logs with daily rotation, automatic cleanup and one-click export; built-in script marketplace (works offline) that keeps expanding the script ecosystem.</p></div>
-      <div class="card reveal"><div class="ico">🔄</div><h3>Automatic updates</h3><p>Self-checks for new versions at startup and fetches the manifest with multi-source fallback (GitHub Releases → raw manifest → CDN mirror). Downloads show progress and are verified by sha256; if a mirror serves an old package it switches source automatically, then a one-click restart completes the replacement without touching your config or scripts.<span class="tag-new" data-ver></span></p></div>
-      <div class="card reveal"><div class="ico">🌐</div><h3>Browser automation</h3><p>Built-in Playwright web automation: open a page, click, type, wait for elements, full-page or element screenshots — desktop and web steps can be chained in the same script.</p></div>
-      <div class="card reveal"><div class="ico">🛡️</div><h3>Safety guards</h3><p>Runaway protection (flick the mouse to abort immediately), maximum execution time limits, stop-on-error and failure retry policies — unattended runs still end safely.</p></div>
+      <div class="card reveal"><div class="ico">✍️</div><h3>Write scripts</h3><p><b>Excel as the script</b>: commands in column A, parameters in columns B–J, no programming needed. Or <b>record</b> a run to generate one, or write <b>Python</b> directly (sandbox / trusted / full privilege levels).</p></div>
+      <div class="card reveal"><div class="ico">🎯</div><h3>Find elements</h3><p>Four ways to locate, each for its own case: <b>image recognition</b> (OpenCV / Pillow, region and grayscale acceleration), <b>window-relative coordinates</b> (10–100× faster), <b>OCR</b> by text, and <b>AI</b> by plain-language description.</p></div>
+      <div class="card reveal"><div class="ico">🔁</div><h3>Run flows</h3><p><b>Conditions / loops</b> + <b>workflow orchestration</b> (script / parallel / condition / wait step types) + <b>schedules and triggers</b> (daily / weekly / interval / boot / hotkey).</p></div>
+      <div class="card reveal"><div class="ico">🌐</div><h3>Automate the web</h3><p>Built-in <b>Playwright</b>: open, click, type, wait for elements, tabs, downloads, cookies and packet capture — chainable with desktop steps in one script.</p></div>
+      <div class="card reveal"><div class="ico">🖥️</div><h3>Manage machines</h3><p><b>NetLink</b> multi-device: one PC monitors many LAN machines in real time, distributes scripts in bulk and controls them remotely, viewable from a phone browser — zero extra dependencies.</p></div>
+      <div class="card reveal"><div class="ico">🐞</div><h3>Debug it</h3><p>Breakpoints / single-step / variable watch / call stack / timing; structured logs, exception handling, stop-on-error and runaway protection — unattended runs still end safely.</p></div>
     </div>
   </div>
 </section>
@@ -1139,6 +1120,11 @@
       <div class="card reveal"><div class="ico">🛡️</div><h3>Optional TLS encryption</h3><p>Encrypted channel with a self-signed certificate based on the stdlib <b>ssl</b> module; the peer certificate sha256 fingerprint is <b>pinned (TOFU)</b> and mismatches are rejected outright. Off by default, enable as needed.</p></div>
     </div>
 
+    <div class="ai-note reveal" style="margin-top:28px">
+      <b>Requirements</b>: controller and controlled machines must sit on the same LAN and reach each other over TCP. UDP auto-discovery is on by default (port 19711); when discovery fails, enter <code>IP:port</code> manually. Pairing is required by default (6-digit code valid for 600s) and the controlled machine prompts for confirmation on first remote control. The read-only browser panel is off by default and listens on <code>19712</code> once enabled; TLS is off by default too.<br>
+      <b>Scope</b>: bulk execution and unattended watch over a fixed group of LAN machines — office PCs, test rigs, server-room terminals. Public-internet access, NAT traversal and centralized fleet scheduling are out of scope.
+    </div>
+
     <!-- NetLink screenshots -->
     <div class="showcase" style="margin-top:48px">
       <div class="showcase-item reveal" data-full="img/netlink-devices.png" data-cap="Multi-device · device list and live progress">
@@ -1148,17 +1134,17 @@
         <div class="showcase-text">
           <span class="num">NL 01 · Device Linking</span>
           <h3>All machines, one screen</h3>
-          <p>Device list, run state, current script, line number / loop count / elapsed time and the live log stream all in one window — see the whole picture without switching machines.</p>
+          <p>Device list, current script, line number / loop count / elapsed time and the live log stream, all in one window.</p>
         </div>
       </div>
-      <div class="showcase-item reveal rev" data-full="img/netlink-pairing.png" data-cap="Multi-device · pairing and first-control confirmation">
+      <div class="showcase-item reveal rev" data-full="img/netlink-pairing.png" data-cap="Multi-device · pairing">
         <div class="showcase-img nl-shot-wrap">
-          <img src="img/netlink-pairing.png" loading="lazy" decoding="async" alt="Multi-device · pairing and first-control confirmation" width="1587" height="814">
+          <img src="img/netlink-pairing.png" loading="lazy" decoding="async" alt="Multi-device · pairing" width="1587" height="814">
         </div>
         <div class="showcase-text">
           <span class="num">NL 02 · Pairing</span>
-          <h3>PIN + challenge-response + credential store</h3>
-          <p>The controlled machine generates a 6-digit pairing code and the controller enters it to pair. Keys are never written to config.json, reconnects need no PIN after pairing, and first-time control still requires confirmation on the controlled side.</p>
+          <h3>Pair once, no PIN after</h3>
+          <p>The controlled machine shows a 6-digit code and the controller types it in; the key lands in the Windows credential store, so reconnects skip the PIN.</p>
         </div>
       </div>
       <div class="showcase-item reveal" data-full="img/netlink-webui.png" data-cap="Multi-device · read-only browser panel">
@@ -1167,8 +1153,8 @@
         </div>
         <div class="showcase-text">
           <span class="num">NL 03 · Browser Panel</span>
-          <h3>Viewable from a phone browser</h3>
-          <p>A built-in read-only web panel (default port 19712, off by default). Scan a QR code or type the address on a phone or tablet to view multi-machine progress and logs — the panel contains no write operations at all.</p>
+          <h3>Watch it from a phone</h3>
+          <p>A built-in read-only panel (port 19712, off by default) — open the address on a phone or tablet to see progress and logs.</p>
         </div>
       </div>
     </div>
@@ -1181,10 +1167,10 @@
     <div class="sec-head reveal">
       <span class="sec-tag">COMMAND SYSTEM</span>
       <h2>Command System · 88 Built-in Commands</h2>
-      <p class="sec-desc">88 built-in commands: write one per row in Excel and use them right away (51 of them are listed in the quick reference below). Click any command or example to copy it. See the <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a> for full documentation.</p>
+      <p class="sec-desc">88 built-in commands: write one per row in Excel and use them right away (all 88 are listed in the quick reference below, grouped into 9 categories). Click any command or example to copy it. See the <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a> for full documentation.</p>
     </div>
     <details class="cmd-fold">
-      <summary>Expand the Command Reference · 7 categories · 51 commands listed<span style="color:var(--dim);font-weight:400;font-size:13px">Full docs in the <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a></span></summary>
+      <summary>Expand the Command Reference · 9 categories · 88 commands<span style="color:var(--dim);font-weight:400;font-size:13px">Full docs in the <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a></span></summary>
     <div class="cmd-tabs reveal">
       <div class="cmd-tab on" data-tab="t1">🎯 Basic Ops</div>
       <div class="cmd-tab" data-tab="t2">🪟 Windows</div>
@@ -1193,6 +1179,8 @@
       <div class="cmd-tab" data-tab="t5">🤖 AI</div>
       <div class="cmd-tab" data-tab="t6">🧩 Workflow</div>
       <div class="cmd-tab" data-tab="t7">🌐 Browser</div>
+      <div class="cmd-tab" data-tab="t8">📁 Files &amp; System</div>
+      <div class="cmd-tab" data-tab="t9">🔗 Data &amp; Network</div>
     </div>
 
     <div class="cmd-panel on" id="t1">
@@ -1210,6 +1198,7 @@
         <tr><td><code>按下 / 释放</code></td><td>Hold and release a key to implement press-and-drag and other complex actions</td><td class="ex">按下, a</td></tr>
         <tr><td><code>复制 / 粘贴</code></td><td>Built-in shortcut combinations (Ctrl+A+C / Ctrl+A+V)</td><td class="ex">复制</td></tr>
         <tr><td><code>代码</code></td><td>Execute Python code from a specified txt file (the program built-in libraries can be called)</td><td class="ex">代码, my_code</td></tr>
+        <tr><td><code>Python</code></td><td>Execute Python code directly from a cell, subject to permission and AST pre-checks, with the built-in libraries available</td><td class="ex">Python, <b>${x}+1</b>, sandbox</td></tr>
         <tr><td><code>截屏</code></td><td>Take and save a screenshot; a timestamp is appended to the filename automatically</td><td class="ex">截屏, shot, E:/ACRPA/screenshots</td></tr>
       </table>
     </div>
@@ -1219,10 +1208,11 @@
         <tr><th class="col-cmd">Command</th><th class="col-desc">Description</th><th>Example</th></tr>
         <tr><td><code>激活窗口</code></td><td>Activate the window with the given title; fuzzy matching supported</td><td class="ex">激活窗口, Notepad</td></tr>
         <tr><td><code>关闭窗口</code></td><td>Close the specified window</td><td class="ex">关闭窗口, Untitled - Notepad</td></tr>
-        <tr><td><code>最小化 / 最大化窗口</code></td><td>Minimize the window to the taskbar / maximize it</td><td class="ex">最小化窗口, Calculator</td></tr>
+        <tr><td><code>最小化窗口 / 最大化窗口</code></td><td>Minimize the window to the taskbar / maximize it</td><td class="ex">最小化窗口, Calculator</td></tr>
         <tr><td><code>获取窗口位置</code></td><td>Get the window coordinates and size and save them to variables</td><td class="ex">获取窗口位置, Notepad, x, y, w, h</td></tr>
         <tr><td><code>等待窗口</code></td><td>Wait for a window to appear or disappear, with a configurable timeout</td><td class="ex">等待窗口, Chrome, 10, exists</td></tr>
         <tr><td><code>窗口坐标</code></td><td>Click relative to the window top-left corner; stays accurate even after the window moves ★</td><td class="ex">窗口坐标, Notepad, 100, 50</td></tr>
+        <tr><td><code>设置窗口样式</code></td><td>Set a window to stay on top, change its opacity, or hide / show it</td><td class="ex">设置窗口样式, Notepad, <b>200</b>, yes</td></tr>
       </table>
     </div>
 
@@ -1254,8 +1244,8 @@
         <tr><td><code>AI找图</code></td><td>Describe a UI element in natural language; AI analyzes the screenshot and locates it (click / hover / find only)</td><td class="ex">AI找图, the login button, 0.8, click</td></tr>
         <tr><td><code>AI识别界面</code></td><td>AI analyzes all UI elements on the current screen; results are stored in a ${prefix}_elements variable</td><td class="ex">AI识别界面, ui</td></tr>
         <tr><td><code>AI优化建议</code></td><td>AI analyzes historical execution data and gives script optimization suggestions</td><td class="ex">AI优化建议, log</td></tr>
-        <tr><td><code>[AI] 调试</code></td><td>Ask AI in natural language; AI analyzes the logs and answers debugging questions</td><td class="ex">click the [AI] Debug button</td></tr>
       </table>
+      <p class="cmd-note">Beyond commands, the script editor also provides an <code>[AI] Debug</code> button: ask AI in natural language and it analyzes the execution logs to answer debugging questions.</p>
     </div>
 
     <div class="cmd-panel" id="t6">
@@ -1274,8 +1264,53 @@
         <tr><td><code>浏览器输入</code></td><td>Fill text into the specified input box (located by selector)</td><td class="ex">浏览器输入, #username, admin</td></tr>
         <tr><td><code>等待元素</code></td><td>Wait for a web element to appear / disappear, with a configurable timeout</td><td class="ex">等待元素, .result, 10, 出现</td></tr>
         <tr><td><code>浏览器截图</code></td><td>Save a full-page or specific-element screenshot</td><td class="ex">浏览器截图, result, page</td></tr>
+        <tr><td><code>浏览器执行JS / 执行JS</code></td><td>Execute JS in the page and write the return value to a variable (the two names are aliases)</td><td class="ex">浏览器执行JS, document.title, title</td></tr>
+        <tr><td><code>浏览器读取Cookie</code></td><td>Export the current context's cookies to a variable or file, in json / header / netscape format</td><td class="ex">浏览器读取Cookie, cookie, <b>json</b></td></tr>
+        <tr><td><code>浏览器设置Cookie</code></td><td>Inject cookies from a variable or file, optionally scoped to a domain</td><td class="ex">浏览器设置Cookie, cookie, <b>example.com</b></td></tr>
+        <tr><td><code>切换框架 / 返回主框架</code></td><td>Enter an iframe (by locator expression or index), or return to the top-level document</td><td class="ex">切换框架, <b>0</b></td></tr>
+        <tr><td><code>新建标签页</code></td><td>Open a new tab and make it active, optionally navigating to a URL</td><td class="ex">新建标签页, https://example.com</td></tr>
+        <tr><td><code>切换标签页</code></td><td>Switch the active tab by index, title or URL match</td><td class="ex">切换标签页, <b>2</b></td></tr>
+        <tr><td><code>关闭标签页</code></td><td>Close the current tab or the tab at a given index</td><td class="ex">关闭标签页</td></tr>
+        <tr><td><code>等待下载</code></td><td>Wait for a browser download to finish and save the file, with filename matching, timeout and write-back</td><td class="ex">等待下载, E:/ACRPA/downloads, <b>*.xls</b>, 60, file_path</td></tr>
+        <tr><td><code>浏览器上传</code></td><td>Set local files on an input[type=file] element, several files at a time</td><td class="ex">浏览器上传, #file, <b>E:/a.png</b></td></tr>
+        <tr><td><code>连接已开浏览器 / 接管浏览器</code></td><td>Take over an already running browser through a CDP endpoint (requires --remote-debugging-port)</td><td class="ex">连接已开浏览器, http://127.0.0.1:9222</td></tr>
+        <tr><td><code>开始监听</code></td><td>Start queueing network responses (packet capture), with URL matching and resource-type filtering</td><td class="ex">开始监听, <b>*/api/*</b></td></tr>
+        <tr><td><code>等待数据包</code></td><td>Wait for and retrieve matching packets, writing them back to a variable or exporting to disk</td><td class="ex">等待数据包, */api/*, 1, 30, <b>resp</b></td></tr>
+        <tr><td><code>停止监听</code></td><td>Stop listening and clear the queue</td><td class="ex">停止监听</td></tr>
+        <tr><td><code>启动浏览器录制</code></td><td>Record web actions with Playwright codegen and append the result to the script as DSL</td><td class="ex">启动浏览器录制</td></tr>
       </table>
       <p class="cmd-note">Browser commands are implemented on <code>Playwright</code>, installed on demand (about 155 MB, not bundled with the main program); if it is missing, the command shows how to install it. Desktop and web steps can be chained serially in the same script.</p>
+    </div>
+
+    <div class="cmd-panel" id="t8">
+      <table class="cmd-table">
+        <tr><th class="col-cmd">Command</th><th class="col-desc">Description</th><th>Example</th></tr>
+        <tr><td><code>复制文件</code></td><td>Copy a file or directory (relative paths resolve against the script directory), with overwrite and write-back</td><td class="ex">复制文件, data.csv, <b>backup/data.csv</b>, yes</td></tr>
+        <tr><td><code>移动文件</code></td><td>Move a file or directory; same directory means rename</td><td class="ex">移动文件, a.txt, <b>b.txt</b></td></tr>
+        <tr><td><code>删除文件</code></td><td>Delete a file or directory; sent to the Recycle Bin by default, falling back to permanent deletion</td><td class="ex">删除文件, E:/tmp/old, yes, <b>yes</b></td></tr>
+        <tr><td><code>创建目录</code></td><td>Create a directory, including nested levels</td><td class="ex">创建目录, <b>E:/ACRPA/out/report</b></td></tr>
+        <tr><td><code>列出目录</code></td><td>List directory contents into a variable line by line, with glob and sorting support</td><td class="ex">列出目录, E:/ACRPA, <b>*.xls</b>, name, files</td></tr>
+        <tr><td><code>读取文本文件</code></td><td>Read a text file into a variable, with a fixed or auto-detected encoding</td><td class="ex">读取文本文件, note.txt, <b>auto</b>, content</td></tr>
+        <tr><td><code>写入文本文件</code></td><td>Write a text file atomically, in overwrite or append mode</td><td class="ex">写入文本文件, log.txt, ${result}, <b>append</b>, utf-8</td></tr>
+        <tr><td><code>文件是否存在</code></td><td>Check whether a file or directory exists; writes 1 / 0 to a variable</td><td class="ex">文件是否存在, E:/a.png, <b>exists</b></td></tr>
+        <tr><td><code>启动程序</code></td><td>Launch an external program, document or URL; can wait for exit or hide the window</td><td class="ex">启动程序, <b>notepad.exe</b>, , , no, no</td></tr>
+        <tr><td><code>结束进程</code></td><td>Kill a process by name, guarded by a built-in whitelist of critical system processes</td><td class="ex">结束进程, notepad.exe, no, <b>yes</b></td></tr>
+        <tr><td><code>打开系统面板</code></td><td>Open a system panel from a fixed whitelist (Task Manager / Services / Registry / Control Panel / Device Manager and more)</td><td class="ex">打开系统面板, <b>Task Manager</b></td></tr>
+        <tr><td><code>电源操作</code></td><td>Shut down / restart / log off / lock / sleep / hibernate, with delay and dry-run support</td><td class="ex">电源操作, shutdown, <b>60</b>, no, yes</td></tr>
+        <tr><td><code>音量控制</code></td><td>Set, raise or lower the volume, or toggle mute</td><td class="ex">音量控制, set, <b>50</b></td></tr>
+        <tr><td><code>磁盘空间</code></td><td>Query a disk's total / free capacity and usage rate into variables</td><td class="ex">磁盘空间, <b>C:</b>, disk_total, disk_free, disk_percent</td></tr>
+      </table>
+    </div>
+
+    <div class="cmd-panel" id="t9">
+      <table class="cmd-table">
+        <tr><th class="col-cmd">Command</th><th class="col-desc">Description</th><th>Example</th></tr>
+        <tr><td><code>HTTP 请求</code></td><td>Send an HTTP(S) request; writes the response body and status code to variables, and can save to a file</td><td class="ex">HTTP 请求, GET, <b>https://api.example.com/data</b>, , , 30, resp, code</td></tr>
+        <tr><td><code>JSON 取值</code></td><td>Extract a value by path expression from a variable, file or JSON text, with a default fallback</td><td class="ex">JSON 取值, ${resp}, <b>data.items[0].name</b>, , name</td></tr>
+        <tr><td><code>Base64 编解码</code></td><td>Base64 encode or decode</td><td class="ex">Base64 编解码, encode, ${text}, <b>b64</b></td></tr>
+        <tr><td><code>URL 编解码</code></td><td>URL percent-encode or decode</td><td class="ex">URL 编解码, encode, ${keyword}, <b>url</b></td></tr>
+        <tr><td><code>哈希值</code></td><td>Compute the MD5 / SHA1 / SHA256 hash of text or a file</td><td class="ex">哈希值, <b>sha256</b>, file, E:/a.exe, hash</td></tr>
+      </table>
     </div>
     </details>
   </div>
@@ -1318,6 +1353,10 @@
         <div class="wf-item reveal"><div class="dot2">📝</div><div><b>Node-level control</b><p>Four node types — command / variable / loop / log — share one edit form and support enable-disable, comments, cloning, copy-paste and reordering.</p></div></div>
         <div class="wf-item reveal"><div class="dot2">🎯</div><div><b>Execution highlighting</b><p>The running node is highlighted live with result tracking; failed nodes are marked red, making debugging direct and efficient.</p></div></div>
       </div>
+      <div class="ai-note reveal" style="margin-top:22px">
+        <b>Requirements</b>: nothing to install or license — it ships with the program. A workflow is saved as <code>.json</code> or <code>.yaml</code> (YAML goes through a built-in minimal parser, no pyyaml needed) and invoked with the <code>运行工作流</code> command, or run straight from the Workflow tab once the nodes are arranged.<br>
+        <b>Scope</b>: multi-step jobs that chain several scripts in sequence, in parallel or behind condition branches. If one script already finishes the job in a single pass, skip the workflow and run that script.
+      </div>
     </div>
   </div>
 </section>
@@ -1336,7 +1375,8 @@
       <div class="ai-card reveal"><div class="aico">🚨</div><h3>AI anomaly detection</h3><p>AI continuously watches for abnormal screens and states during a run and warns early, preventing incorrect operations from spreading.</p></div>
       <div class="ai-card reveal"><div class="aico">💬</div><h3>Natural-language debugging</h3><p>Ask AI directly about logs and execution issues; it analyzes them and returns conclusions plus optimization advice — debugging with no barrier to entry.</p></div>
     </div>
-    <div class="ai-note reveal">💡 AI features require an API key in Settings (DeepSeek / Qwen / GPT / Claude supported); the model dropdown auto-matches the correct API endpoint, so no manual configuration is needed.</div>
+    <div class="ai-note reveal">💡 <b>Requirements</b>: enter an API key in Settings first (DeepSeek / Qwen / GPT / Claude, or a custom base URL and model name); the model dropdown auto-matches the right endpoint. The key is stored in the Windows credential store — never in config.json, never in logs. <b>Smart retry</b> and <b>anomaly detection</b> are off by default and must be enabled separately. Without a key the AI commands are unavailable; everything else keeps working.<br>
+      <b>Scope</b>: reach for AI visual localization when image, coordinate and OCR targeting all miss, AI screen description to inventory UI elements, and AI optimization advice when tuning a finished script. Plain find-image, find-color and OCR are more stable and cheaper — prefer them whenever they work.</div>
   </div>
 </section>
 
@@ -1346,38 +1386,38 @@
     <div class="sec-head reveal">
       <span class="sec-tag">TEMPLATES</span>
       <h2>Sample Script Library · Ready to Run</h2>
-      <p class="sec-desc">Ten ready-to-use templates cover office, system and interaction scenarios — import one and run it. Combined with conditions, loops and AI generation, they can be quickly adapted into complex flows.</p>
+      <p class="sec-desc">Ten built-in snippets whose names, row counts and purposes match the in-app snippet library — insert one, swap the image feature names, coordinates and inputs for your own, and it runs.</p>
     </div>
     <div class="tmpl-grid">
       <div class="tmpl-card reveal">
         <h3><span class="tmpl-badge t-basic">Office</span> Office · Daily Tasks</h3>
         <ul>
-          <li>Login flow</li>
-          <li>Form filling</li>
-          <li>Data collection</li>
-          <li>Text editing</li>
+          <li><b>登录流程</b><em>Locate the account / password / login button by image, type, then click; swap the parameters to fit your own system (10 rows).</em></li>
+          <li><b>表单填写</b><em>Click a field → type → Tab to the next; three fields filled and submitted (9 rows).</em></li>
+          <li><b>数据采集</b><em>Click export → copy → Alt+Tab to the other window → paste, pulling data out of another system (8 rows).</em></li>
+          <li><b>文本编辑</b><em>Copy → Ctrl+A → Delete → paste, replacing the whole text in one pass (8 rows).</em></li>
         </ul>
       </div>
       <div class="tmpl-card reveal">
         <h3><span class="tmpl-badge t-adv">System</span> System · OS Operations</h3>
         <ul>
-          <li>Page screenshot</li>
-          <li>File download</li>
-          <li>Window switching</li>
+          <li><b>页面截图</b><em>Grab a shot into the screenshots folder → scroll down → grab another, keeping a full-page record (6 rows).</em></li>
+          <li><b>文件下载</b><em>Click download → wait for the save dialog → arrow key + Enter to confirm, no picking a path by hand (6 rows).</em></li>
+          <li><b>窗口切换</b><em>Alt+Tab to the target window, then locate by image — the opening move for cross-window flows (4 rows).</em></li>
         </ul>
       </div>
       <div class="tmpl-card reveal">
-        <h3><span class="tmpl-badge t-ai">Interaction</span> Interaction · UI Operations</h3>
+        <h3><span class="tmpl-badge t-ai">Other</span> Other · UI Interaction</h3>
         <ul>
-          <li>Batch clicking</li>
-          <li>Scroll browsing</li>
-          <li>Context menu</li>
+          <li><b>批量点击</b><em>Click the same target three times at 0.3s intervals — drop it into a loop for paged clicking (5 rows).</em></li>
+          <li><b>滚动浏览</b><em>Two scrolls down, one back up, mimicking a person browsing a page (6 rows).</em></li>
+          <li><b>右键菜单</b><em>Right-click at a coordinate to open the menu → arrow key + Enter to pick an item (5 rows).</em></li>
         </ul>
       </div>
     </div>
     <div class="reveal" style="margin-top:22px;font-size:13.5px;color:var(--muted);border:1px solid var(--border);border-radius:12px;padding:16px 20px;background:var(--card)">
-      📂 Quick start: pick a template → "File" → "Import Script" and choose a .xls → adjust the window title and parameters → click "Run" (or press F5) to see it work.<br>
-      <span style="color:var(--dim)">Bonus business samples — send mail, bank receipts, interval clicking, script templates and more — ship as bundled .xls files, ready to import and use.</span>
+      📂 Import steps: open the program → click <b>片段</b> (Snippets) on the toolbar → pick a template under Office / System / Other → choose <b>append</b> / <b>insert before the selected row</b> / <b>replace all</b> → change the image feature names, coordinates and inputs to your own → press F5 to run.<br>
+      <span style="color:var(--dim)">The ten above are the built-in snippets in the library, with row counts matching the app and fully offline. Bundled .xls business samples (send mail, bank receipts, interval clicking and more) open directly via "File → Import Script".</span>
     </div>
   </div>
 </section>

@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ACRPA · Lightweight Windows Desktop Automation</title>
-<meta name="description" content="ACRPA is a lightweight Windows desktop automation tool: Excel spreadsheets are your scripts. It supports image-based localization, window management, OCR, browser automation, record and replay, scheduled tasks, workflow orchestration and AI enhancement.">
-<meta name="keywords" content="ACRPA,RPA,desktop automation,automation script,Excel script,image recognition,window management,OCR,browser automation,workflow orchestration,scheduled tasks,AI enhancement,Python automation,Windows automation,portable">
+<meta name="description" content="ACRPA is a lightweight automation workflow tool: Excel spreadsheets are your scripts. It supports image-based localization, window management, OCR, browser automation, record and replay, scheduled tasks, workflow orchestration and AI enhancement.">
+<meta name="keywords" content="ACRPA,RPA,multi-scenario automation,automation script,Excel script,image recognition,window management,OCR,browser automation,workflow orchestration,scheduled tasks,AI enhancement,Python automation,Windows automation,portable">
 <meta name="author" content="yohoten">
 <meta name="theme-color" content="#070b15">
 <meta name="color-scheme" content="dark">
@@ -14,19 +14,19 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ACRPA">
 <meta property="og:title" content="ACRPA · Lightweight Windows Desktop Automation">
-<meta property="og:description" content="Excel spreadsheets as scripts, image recognition + window management + OCR + browser automation + workflow orchestration + AI enhancement. A lightweight, portable Windows desktop automation tool.">
+<meta property="og:description" content="Excel spreadsheets as scripts, image recognition + window management + OCR + browser automation + workflow orchestration + AI enhancement. A lightweight, portable automation workflow tool.">
 <meta property="og:url" content="https://yohoten.github.io/acrpa/">
 <meta property="og:image" content="https://raw.githubusercontent.com/yohoten/acrpa/main/img/image1.png">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="ACRPA · Lightweight Windows Desktop Automation">
-<meta name="twitter:description" content="Excel spreadsheets as scripts, image recognition + window management + OCR + browser automation + workflow orchestration + AI enhancement. A lightweight, portable Windows desktop automation tool.">
+<meta name="twitter:description" content="Excel spreadsheets as scripts, image recognition + window management + OCR + browser automation + workflow orchestration + AI enhancement. A lightweight, portable automation workflow tool.">
 <meta name="twitter:image" content="https://raw.githubusercontent.com/yohoten/acrpa/main/img/image1.png">
 <link rel="icon" type="image/png" sizes="32x32" href="res/icon-32.png">
 <link rel="icon" type="image/png" sizes="128x128" href="res/icon.png">
 <link rel="apple-touch-icon" sizes="180x180" href="res/apple-touch-icon.png">
 <link rel="shortcut icon" type="image/x-icon" href="res/automation.ico">
 <script type="application/ld+json" id="ldjson">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"ACRPA","alternateName":"A/C RPA Desktop Automation Workflow Tool","applicationCategory":"UtilitiesApplication","applicationSubCategory":"RPA Desktop Automation","operatingSystem":"Windows","softwareVersion":"","datePublished":"","description":"Lightweight Windows desktop automation tool: Excel spreadsheets as scripts, with image-based localization, window management, OCR, browser automation, workflow orchestration, scheduled tasks and AI enhancement.","url":"https://yohoten.github.io/acrpa/","downloadUrl":"","author":{"@type":"Person","name":"yohoten"},"offers":{"@type":"Offer","price":"0","priceCurrency":"CNY"}}
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"ACRPA","alternateName":"A/C RPA Desktop Automation Workflow Tool","applicationCategory":"UtilitiesApplication","applicationSubCategory":"RPA Automation","operatingSystem":"Windows","softwareVersion":"","datePublished":"","description":"Lightweight Windows automation tool: Excel spreadsheets as scripts, with image-based localization, window management, OCR, browser automation, workflow orchestration, scheduled tasks and AI enhancement.","url":"https://yohoten.github.io/acrpa/","downloadUrl":"","author":{"@type":"Person","name":"yohoten"},"offers":{"@type":"Offer","price":"0","priceCurrency":"CNY"}}
 </script>
 <noscript><style>.reveal{opacity:1 !important;transform:none !important}.timeline .tl-item{display:block !important}</style></noscript>
 <style>
@@ -94,7 +94,7 @@
     transform:scale(1.07) rotate(-4deg);
     filter:drop-shadow(0 4px 14px rgba(99,172,255,.45));
   }
-  .nav-links{display:flex;gap:22px;margin-left:auto}
+  .nav-links{display:flex;gap:28px;margin-left:auto}
   .nav-links a{color:var(--muted);font-size:14px;transition:color .2s}
   .nav-links a:hover{color:var(--text)}
   .menu-toggle{
@@ -438,8 +438,7 @@
   .reveal{opacity:0;transform:translateY(22px);transition:opacity .6s ease,transform .6s ease}
   .reveal.in{opacity:1;transform:none}
 
-  /* Download dropdown */
-  .dl-drop{position:relative;display:inline-block}
+  /* Download modal (Steam++ style) */
   .btn-download{
     display:inline-flex;align-items:center;gap:9px;
     padding:14px 28px;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;
@@ -448,23 +447,69 @@
     transition:transform .18s,box-shadow .18s;border:none;font-family:var(--sans);
   }
   .btn-download:hover{transform:translateY(-2px);box-shadow:0 12px 34px rgba(232,121,249,.42)}
-  .btn-download .caret{font-size:12px;margin-left:2px;transition:transform .2s}
-  .dl-drop.open .caret{transform:rotate(180deg)}
-  .dl-menu{
-    position:absolute;top:calc(100% + 10px);left:0;min-width:270px;z-index:60;
-    background:rgba(14,20,38,.98);border:1px solid var(--border-strong);border-radius:12px;
-    padding:8px;display:none;box-shadow:0 18px 50px rgba(0,0,0,.5);
-    backdrop-filter:blur(12px);
+  .dl-overlay{
+    position:fixed;inset:0;z-index:90;display:none;align-items:center;justify-content:center;
+    background:rgba(5,8,18,.66);backdrop-filter:blur(8px);padding:24px;
   }
-  .dl-menu.open{display:block;animation:fadeIn .2s}
-  .dl-menu a{
-    display:flex;flex-direction:column;gap:2px;padding:11px 14px;border-radius:8px;
-    color:var(--text);font-size:14.5px;font-weight:600;transition:background .15s;
+  .dl-overlay.open{display:flex;animation:fadeIn .2s}
+  .dl-modal{
+    display:flex;width:min(720px,100%);max-height:min(600px,92vh);
+    background:linear-gradient(180deg,rgba(20,28,52,.98),rgba(12,17,34,.98));
+    border:1px solid var(--border-strong);border-radius:20px;overflow:hidden;
+    box-shadow:0 32px 90px rgba(0,0,0,.6);
+    animation:popIn .22s ease;
   }
-  .dl-menu a:hover{background:rgba(255,255,255,.07)}
-  .dl-menu a .gi{font-size:16px;margin-right:8px}
-  .dl-menu a small{color:var(--dim);font-size:11.5px;font-family:var(--mono);font-weight:400}
-  .dl-menu a .row{display:flex;align-items:center}
+  @keyframes popIn{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
+  .dl-brand{
+    flex-shrink:0;width:186px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+    background:linear-gradient(160deg,rgba(34,211,238,.10),rgba(232,121,249,.10));border-right:1px solid var(--border);
+    padding:28px 16px;text-align:center;
+  }
+  .dl-brand img{border-radius:22px;box-shadow:0 10px 30px rgba(34,211,238,.25)}
+  .dl-brand b{font-size:19px;letter-spacing:.5px}
+  .dl-brand-ver{
+    font-family:var(--mono);font-size:12px;color:var(--c1);
+    background:rgba(34,211,238,.10);border:1px solid rgba(34,211,238,.3);border-radius:999px;padding:3px 10px;
+  }
+  .dl-brand-note{font-size:12px;color:var(--dim);line-height:1.7}
+  .dl-body{flex:1;min-width:0;padding:26px 28px 22px;overflow:auto}
+  .dl-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .dl-head h3{font-size:20px;font-weight:800;margin:0}
+  .dl-close{
+    background:none;border:1px solid var(--border-strong);border-radius:10px;width:34px;height:34px;
+    color:var(--muted);font-size:15px;cursor:pointer;transition:color .2s,border-color .2s;
+  }
+  .dl-close:hover{color:var(--text);border-color:rgba(34,211,238,.55)}
+  .dl-detect{
+    font-size:12.5px;color:var(--ok);background:rgba(52,211,153,.08);
+    border:1px solid rgba(52,211,153,.3);border-radius:10px;padding:9px 13px;margin:0 0 16px;
+  }
+  .dl-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .dl-card{
+    position:relative;display:flex;flex-direction:column;gap:6px;
+    border:1px solid var(--border-strong);border-radius:14px;padding:15px 16px;
+    color:var(--text);text-decoration:none;background:rgba(255,255,255,.03);
+    transition:transform .18s,border-color .18s,background .18s;
+  }
+  .dl-card:hover{transform:translateY(-3px);border-color:rgba(34,211,238,.55);background:rgba(34,211,238,.06)}
+  .dl-card-head{display:flex;align-items:center;gap:8px;font-size:14.5px;font-weight:700}
+  .dl-card-head .gi{font-size:16px}
+  .dl-card small{color:var(--dim);font-size:11.5px;line-height:1.6;font-family:var(--sans);font-weight:400}
+  .dl-arrow{margin-left:auto;color:var(--c1);font-size:15px;transition:transform .18s}
+  .dl-card:hover .dl-arrow{transform:translateY(2px)}
+  .dl-badge{
+    position:absolute;top:-8px;right:12px;font-size:10.5px;font-weight:700;color:#0b0d1a;
+    background:linear-gradient(135deg,var(--c1),var(--c2));border-radius:999px;padding:2px 9px;
+  }
+  .dl-card-primary{border-color:rgba(232,121,249,.45);background:linear-gradient(160deg,rgba(232,121,249,.08),rgba(34,211,238,.05))}
+  .dl-foot{margin:16px 0 0;font-size:11.5px;color:var(--dim);font-family:var(--mono)}
+  @media (max-width:720px){
+    .dl-modal{flex-direction:column;max-height:92vh}
+    .dl-brand{width:100%;flex-direction:row;justify-content:flex-start;text-align:left;gap:12px;padding:14px 18px;border-right:none;border-bottom:1px solid var(--border)}
+    .dl-brand img{width:40px;height:40px;border-radius:10px}
+    .dl-brand-note{display:none}
+    .dl-grid{grid-template-columns:1fr}
+  }
 
   /* Screenshot showcase (Agivar-style) */
   .showcase{display:flex;flex-direction:column;gap:48px}
@@ -543,7 +588,7 @@
   }
 
   /* ==========================================================
-     visual enhancements v2 · aurora background / spotlight cards / scroll progress / parallax
+     visual enhancements v2 · aurora background / spotlight cards / parallax
      ========================================================== */
 
   /* --- 背景层：极光 + 网格 + 噪点 --- */
@@ -569,14 +614,9 @@
   @keyframes drift2{0%,100%{transform:translate3d(0,0,0) scale(1.05)}50%{transform:translate3d(9%,6%,0) scale(.92)}}
   @keyframes drift3{0%,100%{transform:translate3d(0,0,0) scale(.95)}50%{transform:translate3d(6%,-8%,0) scale(1.12)}}
 
-  /* --- 导航：滚动进度条 + 当前区块高亮 --- */
+  /* --- 导航：滚动收起 + 当前区块高亮 --- */
   nav{transition:background .3s ease,box-shadow .3s ease}
   nav.scrolled{background:rgba(7,11,21,.92);box-shadow:0 12px 34px rgba(0,0,0,.42)}
-  .nav-progress{
-    position:absolute;left:0;bottom:-1px;height:2px;width:0;
-    background:linear-gradient(90deg,var(--c1),var(--c2) 55%,var(--c3));
-    box-shadow:0 0 14px rgba(129,140,248,.7);
-  }
   .nav-links a{position:relative;padding:6px 0}
   .nav-links a::after{
     content:'';position:absolute;left:0;right:0;bottom:-2px;height:2px;border-radius:2px;
@@ -744,6 +784,7 @@
     .stats-grid{gap:26px}
     .bg-grid{background-size:44px 44px}
     .mock-wrap{transform:none}
+    .glow-ring{display:none}
     .to-top{right:16px;bottom:16px;width:42px;height:42px}
   }
 
@@ -846,69 +887,40 @@
   <div class="wrap nav-inner">
     <a class="logo" href="#top"><img class="logo-badge" src="res/icon.png" alt="ACRPA application icon" width="34" height="34" decoding="async">ACRPA</a>
     <div class="nav-links">
-      <a href="#screenshots">Screenshots</a>
-      <a href="#features">Features</a>
-      <a href="#netlink">Multi-Device</a>
-      <a href="#commands">Commands</a>
-      <a href="#workflow">Workflow</a>
-      <a href="#ai">AI</a>
-      <a href="#templates">Templates</a>
-      <a href="#changelog">Changelog</a>
-      <a href="#contact">Contact</a>
+      <a href="#scenarios">Core Features</a>
+      <a href="#screenshots">Interface &amp; Capabilities</a>
+      <a href="#netlink">NetLink</a>
+      <a href="#commands">Commands &amp; Workflow</a>
+      <a href="#env">Help &amp; Contact</a>
     </div>
     <a class="lang-switch" href="index.html" hreflang="zh-CN" lang="zh-CN" aria-label="Switch to Chinese" title="切换到中文版"><span class="globe">🌐</span>中文</a>
     <button class="menu-toggle" id="menuToggle" aria-label="Menu" aria-expanded="false">☰</button>
   </div>
   <div class="mobile-nav" id="mobileNav">
-    <a href="#screenshots">Screenshots</a>
-    <a href="#features">Features</a>
-    <a href="#netlink">Multi-Device</a>
-    <a href="#commands">Commands</a>
-    <a href="#workflow">Workflow</a>
-    <a href="#ai">AI</a>
-    <a href="#templates">Templates</a>
-    <a href="#changelog">Changelog</a>
-    <a href="#contact">Contact</a>
+    <a href="#scenarios">Core Features</a>
+    <a href="#screenshots">Interface &amp; Capabilities</a>
+    <a href="#netlink">NetLink</a>
+    <a href="#commands">Commands &amp; Workflow</a>
+    <a href="#env">Help &amp; Contact</a>
   </div>
-  <span class="nav-progress" id="navProgress"></span>
 </nav>
 
 <!-- ================= Hero ================= -->
 <header id="top">
   <div class="wrap hero-grid">
     <div>
-      <span class="hero-eyebrow"><span class="dot"></span>Lightweight desktop automation workflow · A/C RPA</span>
+      <span class="hero-eyebrow"><span class="dot"></span>Lightweight automation workflow · A/C RPA</span>
       <h1>Fill in Excel,<br><span class="grad">automate everything</span></h1>
       <p class="hero-sub">Write your steps into Excel (or just record them once) and let the computer do the rest — image recognition / window management / OCR / browser automation / workflow orchestration / NetLink multi-device / scheduled tasks / local AI enhancement, all built in.</p>
       <div class="hero-cta">
-        <div class="dl-drop" id="dlDrop">
-          <button class="btn-download" id="dlToggle" aria-haspopup="true" aria-expanded="false">⬇ Download Installer <span class="caret">▾</span></button>
-          <div class="dl-menu" id="dlMenu">
-            <a href="https://github.com/yohoten/acrpa/releases" data-download target="_blank" rel="noopener noreferrer">
-              <span class="row"><span class="gi">⬇</span> Direct download <span data-ver></span></span>
-              <small><span data-asset></span> · Portable · 13.4 MiB · Pre-release</small>
-            </a>
-            <a href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener noreferrer">
-              <span class="row"><span class="gi">⌥</span> GitHub repository</span>
-              <small>github.com/yohoten/acrpa</small>
-            </a>
-            <a href="https://gitee.com/yohoten/ACRPA" target="_blank" rel="noopener noreferrer">
-              <span class="row"><span class="gi">◆</span> Gitee repository</span>
-              <small>gitee.com/yohoten/ACRPA</small>
-            </a>
-            <a href="https://atomgit.com/yohoten/acrpa" target="_blank" rel="noopener noreferrer">
-              <span class="row"><span class="gi">⌥</span> Atomgit repository</span>
-              <small>atomgit.com/yohoten/acrpa</small>
-            </a>
-          </div>
-        </div>
+        <button class="btn-download" id="dlToggle" aria-haspopup="dialog" aria-controls="dlModal" aria-expanded="false">⬇ Download</button>
         <a class="btn btn-ghost" href="#screenshots">▶ See it in action</a>
         <a class="btn btn-ghost" href="#contact">💬 Join the community</a>
       </div>
       <p style="font-size:12.5px;color:var(--dim);margin:-10px 0 22px">Latest: <span data-ver></span> (pre-release) · <span data-asset></span> · 13.4 MiB · SHA-256 473f1db3…06d54</p>
       <div class="hero-trust">
         <span class="badge-free">✔ Completely free · MIT open source</span>
-        <span class="badge-free">✔ Single file · portable, no installation</span>
+        <span class="badge-free">✔ Portable &amp; efficient · unzip and run, no installation</span>
         <span class="badge-free">✔ One PC manages many machines on the LAN</span>
       </div>
     </div>
@@ -917,7 +929,7 @@
       <div class="mock">
         <div class="mock-bar">
           <span class="mock-dot r"></span><span class="mock-dot y"></span><span class="mock-dot g"></span>
-          <span class="mock-title">ACRPA Desktop Automation</span>
+          <span class="mock-title">Adaptive Control · Automation Workflow</span>
         </div>
         <div class="mock-body">
           <div class="mock-tabs">
@@ -950,6 +962,45 @@
     </div>
   </div>
 </header>
+
+<!-- ================= Download modal (Steam++ style) ================= -->
+<div class="dl-overlay" id="dlOverlay" aria-hidden="true">
+  <div class="dl-modal" id="dlModal" role="dialog" aria-modal="true" aria-labelledby="dlTitle">
+    <aside class="dl-brand">
+      <img src="res/icon.png" alt="ACRPA application icon" width="84" height="84" decoding="async">
+      <b>ACRPA</b>
+      <span class="dl-brand-ver" data-ver></span>
+      <span class="dl-brand-note">Completely free · MIT open source<br>Single file · portable, unzip &amp; run</span>
+    </aside>
+    <div class="dl-body">
+      <div class="dl-head">
+        <h3 id="dlTitle">Download ACRPA</h3>
+        <button type="button" class="dl-close" id="dlClose" aria-label="Close download dialog">✕</button>
+      </div>
+      <p class="dl-detect" id="dlDetect">Detecting your system…</p>
+      <div class="dl-grid">
+        <a class="dl-card dl-card-primary" href="https://github.com/yohoten/acrpa/releases" data-download target="_blank" rel="noopener noreferrer">
+          <span class="dl-badge">Recommended</span>
+          <span class="dl-card-head"><span class="gi">⬇</span> Direct download <span class="dl-arrow">↓</span></span>
+          <small>GitHub Release direct link · <span data-asset></span> · 13.4 MiB · unzip &amp; run</small>
+        </a>
+        <a class="dl-card" href="https://github.com/yohoten/acrpa/releases" target="_blank" rel="noopener noreferrer">
+          <span class="dl-card-head"><span class="gi">⌥</span> GitHub Releases <span class="dl-arrow">↓</span></span>
+          <small>All versions &amp; historical builds · per-release notes</small>
+        </a>
+        <a class="dl-card" href="https://gitee.com/yohoten/ACRPA" target="_blank" rel="noopener noreferrer">
+          <span class="dl-card-head"><span class="gi">◆</span> Gitee mirror <span class="dl-arrow">↓</span></span>
+          <small>Faster in mainland China · use this if the direct link fails</small>
+        </a>
+        <a class="dl-card" href="https://atomgit.com/yohoten/acrpa" target="_blank" rel="noopener noreferrer">
+          <span class="dl-card-head"><span class="gi">⌥</span> Atomgit mirror <span class="dl-arrow">↓</span></span>
+          <small>Alternative mirror · released in sync with the main repo</small>
+        </a>
+      </div>
+      <p class="dl-foot">SHA-256 473f1db3…06d54 · verify the checksum after download</p>
+    </div>
+  </div>
+</div>
 
 <!-- ================= Stats ================= -->
 <div class="stats">
@@ -1082,15 +1133,15 @@
 <section id="features">
   <div class="wrap">
     <div class="sec-head reveal">
-      <span class="sec-tag">CORE FEATURES</span>
-      <h2>Core Features</h2>
-      <p class="sec-desc">From basic automation to intelligent workflows, ACRPA covers the entire desktop automation stack.</p>
+      <span class="sec-tag">CAPABILITIES</span>
+      <h2>Capability Matrix</h2>
+      <p class="sec-desc">From basic automation to intelligent workflows, ACRPA covers the entire automation stack.</p>
     </div>
     <div class="cards" id="featureGrid">
       <div class="card reveal"><div class="ico">✍️</div><h3>Write scripts</h3><p><b>Excel as the script</b>: commands in column A, parameters in columns B–J, no programming needed. Or <b>record</b> a run to generate one, or write <b>Python</b> directly (sandbox / trusted / full privilege levels).</p></div>
       <div class="card reveal"><div class="ico">🎯</div><h3>Find elements</h3><p>Four ways to locate, each for its own case: <b>image recognition</b> (OpenCV / Pillow, region and grayscale acceleration), <b>window-relative coordinates</b> (10–100× faster), <b>OCR</b> by text, and <b>AI</b> by plain-language description.</p></div>
       <div class="card reveal"><div class="ico">🔁</div><h3>Run flows</h3><p><b>Conditions / loops</b> + <b>workflow orchestration</b> (script / parallel / condition / wait step types) + <b>schedules and triggers</b> (daily / weekly / interval / boot / hotkey).</p></div>
-      <div class="card reveal"><div class="ico">🌐</div><h3>Automate the web</h3><p>Built-in <b>Playwright</b>: open, click, type, wait for elements, tabs, downloads, cookies and packet capture — chainable with desktop steps in one script.</p></div>
+      <div class="card reveal"><div class="ico">🌐</div><h3>Automate the web</h3><p>Built-in <b>Playwright</b>: open, click, type, wait for elements, tabs, downloads, cookies and packet capture — chainable with any other step in one script.</p></div>
       <div class="card reveal"><div class="ico">🖥️</div><h3>Manage machines</h3><p><b>NetLink</b> multi-device: one PC monitors many LAN machines in real time, distributes scripts in bulk and controls them remotely, viewable from a phone browser — zero extra dependencies.</p></div>
       <div class="card reveal"><div class="ico">🐞</div><h3>Debug it</h3><p>Breakpoints / single-step / variable watch / call stack / timing; structured logs, exception handling, stop-on-error and runaway protection — unattended runs still end safely.</p></div>
     </div>
@@ -1283,7 +1334,7 @@
         <tr><td><code>启动浏览器录制</code></td><td>Record web actions with Playwright codegen and append the result to the script as DSL</td><td class="ex">启动浏览器录制</td></tr>
         <tr><td><code>关闭浏览器</code></td><td>End the browser session and release the process; the next command relaunches it per your settings</td><td class="ex">关闭浏览器</td></tr>
       </table>
-      <p class="cmd-note">Browser commands are implemented on <code>Playwright</code>, installed on demand (about 155 MB, not bundled with the main program); if it is missing, the command shows how to install it. Desktop and web steps can be chained serially in the same script.</p>
+      <p class="cmd-note">Browser commands are implemented on <code>Playwright</code>, installed on demand (about 155 MB, not bundled with the main program); if it is missing, the command shows how to install it. Workflow and web steps can be chained serially in the same script.</p>
     </div>
 
     <div class="cmd-panel" id="t8">
@@ -1502,7 +1553,7 @@
     <div class="sec-head reveal">
       <span class="sec-tag">SECURITY · TRUST</span>
       <h2>Safe Enough to Double-Click, Open Enough to Read</h2>
-      <p class="sec-desc">The hardest question for a desktop automation tool is "should I dare install it?". ACRPA answers with: open source, local, install-free.</p>
+      <p class="sec-desc">The hardest question for an automation tool is "should I dare install it?". ACRPA answers with: open source, local, install-free.</p>
     </div>
     <div class="sec-list">
       <div class="sec-item reveal"><b>🔓 Open and auditable</b>｜MIT licensed, source fully public and mirrored on GitHub and Gitee — anyone can review it and build it themselves.</div>
@@ -1534,7 +1585,7 @@
     </div>
     <div class="faq reveal">
       <details><summary>Do I need Python installed?</summary><div class="faq-body">No. Download the portable exe and double-click to run — no Python installation required. You only need Python 3.7+ if you want to modify the source.</div></details>
-      <details><summary>Which operating systems are supported?</summary><div class="faq-body">Windows (x64) desktop only, available as a portable build and an installer. macOS and Linux are not supported at this time.</div></details>
+      <details><summary>Which operating systems are supported?</summary><div class="faq-body">Windows (x64) only, available as a portable build and an installer. macOS and Linux are not supported at this time.</div></details>
       <details><summary>What format are scripts in?</summary><div class="faq-body">Excel <b>.xls</b> spreadsheets (.xlsx is not supported yet): one command per row, with the command name in column A and parameters in the following columns. Ten templates and a recorder are built in to generate scripts automatically. Image assets must be PNG, and avoid non-ASCII characters in paths and filenames.</div></details>
       <details><summary>Is it really free? Can I use it commercially?</summary><div class="faq-body">Completely free under the MIT license. Individuals and companies alike may use, modify and commercialize it. No feature or time limits, no ads, no in-app purchases.</div></details>
       <details><summary>Antivirus or SmartScreen flags it. What now?</summary><div class="faq-body">Because the binary is not signed with a paid certificate, the first run may be blocked. Click "More info → Run anyway" or add the folder to your allowlist; you are also welcome to build from source and verify it yourself.</div></details>
@@ -1693,25 +1744,43 @@
     });
   })();
 
-  // Download dropdown
+  // Download modal (Steam++ style)
   (function(){
-    var drop = document.getElementById('dlDrop');
-    if(!drop) return;
+    var overlay = document.getElementById('dlOverlay');
     var tg = document.getElementById('dlToggle');
-    var menu = document.getElementById('dlMenu');
-    tg.addEventListener('click', function(e){
-      e.stopPropagation();
-      var open = menu.classList.toggle('open');
-      drop.classList.toggle('open', open);
-      tg.setAttribute('aria-expanded', open ? 'true' : 'false');
-    });
-    document.addEventListener('click', function(e){
-      if(!drop.contains(e.target)){
-        menu.classList.remove('open'); drop.classList.remove('open'); tg.setAttribute('aria-expanded','false');
-      }
-    });
+    if(!overlay || !tg) return;
+    var modal = document.getElementById('dlModal');
+    var closeBtn = document.getElementById('dlClose');
+    var detect = document.getElementById('dlDetect');
+    if(detect){
+      var isWin = /Windows|Win32|Win64|WOW64/i.test(navigator.userAgent);
+      detect.innerHTML = isWin
+        ? 'Detected system: <b>Windows</b> · the <b>x64 portable build</b> is recommended — unzip and run.'
+        : 'Non-Windows environment detected · you can still grab the portable build, or see the repos for running from source.';
+    }
+    function open(){
+      overlay.classList.add('open');
+      overlay.setAttribute('aria-hidden','false');
+      tg.setAttribute('aria-expanded','true');
+      document.body.style.overflow = 'hidden';
+      if(closeBtn) closeBtn.focus();
+    }
+    function close(){
+      overlay.classList.remove('open');
+      overlay.setAttribute('aria-hidden','true');
+      tg.setAttribute('aria-expanded','false');
+      document.body.style.overflow = '';
+      tg.focus();
+    }
+    tg.addEventListener('click', open);
+    if(closeBtn) closeBtn.addEventListener('click', close);
+    overlay.addEventListener('click', function(e){ if(e.target === overlay) close(); });
     document.addEventListener('keydown', function(e){
-      if(e.key === 'Escape'){ menu.classList.remove('open'); drop.classList.remove('open'); tg.setAttribute('aria-expanded','false'); }
+      if(e.key === 'Escape' && overlay.classList.contains('open')) close();
+    });
+    if(modal) modal.addEventListener('click', function(e){
+      var a = e.target && e.target.closest ? e.target.closest('a') : null;
+      if(a) close();
     });
   })();
 
@@ -1808,10 +1877,9 @@
 </script>
 
 <script>
-  /* ===== 视觉增强交互：滚动进度 / 区块高亮 / 卡片聚光 / 视差 / 回到顶部 ===== */
+  /* ===== 视觉增强交互：区块高亮 / 卡片聚光 / 视差 / 回到顶部 ===== */
   (function(){
     var nav = document.querySelector('nav');
-    var bar = document.getElementById('navProgress');
     var top = document.getElementById('toTop');
     var links = Array.prototype.slice.call(document.querySelectorAll('.nav-links a'));
     var targets = links.map(function(a){
@@ -1821,8 +1889,6 @@
 
     function onScroll(){
       var y = window.pageYOffset || document.documentElement.scrollTop || 0;
-      var max = Math.max(document.documentElement.scrollHeight - window.innerHeight, 1);
-      if(bar) bar.style.width = Math.min(y / max * 100, 100) + '%';
       if(nav) nav.classList.toggle('scrolled', y > 12);
       if(top) top.classList.toggle('show', y > 620);
 

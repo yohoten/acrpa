@@ -25,6 +25,8 @@ __all__ = [
     "set_role", "get_role", "clear_role", "roled", "resolve_bg", "SEMANTIC_TOKENS",
     "subscribe", "unsubscribe", "publish", "subscriber_count", "clear_subscribers",
     "claim_window", "is_claimed", "claimed_count",
+    "CAT_GROUPS", "CAT_COLORS", "cat_color",
+    "FLOW_FALLBACK_COLOR", "FLOW_DISABLED_COLOR", "flow_fallback_style",
 ]
 
 # ── 语义色键 (角色名白名单): 只有这些键允许作为「语义角色」登记 ──
@@ -37,11 +39,34 @@ SEMANTIC_TOKENS = ("sc", "ok", "dg", "err", "wn", "ac", "hover", "focus", "acl",
 # ① 色板 (实现自 src/utils.py::_colors 迁入)
 # ══════════════════════════════════════════════════════════════════════
 
+# ── 表面层级 v4 回退开关 (方案 A §3.4) ──
+# _SURFACE_V4=False 时 colors() 回退到 v3 旧表面取值 (保留旧值常量, 无需回滚代码)。
+_SURFACE_V4 = True
+
+# 旧表面/语义取值 (v3, 供 _SURFACE_V4=False 回退): {dark: {key: old_value}}
+_SURFACE_V4_OLD = {
+    False: {  # 亮色
+        "surface_alt": "#FAFAFA", "zebra": "#FAFAFA", "gutter_bg": "#F6F6F6",
+        "row_hover": "#F3F3F3", "heading_hover": "#F0F0F0", "caption_hover": "#E9E9E9",
+        "bd": "#E1E1E1", "border_strong": "#C8C8C8",
+        "wn": "#F7630C", "log_info": "#8A8886",
+    },
+    True: {  # 暗色
+        "gutter_bg": "#2A2A2A", "row_hover": "#2A2A2A",
+        "heading_hover": "#333333", "caption_hover": "#333333",
+        "bd": "#3A3A3A", "gridline": "#333333",
+    },
+}
+
+
 def colors(dark=None):
     """Windows-aligned palette (docs/UI美化设计方案.md §2.1/§2.2/§2.4).
 
-    强调色收敛为 Windows 系统蓝 #0078D4 (旧 #2563eb 网页蓝已废弃);
+    强调色收敛为 Windows 系统蓝 #0078D4 (旧网页蓝已废弃);
     §6.1 新增键全部补齐 (light/dark 两套), **既有键一律保留** (向后兼容)。
+
+    方案 A (v4 §3): 表面层级重建 —— 13 键归并为 5 级真实表面 + 3 级语义高亮,
+    `row_hover`/`heading_hover`/`caption_hover` 统一为染色悬停, `bd` 加深收边。
 
     dark=None 时取 state.DARK_MODE。
     """
@@ -50,43 +75,125 @@ def colors(dark=None):
     # hlbg: 「当前行/变更项」高亮底色 (脚本树 running 行、变量树 changed 项);
     #       旧实现写死 #FEF3C7, 暗色下刺眼, 现纳入主题色表统一随主题切换。
     if dark:
-        return dict(
+        d = dict(
             # ── 既有键 (值按 §2.2 修订; 语义等价键 ok=sc / err=dg / hover=ach / cardhover=ac) ──
             bg="#202020", bgc="#2B2B2B", fgt="#FFFFFF", fgb="#E0E0E0",
             fgm="#A0A0A0", ac="#4CC2FF", ach="#3793D4", acl="#094771",
-            sc="#6CCB5F", dg="#FF99A4", wn="#FCE100", bd="#3A3A3A",
+            sc="#6CCB5F", dg="#FF99A4", wn="#FCE100", bd="#3F3F3F",
             logbg="#2B2B2B", logfg="#E0E0E0", ebg="#2B2B2B",
             err="#FF99A4", errbg="#3a2525", ok="#6CCB5F",
             hover="#3793D4", cardhover="#4CC2FF", focus="#4CC2FF",
             flowbg="#0f172a", hlbg="#4D3B00",
             ai="#8B5CF6",  # AI 品牌紫 (暗色模式, 与 ac/sc/dg/wn 同级语义键)
-            # ── 新增键 (§6.1: surface_alt/acp/fgd/border_strong/gridline/gutter_bg/
-            #    heading_hover/caption_hover/row_hover/zebra/tooltip_*/log_*/search_hit_*) ──
+            # ── 新增键 (§6.1) ── 表面层级 v4: 悬停统一 #2F3A45, bd 加深 #3F3F3F ──
             surface_alt="#262626", acp="#2B7AB8", fgd="#6E6E6E",
-            border_strong="#4A4A4A", gridline="#333333", gutter_bg="#2A2A2A",
-            heading_hover="#333333", caption_hover="#333333", row_hover="#2A2A2A",
+            border_strong="#4A4A4A", gridline="#383838", gutter_bg="#262626",
+            heading_hover="#2F3A45", caption_hover="#2F3A45", row_hover="#2F3A45",
             zebra="#262626", tooltip_bg="#3A3A3A", tooltip_border="#5A5A5A",
             log_info="#9A9A9A", log_success="#6CCB5F",
             log_warn="#FCE100", log_error="#FF99A4",
             search_hit_bg="#4D3B00", search_hit_border="#4CC2FF")
-    return dict(
-        # ── 既有键 (值按 §2.1 修订) ──
-        bg="#F3F3F3", bgc="#FFFFFF", fgt="#1F1F1F", fgb="#333333",
-        fgm="#5F5F5F", ac="#0078D4", ach="#106EBE", acl="#CCE4F7",
-        sc="#107C10", dg="#C42B1C", wn="#F7630C", bd="#E1E1E1",
-        logbg="#FFFFFF", logfg="#1F1F1F", ebg="#FFFFFF",
-        err="#C42B1C", errbg="#fff0f0", ok="#107C10",
-        hover="#106EBE", cardhover="#0078D4", focus="#0078D4",
-        flowbg="#f8fafc", hlbg="#FFF4CE",
-        ai="#7C3AED",  # AI 品牌紫 (亮色模式, 与 ac/sc/dg/wn 同级语义键)
-        # ── 新增键 (§6.1) ──
-        surface_alt="#FAFAFA", acp="#005A9E", fgd="#9A9A9A",
-        border_strong="#C8C8C8", gridline="#EEEEEE", gutter_bg="#F6F6F6",
-        heading_hover="#F0F0F0", caption_hover="#E9E9E9", row_hover="#F3F3F3",
-        zebra="#FAFAFA", tooltip_bg="#FFFFE1", tooltip_border="#646464",
-        log_info="#8A8886", log_success="#107C10",
-        log_warn="#F7630C", log_error="#C42B1C",
-        search_hit_bg="#FFF4CE", search_hit_border="#0078D4")
+    else:
+        d = dict(
+            # ── 既有键 (值按 §2.1 修订) ── wn 亮色 #C2410C (v4 §4.4 达 AA) ──
+            bg="#F3F3F3", bgc="#FFFFFF", fgt="#1F1F1F", fgb="#333333",
+            fgm="#5F5F5F", ac="#0078D4", ach="#106EBE", acl="#CCE4F7",
+            sc="#107C10", dg="#C42B1C", wn="#C2410C", bd="#D6D6D6",
+            logbg="#FFFFFF", logfg="#1F1F1F", ebg="#FFFFFF",
+            err="#C42B1C", errbg="#fff0f0", ok="#107C10",
+            hover="#106EBE", cardhover="#0078D4", focus="#0078D4",
+            flowbg="#f8fafc", hlbg="#FFF4CE",
+            ai="#7C3AED",  # AI 品牌紫 (亮色模式, 与 ac/sc/dg/wn 同级语义键)
+            # ── 新增键 (§6.1) ── 表面层级 v4: 悬停统一 #E5F1FB, bd 加深 #D6D6D6 ──
+            surface_alt="#F7F7F7", acp="#005A9E", fgd="#9A9A9A",
+            border_strong="#B8B8B8", gridline="#EEEEEE", gutter_bg="#F7F7F7",
+            heading_hover="#E5F1FB", caption_hover="#E5F1FB", row_hover="#E5F1FB",
+            zebra="#F7F7F7", tooltip_bg="#FFFFE1", tooltip_border="#646464",
+            log_info="#6E6C69", log_success="#107C10",
+            log_warn="#F7630C", log_error="#C42B1C",
+            search_hit_bg="#FFF4CE", search_hit_border="#0078D4")
+    if not _SURFACE_V4:
+        d.update(_SURFACE_V4_OLD.get(dark, {}))
+    return d
+
+
+# ── 分类色 (方案 B §4.2): 命令名分类色明/暗双套, 全部 ≥ 4.5:1 ──
+# 不放 ACRPA.py, 避免出现第二份色板; 命令名文字色由 cat_color() 取色。
+
+CAT_GROUPS = {                      # 命令 → 分类 (沿用现有 10 个图例分组)
+    "找图": "locate", "区域找图": "locate",
+    "点图": "click", "区域点图": "click",
+    "按键": "key", "按下": "key", "释放": "key",
+    "热键": "hotkey",
+    "输入": "input", "等待": "input",
+    "坐标": "coord", "相移": "coord",
+    "悬停": "hover", "拖拽": "hover",
+    "滚轮": "wheel",
+    "截屏": "shot",
+    "代码": "code",
+    "复制": "input", "粘贴": "input",
+}
+
+CAT_COLORS = {                      # 分类 → (亮色, 暗色)
+    "locate": ("#1D4ED8", "#93C5FD"),
+    "click":  ("#15803D", "#86EFAC"),
+    "key":    ("#6D28D9", "#C4B5FD"),
+    "hotkey": ("#B91C1C", "#FCA5A5"),
+    "input":  ("#B45309", "#FCD34D"),
+    "coord":  ("#475569", "#94A3B8"),
+    "hover":  ("#C2410C", "#FDBA74"),
+    "wheel":  ("#BE185D", "#F9A8D4"),
+    "shot":   ("#0369A1", "#7DD3FC"),
+    "code":   ("#BE123C", "#FDA4AF"),
+}
+
+
+def cat_color(group, dark=None):
+    """返回分类 group 的命令名文字色 (明/暗双套, 全部 ≥ 4.5:1)。
+
+    dark=None 时取 state.DARK_MODE; 未知分类回退中性前景色 fgb。
+    """
+    pair = CAT_COLORS.get(group)
+    if pair is None:
+        return colors(dark)["fgb"]
+    light, darkv = pair
+    if dark is None:
+        dark = bool(getattr(state, "DARK_MODE", False))
+    return darkv if dark else light
+
+
+# ── 工作流画布结构色回退 (v4 §5.3): flow_canvas 独立调用/回退时的默认值 ──
+# 唯一真源在 ui.workflow_view._FLOW_STYLE; 此处把 31 处 #RRGGBB 字面量收口到 theme
+# (v4 C2: flow_canvas.py → 0)。flow_canvas 经 flow_fallback_style() 取回退,
+# 保持其「零 GUI 依赖」纯度 (theme 仅 import state, 无 tkinter)。
+FLOW_FALLBACK_COLOR = "#6B7280"        # 缺省类型色兜底 (真源 workflow_view._FLOW_COLORS)
+FLOW_DISABLED_COLOR = "#94A3B8"        # 兼容别名 (旧「整体变灰」常量, P0-2 起仅作兜底)
+FLOW_TEXT_ON_LIGHT = "#FFFFFF"         # text_color_on: 深底 → 白字
+FLOW_TEXT_ON_DARK = "#1A1A1A"          # text_color_on: 浅底 → 近黑字
+
+_FLOW_STYLE_FALLBACK = {
+    False: {
+        "shadow": "#CBD5E0", "flowbg": "#f8fafc", "disabled_mix": 0.4,
+        "text_on_node": "#FFFFFF", "text_sub": "#E2E8F0",
+        "grid_fine": "#EEEEEE", "grid_coarse": "#E1E1E1",
+        "edge": "#94A3B8", "edge_sel": "#0078D4", "edge_reject": "#EF4444",
+        "edge_back": "#8B5CF6", "walked": "#10B981", "terminal": "#94A3B8",
+        "disabled_color": FLOW_DISABLED_COLOR, "port_idle": None, "port_hover": "#0078D4",
+    },
+    True: {
+        "shadow": "#334155", "flowbg": "#0f172a", "disabled_mix": 0.4,
+        "text_on_node": "#FFFFFF", "text_sub": "#CBD5E0",
+        "grid_fine": "#333333", "grid_coarse": "#3A3A3A",
+        "edge": "#A0A0A0", "edge_sel": "#4CC2FF", "edge_reject": "#FF99A4",
+        "edge_back": "#8B5CF6", "walked": "#6CCB5F", "terminal": "#A0A0A0",
+        "disabled_color": "#4A4A4A", "port_idle": None, "port_hover": "#4CC2FF",
+    },
+}
+
+
+def flow_fallback_style(dark=False):
+    """工作流画布结构色回退表 (副本)。真源 workflow_view._FLOW_STYLE; 供 flow_canvas 回退。"""
+    return dict(_FLOW_STYLE_FALLBACK[bool(dark)])
 
 
 # ══════════════════════════════════════════════════════════════════════

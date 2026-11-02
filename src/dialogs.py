@@ -275,11 +275,11 @@ def _show_help_dialog_legacy():
         dlg.resizable(width=True, height=True); dlg.minsize(400, 500)
 
         contact_card = tkinter.Frame(dlg, bg=C["bgc"], highlightbackground=C["bd"], highlightthickness=1)
-        contact_card.grid(row=0, column=0, sticky="ew", padx=10, pady=(10,4))
+        contact_card.grid(row=0, column=0, sticky="ew", padx=sp("sp_sm"), pady=(sp("sp_sm"), sp("gap_tight")))
         contact_card.columnconfigure(1, weight=1)
 
         tkinter.Label(contact_card, text="联系与支持", font=FONT_TITLE, bg=C["bgc"],
-            fg=C["fgt"]).grid(row=0, column=0, columnspan=2, sticky="w", padx=12, pady=(8,4))
+            fg=C["fgt"]).grid(row=0, column=0, columnspan=2, sticky="w", padx=sp("sp_md"), pady=(sp("gap"), sp("gap_tight")))
 
         wp = None
         search_dirs = [RES_DIR, APP_ROOT]
@@ -290,7 +290,7 @@ def _show_help_dialog_legacy():
             if os.path.exists(p): wp = p; break
 
         qr_frame = tkinter.Frame(contact_card, bg=C["bgc"])
-        qr_frame.grid(row=1, column=0, sticky="nw", padx=(12,8), pady=(0,8), rowspan=3)
+        qr_frame.grid(row=1, column=0, sticky="nw", padx=(sp("sp_md"), sp("gap")), pady=(0, sp("gap")), rowspan=3)
 
         # Load QR from external file only — drop wechat_qrcode.png next to the exe or in res/
         qr_loaded = False
@@ -315,18 +315,18 @@ def _show_help_dialog_legacy():
             log1("未找到二维码图片，请将 wechat_qrcode.png 放到程序目录", "warning")
 
         info_frame = tkinter.Frame(contact_card, bg=C["bgc"])
-        info_frame.grid(row=1, column=1, sticky="w", padx=(0,12), pady=(4,0))
+        info_frame.grid(row=1, column=1, sticky="w", padx=(0, sp("sp_md")), pady=(sp("gap_tight"), 0))
 
         tkinter.Label(info_frame, text="作者：yohoten | 微信扫描二维码添加好友", font=FONT_BODY, bg=C["bgc"],
             fg=C["fgb"]).pack(anchor="w")
         tkinter.Label(info_frame, text="邮箱: yoho12138@aliyun.com", font=FONT_SMALL, bg=C["bgc"],
-            fg=C["ac"], cursor="hand2").pack(anchor="w", pady=(4,0))
+            fg=C["ac"], cursor="hand2").pack(anchor="w", pady=(sp("gap_tight"), 0))
         from version_info import VERSION as _APP_VERSION
         tkinter.Label(info_frame, text="版本: v{}  |  Python tkinter + pyautogui".format(_APP_VERSION),
-            font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"]).pack(anchor="w", pady=(8,0))
+            font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"]).pack(anchor="w", pady=(sp("gap"), 0))
 
         btn_row = tkinter.Frame(contact_card, bg=C["bgc"])
-        btn_row.grid(row=2, column=1, sticky="w", padx=(0,12), pady=(8,8))
+        btn_row.grid(row=2, column=1, sticky="w", padx=(0, sp("sp_md")), pady=(sp("gap"), sp("gap")))
 
         def _open_doc(path):
             try: os.startfile(path)
@@ -348,12 +348,12 @@ def _show_help_dialog_legacy():
                     log1("无法打开使用说明（无网络且本地无文件）", "warning")
         _doc_btn = tkinter.Button(btn_row, text="打开使用说明", font=FONT_SMALL, bg=C["ac"],
             fg=_ui_theme.text_on(C["ac"]),
-            relief="flat", bd=1, cursor="hand2", padx=12, pady=3,
+            relief="flat", bd=1, cursor="hand2", padx=sp("sp_md"), pady=sp("gap_tight"),
             activebackground=C["ach"],
             activeforeground=_ui_theme.text_on(C["ach"]),
             command=_open_doc_online)
         _ui_theme.set_role(_doc_btn, "ac")   # 语义角色登记 (换肤按角色回填)
-        _doc_btn.pack(side="left", padx=(0,4))
+        _doc_btn.pack(side="left", padx=(0, sp("gap_tight")))
         attach_tooltip(_doc_btn, "打开在线使用说明（离线时回退本地文件）")
         # README: 优先打开在线 URL (打包后本地文件不存在且渲染美观)，
         # 失败则回退本地 README.md (开发环境可离线查看)
@@ -368,29 +368,29 @@ def _show_help_dialog_legacy():
                 else:
                     log1("无法打开 README（无网络且本地无文件）", "warning")
         _readme_btn = tkinter.Button(btn_row, text="查看 README", font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"],
-            relief="flat", bd=1, cursor="hand2", padx=12, pady=3,
+            relief="flat", bd=1, cursor="hand2", padx=sp("sp_md"), pady=sp("gap_tight"),
             activebackground=C["acl"], activeforeground=C["fgb"],
             command=_open_readme)
-        _readme_btn.pack(side="left", padx=(0,4))
+        _readme_btn.pack(side="left", padx=(0, sp("gap_tight")))
         attach_tooltip(_readme_btn, "打开在线 README（离线时回退本地文件）")
         tkinter.Button(btn_row, text="关闭", font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"],
-            relief="flat", bd=1, cursor="hand2", padx=12, pady=3,
+            relief="flat", bd=1, cursor="hand2", padx=sp("sp_md"), pady=sp("gap_tight"),
             activebackground=C["acl"], activeforeground=C["fgb"],
             command=dlg.destroy).pack(side="left")
 
         cmd_card = tkinter.Frame(dlg, bg=C["bgc"], highlightbackground=C["bd"], highlightthickness=1)
-        cmd_card.grid(row=1, column=0, sticky="nsew", padx=10, pady=(4,10))
+        cmd_card.grid(row=1, column=0, sticky="nsew", padx=sp("sp_sm"), pady=(sp("gap_tight"), sp("sp_sm")))
         cmd_card.columnconfigure(0, weight=1); cmd_card.rowconfigure(1, weight=1)
 
         tkinter.Label(cmd_card, text="命令速查", font=FONT_TITLE, bg=C["bgc"],
-            fg=C["fgt"]).grid(row=0, column=0, sticky="w", padx=12, pady=(8,4))
+            fg=C["fgt"]).grid(row=0, column=0, sticky="w", padx=sp("sp_md"), pady=(sp("gap"), sp("gap_tight")))
 
         txt_frame = tkinter.Frame(cmd_card, bg=C["bgc"])
-        txt_frame.grid(row=1, column=0, sticky="nsew", padx=6, pady=(0,6))
+        txt_frame.grid(row=1, column=0, sticky="nsew", padx=sp("gap"), pady=(0, sp("gap")))
         txt_frame.columnconfigure(0, weight=1); txt_frame.rowconfigure(0, weight=1)
 
         help_txt = tkinter.Text(txt_frame, font=FONT_BODY, wrap="word",
-            bg=C["logbg"], fg=C["logfg"], relief="flat", bd=0, padx=10, pady=8,
+            bg=C["logbg"], fg=C["logfg"], relief="flat", bd=0, padx=sp("sp_sm"), pady=sp("gap"),
             selectbackground=C["acl"], selectforeground=C["fgt"], cursor="arrow")
         help_txt.grid(row=0, column=0, sticky="nsew")
 
@@ -443,7 +443,7 @@ def open_version_history():
 
     dlg = tkinter.Toplevel(root)
     # v3 §2.3 试点: 骨架统一负责 底色/标题/尺寸/最小尺寸/居中/模态,
-    # 留白全部走 utils token (原先 680x480 / minsize(500,350) / padx=8 等字面量)
+    # 留白全部走 utils token (原先 680x480 / minsize(500,350) / padx=sp("gap") 等字面量)
     from ui.window_shell import apply_window_shell
     shell = apply_window_shell(
         dlg, "版本历史 — {}".format(os.path.basename(state.filename)),
@@ -542,7 +542,7 @@ def open_version_history():
         dd.rowconfigure(0, weight=1)
 
         dtxt = tkinter.Text(dd, font=FONT_LOG, bg=C["logbg"], fg=C["logfg"],
-            wrap="none", relief="flat", bd=0, padx=10, pady=8)
+            wrap="none", relief="flat", bd=0, padx=sp("sp_sm"), pady=sp("gap"))
         dtxt.grid(row=0, column=0, sticky="nsew")
         ds = tkinter.Scrollbar(dd, orient="vertical", command=dtxt.yview,
                                width=sp("sb_w"))
@@ -552,12 +552,12 @@ def open_version_history():
         dtxt.config(state="disabled")
 
         tkinter.Button(dd, text="关闭", font=FONT_BUTTON, bg=C["bgc"], fg=C["fgb"],
-            command=dd.destroy).grid(row=1, column=0, pady=8)
+            command=dd.destroy).grid(row=1, column=0, pady=sp("gap"))
         dd.bind("<Escape>", lambda e: dd.destroy())
 
-    _btn(vh_btn_frame, "回退到此版本", _vh_restore, "wn", "white").pack(side="left", padx=2)
-    _btn(vh_btn_frame, "对比差异", _vh_diff, "ac", "white").pack(side="left", padx=2)
-    _btn(vh_btn_frame, "刷新", _vh_refresh, C["bgc"], C["fgb"]).pack(side="left", padx=2)
+    _btn(vh_btn_frame, "回退到此版本", _vh_restore, "wn", "white").pack(side="left", padx=sp("gap_tight"))
+    _btn(vh_btn_frame, "对比差异", _vh_diff, "ac", "white").pack(side="left", padx=sp("gap_tight"))
+    _btn(vh_btn_frame, "刷新", _vh_refresh, C["bgc"], C["fgb"]).pack(side="left", padx=sp("gap_tight"))
     tkinter.Label(vh_btn_frame, text="提示: 每次保存自动创建版本快照",
         font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"]).pack(side="right")
 
@@ -604,7 +604,7 @@ def open_ai_panel():
     _title_lbl = tkinter.Label(top_bar, text="  AI 脚本生成器", font=FONT_TITLE,
         bg=C["bgc"], fg=C["fgt"])
     _ui_theme.set_fg_token(_title_lbl, "fgt")
-    _title_lbl.grid(row=0, column=0, sticky="w", pady=6)
+    _title_lbl.grid(row=0, column=0, sticky="w", pady=sp("gap"))
 
     # 中: 模型 + API 状态 (可点击配置)
     info_frame = tkinter.Frame(top_bar, bg=C["bgc"])
@@ -640,12 +640,12 @@ def open_ai_panel():
     clear_chat_btn = tkinter.Button(top_bar, text="✕ 清空对话", font=FONT_TINY,
         bg=C["bgc"], fg=C["fgm"], relief="flat", bd=0, cursor="hand2",
         activebackground=C["acl"], activeforeground=C["ach"],
-        highlightthickness=0, padx=8, pady=1)
-    clear_chat_btn.grid(row=0, column=2, sticky="e", padx=(0, 8))
+        highlightthickness=0, padx=sp("gap"), pady=sp("hairline"))
+    clear_chat_btn.grid(row=0, column=2, sticky="e", padx=(0, sp("gap")))
 
     # ═══ Row 1: 对话消息流 (Canvas + Scrollbar, 支持消息气泡) ═══
     chat_frame = tkinter.Frame(dlg, bg=C["bg"])
-    chat_frame.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
+    chat_frame.grid(row=1, column=0, sticky="nsew")
     chat_frame.columnconfigure(0, weight=1)
     chat_frame.rowconfigure(0, weight=1)
 
@@ -698,7 +698,7 @@ def open_ai_panel():
         script_content: 若提供, 在消息下方追加脚本预览卡片 + 操作按钮
         """
         msg_frame = tkinter.Frame(chat_inner, bg=C["bg"])
-        msg_frame.pack(fill="x", padx=12, pady=(4, 4))
+        msg_frame.pack(fill="x", padx=sp("sp_md"), pady=(sp("gap_tight"), sp("gap_tight")))
         _msg_widgets.append(msg_frame)
 
         # 消息气泡容器
@@ -730,7 +730,7 @@ def open_ai_panel():
             tag_frame.pack(fill="x")
             tkinter.Label(tag_frame, text=tag_text, font=FONT_TINY,
                 bg=C["bg"], fg=tag_fg).pack(side="left" if role == "ai" else "right",
-                    padx=4)
+                    padx=sp("gap_tight"))
 
         # 气泡 Frame
         bubble_frame = tkinter.Frame(msg_frame, bg=bubble_bg,
@@ -743,18 +743,18 @@ def open_ai_panel():
         elif role == "ai":
             _ui_theme.set_role(bubble_frame, "bgc")
         if anchor == "e":
-            bubble_frame.pack(side="right", anchor="e", padx=(60, 0))
+            bubble_frame.pack(side="right", anchor="e", padx=(sp(60), 0))
         elif anchor == "w":
-            bubble_frame.pack(side="left", anchor="w", padx=(0, 60))
+            bubble_frame.pack(side="left", anchor="w", padx=(0, sp(60)))
         else:
-            bubble_frame.pack(anchor="center", padx=60)
+            bubble_frame.pack(anchor="center", padx=sp(60))
 
         bubble_frame.columnconfigure(0, weight=1)
 
         # 消息文本
         msg_lbl = tkinter.Label(bubble_frame, text=text, font=FONT_BODY,
             bg=bubble_bg, fg=bubble_fg, justify="left", anchor="w",
-            wraplength=520, padx=10, pady=6)
+            wraplength=520, padx=sp("sp_sm"), pady=sp("gap"))
         msg_lbl.pack(fill="x")
         _ui_theme.set_role(msg_lbl, "bgc" if role == "ai" else "acl")
 
@@ -775,12 +775,12 @@ def open_ai_panel():
             card_frame = tkinter.Frame(bubble_frame, bg=C["logbg"],
                 highlightbackground=C["ac"], highlightthickness=1)
             _ui_theme.set_role(card_frame, "logbg")
-            card_frame.pack(fill="x", padx=8, pady=(4, 8))
+            card_frame.pack(fill="x", padx=sp("gap"), pady=(sp("gap_tight"), sp("gap")))
 
             # 卡片标题行
             card_header = tkinter.Frame(card_frame, bg=C["logbg"])
             _ui_theme.set_role(card_header, "logbg")
-            card_header.pack(fill="x", padx=8, pady=(6, 2))
+            card_header.pack(fill="x", padx=sp("gap"), pady=(sp("gap"), sp("gap_tight")))
             tkinter.Label(card_header, text="📋 生成的脚本", font=FONT_SMALL,
                 bg=C["logbg"], fg=C["ac"]).pack(side="left")
 
@@ -793,21 +793,21 @@ def open_ai_panel():
             # 脚本内容 (Text widget, 带滚动条, 限高)
             script_txt = tkinter.Text(card_frame, font=FONT_LOG,
                 bg=C["logbg"], fg=C["logfg"], wrap="none", relief="flat", bd=0,
-                padx=8, pady=4, height=min(12, max(4, line_count + 1)),
+                padx=sp("gap"), pady=sp("gap_tight"), height=min(12, max(4, line_count + 1)),
                 insertbackground=C["fgt"],
                 selectbackground=C["acl"], selectforeground=C["fgt"])
-            script_txt.pack(fill="x", padx=8, pady=(0, 4))
+            script_txt.pack(fill="x", padx=sp("gap"), pady=(0, sp("gap_tight")))
             script_txt.insert("1.0", script_content)
             script_txt.configure(state="disabled")
 
             # 卡片操作按钮行
             card_btns = tkinter.Frame(card_frame, bg=C["logbg"])
             _ui_theme.set_role(card_btns, "logbg")
-            card_btns.pack(fill="x", padx=8, pady=(0, 6))
+            card_btns.pack(fill="x", padx=sp("gap"), pady=(0, sp("gap")))
 
             insert_card_btn = tkinter.Button(card_btns, text="↓ 插入表格",
                 font=FONT_SMALL, bg=C["sc"], fg=_ui_theme.text_on(C["sc"]),
-                relief="flat", bd=1, padx=10, pady=2, cursor="hand2",
+                relief="flat", bd=1, padx=sp("sp_sm"), pady=sp("gap_tight"), cursor="hand2",
                 activebackground=_darken(C["sc"]),
                 activeforeground=_ui_theme.text_on(_darken(C["sc"])),
                 command=lambda c=script_content: _insert_script(c))
@@ -816,11 +816,11 @@ def open_ai_panel():
 
             copy_card_btn = tkinter.Button(card_btns, text="📋 复制",
                 font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"],
-                relief="flat", bd=1, padx=8, pady=2, cursor="hand2",
+                relief="flat", bd=1, padx=sp("gap"), pady=sp("gap_tight"), cursor="hand2",
                 activebackground=_darken(C["bgc"]), activeforeground=C["fgb"],
                 highlightbackground=C["bd"], highlightthickness=1,
                 command=lambda c=script_content: _copy_script(c))
-            copy_card_btn.pack(side="left", padx=4)
+            copy_card_btn.pack(side="left", padx=sp("gap_tight"))
 
         _scroll_to_bottom()
 
@@ -855,15 +855,15 @@ def open_ai_panel():
 
         # 建议提示词卡片
         suggest_frame = tkinter.Frame(chat_inner, bg=C["bg"])
-        suggest_frame.pack(fill="x", padx=12, pady=(4, 8))
+        suggest_frame.pack(fill="x", padx=sp("sp_md"), pady=(sp("gap_tight"), sp("gap")))
         _msg_widgets.append(suggest_frame)
 
         tkinter.Label(suggest_frame, text="💡 建议试试:", font=FONT_SMALL,
-            bg=C["bg"], fg=C["fgm"]).pack(anchor="w", padx=4, pady=(0, 4))
+            bg=C["bg"], fg=C["fgm"]).pack(anchor="w", padx=sp("gap_tight"), pady=(0, sp("gap_tight")))
 
         from templates import AI_QUICK_PROMPTS
         suggestions_frame = tkinter.Frame(suggest_frame, bg=C["bg"])
-        suggestions_frame.pack(fill="x", padx=4)
+        suggestions_frame.pack(fill="x", padx=sp("gap_tight"))
 
         # 两列布局展示建议
         names = list(AI_QUICK_PROMPTS.keys())[:8]
@@ -874,10 +874,10 @@ def open_ai_panel():
                 bg=C["bgc"], fg=C["ac"], relief="flat", bd=1, cursor="hand2",
                 activebackground=C["acl"], activeforeground=C["ach"],
                 highlightbackground=C["bd"], highlightthickness=1,
-                padx=8, pady=3, anchor="w",
+                padx=sp("gap"), pady=sp("gap_tight"), anchor="w",
                 command=lambda n=name: _use_suggestion(AI_QUICK_PROMPTS[n]))
-            chip.grid(row=row, column=col, sticky="ew", padx=(0, 4) if col == 0 else (4, 0),
-                      pady=2)
+            chip.grid(row=row, column=col, sticky="ew", padx=(0, sp("gap_tight")) if col == 0 else (sp("gap_tight"), 0),
+                      pady=sp("gap_tight"))
             _ui_theme.set_role(chip, "ac")
         suggestions_frame.columnconfigure(0, weight=1)
         suggestions_frame.columnconfigure(1, weight=1)
@@ -899,12 +899,12 @@ def open_ai_panel():
 
     # 输入框容器
     input_container = tkinter.Frame(input_bar, bg=C["bgc"])
-    input_container.grid(row=0, column=0, sticky="ew", padx=8, pady=8)
+    input_container.grid(row=0, column=0, sticky="ew", padx=sp("gap"), pady=sp("gap"))
     input_container.columnconfigure(0, weight=1)
 
     prompt_entry = tkinter.Text(input_container, height=3, font=FONT_BODY,
         bg=C["ebg"], fg=C["fgb"], wrap="word", relief="flat", bd=0,
-        padx=8, pady=6, insertbackground=C["fgt"],
+        padx=sp("gap"), pady=sp("gap"), insertbackground=C["fgt"],
         selectbackground=C["acl"], selectforeground=C["fgt"],
         highlightbackground=C["bd"], highlightthickness=1)
     prompt_entry.grid(row=0, column=0, sticky="ew")
@@ -918,11 +918,11 @@ def open_ai_panel():
     # 发送按钮
     send_btn = tkinter.Button(input_container, text="发送", font=FONT_BUTTON,
         bg=C["ac"], fg=_ui_theme.text_on(C["ac"]), relief="flat", bd=1,
-        padx=14, pady=4, cursor="hand2",
+        padx=sp("sp_md"), pady=sp("gap_tight"), cursor="hand2",
         activebackground=C["ach"], activeforeground=_ui_theme.text_on(C["ach"]),
         disabledforeground=C["fgm"], state="disabled")
     _ui_theme.set_role(send_btn, "ac")
-    send_btn.grid(row=0, column=1, padx=(6, 0), sticky="ns")
+    send_btn.grid(row=0, column=1, padx=(sp("gap"), 0), sticky="ns")
 
     # 底部提示行 (surface_alt 登记角色, 否则换肤会被 ht 判定刷成 bg/bgc)
     hint_frame = tkinter.Frame(input_bar, bg=C["surface_alt"])
@@ -930,7 +930,7 @@ def open_ai_panel():
     hint_frame.grid(row=1, column=0, sticky="ew")
     hint_var = tkinter.StringVar(value=" Enter 发送 · Ctrl+Enter 强制发送 · 输入操作描述生成 RPA 脚本")
     tkinter.Label(hint_frame, textvariable=hint_var,
-        font=FONT_TINY, bg=C["surface_alt"], fg=C["fgm"]).pack(anchor="w", padx=8, pady=2)
+        font=FONT_TINY, bg=C["surface_alt"], fg=C["fgm"]).pack(anchor="w", padx=sp("gap"), pady=sp("gap_tight"))
 
     # ── 输入框交互 ──
     _placeholder_active = [True]
@@ -1020,13 +1020,13 @@ def open_ai_panel():
 
         # 思考动画消息
         thinking_frame = tkinter.Frame(chat_inner, bg=C["bg"])
-        thinking_frame.pack(fill="x", padx=12, pady=4)
+        thinking_frame.pack(fill="x", padx=sp("sp_md"), pady=sp("gap_tight"))
         _msg_widgets.append(thinking_frame)
         thinking_lbl = tkinter.Label(thinking_frame,
             text="⧗ AI 正在思考...", font=FONT_SMALL,
             bg=C["bgc"], fg=C["fgm"],
-            highlightbackground=C["bd"], highlightthickness=1, padx=10, pady=4)
-        thinking_lbl.pack(side="left", padx=(0, 60))
+            highlightbackground=C["bd"], highlightthickness=1, padx=sp("sp_sm"), pady=sp("gap_tight"))
+        thinking_lbl.pack(side="left", padx=(0, sp(60)))
         _ui_theme.set_role(thinking_lbl, "bgc")
         _scroll_to_bottom()
 
@@ -1254,7 +1254,7 @@ def open_ai_debug_dialog():
         btn = tkinter.Button(quick_frame, text=q, font=FONT_TINY,
             bg=C["acl"], fg=C["ac"], relief="raised", bd=1, cursor="hand2",
             command=lambda qq=q: question_var.set(qq))
-        btn.pack(side="left", padx=1, pady=1)
+        btn.pack(side="left", padx=sp("hairline"), pady=sp("hairline"))
 
     # Question input
     input_frame = tkinter.Frame(ai_body, bg=C["bgc"])
@@ -1264,12 +1264,12 @@ def open_ai_debug_dialog():
     question_var = tkinter.StringVar(value="请分析最近的执行情况，有什么问题?")
     question_entry = tkinter.Entry(input_frame, textvariable=question_var,
         font=FONT_BODY, relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"])
-    question_entry.grid(row=0, column=0, sticky="ew", padx=(0, 4))
+    question_entry.grid(row=0, column=0, sticky="ew", padx=(0, sp("gap_tight")))
     question_entry.select_range(0, "end")
 
     ask_btn = tkinter.Button(input_frame, text="▶ 提问",
         font=FONT_BUTTON, bg=C["ac"], fg=_ui_theme.text_on(C["ac"]),
-        relief="flat", bd=1, padx=12, pady=2, cursor="hand2")
+        relief="flat", bd=1, padx=sp("sp_md"), pady=sp("gap_tight"), cursor="hand2")
     _ui_theme.set_role(ask_btn, "ac")
     ask_btn.grid(row=0, column=1)
     attach_tooltip(ask_btn, "提交问题给 AI 分析执行日志")
@@ -1283,7 +1283,7 @@ def open_ai_debug_dialog():
 
     answer_txt = tkinter.Text(answer_frame, font=FONT_BODY,
         bg=C["logbg"], fg=C["logfg"], wrap="word", relief="flat", bd=0,
-        padx=10, pady=8, state="disabled",
+        padx=sp("sp_sm"), pady=sp("gap"), state="disabled",
         selectbackground=C["acl"], selectforeground=C["fgt"])
     answer_txt.grid(row=0, column=0, sticky="nsew")
     answer_scroll = tkinter.Scrollbar(answer_frame, width=sp("sb_w"), relief="flat",
@@ -1365,15 +1365,15 @@ def open_ai_debug_dialog():
             show_toast(root, "已复制到剪贴板", "success")
 
     btn_frame = tkinter.Frame(dlg, bg=C["bgc"])
-    btn_frame.grid(row=6, column=0, sticky="ew", padx=12, pady=(0, 12))
+    btn_frame.grid(row=6, column=0, sticky="ew", padx=sp("sp_md"), pady=(0, sp("sp_md")))
     _copy_btn = tkinter.Button(btn_frame, text="复制回答", font=FONT_BUTTON,
-        bg=C["bgc"], fg=C["fgb"], relief="flat", bd=1, padx=12, pady=3,
+        bg=C["bgc"], fg=C["fgb"], relief="flat", bd=1, padx=sp("sp_md"), pady=sp("gap_tight"),
         command=_copy_answer)
     _copy_btn.pack(side="left")
     attach_tooltip(_copy_btn, "复制 AI 回答到剪贴板")
     _ui_theme.roled(tkinter.Button(btn_frame, text="关闭", font=FONT_BUTTON,
         bg=C["dg"], fg=_ui_theme.text_on(C["dg"]),
-        relief="flat", bd=1, padx=16, pady=3,
+        relief="flat", bd=1, padx=sp("sp_lg"), pady=sp("gap_tight"),
         command=dlg.destroy), "dg").pack(side="right")
 
     dlg.bind("<Escape>", lambda e: dlg.destroy())
@@ -1763,10 +1763,10 @@ def _sched_task_dialog(parent, task=None, on_done=None, prefill=None):
     _set_window_icon(dlg2)
 
     tkinter.Label(dlg2, text="编辑计划任务" if editing else "新建计划任务",
-        font=FONT_TITLE, bg=C["bgc"], fg=C["fgt"]).pack(pady=(8, 4))
+        font=FONT_TITLE, bg=C["bgc"], fg=C["fgt"]).pack(pady=(sp("gap"), sp("gap_tight")))
 
     nb = ttk.Notebook(dlg2)
-    nb.pack(fill="both", expand=True, padx=12, pady=(0, 4))
+    nb.pack(fill="both", expand=True, padx=sp("sp_md"), pady=(0, sp("gap_tight")))
     tab_task = tkinter.Frame(nb, bg=C["bgc"])
     tab_plan = tkinter.Frame(nb, bg=C["bgc"])
     tab_hotkey = tkinter.Frame(nb, bg=C["bgc"])
@@ -1788,7 +1788,7 @@ def _sched_task_dialog(parent, task=None, on_done=None, prefill=None):
             if text:
                 tkinter.Label(frame, text=text, font=FONT_BODY, bg=C["bgc"],
                     fg=C["fgb"], width=width, anchor="e").grid(
-                    row=idx, column=0, sticky="e", padx=(0, 6), pady=3)
+                    row=idx, column=0, sticky="e", padx=(0, sp("gap")), pady=sp("gap_tight"))
             return idx
 
         def _entry(var, width=32):
@@ -1803,7 +1803,7 @@ def _sched_task_dialog(parent, task=None, on_done=None, prefill=None):
     nv = tkinter.StringVar(value=str(base.get("name") or "新任务"))
     i = _row_t("任务名称:")
     name_entry = _entry_t(nv)
-    name_entry.grid(row=i, column=1, sticky="ew", pady=3)
+    name_entry.grid(row=i, column=1, sticky="ew", pady=sp("gap_tight"))
 
     cur_type = str(base.get("target_type") or "script").lower()
     ttv = tkinter.StringVar(
@@ -1811,12 +1811,12 @@ def _sched_task_dialog(parent, task=None, on_done=None, prefill=None):
     i = _row_t("目标类型:")
     ttk.Combobox(tab_task, textvariable=ttv,
         values=[t for t, _k in _SCHED_TARGET_LABELS],
-        state="readonly", width=12).grid(row=i, column=1, sticky="w", pady=3)
+        state="readonly", width=12).grid(row=i, column=1, sticky="w", pady=sp("gap_tight"))
 
     tv = tkinter.StringVar(value=str(base.get("target") or base.get("script") or ""))
     i_tgt = _row_t("目标:")
     tgt_frame = tkinter.Frame(tab_task, bg=C["bgc"])
-    tgt_frame.grid(row=i_tgt, column=1, sticky="ew", pady=3)
+    tgt_frame.grid(row=i_tgt, column=1, sticky="ew", pady=sp("gap_tight"))
     tgt_frame.columnconfigure(0, weight=1)
     tgt_entry = tkinter.Entry(tgt_frame, textvariable=tv, font=FONT_BODY,
         bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1)
@@ -1839,7 +1839,7 @@ def _sched_task_dialog(parent, task=None, on_done=None, prefill=None):
     _browse = tkinter.Button(tgt_frame, text="浏览", font=FONT_SMALL, bg=C["ac"],
         fg=_ui_theme.text_on(C["ac"]), command=_browse_target)
     _ui_theme.set_role(_browse, "ac")
-    _browse.grid(row=0, column=1, padx=4)
+    _browse.grid(row=0, column=1, padx=sp("gap_tight"))
     attach_tooltip(_browse, "选择脚本 / 工作流文件")
     cmd_combo = ttk.Combobox(tgt_frame, textvariable=tv, width=26,
         values=tuple(cmd_mod.list_names()))
@@ -1854,7 +1854,7 @@ def _sched_task_dialog(parent, task=None, on_done=None, prefill=None):
     av = tkinter.StringVar(value=str(_args_val or ""))
     i = _row_t("命令参数:")
     args_entry = _entry_t(av)
-    args_entry.grid(row=i, column=1, sticky="ew", pady=3)
+    args_entry.grid(row=i, column=1, sticky="ew", pady=sp("gap_tight"))
     i = _row_t("")
     param_hint_var = tkinter.StringVar(value=interp_hint_text(None))
     tkinter.Label(tab_task, textvariable=param_hint_var, font=FONT_SMALL,
@@ -1865,7 +1865,7 @@ def _sched_task_dialog(parent, task=None, on_done=None, prefill=None):
     ev = tkinter.BooleanVar(value=bool(base.get("enabled", True)))
     i = _row_t("")
     ttk.Checkbutton(tab_task, text="启用该任务", variable=ev).grid(
-        row=i, column=1, sticky="w", pady=(8, 0))
+        row=i, column=1, sticky="w", pady=(sp("gap"), 0))
 
     def _refresh_param_hint(*_a):
         kind = _sched_target_kind(ttv.get())
@@ -1902,7 +1902,7 @@ def _sched_task_dialog(parent, task=None, on_done=None, prefill=None):
     i = _row_p("触发器列表:")
     trg_wrap = tkinter.Frame(tab_plan, bg=C["bgc"],
         highlightbackground=C["bd"], highlightthickness=1)
-    trg_wrap.grid(row=i, column=1, sticky="ew", pady=3)
+    trg_wrap.grid(row=i, column=1, sticky="ew", pady=sp("gap_tight"))
     trg_wrap.columnconfigure(0, weight=1)
     trg_tree = ttk.Treeview(trg_wrap, columns=("kind", "param"), show="headings",
         height=4, selectmode="browse")
@@ -1919,12 +1919,12 @@ def _sched_task_dialog(parent, task=None, on_done=None, prefill=None):
     ktv = tkinter.StringVar(value=_label_of.get("daily", "每天"))
     i = _row_p("类型:")
     ttk.Combobox(tab_plan, textvariable=ktv, values=[lab for _k, lab in _infos],
-        state="readonly", width=14).grid(row=i, column=1, sticky="w", pady=3)
+        state="readonly", width=14).grid(row=i, column=1, sticky="w", pady=sp("gap_tight"))
 
     pv = tkinter.StringVar(value=_sched_spec_text(trg_mod.default_trigger()))
     i = _row_p("参数:")
     pv_entry = _entry_p(pv)
-    pv_entry.grid(row=i, column=1, sticky="ew", pady=3)
+    pv_entry.grid(row=i, column=1, sticky="ew", pady=sp("gap_tight"))
     i = _row_p("")
     hint_var = tkinter.StringVar(value=_SCHED_TRIGGER_HINTS.get("daily", ""))
     tkinter.Label(tab_plan, textvariable=hint_var, font=FONT_SMALL, bg=C["bgc"],
@@ -1935,7 +1935,7 @@ def _sched_task_dialog(parent, task=None, on_done=None, prefill=None):
     i = _row_p("整点模式:")
     mode_combo = ttk.Combobox(tab_plan, textvariable=mode_var,
         values=("full", "half", "both"), state="disabled", width=10)
-    mode_combo.grid(row=i, column=1, sticky="w", pady=3)
+    mode_combo.grid(row=i, column=1, sticky="w", pady=sp("gap_tight"))
 
     def _on_kind_change(*_a):
         kind = _kind_of_label.get(ktv.get(), "daily")
@@ -2033,20 +2033,20 @@ def _sched_task_dialog(parent, task=None, on_done=None, prefill=None):
 
     i = _row_p("")
     _trg_bar = tkinter.Frame(tab_plan, bg=C["bgc"])
-    _trg_bar.grid(row=i, column=1, sticky="w", pady=(2, 6))
-    _btn(_trg_bar, "添加", _trg_add, "ac", "white").pack(side="left", padx=(0, 4))
-    _btn(_trg_bar, "更新选中", _trg_update, C["bgc"], C["fgb"]).pack(side="left", padx=(0, 4))
-    _btn(_trg_bar, "删除", _trg_del, C["dg"], "white").pack(side="left", padx=(0, 4))
+    _trg_bar.grid(row=i, column=1, sticky="w", pady=(sp("gap_tight"), sp("gap")))
+    _btn(_trg_bar, "添加", _trg_add, "ac", "white").pack(side="left", padx=(0, sp("gap_tight")))
+    _btn(_trg_bar, "更新选中", _trg_update, C["bgc"], C["fgb"]).pack(side="left", padx=(0, sp("gap_tight")))
+    _btn(_trg_bar, "删除", _trg_del, C["dg"], "white").pack(side="left", padx=(0, sp("gap_tight")))
     _btn(_trg_bar, "清空重填", _trg_reset, C["bgc"], C["fgb"]).pack(side="left")
 
     sdv = tkinter.StringVar(value=str(base.get("start_date") or ""))
     i = _row_p("生效开始:")
     sd_entry = _entry_p(sdv, 16)
-    sd_entry.grid(row=i, column=1, sticky="w", pady=3)
+    sd_entry.grid(row=i, column=1, sticky="w", pady=sp("gap_tight"))
     edv = tkinter.StringVar(value=str(base.get("end_date") or ""))
     i = _row_p("生效结束:")
     ed_entry = _entry_p(edv, 16)
-    ed_entry.grid(row=i, column=1, sticky="w", pady=3)
+    ed_entry.grid(row=i, column=1, sticky="w", pady=sp("gap_tight"))
     i = _row_p("")
     tkinter.Label(tab_plan, text="格式 YYYY-MM-DD，空 = 不限（含起止当日）",
         font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"], anchor="w").grid(
@@ -2057,7 +2057,7 @@ def _sched_task_dialog(parent, task=None, on_done=None, prefill=None):
     hkv = tkinter.StringVar(value=_spec_hotkey_text(_specs))
     i = _row_h("任务热键:")
     hk_entry = _entry_h(hkv, 20)
-    hk_entry.grid(row=i, column=1, sticky="w", pady=3)
+    hk_entry.grid(row=i, column=1, sticky="w", pady=sp("gap_tight"))
     attach_tooltip(hk_entry, "如 ctrl+alt+1（需含至少一个修饰键）；留空 = 不绑热键")
     i = _row_h("")
     tkinter.Label(tab_hotkey, text="如 ctrl+alt+1（需含至少一个修饰键）；留空 = 该任务不绑热键",
@@ -2067,7 +2067,7 @@ def _sched_task_dialog(parent, task=None, on_done=None, prefill=None):
     shv = tkinter.StringVar(value=str(sched_module.exec_opt(base, "stop_hotkey", "")))
     i = _row_h("停止热键:")
     sh_entry = _entry_h(shv, 20)
-    sh_entry.grid(row=i, column=1, sticky="w", pady=3)
+    sh_entry.grid(row=i, column=1, sticky="w", pady=sp("gap_tight"))
     attach_tooltip(sh_entry, "任务级停止热键，如 ctrl+alt+f12")
     i = _row_h("")
     tkinter.Label(tab_hotkey, text="如 ctrl+alt+f12；与内建热键冲突时会在日志告警并忽略",
@@ -2079,7 +2079,7 @@ def _sched_task_dialog(parent, task=None, on_done=None, prefill=None):
         text="说明：热键是独立的触发方式，不占用「计划」页的触发器列表；"
              "保存时会自动合并为 hotkey 触发器。",
         font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"], anchor="w", justify="left",
-        wraplength=420).grid(row=i, column=1, sticky="w", pady=(10, 0))
+        wraplength=420).grid(row=i, column=1, sticky="w", pady=(sp("sp_sm"), 0))
 
     # ══════════════════ 页签④ 执行 ══════════════════
     _row_e, _entry_e = _mk_grid(tab_exec)
@@ -2087,7 +2087,7 @@ def _sched_task_dialog(parent, task=None, on_done=None, prefill=None):
     ov = tkinter.StringVar(value=str(sched_module.exec_opt(base, "on_overlap", "skip")))
     i = _row_e("重入策略:")
     ttk.Combobox(tab_exec, textvariable=ov, values=("skip", "queue", "terminate"),
-        state="readonly", width=12).grid(row=i, column=1, sticky="w", pady=3)
+        state="readonly", width=12).grid(row=i, column=1, sticky="w", pady=sp("gap_tight"))
     i = _row_e("")
     tkinter.Label(tab_exec, text="skip=运行中跳过 / queue=排队等上次结束 / terminate=先停止再执行",
         font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"], anchor="w", justify="left",
@@ -2096,7 +2096,7 @@ def _sched_task_dialog(parent, task=None, on_done=None, prefill=None):
     tov = tkinter.StringVar(value=str(sched_module.exec_opt(base, "timeout_sec", 0)))
     i = _row_e("任务超时(秒):")
     tov_entry = _entry_e(tov, 10)
-    tov_entry.grid(row=i, column=1, sticky="w", pady=3)
+    tov_entry.grid(row=i, column=1, sticky="w", pady=sp("gap_tight"))
     i = _row_e("")
     tkinter.Label(tab_exec, text="0 = 不限；到点会真正中断本次执行",
         font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"], anchor="w").grid(
@@ -2106,18 +2106,18 @@ def _sched_task_dialog(parent, task=None, on_done=None, prefill=None):
     i = _row_e("错过补偿:")
     ttk.Combobox(tab_exec, textvariable=mrv,
         values=("ignore", "run_now", "run_delay"), state="readonly",
-        width=12).grid(row=i, column=1, sticky="w", pady=3)
+        width=12).grid(row=i, column=1, sticky="w", pady=sp("gap_tight"))
 
     mdv = tkinter.StringVar(value=str(sched_module.exec_opt(base, "missed_delay_sec", 60)))
     i = _row_e("补偿延迟(秒):")
     mdv_entry = _entry_e(mdv, 10)
-    mdv_entry.grid(row=i, column=1, sticky="w", pady=3)
+    mdv_entry.grid(row=i, column=1, sticky="w", pady=sp("gap_tight"))
 
     _max_runs = base.get("max_runs")
     maxv = tkinter.StringVar(value="" if _max_runs in (None, "") else str(_max_runs))
     i = _row_e("次数上限:")
     maxv_entry = _entry_e(maxv, 10)
-    maxv_entry.grid(row=i, column=1, sticky="w", pady=3)
+    maxv_entry.grid(row=i, column=1, sticky="w", pady=sp("gap_tight"))
     i = _row_e("")
     tkinter.Label(tab_exec,
         text="空 = 不限；已执行 {} 次（只读）".format(int(base.get("run_count") or 0)),
@@ -2255,12 +2255,12 @@ def _sched_task_dialog(parent, task=None, on_done=None, prefill=None):
         show_toast(root, "任务已保存: {}".format(name), "success")
 
     bf = tkinter.Frame(dlg2, bg=C["bgc"])
-    bf.pack(pady=(4, 10))
+    bf.pack(pady=(sp("gap_tight"), sp("sp_sm")))
     _ui_theme.roled(tkinter.Button(bf, text="确定", command=_confirm, font=FONT_BUTTON,
-        bg=C["ac"], fg=_ui_theme.text_on(C["ac"]), padx=14, pady=3),
-        "ac").pack(side="left", padx=4)
+        bg=C["ac"], fg=_ui_theme.text_on(C["ac"]), padx=sp("sp_md"), pady=sp("gap_tight")),
+        "ac").pack(side="left", padx=sp("gap_tight"))
     tkinter.Button(bf, text="取消", command=dlg2.destroy, font=FONT_BUTTON,
-        bg=C["bgc"], fg=C["fgb"], padx=14, pady=3).pack(side="left", padx=4)
+        bg=C["bgc"], fg=C["fgb"], padx=sp("sp_md"), pady=sp("gap_tight")).pack(side="left", padx=sp("gap_tight"))
     dlg2.bind("<Escape>", lambda e: dlg2.destroy())
 
     _on_type_change()
@@ -2285,7 +2285,7 @@ def open_sched_manager():
 
     # 工具栏
     mgr_toolbar = tkinter.Frame(dlg, bg=C["bgc"])
-    mgr_toolbar.grid(row=0, column=0, sticky="ew", padx=8, pady=(8, 2))
+    mgr_toolbar.grid(row=0, column=0, sticky="ew", padx=sp("gap"), pady=(sp("gap"), sp("gap_tight")))
 
     def _mgr_new_task():
         # 表单统一走 _sched_task_dialog (目标三型 + 触发器 + 执行语义, L0/L1)
@@ -2297,18 +2297,18 @@ def open_sched_manager():
             return
         _sched_task_dialog(dlg, task, _mgr_refresh)
 
-    _btn(mgr_toolbar, "新建任务", _mgr_new_task, "ac", "white").pack(side="left", padx=1)
+    _btn(mgr_toolbar, "新建任务", _mgr_new_task, "ac", "white").pack(side="left", padx=sp("hairline"))
     _btn(mgr_toolbar, "编辑", lambda: (
         _mgr_edit_task(mgr_tree.selection()[0]) if mgr_tree.selection() else None),
-        C["bgc"], C["fgb"]).pack(side="left", padx=1)
-    _btn(mgr_toolbar, "刷新", lambda: _mgr_refresh(), C["bgc"], C["fgb"]).pack(side="left", padx=1)
-    tkinter.Frame(mgr_toolbar, bg=C["bd"], width=2, height=20).pack(side="left", fill="y", padx=4)
+        C["bgc"], C["fgb"]).pack(side="left", padx=sp("hairline"))
+    _btn(mgr_toolbar, "刷新", lambda: _mgr_refresh(), C["bgc"], C["fgb"]).pack(side="left", padx=sp("hairline"))
+    tkinter.Frame(mgr_toolbar, bg=C["bd"], width=2, height=20).pack(side="left", fill="y", padx=sp("gap_tight"))
     _btn(mgr_toolbar, "查看日志", lambda: _mgr_show_logs(dlg),
-        C["bgc"], C["fgb"]).pack(side="left", padx=1)
-    tkinter.Frame(mgr_toolbar, bg=C["bd"], width=2, height=20).pack(side="left", fill="y", padx=4)
+        C["bgc"], C["fgb"]).pack(side="left", padx=sp("hairline"))
+    tkinter.Frame(mgr_toolbar, bg=C["bd"], width=2, height=20).pack(side="left", fill="y", padx=sp("gap_tight"))
     # L4 #5 搜索增强: 空格分隔多关键词 AND + 日期关键词(2026-10 / 10-23)
     tkinter.Label(mgr_toolbar, text="搜索:", font=FONT_SMALL,
-        bg=C["bgc"], fg=C["fgm"]).pack(side="left", padx=(0, 4))
+        bg=C["bgc"], fg=C["fgm"]).pack(side="left", padx=(0, sp("gap_tight")))
     mgr_search_var = tkinter.StringVar(value="")
     _mgr_search = tkinter.Entry(mgr_toolbar, textvariable=mgr_search_var,
         font=FONT_SMALL, width=22, relief="solid", bd=1,
@@ -2319,13 +2319,13 @@ def open_sched_manager():
         + ("；已启用拼音首字母匹配" if pinyin_available() else ""))
     _mgr_count = tkinter.Label(mgr_toolbar, text="",
         font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"])
-    _mgr_count.pack(side="right", padx=(6, 0))
+    _mgr_count.pack(side="right", padx=(sp("gap"), 0))
     tkinter.Label(mgr_toolbar, text="( 计划任务模块)",
         font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"]).pack(side="right")
 
     # 任务表格
     list_f = tkinter.Frame(dlg, bg=C["bgc"], highlightbackground=C["bd"], highlightthickness=1)
-    list_f.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0, 8))
+    list_f.grid(row=1, column=0, sticky="nsew", padx=sp("gap"), pady=(0, sp("gap")))
     list_f.columnconfigure(0, weight=1); list_f.rowconfigure(0, weight=1)
 
     mgr_tree = ttk.Treeview(list_f,
@@ -2413,13 +2413,13 @@ def open_sched_manager():
         ldlg.columnconfigure(0, weight=1); ldlg.rowconfigure(1, weight=1)
 
         ltbar = tkinter.Frame(ldlg, bg=C["bgc"])
-        ltbar.grid(row=0, column=0, sticky="ew", padx=8, pady=(8,2))
-        _btn(ltbar, "刷新", lambda: _log_refresh(), C["bgc"], C["fgb"]).pack(side="left", padx=1)
+        ltbar.grid(row=0, column=0, sticky="ew", padx=sp("gap"), pady=(sp("gap"), sp("gap_tight")))
+        _btn(ltbar, "刷新", lambda: _log_refresh(), C["bgc"], C["fgb"]).pack(side="left", padx=sp("hairline"))
         _btn(ltbar, "清除", lambda: (sched_module.clear_task_logs(), _log_refresh()),
-            C["dg"], "white").pack(side="left", padx=1)
+            C["dg"], "white").pack(side="left", padx=sp("hairline"))
 
         lf = tkinter.Frame(ldlg, bg=C["bgc"], highlightbackground=C["bd"], highlightthickness=1)
-        lf.grid(row=1, column=0, sticky="nsew", padx=8, pady=(0,8))
+        lf.grid(row=1, column=0, sticky="nsew", padx=sp("gap"), pady=(0, sp("gap")))
         lf.columnconfigure(0, weight=1); lf.rowconfigure(0, weight=1)
 
         log_tree = ttk.Treeview(lf,
@@ -2489,7 +2489,7 @@ def show_update_dialog(force_check=False):
     _set_window_icon(dlg)
 
     body = tkinter.Frame(dlg, bg=C["bg"])
-    body.grid(row=0, column=0, sticky="nsew", padx=20, pady=16)
+    body.grid(row=0, column=0, sticky="nsew", padx=sp(20), pady=sp("sp_lg"))
     body.columnconfigure(0, weight=1)
 
     head = tkinter.Label(body, text="正在检查更新…", font=FONT_TITLE,
@@ -2498,26 +2498,26 @@ def show_update_dialog(force_check=False):
 
     sub = tkinter.Label(body, text="当前版本 v{}".format(updater.VERSION),
                         font=FONT_SMALL, fg=C["fgm"], bg=C["bg"], anchor="w")
-    sub.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+    sub.grid(row=1, column=0, sticky="ew", pady=(sp("gap_tight"), 0))
 
     notes = tkinter.Text(body, height=7, width=52, font=FONT_SMALL, wrap="word",
                          bg=C["logbg"], fg=C["logfg"], relief="flat",
                          highlightbackground=C["bd"], highlightthickness=1)
-    notes.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+    notes.grid(row=2, column=0, sticky="ew", pady=(sp("sp_sm"), 0))
     notes.configure(state="disabled")
     notes.grid_remove()
 
     prog = ttk.Progressbar(body, orient="horizontal", length=460,
                            mode="determinate", maximum=100)
-    prog.grid(row=3, column=0, sticky="ew", pady=(10, 0))
+    prog.grid(row=3, column=0, sticky="ew", pady=(sp("sp_sm"), 0))
     prog.grid_remove()
 
     detail = tkinter.Label(body, text="", font=FONT_SMALL, fg=C["fgm"], bg=C["bg"],
                            anchor="w", justify="left", wraplength=460)
-    detail.grid(row=4, column=0, sticky="ew", pady=(8, 0))
+    detail.grid(row=4, column=0, sticky="ew", pady=(sp("gap"), 0))
 
     bar = tkinter.Frame(body, bg=C["bg"])
-    bar.grid(row=5, column=0, sticky="ew", pady=(14, 0))
+    bar.grid(row=5, column=0, sticky="ew", pady=(sp("sp_md"), 0))
 
     ui = {"info": None, "downloading": False, "done": False, "started": 0}
 
@@ -2581,17 +2581,17 @@ def show_update_dialog(force_check=False):
 
     btn_retry = _mk("重新检查", lambda: _start_check(force=True),
                     tip="忽略本次结果重新请求更新清单")
-    btn_retry.grid(row=0, column=0, padx=(0, 8)); btn_retry.grid_remove()
+    btn_retry.grid(row=0, column=0, padx=(0, sp("gap"))); btn_retry.grid_remove()
     btn_download = _mk("↓ 下载更新", lambda: _start_download(), C["ac"], "white",
                        tip="下载到 updates/ 并校验完整性")
-    btn_download.grid(row=0, column=1, padx=(0, 8)); btn_download.grid_remove()
+    btn_download.grid(row=0, column=1, padx=(0, sp("gap"))); btn_download.grid_remove()
     btn_page = _mk("打开下载页", lambda: _open(releases_page))
-    btn_page.grid(row=0, column=2, padx=(0, 8)); btn_page.grid_remove()
+    btn_page.grid(row=0, column=2, padx=(0, sp("gap"))); btn_page.grid_remove()
     btn_restart = _mk("↻ 立即重启更新", lambda: _apply(), C["sc"], "white",
                       tip="退出程序 → 替换主程序与 VERSION → 自动重启")
-    btn_restart.grid(row=0, column=3, padx=(0, 8)); btn_restart.grid_remove()
+    btn_restart.grid(row=0, column=3, padx=(0, sp("gap"))); btn_restart.grid_remove()
     btn_folder = _mk("打开所在文件夹", lambda: _open_folder())
-    btn_folder.grid(row=0, column=4, padx=(0, 8)); btn_folder.grid_remove()
+    btn_folder.grid(row=0, column=4, padx=(0, sp("gap"))); btn_folder.grid_remove()
     _mk("关闭", dlg.destroy).grid(row=0, column=5)
 
     def _open(path):

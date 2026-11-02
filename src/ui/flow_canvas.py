@@ -53,6 +53,23 @@
 import math
 import os
 
+
+def _flow_theme():
+    """惰性取 ui.theme (运行时)。保持本模块 import 不引入 tkinter (P0 纯度护栏)。"""
+    from ui import theme as _t
+    return _t
+
+
+def _fallback_color():
+    """缺省类型色兜底 (真源 workflow_view._FLOW_COLORS; 字面量收口 ui.theme)。"""
+    return _flow_theme().FLOW_FALLBACK_COLOR
+
+
+def _fallback_style(dark=False):
+    """结构色回退表 (真源 workflow_view._FLOW_STYLE; 字面量收口 ui.theme, 返回副本)。"""
+    return _flow_theme().flow_fallback_style(dark)
+
+
 # 节点几何 (口径与 ui.workflow_view 的 _NODE_W/_NODE_H/_NODE_GAP 一致)。
 # 保留为**设计像素默认值** —— 实际尺寸由调用方经 ctx["sp"] 注入 sp(...) (P0-1),
 # 直接调用 layout() 的既有路径 (无 sp) 仍得到这些字面量 (向后兼容)。
@@ -61,32 +78,6 @@ NODE_H = 36
 H_GAP = 46
 V_GAP = 56
 MARGIN = 28
-
-# 缺省类型色 (类型色真源仍是 ui.workflow_view._FLOW_COLORS; 此处仅兜底)
-FALLBACK_COLOR = "#6B7280"
-# 兼容别名: 旧「整体变灰」常量 (P0-2 起不再用于覆盖类型色; 仅作最后兜底)
-DISABLED_COLOR = "#94A3B8"
-
-# ── 结构色回退真源 (P0-3) ────────────────────────────────────────────────
-# 仅在 ctx["style"] 缺失时使用; 一旦调用方注入 ctx["style"] 即被逐键覆盖。
-# 唯一真源在 ui.workflow_view._FLOW_STYLE —— 本模块「不自建色板」(见模块 docstring),
-# 下面两张表只是**独立调用/回退**时的默认值 (A6: 字面量仅出现在默认回退值处)。
-_FALLBACK_STYLE_LIGHT = {
-    "shadow": "#CBD5E0", "flowbg": "#f8fafc", "disabled_mix": 0.4,
-    "text_on_node": "#FFFFFF", "text_sub": "#E2E8F0",
-    "grid_fine": "#EEEEEE", "grid_coarse": "#E1E1E1",
-    "edge": "#94A3B8", "edge_sel": "#0078D4", "edge_reject": "#EF4444",
-    "edge_back": "#8B5CF6", "walked": "#10B981", "terminal": "#94A3B8",
-    "disabled_color": DISABLED_COLOR, "port_idle": None, "port_hover": "#0078D4",
-}
-_FALLBACK_STYLE_DARK = {
-    "shadow": "#334155", "flowbg": "#0f172a", "disabled_mix": 0.4,
-    "text_on_node": "#FFFFFF", "text_sub": "#CBD5E0",
-    "grid_fine": "#333333", "grid_coarse": "#3A3A3A",
-    "edge": "#A0A0A0", "edge_sel": "#4CC2FF", "edge_reject": "#FF99A4",
-    "edge_back": "#8B5CF6", "walked": "#6CCB5F", "terminal": "#A0A0A0",
-    "disabled_color": "#4A4A4A", "port_idle": None, "port_hover": "#4CC2FF",
-}
 
 
 def _is_color(value):
@@ -125,12 +116,16 @@ def blend(color, other, ratio):
     return "#{:02X}{:02X}{:02X}".format(r, g, b)
 
 
-def text_color_on(bg, light="#FFFFFF", dark="#1A1A1A"):
+def text_color_on(bg, light=None, dark=None):
     """按底色相对亮度选前景色 (WCAG; 与 utils.text_on 同口径, 本模块零依赖故内置)。
 
     节点填充随类型色/主题变化 (禁用态还会与 flowbg 混色变浅), 单一常量字色
     必然在其中一侧对比不足 —— 逐节点按填充色计算。
     """
+    if light is None:
+        light = _flow_theme().FLOW_TEXT_ON_LIGHT
+    if dark is None:
+        dark = _flow_theme().FLOW_TEXT_ON_DARK
     c = str(bg or "").strip().lstrip("#")
     if len(c) == 3:
         c = "".join(ch * 2 for ch in c)
@@ -148,11 +143,11 @@ def text_color_on(bg, light="#FFFFFF", dark="#1A1A1A"):
 def resolve_style(ctx):
     """合并 ctx["style"] (真源) 与模块回退默认值 → 完整结构色表 (P0-3)。
 
-    ctx["style"] 缺失/非法时整体回退 _FALLBACK_STYLE_*; 部分缺失键由回退补齐,
+    ctx["style"] 缺失/非法时整体回退 _fallback_style(); 部分缺失键由回退补齐,
     保证返回 dict 内**所有键均存在** (调用方可直接下标取值)。
     """
     ctx = ctx or {}
-    base = dict(_FALLBACK_STYLE_DARK if ctx.get("dark") else _FALLBACK_STYLE_LIGHT)
+    base = _fallback_style(bool(ctx.get("dark")))
     st = ctx.get("style")
     if isinstance(st, dict):
         for k, v in st.items():
@@ -370,7 +365,7 @@ def _draw_node(canvas, node, colors, fonts, ctx, *, zoom=1.0, sp=None, style=Non
     sp = sp or (lambda v: v)
     style = style or resolve_style(ctx)
     index = _node_index(ctx, node.id)
-    base = colors.get(typ, FALLBACK_COLOR)
+    base = colors.get(typ, _fallback_color())
 
     # P0-2: 禁用态**保留类型色** —— 填充 = blend(类型色, flowbg, 0.4) (无 alpha 近似),
     # 禁止整体变灰 (移除旧的 DISABLED_COLOR 覆盖); 描边取混色, 文本第 2 行叠删除线。
@@ -516,8 +511,8 @@ def _draw_grid(canvas, x0, y0, x1, y1, style, sp, zoom, *, fine=16, coarse=4):
     """
     # 缺键回退到模块回退样式表 (resolve_style 已保证齐备; 此处再兜底, 且不引入
     # 越界字面量色 —— 见 P0 断言 A6「无越界字面量结构色」)。
-    fine_color = style.get("grid_fine") or _FALLBACK_STYLE_LIGHT["grid_fine"]
-    coarse_color = style.get("grid_coarse") or _FALLBACK_STYLE_LIGHT["grid_coarse"]
+    fine_color = style.get("grid_fine") or _fallback_style(False)["grid_fine"]
+    coarse_color = style.get("grid_coarse") or _fallback_style(False)["grid_coarse"]
     try:
         step = max(6.0, float(sp(fine)) * float(zoom))
     except Exception:
@@ -977,7 +972,7 @@ def minimap(mcv, graph, *, colors=None, ctx=None, width=None, height=None, view=
     oy = pad + ((height - 2.0 * pad) - ch * s) / 2.0 - min(ys) * s
     flowbg = style.get("flowbg")
     for n in nodes:
-        col = colors.get(n.type) or FALLBACK_COLOR
+        col = colors.get(n.type) or _fallback_color()
         if not n.enabled and _is_color(flowbg):
             col = blend(col, flowbg, style.get("disabled_mix", 0.4))
         x1, y1 = ox + n.x * s, oy + n.y * s

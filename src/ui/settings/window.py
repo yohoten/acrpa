@@ -644,7 +644,7 @@ def open_settings_window():
     status_bar.grid(row=0, column=1, sticky="ew")
     status_bar.columnconfigure(1, weight=1)
     _restart_count = [0]
-    _restart_lbl = tkinter.Label(status_bar, text="✓ 全部即时生效",
+    _restart_lbl = tkinter.Label(status_bar, text="✔ 全部即时生效",
         font=FONT_SMALL, bg=C["bg"], fg=C["sc"])
     _restart_lbl.grid(row=0, column=0, sticky="w", padx=sp("sp_md"),
         pady=(sp("sp_sm"), 0))

@@ -110,7 +110,7 @@ class ShellBody:
             inner.grid(row=0, column=1, sticky="e")
             self._footer_inner = inner
         if kind == "primary":
-            role, bg, fg = "ac", C.get("ac", "#2563EB"), "white"
+            role, bg, fg = "ac", C.get("ac", "#0078D4"), "white"
         elif kind == "danger":
             role, bg, fg = "dg", C.get("dg", "#DC2626"), "white"
         else:

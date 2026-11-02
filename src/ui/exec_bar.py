@@ -118,7 +118,7 @@ _loop_last = "1"            # 上次有效次数 (默认 1 = 单次执行; 取�
 _exec_maxmin_var = None     # StringVar 最长执行分钟
 _exec_maxmin_sp = None      # Spinbox 最长执行分钟
 _exec_stoponerror_var = None  # BooleanVar 出错即停
-_btn_validate = None        # ✓ 校验 (语义角色 "ac"; 运行前静态校验)
+_btn_validate = None        # ✔ 校验 (语义角色 "ac"; 运行前静态校验)
 _btn_run = None             # ▶ 运行 (语义角色 "sc")
 _btn_pause = None           # ⏸ 暂停/继续 (语义角色 "wn")
 _btn_step = None            # ⏭ 单步 (语义角色 "ac")
@@ -323,7 +323,7 @@ def build(parent, *, notebook, colors, fonts, deps=None):
     tkinter.Frame(run_bar, bg=C["bd"], width=sp(2), height=sp(22)).pack(
         side="left", fill="y", padx=sp(6), pady=4)
 
-    # ✓ 校验 (运行前 dry-run; 默认只读展示问题, 不执行脚本)
+    # ✔ 校验 (运行前 dry-run; 默认只读展示问题, 不执行脚本)
     # 置于四键同组之前: 与运行相关但不参与「运行/暂停/单步/停止」状态机
     btn_validate = ui_theme.roled(tkinter.Button(run_bar, text=i18n.t("exec.btn_validate"), font=FONT_BUTTON, bg=C["ac"], fg=ui_theme.text_on(C["ac"]),
         activebackground=C["ach"], activeforeground=ui_theme.text_on(C["ach"]), disabledforeground=C["fgm"],

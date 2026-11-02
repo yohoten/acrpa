@@ -15,9 +15,11 @@ import os, time, datetime, re
 import collections
 import threading
 import state
-from utils import _safe_get, log1
+from core.util import _safe_get
+from core.log import log1
 import commands
 import capabilities
+import failure_policy
 from safe_eval import safe_eval_condition, safe_eval_math, EvalError
 
 
@@ -565,6 +567,8 @@ class ExecutionEngine:
         # Format: {row_number: condition_string}
         self.conditional_breakpoints = {}
         self._script_failed = False
+        # P2 步骤级失败策略: 跳转目标命中计数 {0基目标下标: 次数}, 用于环检测
+        self._jump_counts = {}
 
     def execute_script(self, rows, script_dir, _nested=False):
         """
@@ -575,6 +579,8 @@ class ExecutionEngine:
             # Clear variables from previous run to prevent cross-run pollution
             self.variables.clear()
             self._script_failed = False
+            # P2 失败策略: 跳转计数按「每次运行」重置, 避免跨 run 累积误判环
+            self._jump_counts = {}
             # Tier3 脚本级钩子（脚本开始）。
             # 注意：工作流经 workflow.py 的 eng.execute 直接调用 handler，不经过
             # execute_script，故钩子在工作流场景不会触发（本期设计如此）。
@@ -726,9 +732,22 @@ class ExecutionEngine:
                         self._save_failure_context(rows, i, row, result)
                     except Exception as _ctx_err:
                         log1("失败现场留存异常: {}".format(_ctx_err), "warning")
-                    if getattr(state, 'STOP_ON_ERROR', True):
+                    # ── P2 步骤级失败策略 (failure_policy) ──
+                    # 行未设置策略 → 沿用全局 stop_on_error (旧行为逐字一致)。
+                    action, target, note = failure_policy.should_stop_on_failure(
+                        row, i, total_rows,
+                        getattr(state, 'STOP_ON_ERROR', True), self._jump_counts)
+                    if note:
+                        log1("第 {} 行: {}".format(i + 1, note), "warning")
+                    if action == failure_policy.ACTION_STOP:
                         log1("脚本因命令失败停止: {}".format(result.message or result.code), "error")
                         break
+                    if action == failure_policy.ACTION_JUMP:
+                        log1("第 {} 行失败 → 按策略跳转到第 {} 行".format(
+                            i + 1, target + 1), "warning")
+                        i = target
+                        continue
+                    log1("第 {} 行失败 → 按策略继续执行后续行".format(i + 1), "warning")
                 i += 1
             
             # P1 Enhancement: Notify variable watchers and handle step-mode debugging
@@ -930,6 +949,8 @@ class ExecutionEngine:
             
             # Execute loop body (支持嵌套 如果/循环开始 块命令)
             should_break = False
+            # P2 步骤级失败策略: 本轮迭代是否需要中止 (None=尚无失败决策)
+            abort_now = False
             j = 0
             while j < len(loop_body):
                 body_row = loop_body[j]
@@ -942,24 +963,41 @@ class ExecutionEngine:
                     # 整个 IF 块由 _handle_if 递归执行，跳转到块之后
                     ret = self._handle_if(loop_body, j, script_dir)
                     j = ret - 1
+                    if self._script_failed:
+                        abort_now = True        # 块内失败: 保持旧的「中止本层」语义
                 elif cmd == "循环开始":
                     # 整个内层循环块由 _handle_loop 递归执行，跳转到块之后
                     ret = self._handle_loop(loop_body, j, script_dir)
                     j = ret - 1
+                    if self._script_failed:
+                        abort_now = True
                 else:
                     result = self.execute(body_row, script_dir)
                     if not result.ok:
                         self._script_failed = True
+                        # 循环体内只支持 停止/继续; 跨块跳转语义不明确 → 按停止处理
+                        action, _tgt, note = failure_policy.should_stop_on_failure(
+                            body_row, loop_start + j, len(rows),
+                            getattr(state, 'STOP_ON_ERROR', True), None)
+                        if note:
+                            log1("循环体第 {} 行: {}".format(loop_start + j + 1, note), "warning")
+                        if action == failure_policy.ACTION_CONTINUE:
+                            abort_now = False
+                        else:
+                            if action == failure_policy.ACTION_JUMP:
+                                log1("循环体内不支持跳转策略（第 {} 行），按停止处理".format(
+                                    loop_start + j + 1), "warning")
+                            abort_now = True
                 j += 1
 
                 # 循环体内命令(含嵌套 如果/循环块)失败时中止本层迭代
-                if self._script_failed and getattr(state, 'STOP_ON_ERROR', True):
+                if abort_now:
                     break
 
             iteration_count += 1
 
             # 必须同时中止外层迭代，否则条件循环会反复重跑同一条失败命令
-            if self._script_failed and getattr(state, 'STOP_ON_ERROR', True):
+            if abort_now:
                 break
 
             if should_break:
@@ -1139,7 +1177,7 @@ class ExecutionEngine:
             with open(tmp, "w", encoding="utf-8", newline="\n") as f:
                 f.write(text)
 
-        from utils import atomic_save
+        from core.fs import atomic_save
         atomic_save(fp, _writer, backup=False)
         log1("失败现场已保存: {}".format(fp), "warning")
         return fp
@@ -2635,6 +2673,7 @@ try:
         _browser_connect_cdp, _browser_start_listen, _browser_wait_packets,
         _browser_stop_listen, _browser_record,
         _browser_manage, _browser_close_cmd, _browser_read, _browser_select,
+        _browser_captcha,
     )
     commands._set_handler("打开网页", _browser_navigate)
     commands._set_handler("浏览器点击", _browser_click)
@@ -2666,6 +2705,8 @@ try:
     commands._set_handler("关闭浏览器", _browser_close_cmd)
     commands._set_handler("浏览器读取", _browser_read)
     commands._set_handler("浏览器选择", _browser_select)
+    # 浏览器后端增强 P2：滑块验证码（自研，纯追加绑定）
+    commands._set_handler("浏览器验证码", _browser_captcha)
 except ImportError:
     pass
 

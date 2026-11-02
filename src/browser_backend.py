@@ -35,6 +35,11 @@ Browser Automation Backend for ACRPA — Playwright-powered web automation.
 - 关闭浏览器      : 关闭会话并复位启动参数（P3）
 - 浏览器读取      : 读取元素 文本/属性/值/HTML/数量，或页面 URL/标题/HTML（P3）
 - 浏览器选择      : 下拉框按 标签/值/序号 选择，非 select 控件自动降级点击（P3）
+- 浏览器验证码    : 滑块验证码闭环——缺口测算（几何法/灰度列差分）+ 缓动拖拽 + 成功检测/重试（P2）
+
+滑块验证码纯函数（P2，仅 stdlib + PIL，可离线单测）:
+  `ease_out_cubic` / `build_drag_path` / `column_profile` / `detect_gap_offset`
+  / `compute_drag_distance`
 
 codegen → DSL 转换器（P2，纯函数、仅 stdlib、不依赖 playwright）:
   `codegen_to_dsl(code_text, strict=False) -> (rows, warnings)`
@@ -2475,6 +2480,340 @@ def _browser_select(row, script_dir=""):
     _clear_last_error()
     log1("浏览器选择: {} = {} ({})".format(selector, option, mode))
     return None
+
+
+# ======================================================================
+# 滑块验证码（P2，自研；只用 PIL + Playwright 公开 API，无新增依赖）
+# ----------------------------------------------------------------------
+# 净室说明: 仅借鉴"测算缺口偏移 → 分段缓动拖拽 → 轮询成功标志 → 失败刷新重试"
+# 这一通用工程套路；算法（灰度逐列差分、ease-out 路径构造）与错误码全部独立实现，
+# 不引用任何第三方 DLL / 内核 / 其模板字段。
+# ======================================================================
+CAPTCHA_DEFAULT_DURATION_MS = 800
+CAPTCHA_DEFAULT_STEPS = 30
+CAPTCHA_DEFAULT_ACCEPT_S = 5.0
+CAPTCHA_MIN_TRAVEL_PX = 20
+CAPTCHA_MIN_DELTA = 3.0
+
+
+def _clamp_int(text, default, lo, hi):
+    """文本 → 夹取到 [lo, hi] 的整数（空/非数字 → default；纯函数）。"""
+    try:
+        value = int(float(str(text).strip()))
+    except (TypeError, ValueError):
+        return default
+    return max(lo, min(hi, value))
+
+
+def _clamp_float(text, default, lo, hi):
+    """文本 → 夹取到 [lo, hi] 的浮点数（空/非数字 → default；纯函数）。"""
+    try:
+        value = float(str(text).strip())
+    except (TypeError, ValueError):
+        return default
+    return max(lo, min(hi, value))
+
+
+def ease_out_cubic(t):
+    """缓出曲线：前段快、末段减速。t ∈ [0,1] → [0,1]（纯函数，越界自动夹取）。"""
+    if t <= 0:
+        return 0.0
+    if t >= 1:
+        return 1.0
+    return 1.0 - (1.0 - float(t)) ** 3
+
+
+def build_drag_path(distance, steps=CAPTCHA_DEFAULT_STEPS):
+    """构造分段缓动位移序列（纯函数）→ 累计位移整数列表，末值恒等于 distance。
+
+    - 前段每步位移大、末段逐渐减小（ease-out），近似手动拖拽的减速收尾；
+    - steps<=1 或 distance==0 退化为单元素列表；
+    - distance 为负时序列单调递减，末值仍等于 distance。
+    """
+    try:
+        dist = int(round(float(distance)))
+    except (TypeError, ValueError):
+        return []
+    try:
+        n = int(steps)
+    except (TypeError, ValueError):
+        n = CAPTCHA_DEFAULT_STEPS
+    n = max(1, min(n, 400))
+    if dist == 0:
+        return [0]
+    if n == 1:
+        return [dist]
+    out = []
+    last = 0
+    for i in range(1, n + 1):
+        pos = int(round(dist * ease_out_cubic(float(i) / n)))
+        if i == n:
+            pos = dist
+        elif abs(pos - last) < 1:
+            continue          # 末段位移不足 1px 时合并，避免重复坐标
+        out.append(pos)
+        last = pos
+    if not out or out[-1] != dist:
+        out.append(dist)
+    return out
+
+
+def column_profile(rows):
+    """灰度行列表 → 逐列平均亮度（纯函数，无第三方依赖）。
+
+    rows: 可迭代的行，每行为等长亮度序列（0-255）。列数按最长行对齐，
+    缺失像素不计入该列均值（全缺 → 0.0）。
+    """
+    width = 0
+    for row in rows:
+        if len(row) > width:
+            width = len(row)
+    if width <= 0:
+        return []
+    sums = [0.0] * width
+    counts = [0] * width
+    for row in rows:
+        for x, value in enumerate(row):
+            try:
+                v = float(value)
+            except (TypeError, ValueError):
+                continue
+            sums[x] += v
+            counts[x] += 1
+    return [sums[x] / counts[x] if counts[x] else 0.0 for x in range(width)]
+
+
+def detect_gap_offset(profile, min_travel=CAPTCHA_MIN_TRAVEL_PX,
+                      smooth=2, min_delta=CAPTCHA_MIN_DELTA):
+    """按列亮度梯度定位缺口左缘 → 相对背景图左边界的像素偏移；无显著跳变 → None。
+
+    做法: 对逐列平均亮度求「间隔 smooth 列」的差分并取绝对值最大处（抑制单列噪点），
+    最大值出现在跳变前第 smooth 列，故返回 `best_x + smooth` ≈ 跳变后的第一列。
+    只统计 x >= min_travel 的列（跳过滑块初始可见区域）。
+    """
+    if not profile:
+        return None
+    n = len(profile)
+    s = max(1, int(smooth))
+    best_x = None
+    best_v = 0.0
+    for x in range(max(int(min_travel), 0), n - s):
+        v = abs(profile[x + s] - profile[x])
+        if v > best_v:
+            best_v = v
+            best_x = x
+    if best_x is None or best_v < float(min_delta):
+        return None
+    return best_x + s
+
+
+def compute_drag_distance(bg_box, handle_box, gap_offset, correction=0):
+    """由包围盒 + 缺口偏移推算水平拖动距离（纯函数）；入参非法 → None。
+
+    gap_offset 是缺口左缘相对**背景图左边界**的偏移，减去滑块左缘相对背景图
+    左边界的位置，即得滑块需要右移的像素数（再用 correction 微调）。
+    滑块包围盒缺失时按"滑块位于背景图左边界"处理。
+    """
+    try:
+        gap_off = float(gap_offset)
+        corr = float(correction)
+        bg_x = float(bg_box.get("x", 0.0))
+        handle_x = float(handle_box.get("x", bg_x)) if handle_box else bg_x
+    except (TypeError, ValueError, AttributeError):
+        return None
+    return int(round(gap_off - (handle_x - bg_x) + corr))
+
+
+def _pil_open(raw):
+    """截图字节 → PIL Image（PIL 函数内懒 import）；失败返回 None。"""
+    if not raw:
+        return None
+    try:
+        import io as _io
+        from PIL import Image
+    except Exception:
+        return None
+    try:
+        return Image.open(_io.BytesIO(raw))
+    except Exception:
+        return None
+
+
+def _image_column_profile(img, max_width=400):
+    """PIL 图片 → 逐列平均亮度（PIL 懒 import；失败/入参空 → []）。
+
+    超宽图片先按 BOX 缩放（等比），把列数压到 max_width 以内，避免大图逐像素
+    遍历拖慢脚本；缩放仅影响列精度，缺口定位误差在 ±2px 内，由 偏移修正 兜底。
+    """
+    if img is None:
+        return []
+    try:
+        from PIL import Image
+        gray = img.convert("L")
+        w, h = gray.size
+        if w > max_width:
+            ratio = float(max_width) / float(w)
+            gray = gray.resize((max_width, max(1, int(h * ratio))), Image.BOX)
+            w, h = gray.size
+        data = gray.tobytes()
+        return column_profile([data[y * w:(y + 1) * w] for y in range(h)])
+    except Exception:
+        return []
+
+
+def _captcha_box(loc):
+    """取首个匹配元素的包围盒（CSS 像素）；不可见/异常 → None。"""
+    if loc is None:
+        return None
+    try:
+        return loc.first.bounding_box()
+    except Exception:
+        return None
+
+
+def _captcha_measure(page, plans, gap_sel, correction=0):
+    """测算水平拖动距离：缺口包围盒几何法优先，退化到背景图灰度列差分。
+
+    plans 需含 "滑块" / "背景图"（"缺口" 可选）。返回 int 像素或 None（无法测算）。
+    """
+    bg_loc = build_locator(page, plans["背景图"])
+    bg_box = _captcha_box(bg_loc)
+    if not bg_box:
+        return None
+    handle_box = _captcha_box(build_locator(page, plans["滑块"]))
+
+    # ① 几何法：缺口元素与背景元素都是 DOM 节点时，直接相减（无图像处理、零误差）
+    if gap_sel and plans.get("缺口"):
+        gap_box = _captcha_box(build_locator(page, plans["缺口"]))
+        if gap_box:
+            return compute_drag_distance(bg_box, handle_box,
+                                         gap_box["x"] - bg_box["x"], correction)
+
+    # ② 图像法：背景图元素截图 → 灰度逐列差分取最大跳变
+    try:
+        raw = bg_loc.first.screenshot(timeout=8000)
+    except Exception:
+        return None
+    offset = detect_gap_offset(_image_column_profile(_pil_open(raw)))
+    if offset is None:
+        return None
+    return compute_drag_distance(bg_box, handle_box, offset, correction)
+
+
+def _captcha_drag(page, start_x, start_y, distance, steps, duration_ms):
+    """按缓动路径拖动滑块（Playwright mouse API）。返回实际累计位移（px）。
+
+    每步间 sleep 均分总时长；无论中途是否异常都保证 mouse.up()，避免鼠标卡在按下态。
+    """
+    path = build_drag_path(distance, steps)
+    per = max(int(duration_ms), 1) / 1000.0 / float(max(len(path), 1))
+    page.mouse.move(start_x, start_y)
+    page.mouse.down()
+    moved = 0
+    try:
+        for pos in path:
+            if pos != moved:
+                page.mouse.move(start_x + pos, start_y, steps=1)
+                moved = pos
+            time.sleep(per)
+    finally:
+        page.mouse.up()
+    return moved
+
+
+# ── 命令: 浏览器验证码（P2，滑块） ──
+def _browser_captcha(row, script_dir=""):
+    """浏览器验证码 — 滑块验证码闭环（自研替换第三方 OCR/OpenCV 组件）。
+
+    Excel: 浏览器验证码, #slider-btn, #captcha-bg
+           浏览器验证码, .yidun_slider, .yidun_bg-img, , .yidun_tips--success
+           浏览器验证码, #btn, .bg, .gap, .ok, .refresh, 1000, 40, 2, 8
+
+    参数: 滑块定位, 背景图定位, 缺口图定位(可空), 成功检测定位(可空),
+          刷新定位(可空), 拖动时长ms(可空=800), 拖动步数(可空=30),
+          偏移修正px(可空=0), 校验超时秒(可空=5)
+
+    重试次数取配置项 browser_retry（默认 1，即最多尝试 2 次）。
+    缺口偏移: 有"缺口图定位"时用包围盒几何法；否则对背景图做灰度逐列差分。
+    成功检测: 给了定位就轮询其可见；未给则拖动完成即视为成功（仅做位移记录）。
+
+    返回: 成功 None；失败 False（browser_last_error=CAPTCHA_* / INVALID_* / PW_NOT_INSTALLED）。
+    """
+    handle_sel = str(_row_arg(row, 0, "") or "").strip()
+    bg_sel = str(_row_arg(row, 1, "") or "").strip()
+    gap_sel = str(_row_arg(row, 2, "") or "").strip()
+    ok_sel = str(_row_arg(row, 3, "") or "").strip()
+    refresh_sel = str(_row_arg(row, 4, "") or "").strip()
+    duration_ms = _clamp_int(_row_arg(row, 5, ""), CAPTCHA_DEFAULT_DURATION_MS, 50, 20000)
+    steps = _clamp_int(_row_arg(row, 6, ""), CAPTCHA_DEFAULT_STEPS, 1, 400)
+    correction = _clamp_int(_row_arg(row, 7, ""), 0, -2000, 2000)
+    accept_s = _clamp_float(_row_arg(row, 8, ""), CAPTCHA_DEFAULT_ACCEPT_S, 0.5, 120.0)
+
+    if not handle_sel:
+        return _fail("INVALID_ARGUMENT", "浏览器验证码: 未指定滑块定位")
+    if not bg_sel:
+        return _fail("INVALID_ARGUMENT", "浏览器验证码: 未指定背景图定位")
+
+    page = get_active_page()
+    if not page:
+        return _fail("PW_NOT_INSTALLED", "浏览器后端未安装(Playwright)")
+
+    plans = {}
+    for label, spec in (("滑块", handle_sel), ("背景图", bg_sel), ("缺口", gap_sel),
+                        ("成功检测", ok_sel), ("刷新", refresh_sel)):
+        if not spec:
+            continue
+        plan = parse_locator(parse_selector(spec, ""))
+        if plan.get("engine") == "error":
+            return _fail("INVALID_LOCATOR",
+                         "浏览器验证码: {}定位表达式无效".format(label))
+        plans[label] = plan
+
+    retries = max(int(_cfg_float("BROWSER_RETRY", 1)), 0)
+    last_msg = ""
+    for attempt in range(retries + 1):
+        if attempt and refresh_sel:
+            try:
+                build_locator(page, plans["刷新"]).first.click(timeout=5000)
+                page.wait_for_timeout(800)
+            except Exception as e:
+                last_msg = "刷新失败: {}".format(e)
+
+        distance = _captcha_measure(page, plans, gap_sel, correction)
+        if distance is None:
+            return _fail("CAPTCHA_NO_GAP", "浏览器验证码: 未能测算缺口偏移"
+                         "（检查背景图/缺口图定位，或用 偏移修正 微调）")
+        if distance <= 0:
+            return _fail("CAPTCHA_NO_GAP",
+                         "浏览器验证码: 测算拖动距离非正 ({})".format(distance))
+
+        box = _captcha_box(build_locator(page, plans["滑块"]))
+        if not box:
+            return _fail("CAPTCHA_NO_HANDLE", "浏览器验证码: 滑块不可见或无包围盒")
+        start_x = float(box["x"]) + float(box["width"]) / 2.0
+        start_y = float(box["y"]) + float(box["height"]) / 2.0
+
+        try:
+            moved = _captcha_drag(page, start_x, start_y, distance, steps, duration_ms)
+        except Exception as e:
+            last_msg = "拖动失败: {}".format(e)
+            continue
+        _write_var("browser_captcha_offset", moved)
+
+        if not ok_sel:
+            _clear_last_error()
+            log1("浏览器验证码: 已拖动 {}px（未设成功检测定位，默认视为成功）".format(moved))
+            return None
+
+        okp = wait_for(page, plans["成功检测"], state="visible",
+                       timeout_ms=int(accept_s * 1000), poll_ms=200)
+        if okp[0]:
+            _clear_last_error()
+            log1("浏览器验证码: 校验通过（第 {} 次尝试，位移 {}px）".format(attempt + 1, moved))
+            return None
+        last_msg = okp[2] or "成功检测定位未出现"
+
+    return _fail("CAPTCHA_FAILED", "浏览器验证码失败: {}".format(last_msg or "未知原因"))
 
 
 # ── 命令: 浏览器点击 ──

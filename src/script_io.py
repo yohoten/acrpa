@@ -54,6 +54,55 @@ _HEADER_CMD = "命令类型"
 _TITLE_PLACEHOLDER = "（标题行）"
 _NUM_ARGS = 9
 
+# 步骤级失败策略（P2，见 failure_policy）在 .xls 中的承载方式：
+# **第二张工作表**（不占用主表列 → 不新增常显列，旧版本读主表完全不受影响）。
+# 三列：数据行序号(0 基) / 策略码 / 跳转目标(1 基)。无策略的行不写。
+_POLICY_SHEET = "ACRPA-Policy"
+
+
+def _policy_of(sd):
+    """取行的失败策略元数据 dict（无策略 → 空 dict；异常 → 空 dict）。"""
+    fn = getattr(sd, "failure_meta", None)
+    if not callable(fn):
+        return {}
+    try:
+        meta = fn()
+    except Exception:
+        return {}
+    return meta if isinstance(meta, dict) else {}
+
+
+def _read_policy_sheet(wb):
+    """从工作簿读策略表 → ``{数据行序号(0 基): (策略码, 跳转目标)}``。
+
+    缺表 / 损坏一律返回空 dict（失败开放：旧文件没有策略表是正常情况）。
+    """
+    out = {}
+    try:
+        sheet = wb.sheet_by_name(_POLICY_SHEET)
+    except Exception:
+        return out
+    try:
+        for r in range(1, sheet.nrows):
+            try:
+                idx = int(sheet.cell_value(r, 0))
+            except (TypeError, ValueError):
+                continue
+            try:
+                code = str(sheet.cell_value(r, 1) or "").strip()
+            except Exception:
+                code = ""
+            if not code:
+                continue
+            try:
+                jump = int(sheet.cell_value(r, 2) or 0)
+            except (TypeError, ValueError):
+                jump = 0
+            out[idx] = (code, jump)
+    except Exception:
+        return out
+    return out
+
 
 # ── 归一化工具 ────────────────────────────────────────────────────────
 def _norm_arg(value):
@@ -156,12 +205,17 @@ def rows_to_acrpas(rows, meta=None):
         import datetime
         doc["created"] = datetime.datetime.now().isoformat(timespec="seconds")
     for sd in rows or []:
-        doc["rows"].append({
+        item = {
             "cmd": _norm_cmd(getattr(sd, "cmd_type", "")),
             "args": _norm_args(getattr(sd, "args", None)),
             # 稳定行标识: 可选字段 (schema 仍为 1, 向后兼容; 旧文档无此键)
             "id": getattr(sd, "id", None) or _new_row_id(),
-        })
+        }
+        # 步骤级失败策略: 仅在设置时写出 (无策略的行/旧文件逐字不变)
+        policy = _policy_of(sd)
+        if policy:
+            item.update(policy)
+        doc["rows"].append(item)
     return doc
 
 
@@ -179,7 +233,10 @@ def acrpas_to_rows(doc):
     rows = []
     for item in doc.get("rows") or []:
         rid = None
+        policy = {}
         if isinstance(item, dict):
+            policy = {k: item.get(k) for k in ("on_error", "jump_to")
+                      if item.get(k)}
             cmd = _norm_cmd(item.get("cmd", ""))
             args = item.get("args")
             if isinstance(args, dict):
@@ -193,7 +250,14 @@ def acrpas_to_rows(doc):
             args = seq[1:]
         else:
             cmd, args = "", None
-        rows.append(ScriptData(cmd, _norm_args(args), id=rid))
+        sd = ScriptData(cmd, _norm_args(args), id=rid)
+        if policy:
+            try:
+                sd.set_failure_policy(policy.get("on_error", ""),
+                                      policy.get("jump_to", 0))
+            except Exception:
+                pass        # 失败开放: 脏策略不影响脚本载入
+        rows.append(sd)
     return rows
 
 
@@ -216,13 +280,21 @@ def load_xls(path):
     wb = xlrd.open_workbook(path)
     try:
         sheet = wb.sheet_by_index(0)
+        policies = _read_policy_sheet(wb)      # 旧文件无此表 → {}
         rows = []
         for r in range(2, sheet.nrows):
             vals = sheet.row_values(r)
             if not vals or not vals[0]:
                 continue
             cmd = _norm_cmd(vals[0])
-            rows.append(ScriptData(cmd, _norm_args(vals[1:10])))
+            sd = ScriptData(cmd, _norm_args(vals[1:10]))
+            policy = policies.get(len(rows))
+            if policy:
+                try:
+                    sd.set_failure_policy(policy[0], policy[1])
+                except Exception:
+                    pass        # 失败开放: 脏策略不影响载入
+            rows.append(sd)
         return rows
     finally:
         try:
@@ -327,11 +399,22 @@ def save_xls(path, rows):
     for j in range(1, _NUM_ARGS + 1):
         ws.write(0, j, "参数{}".format(j))
     ws.write(1, 0, _TITLE_PLACEHOLDER)
+    pol = wb.add_sheet(_POLICY_SHEET)
+    pol.write(0, 0, "行序号")
+    pol.write(0, 1, "失败策略")
+    pol.write(0, 2, "跳转目标")
+    pol_row = 1
     for i, sd in enumerate(rows or [], start=2):
         ws.write(i, 0, _norm_cmd(getattr(sd, "cmd_type", "")))
         args = _norm_args(getattr(sd, "args", None))
         for j in range(_NUM_ARGS):
             ws.write(i, j + 1, args[j])
+        meta = _policy_of(sd)
+        if meta:
+            pol.write(pol_row, 0, i - 2)          # 数据行序号 (0 基, 与主表数据行对齐)
+            pol.write(pol_row, 1, meta.get("on_error", ""))
+            pol.write(pol_row, 2, int(meta.get("jump_to", 0) or 0))
+            pol_row += 1
     return atomic_save(path, lambda tmp: wb.save(tmp), backup=True)
 
 

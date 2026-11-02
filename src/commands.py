@@ -400,6 +400,12 @@ register("浏览器读取", "读取元素文本/属性/值/HTML/数量/可见性
 register("浏览器选择", "下拉框按标签/值/序号选择,非select控件自动降级点击",
          "定位, 选项, 方式(标签/值/序号), 选择器类型(可选)")
 
+# ── 浏览器后端增强 P2 新增命令: 滑块验证码 (纯追加, 自研无新增依赖) ──
+register("浏览器验证码", "滑块验证码闭环:测算缺口偏移+鼠标缓动拖拽+成功检测/重试/刷新",
+         "滑块定位, 背景图定位, 缺口图定位(可选), 成功检测定位(可选), 刷新定位(可选), "
+         "拖动时长ms(可选,默认800), 拖动步数(可选,默认30), 偏移修正px(可选,默认0), "
+         "校验超时秒(可选,默认5)")
+
 # ══════════════════════════════════════════════════════════════════════
 # L2 动作库扩充 —— handler 区 (方案文档 §5 L2 的 20 条 P0 命令)
 # ══════════════════════════════════════════════════════════════════════
@@ -796,6 +802,46 @@ def _cmd_window_style(row, script_dir, api):
     return _report("设置窗口样式", ok, msg, "window_handle", value, api)
 
 
+def _cmd_simulate_typing(row, script_dir, api):
+    """模拟真人打字: SendInput 逐字输出 (Unicode), CPM 调速 + 人类化抖动。"""
+    import time
+    import type_simulator
+
+    text = _arg(row, 0)
+    if not text:
+        _log("[模拟打字] 内容为空", "error")
+        return False
+
+    speed = int(_num(_arg(row, 1), 300))
+    speed = max(type_simulator.TypeSimulatorEngine.MINIMUM_SPEED,
+                min(type_simulator.TypeSimulatorEngine.MAXIMUM_SPEED, speed))
+    humanize = _is_yes(_arg(row, 2), False)
+    start_delay = int(_num(_arg(row, 3), 0))
+    start_delay = max(0, min(60, start_delay))
+
+    engine = type_simulator.TypeSimulatorEngine()
+    try:
+        engine.configure(text, speed, humanize, start_delay)
+        engine.start()
+    except (ValueError, RuntimeError) as exc:
+        _log("[模拟打字] 参数错误: {}".format(exc), "error")
+        return False
+
+    # 「停止」打断: 轮询引擎期间调用 engine._chk, AbortSignal 原样上抛。
+    chk = _engine_chk()
+    try:
+        while engine.is_typing:
+            if chk is not None:
+                chk()
+            time.sleep(0.05)
+    finally:
+        engine.stop()
+    _log("[模拟打字] 完成: {}/{} 字符, {} CPM{}".format(
+        engine.characters_typed, engine.total_characters, speed,
+        "，人类化" if humanize else ""), "info")
+    return True
+
+
 # ── L2 动作库扩充：20 条命令注册 (68 → 88) ───────────────────────────
 # 全部**追加在注册表末尾**, 不改动任何既有命令的名称/参数顺序/语义
 # (.xls 位置式 9 参数布局依赖既有顺序)。
@@ -845,6 +891,24 @@ register("设置窗口样式", "设置窗口置顶/透明度/隐藏显示",
          "窗口标题, 透明度(0-255,可空), 置顶(是/否,可空), 隐藏(隐藏/显示,可空)",
          _cmd_window_style)
 
+# ── 模拟打字 (纯追加, SendInput 逐字输出, 支持中文/CPM调速/人类化) ──
+register(
+    "模拟打字",
+    "模拟真人打字(逐字输出,支持中文,CPM调速与人类化抖动)",
+    "内容, 速度(CPM,默认300), 人类化(是/否), 开始延时(秒,默认0)",
+    _cmd_simulate_typing,
+    schema=[
+        {"name": "内容", "raw": "内容", "kind": "string", "choices": (),
+         "default": None, "optional": False, "variadic": False},
+        {"name": "速度", "raw": "速度(CPM,默认300)", "kind": "number", "choices": (),
+         "default": "300", "optional": True, "variadic": False},
+        {"name": "人类化", "raw": "人类化(是/否)", "kind": "string",
+         "choices": ("是", "否"), "default": None, "optional": False, "variadic": False},
+        {"name": "开始延时", "raw": "开始延时(秒,默认0)", "kind": "number",
+         "choices": (), "default": "0", "optional": True, "variadic": False},
+    ],
+)
+
 # ── 可选依赖声明 (路线图 阶段二新增项①) ────────────────────────────────
 # requires(name) → 该命令运行所需的能力 id 元组:
 #   · ("core",) —— 主包内置能力: **永不拦截、永不加角标**;
@@ -867,6 +931,7 @@ _EXTERNAL_REQUIRES = {
     "连接已开浏览器": ("browser.playwright",), "接管浏览器": ("browser.playwright",),
     "开始监听": ("browser.playwright",), "等待数据包": ("browser.playwright",),
     "停止监听": ("browser.playwright",), "启动浏览器录制": ("browser.playwright",),
+    "浏览器验证码": ("browser.playwright",),
     # PaddleOCR.dll 后端 (可选)
     "识别文字": ("ocr.paddle_dll",), "等待文字": ("ocr.paddle_dll",),
     "点击文字": ("ocr.paddle_dll",),
@@ -911,12 +976,13 @@ def _set_handler(name, handler):
 # 值语义:
 #   ()/(0, 1, ...) —— 仅这些 **0 基参数下标** (0 = 该命令的「参数1」) 禁止插值;
 #   None           —— **整条命令禁插值**。
-# 92 条在册命令**全量登记** (含 6 条块结构命令 —— 它们本来就不经 execute(),
+# 94 条在册命令**全量登记** (含 6 条块结构命令 —— 它们本来就不经 execute(),
 # 仍显式登记为 None 以表明「永不做 {var:} 插值」的设计意图)。
 NO_INTERP = {
     # ── 基础输入 / 图像 (参数都是"数据", 全部可插值) ──
     "找图": (), "区域找图": (), "点图": (), "区域点图": (),
     "按键": (), "热键": (), "输入": (), "写入": (2,),      # 写入: 模式(auto/direct/simulate)
+    "模拟打字": (),             # 内容/速度/人类化/延时 全为数据与调参, 无变量名/安全闸门
     "等待": (), "坐标": (), "悬停": (), "拖拽": (), "滚轮": (), "相移": (),
     "按下": (), "释放": (), "复制": (), "粘贴": (), "截屏": (),
     "代码": (),
@@ -965,6 +1031,7 @@ NO_INTERP = {
     "关闭浏览器": (),
     "浏览器读取": (1, 2, 4),           # 模式(文本/属性/…/可见) + 写回变量 + 选择器类型
     "浏览器选择": (2, 3),              # 方式(标签/值/序号) + 选择器类型
+    "浏览器验证码": (),                # 全是定位串与数值调参,无变量名/安全闸门
 
     # ── L2 文件 / 目录族 ──
     "复制文件": (2, 3),                # 覆盖 + 目标变量名

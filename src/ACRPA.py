@@ -48,6 +48,7 @@ from scriptdata import ScriptData
 import commands
 import script_io
 import script_validate  # 路线图 阶段二第 7 项: 运行前静态校验 (纯函数, 无副作用)
+import failure_policy  # P2 步骤级失败策略: 角标文案 / 策略归一 / 跳转校验 (纯逻辑)
 import i18n  # 路线图 §5.6: UI 字符串目录 (默认 zh; 文本只作显示, 不作状态/主题判定)
 from engine import engine
 import recorder
@@ -313,10 +314,18 @@ def _theme_sync_market(dark=None, palette=None, prev=None):
         pass
 
 
+def _theme_sync_cmd_tags(dark=None, palette=None, prev=None):
+    """订阅: 命令配色 tag + 图例圆点换肤重取色 (v4 §4.3)。"""
+    try:
+        _configure_cmd_tags(dark)
+    except Exception:
+        pass
+
+
 def _subscribe_theme_bus():
     """把全部「独立窗口」换肤回调登记到 ThemeBus (幂等, 重复调用只登记一次)。"""
     for _fn in (_theme_sync_minibar, _theme_sync_netlink,
-                _theme_sync_help, _theme_sync_market):
+                _theme_sync_help, _theme_sync_market, _theme_sync_cmd_tags):
         ui_theme.subscribe(_fn)
 
 
@@ -815,7 +824,7 @@ def autorun(tn):
     state.running=False; state.exec_state["row"]=0; log1("任务终止")
 
 # ══════════════════════════════════════════════════════════════════════
-# 运行前校验 (路线图 阶段二第 7 项): 「✓ 校验」按钮 → 非模态问题列表窗口
+# 运行前校验 (路线图 阶段二第 7 项): 「✔ 校验」按钮 → 非模态问题列表窗口
 # 复用 script_validate.validate_script (纯函数); 不改动编辑器任何既有行为。
 # ══════════════════════════════════════════════════════════════════════
 _validate_win = None          # 当前问题列表窗口 (单例: 再次点击先关旧窗)
@@ -890,7 +899,7 @@ def _show_validation_window(issues):
             lvl = "错误" if it["level"] == "error" else "警告"
             lb.insert("end", "第 {} 行  [{}]  {}".format(it["row"], lvl, it["message"]))
     else:
-        lb.insert("end", "  ✓ 未发现问题")
+        lb.insert("end", "  ✔ 未发现问题")
 
     bar = tkinter.Frame(win, bg=C.get("bg"))
     bar.pack(fill="x", padx=12, pady=(0, 12))
@@ -927,7 +936,7 @@ def _show_validation_window(issues):
 
 
 def validate_script_cb():
-    """「✓ 校验」按钮回调: load_script + validate_script → 问题列表窗口。"""
+    """「✔ 校验」按钮回调: load_script + validate_script → 问题列表窗口。"""
     if not state.has_script:
         messagebox.showwarning("运行前校验", "没有选择要校验的脚本文件")
         return
@@ -1648,11 +1657,11 @@ def _editor_zoom_wheel(event):
         return None
     return _editor_zoom_step(1 if event.delta > 0 else -1)
 _LEGEND_ITEMS = [
-    ("找图/区域找图", "#2563EB"), ("点图/区域点图", "#10B981"),
-    ("按键/按下/释放", "#8B5CF6"), ("热键", "#EF4444"),
-    ("输入/等待", "#F59E0B"), ("坐标", "#6B7280"),
-    ("悬停/拖拽", "#F97316"), ("滚轮", "#EC4899"),
-    ("截屏", "#0EA5E9"), ("代码", "#DC2626"),
+    ("找图/区域找图", "locate"), ("点图/区域点图", "click"),
+    ("按键/按下/释放", "key"), ("热键", "hotkey"),
+    ("输入/等待", "input"), ("坐标", "coord"),
+    ("悬停/拖拽", "hover"), ("滚轮", "wheel"),
+    ("截屏", "shot"), ("代码", "code"),
 ]
 
 # ── §4.5 选中左缘 2px 强调条 (主方案: #0 树列 per-item image) ──
@@ -1858,6 +1867,74 @@ def _show_conditional_breakpoint_menu(event):
         log1("运行到第{}行".format(row_idx))
         from utils import show_toast; show_toast(root, "运行到第{}行".format(row_idx), "info")
 
+    def set_failure_policy_dialog():
+        """步骤级失败策略 (P2 §6.2): 停止 / 继续 / 跳转到第 N 行。
+
+        不新增常显列: 结果只体现为 #0 序号列尾部角标 + 本对话框。
+        """
+        rows_now = getattr(state, "_editor_rows", None) or []
+        if not (0 < row_idx <= len(rows_now)):
+            return
+        sd = rows_now[row_idx - 1]
+        codes = [c for c, _t in failure_policy.choice_labels()]
+        labels = [t for _c, t in failure_policy.choice_labels()]
+        cur_code = failure_policy.parse_policy(getattr(sd, "on_error", ""))
+
+        win = tkinter.Toplevel(root)
+        win.title("失败策略 - 行{}".format(row_idx))
+        win.geometry("400x210")
+        win.resizable(False, False)
+        _set_window_icon(win)
+        tkinter.Label(win, text="该行命令失败时（默认跟随全局「出错即停」）：",
+                      font=FONT_BODY, bg=C["bgc"]).pack(pady=(12, 6))
+        var = tkinter.StringVar(value=failure_policy.policy_text(cur_code))
+        combo = ttk.Combobox(win, textvariable=var, values=labels,
+                             state="readonly", width=22, font=FONT_BODY)
+        combo.pack(pady=4)
+        tgt_frame = tkinter.Frame(win, bg=C["bgc"])
+        tgt_frame.pack(pady=6)
+        tkinter.Label(tgt_frame, text="跳转目标行号", font=FONT_SMALL,
+                      fg=C["fgm"], bg=C["bgc"]).pack(side="left")
+        tgt_entry = tkinter.Entry(tgt_frame, width=8, font=FONT_LOG)
+        tgt_entry.pack(side="left", padx=6)
+        cur_tgt = int(getattr(sd, "jump_to", 0) or 0)
+        if cur_tgt > 0:
+            tgt_entry.insert(0, str(cur_tgt))
+        tkinter.Label(win, text="⊙ 停止  ↷ 继续  ⇥N 跳转到第 N 行（1 起算）",
+                      font=FONT_SMALL, fg=C["fgm"], bg=C["bgc"]).pack(pady=(0, 4))
+
+        def _confirm():
+            label = var.get()
+            code = codes[labels.index(label)] if label in labels else ""
+            target = failure_policy.normalize_jump_target(tgt_entry.get())
+            okv, msg = failure_policy.validate_policy(code, target, len(rows_now), row_idx)
+            if not okv:
+                from utils import show_toast
+                show_toast(root, msg, "error")
+                return
+            _push_undo()
+            sd.set_failure_policy(code, target)
+            win.destroy()
+            _update_row_inplace(row_idx - 1)
+            from utils import show_toast
+            show_toast(root, "行{}：{}".format(row_idx,
+                       failure_policy.policy_text(code) + sd.failure_badge()), "info")
+
+        btn_frame = tkinter.Frame(win, bg=C["bgc"])
+        btn_frame.pack(pady=10)
+        _ok = tkinter.Button(btn_frame, text="确定", command=_confirm,
+                             bg=C["ac"], fg=ui_theme.text_on(C["ac"]),
+                             font=FONT_BUTTON, width=10)
+        ui_theme.set_role(_ok, "ac")
+        _ok.pack(side="left", padx=5)
+        _cancel = tkinter.Button(btn_frame, text="取消", command=win.destroy,
+                                 bg=C["dg"], fg=ui_theme.text_on(C["dg"]),
+                                 font=FONT_BUTTON, width=10)
+        ui_theme.set_role(_cancel, "dg")
+        _cancel.pack(side="left", padx=5)
+
+    menu.add_command(label="失败策略...", command=set_failure_policy_dialog)
+    menu.add_separator()
     menu.add_command(label="设置条件断点...", command=set_conditional_bp)
     menu.add_command(label="移除条件断点", command=remove_conditional_bp)
     menu.add_separator()
@@ -1872,7 +1949,7 @@ def _show_conditional_breakpoint_menu(event):
             t = state._exec_timings[row_idx]
             menu.add_separator()
             menu.add_command(label="⏱ 耗时: {:.3f}s ({})".format(
-                t["elapsed"], "✓" if t["success"] else "✗"),
+                t["elapsed"], "✔" if t["success"] else "✘"),
                 command=lambda: None, state="disabled")
     
     try:
@@ -2526,12 +2603,14 @@ def _editor_load_xls(fp):
     ui_bg_task.submit(lambda: script_io.load_script(fp), _done, _fail, name="load-script")
 
 # Command-type color map
+# 命令 → 分类键 (v4 §4.3): 结构不变、宿主调用点不动; 实际取色走 ui_theme.cat_color()。
+# 复制/粘贴并入「input」(文本/剪贴板族), 相移并入「coord」(坐标族), 收敛为 10 组。
 _CMD_COLORS = {
-    "找图":"#2563EB","区域找图":"#2563EB","点图":"#10B981","区域点图":"#10B981",
-    "按键":"#8B5CF6","热键":"#EF4444","输入":"#F59E0B","等待":"#6366F1",
-    "坐标":"#6B7280","滚轮":"#EC4899","复制":"#14B8A6","粘贴":"#14B8A6",
-    "悬停":"#F97316","拖拽":"#F97316","截屏":"#0EA5E9","相移":"#84CC16",
-    "按下":"#8B5CF6","释放":"#8B5CF6","代码":"#DC2626",
+    "找图":"locate","区域找图":"locate","点图":"click","区域点图":"click",
+    "按键":"key","热键":"hotkey","输入":"input","等待":"input",
+    "坐标":"coord","滚轮":"wheel","复制":"input","粘贴":"input",
+    "悬停":"hover","拖拽":"hover","截屏":"shot","相移":"coord",
+    "按下":"key","释放":"key","代码":"code",
 }
 
 # ── 表格列与 tag 基建 (v3 §2.1a / §4.2) ──
@@ -2548,6 +2627,21 @@ _TREE_COLS_DEBOUNCE = 150   # ms
 _CMD_TAGS_READY = False     # 命令配色 tag 是否已全量预配置
 
 
+def _configure_cmd_tags(dark=None):
+    """配置/重配全部命令配色 tag + 图例圆点色 (v4 §4.3, 同源取色)。
+
+    主题切换时在 ThemeBus 回调里重配 10 个 tag (10 次调用, 可忽略),
+    并同步图例圆点前景色 (图例色 == 行内文字色)。
+    """
+    for name, group in _CMD_COLORS.items():
+        tree.tag_configure(name, foreground=ui_theme.cat_color(group, dark))
+    for _dot, group in _LEGEND_DOTS:
+        try:
+            _dot.configure(fg=ui_theme.cat_color(group, dark))
+        except Exception:
+            pass
+
+
 def _preconfig_cmd_tags():
     """启动期一次性配置全部命令配色 tag (v3 §4.2)。
 
@@ -2558,8 +2652,7 @@ def _preconfig_cmd_tags():
     if _CMD_TAGS_READY:
         return
     try:
-        for name, color in _CMD_COLORS.items():
-            tree.tag_configure(name, foreground=color)
+        _configure_cmd_tags()
         _CMD_TAGS_READY = True
     except Exception:
         # tree 尚未创建等异常: 保持未就绪, 下次调用重试
@@ -2772,6 +2865,7 @@ def _log_breakpoint_on_configure(event=None):
 # ── 图例按需显示 (v3 §2.1b) ──
 _LEGEND_AUTO = True         # 开关: False 恢复「图例常驻」
 _LEGEND_GROUPS = []         # [(names_tuple, frame)] 由 build 时填充
+_LEGEND_DOTS = []           # [(dot_label, group)] 图例圆点, 换肤时同源重取色 (v4 §4.3)
 
 
 def _legend_used_names():
@@ -2824,15 +2918,22 @@ def _sync_legend():
 
 
 def _row_text_for(row_num, sd=None):
-    """生成 #0 列文本: 两位行号 + 断点 ● + 条件 [C:...] (row_num 为 1-based)。
+    """生成 #0 列文本: 两位行号 + 断点 ● + 条件 [C:...] + 失败策略角标。
 
+    角标 (P2 §6.2): ⊘ 停止 / ↷ 继续 / ⇥N 跳转; 未设策略 → 无角标 (不加列、不加宽)。
     就地刷新与全量重建共用此逻辑, 保证两条路径 #0 文本逐字一致。
     """
     num_text = "{:02d}".format(row_num)
     bp_mark = "●" if row_num in state.breakpoints else ""
     cond = engine.conditional_breakpoints.get(row_num, "") if hasattr(engine, 'conditional_breakpoints') else ""
     cond_mark = " [C:{}]".format(cond[:12]) if cond else ""
-    return num_text + bp_mark + cond_mark
+    policy_mark = ""
+    if sd is not None:
+        try:
+            policy_mark = sd.failure_badge()
+        except Exception:
+            policy_mark = ""      # 失败开放: 行对象异常不影响行渲染
+    return num_text + bp_mark + cond_mark + policy_mark
 
 
 # ── 树渲染缓存 + 尾部增量刷新 ──
@@ -3125,7 +3226,7 @@ def _persist_script(fp, action="保存"):
             pass
     try:
         from utils import show_toast
-        show_toast(root, "✓ 已保存: {} ({} 行)".format(
+        show_toast(root, "✔ 已保存: {} ({} 行)".format(
             os.path.basename(fp), len(state._editor_rows)), "success")
     except Exception:
         pass
@@ -4212,7 +4313,7 @@ def _show_variables_window():
             # Sort by row number
             sorted_rows = sorted(state._exec_timings.items(), key=lambda x: x[0])
             for row_num, tdata in sorted_rows:
-                status_text = "✓" if tdata["success"] else "✗"
+                status_text = "✔" if tdata["success"] else "✘"
                 tag = "ok" if tdata["success"] else "fail"
                 timing_tree.insert("", "end", values=(
                     row_num, tdata["cmd"][:12],
@@ -4540,7 +4641,7 @@ _update_exec_buttons = ui_exec_bar.set_state
 # ======================================================================
 
 
-# 设置分卡保存 handlers 已移至 settings_window (各卡 ✓ 按钮独立保存)
+# 设置分卡保存 handlers 已移至 settings_window (各卡 ✔ 按钮独立保存)
 
 def _start_recording():
     """开始录制 —  : 折叠主窗口 → 显示录制 Mini Bar。"""
@@ -5980,14 +6081,16 @@ def build_app():
     legend_inner = tkinter.Frame(legend_frame, bg=C["bg"])
     legend_inner.pack(anchor="w")
     _LEGEND_GROUPS.clear()
-    for label, color in _LEGEND_ITEMS:
+    _LEGEND_DOTS.clear()
+    for label, group in _LEGEND_ITEMS:
         f = tkinter.Frame(legend_inner, bg=C["bg"])
         f.pack(side="left", padx=(2, 0))
-        # 图例圆点的前景 = 节点类型色 (语义色标), 不能登记成 "fgm" 角色 ——
-        # 那会让换肤把它刷成中性灰/浅灰底白字。底色随父容器, 前景保持不变。
-        _dot = tkinter.Label(f, text="●", font=FONT_ICON, fg=color, bg=C["bg"])
+        # 图例圆点的前景 = 分类色 (v4 §4.3: 与行内文字同源, 随主题切换重取色)。
+        _dot = tkinter.Label(f, text="●", font=FONT_ICON,
+                             fg=ui_theme.cat_color(group), bg=C["bg"])
         _dot._acrpa_keep_fg = True
         _dot.pack(side="left")
+        _LEGEND_DOTS.append((_dot, group))
         _lbl = tkinter.Label(f, text=label, font=FONT_TINY, fg=C["fgm"], bg=C["bg"])
         ui_theme.set_fg_token(_lbl, "fgm")
         _lbl.pack(side="left")

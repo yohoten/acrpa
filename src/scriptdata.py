@@ -24,6 +24,11 @@ class ScriptData:
         # .acrpas 往返 / 撤销快照 (copy.deepcopy 兼容) 使用。
         # 旧调用方不传 id → 自动生成; 空/None 亦回退为自动生成。
         self.id = id or ScriptData.new_id()
+        # 步骤级失败策略 (P2, 见 failure_policy): 同样不进 to_tuple ——
+        # 不新增常显列, 只在 #0 序号列尾部加角标 + 详情面板编辑。
+        # 默认 "" = 沿用全局 stop_on_error, 因此旧脚本/旧调用方行为零变化。
+        self.on_error = ""
+        self.jump_to = 0
 
     @classmethod
     def from_xlrd_row(cls, row):
@@ -53,3 +58,25 @@ class ScriptData:
 
     def to_tuple(self): return (self.cmd_type,) + tuple(self.args)
     def get_arg(self, idx): return self.args[idx] if 0<=idx<len(self.args) else ""
+
+    # ── 步骤级失败策略 (P2) ──────────────────────────────────────────
+    def set_failure_policy(self, on_error="", jump_to=0):
+        """写入失败策略（策略码 + 1 基跳转目标）；非法值由 failure_policy 归一。"""
+        import failure_policy
+        self.on_error = failure_policy.parse_policy(on_error)
+        self.jump_to = failure_policy.normalize_jump_target(jump_to)
+        return self.on_error, self.jump_to
+
+    def failure_badge(self):
+        """#0 序号列尾部角标（未设置策略 → 空串）。"""
+        import failure_policy
+        return failure_policy.badge_text(self.on_error, self.jump_to)
+
+    def failure_meta(self):
+        """失败策略的可持久化表示（无策略 → 空 dict，保持旧文件不变）。"""
+        meta = {}
+        if self.on_error:
+            meta["on_error"] = self.on_error
+        if self.on_error == "jump" and int(self.jump_to or 0) > 0:
+            meta["jump_to"] = int(self.jump_to)
+        return meta

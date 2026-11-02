@@ -79,6 +79,9 @@ _PROJECT_MODULES = [
     "market_window", "market_upload", "accounts",
     "flow_graph", "script_io", "script_model", "script_validate",
     "capabilities", "i18n", "cli",
+    # P2 步骤级失败策略 (failure_policy.py): engine 在**模块级** import 它,
+    # 漏加则冻结版一启动 ImportError (源码模式永远测不出来)。
+    "failure_policy",
     # S1-01: 原生文件静态检查 (PE 位数/依赖存在性/路径 ASCII)。纯 stdlib
     # (io/os/struct), capabilities 在**模块级** import 它 —— 静态分析本可见,
     # 但仍是"import 期即需要"的硬依赖, 显式声明以防未来改成惰性后漏包。
@@ -119,6 +122,12 @@ _PROJECT_MODULES = [
     "ui.settings.cards.quick", "ui.settings.cards.advanced",
     "ui.settings.cards.netlink", "ui.settings.cards.python",
     "ui.settings.cards.market", "ui.settings.cards.extensions",
+    # L1-A: 设备互联窗口拆分 —— netlink_window.py 退化为薄壳, 实现迁至 ui/netlink/ 包。
+    # 薄壳在模块级 `from ui.netlink import window`, PyInstaller 静态分析本可发现,
+    # 但遵循「UI 模块显式纳入」惯例双保险, 新增 UI 模块请同步追加。
+    "ui.netlink", "ui.netlink.common", "ui.netlink.window",
+    "ui.netlink.panels", "ui.netlink.sched", "ui.netlink.shot",
+    "ui.netlink.pairing", "ui.netlink.remote", "ui.netlink.web", "ui.netlink.audit",
 ]
 
 # ── 核心依赖 hidden imports (仅导入真正用到的子模块) ──

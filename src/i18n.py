@@ -73,7 +73,7 @@ CATALOG = {
         "status.sep": "  ·  ",
         "status.counts": "  ·  成功 {ok}  失败 {fail}",
         # ── 执行控制: 四键 (注: 「⏸ 暂停」被 _test_netlink_phase2_e2e.py 断言, 未抽取) ──
-        "exec.btn_validate": "✓ 校验",
+        "exec.btn_validate": "✔ 校验",
         "exec.btn_run": "▶ 运行",
         "exec.btn_resume": "▶ 继续",
         "exec.btn_step": "⏭ 单步",
@@ -159,7 +159,7 @@ CATALOG = {
         "status.sep": "  ·  ",
         "status.counts": "  ·  OK {ok}  Failed {fail}",
         # ── Execution control: four buttons ──
-        "exec.btn_validate": "✓ Validate",
+        "exec.btn_validate": "✔ Validate",
         "exec.btn_run": "▶ Run",
         "exec.btn_resume": "▶ Resume",
         "exec.btn_step": "⏭ Step",

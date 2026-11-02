@@ -315,7 +315,7 @@ def _theme_sync_market(dark=None, palette=None, prev=None):
 
 
 def _theme_sync_cmd_tags(dark=None, palette=None, prev=None):
-    """订阅: 命令配色 tag + 图例圆点换肤重取色 (v4 §4.3)。"""
+    """订阅: 命令 tag 反查 + 图例圆点换肤重取色 (v4 §4.2 B2)。"""
     try:
         _configure_cmd_tags(dark)
     except Exception:
@@ -1664,14 +1664,19 @@ _LEGEND_ITEMS = [
     ("截屏", "shot"), ("代码", "code"),
 ]
 
-# ── §4.5 选中左缘 2px 强调条 (主方案: #0 树列 per-item image) ──
-#   ttk Treeview 无 per-row 边框能力, 故在 #0 列每项挂 2px 宽 ac 竖条贴图;
-#   #0 列 minwidth=32 可容纳「2px 图 + 行号文本」, 且不干扰 #0 断点点击。
+# ── §4.5 选中左缘 2px 强调条 + §4.2 B2 行首分类色条 (主方案: #0 树列 per-item image) ──
+#   ttk Treeview 无 per-row 边框能力, 故在 #0 列每项挂竖条贴图:
+#   · 未选中: 4px 分类色条 (B2, 命令名已中性化, 分类色只落这里 + 图例色块);
+#   · 选中:   [2px ac 强调条][4px 分类色条] 复合 (选中左缘仍保留 ac 强调)。
+#   #0 列 width=40 可容纳「6px 图 + 行号文本」, 且不干扰 #0 断点点击。
 _bar_ac = None
+_CAT_BAR_W = 4                      # B2: 行首分类色条宽 (px)
+_cat_bars = {}                      # 分类组 -> 4px 分类色条 PhotoImage (未选中)
+_cat_bars_sel = {}                  # 分类组 -> [2px ac][4px 分类色] 复合条 (选中)
 
 
 def _build_sel_bar():
-    """构造 2px 宽 x row_h 高的 ac 竖条 PhotoImage (随主题/DPI 变更重建)。"""
+    """构造 ac 选中竖条 + B2 行首分类色条 PhotoImage (随主题/DPI 变更重建)。"""
     global _bar_ac
     try:
         h = int(utils.TOKENS.get("row_h", 22))
@@ -1683,11 +1688,47 @@ def _build_sel_bar():
         _bar_ac = img
     except Exception:
         _bar_ac = None
+    # B2: 每分类一组 4px 色条; 选中态复合 [2px ac][4px 分类色]。
+    _cat_bars.clear()
+    _cat_bars_sel.clear()
+    try:
+        for group in set(_CMD_COLORS.values()):
+            color = ui_theme.cat_color(group)
+            bar = tkinter.PhotoImage(width=_CAT_BAR_W, height=h)
+            bar.put(color, to=(0, 0, _CAT_BAR_W, h))
+            _cat_bars[group] = bar
+            sel = tkinter.PhotoImage(width=2 + _CAT_BAR_W, height=h)
+            sel.put(C["ac"], to=(0, 0, 2, h))
+            sel.put(color, to=(2, 0, 2 + _CAT_BAR_W, h))
+            _cat_bars_sel[group] = sel
+    except Exception:
+        _cat_bars.clear()
+        _cat_bars_sel.clear()
+
+
+def _cmd_type_of(tree_, item):
+    """按行 tag 反查该行 cmd_type (供行首分类色条取色, 避免 O(n) index 查找)。"""
+    try:
+        tags = tree_.item(item, "tags")
+        first = tags[0] if tags else ""
+        return first if first in _CMD_COLORS else ""
+    except Exception:
+        return ""
+
+
+def _cat_bar_image(cmd_type, selected=False):
+    """返回该行的行首色条贴图: 分类色条(未选中) / [ac+分类](选中) / 空。"""
+    group = _CMD_COLORS.get(cmd_type)
+    if group is None:
+        return (_bar_ac if (selected and _bar_ac is not None) else "")
+    if selected:
+        return _cat_bars_sel.get(group) or _cat_bars.get(group, "")
+    return _cat_bars.get(group, "")
 
 
 def _sel_bar(tree_, item, on):
     try:
-        tree_.item(item, image=(_bar_ac if (on and _bar_ac is not None) else ""))
+        tree_.item(item, image=_cat_bar_image(_cmd_type_of(tree_, item), on))
     except Exception:
         pass
 
@@ -2603,7 +2644,8 @@ def _editor_load_xls(fp):
     ui_bg_task.submit(lambda: script_io.load_script(fp), _done, _fail, name="load-script")
 
 # Command-type color map
-# 命令 → 分类键 (v4 §4.3): 结构不变、宿主调用点不动; 实际取色走 ui_theme.cat_color()。
+# 命令 → 分类键 (v4 §4.2 B2): 结构不变、宿主调用点不动; 分类色不再上整行文字前景,
+# 改由 _build_sel_bar 生成行首 4px 色条 (经 _cat_bar_image 挂到 #0 列 image)。
 # 复制/粘贴并入「input」(文本/剪贴板族), 相移并入「coord」(坐标族), 收敛为 10 组。
 _CMD_COLORS = {
     "找图":"locate","区域找图":"locate","点图":"click","区域点图":"click",
@@ -2628,13 +2670,12 @@ _CMD_TAGS_READY = False     # 命令配色 tag 是否已全量预配置
 
 
 def _configure_cmd_tags(dark=None):
-    """配置/重配全部命令配色 tag + 图例圆点色 (v4 §4.3, 同源取色)。
+    """B2 (§4.2): 命令名/参数统一中性, 分类色只落行首色条 + 图例色块。
 
-    主题切换时在 ThemeBus 回调里重配 10 个 tag (10 次调用, 可忽略),
-    并同步图例圆点前景色 (图例色 == 行内文字色)。
+    命令 tag 不再上前景色 (否则会覆盖样式「选中 fgt」的提亮), 让整行文字
+    继承 Treeview 样式 (未选中 fgb / 选中 fgt); 分类色改由 per-item image
+    行首 4px 色条承载。主题切换时在 ThemeBus 回调里重取图例圆点色。
     """
-    for name, group in _CMD_COLORS.items():
-        tree.tag_configure(name, foreground=ui_theme.cat_color(group, dark))
     for _dot, group in _LEGEND_DOTS:
         try:
             _dot.configure(fg=ui_theme.cat_color(group, dark))
@@ -2643,15 +2684,17 @@ def _configure_cmd_tags(dark=None):
 
 
 def _preconfig_cmd_tags():
-    """启动期一次性配置全部命令配色 tag (v3 §4.2)。
+    """启动期一次性预配置命令配色 tag (v3 §4.2)。
 
-    改造前每行都要 `tree.tag_has()` + 首次命中才 `tag_configure`, 是 O(n) 次
-    Tcl 往返; 这里一次性配完 20 个 tag, 运行期只按名挂 tag、不再查询。
+    B2 后命令 tag 不再上前景色, 但仍按名挂到每行 (供 _cmd_type_of 反查分类
+    以取行首色条); 这里一次性建齐全部命令 tag, 运行期只挂名、不再查询。
     """
     global _CMD_TAGS_READY
     if _CMD_TAGS_READY:
         return
     try:
+        for name in _CMD_COLORS:
+            tree.tag_configure(name)
         _configure_cmd_tags()
         _CMD_TAGS_READY = True
     except Exception:
@@ -2660,7 +2703,7 @@ def _preconfig_cmd_tags():
 
 
 def _row_tags(cmd_type, index):
-    """单行的 tags: 命令配色 tag (命中才挂) + 偶数行斑马纹 (v3 §4.2)。"""
+    """单行的 tags: 命令分类 tag (命中才挂, 供行首色条反查) + 偶数行斑马纹 (v3 §4.2)。"""
     tags = ()
     if cmd_type in _CMD_COLORS:
         tags = (cmd_type,)
@@ -2993,6 +3036,7 @@ def _tree_tail_sync(new_keys):
                 sd = state._editor_rows[i]
                 text, vals = new_keys[i]
                 iid = tree.insert("", "end", text=text, values=vals,
+                                  image=_cat_bar_image(sd.cmd_type),
                                   tags=_row_tags(sd.cmd_type, i))
                 cache["iids"].append(iid)
                 cache["keys"].append(new_keys[i])
@@ -3026,6 +3070,7 @@ def _update_row_inplace(index, sd=None):
         _preconfig_cmd_tags()      # 一次性预配置, 运行期不再 tag_has/tag_configure
         key = _tree_row_key(sd, index)
         tree.item(item, text=key[0], values=key[1],
+                  image=_cat_bar_image(sd.cmd_type, item in tree.selection()),
                   tags=_row_tags(sd.cmd_type, index))
         # 同步渲染缓存, 否则后续尾部 diff 会拿旧值比对而误判为"无需刷新"
         if index < len(_tree_render_cache["keys"]):
@@ -3070,7 +3115,8 @@ def _editor_sync_to_tree():
     for i, sd in enumerate(state._editor_rows):
         text, vals = new_keys[i]
         item = tree.insert("", "end", text=text,
-                           values=vals, tags=_row_tags(sd.cmd_type, i))
+                           values=vals, image=_cat_bar_image(sd.cmd_type),
+                           tags=_row_tags(sd.cmd_type, i))
         new_iids.append(item)
         sig_to_iid.setdefault(vals, item)
         rid = getattr(sd, "id", None)
@@ -6022,7 +6068,7 @@ def build_app():
         columns=("cmd",)+tuple("p{}".format(i) for i in range(1,10)),
         show="tree headings",selectmode="browse")
     tree.grid(row=0,column=0,sticky="nsew")
-    tree.heading("#0",text="#"); tree.column("#0",width=32,minwidth=32,stretch=False)
+    tree.heading("#0",text="#"); tree.column("#0",width=40,minwidth=40,stretch=False)
     # 列策略 (v3 §2.1a): 显式 stretch 让可见列均分剩余宽度;
     # 尾部参数列的显隐由 _apply_tree_columns() 按窗口宽度决定 (默认全显)。
     tree.heading("cmd",text="命令类型")
@@ -6085,7 +6131,7 @@ def build_app():
     for label, group in _LEGEND_ITEMS:
         f = tkinter.Frame(legend_inner, bg=C["bg"])
         f.pack(side="left", padx=(2, 0))
-        # 图例圆点的前景 = 分类色 (v4 §4.3: 与行内文字同源, 随主题切换重取色)。
+        # 图例圆点的前景 = 分类色 (v4 §4.2 B2: 与行首色条同源, 随主题切换重取色)。
         _dot = tkinter.Label(f, text="●", font=FONT_ICON,
                              fg=ui_theme.cat_color(group), bg=C["bg"])
         _dot._acrpa_keep_fg = True

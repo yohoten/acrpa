@@ -1005,7 +1005,7 @@
 <!-- ================= Stats ================= -->
 <div class="stats">
   <div class="wrap stats-grid">
-    <div class="stat"><div class="num"><span class="grad count" data-target="92">0</span></div><div class="lab">内置自动化命令</div></div>
+    <div class="stat"><div class="num"><span class="grad count" data-target="94">0</span></div><div class="lab">内置自动化命令</div></div>
     <div class="stat"><div class="num"><span class="grad count" data-target="10">0</span></div><div class="lab">即用型脚本模板</div></div>
     <div class="stat"><div class="num"><span class="grad count" data-target="4">0</span></div><div class="lab">步骤类型 · 工作流编排</div></div>
     <div class="stat"><div class="num"><span class="grad" data-ver></span></div><div class="lab"><span data-date></span> 最新版本</div></div>
@@ -1069,7 +1069,7 @@
       <p class="sec-desc">从「录一遍」到「全自动」，最快 3 分钟。</p>
     </div>
     <div class="steps">
-      <div class="step reveal"><div class="stepnum">①</div><h3>录一遍，或写进 Excel</h3><p>用内置「录制」把操作跑一遍，自动生成脚本；或直接在 .xls 表格里一行写一条命令 —— 92 条内置命令，会填表就会写。</p></div>
+      <div class="step reveal"><div class="stepnum">①</div><h3>录一遍，或写进 Excel</h3><p>用内置「录制」把操作跑一遍，自动生成脚本；或直接在 .xls 表格里一行写一条命令 —— 94 条内置命令，会填表就会写。</p></div>
       <div class="step reveal"><div class="stepnum">②</div><h3>调参数，AI 定位</h3><p>改改窗口标题与参数即可；固定坐标不稳就换「AI 找图」用大白话描述元素，或 OCR「点击文字」按文字定位，界面小改也自适应。</p></div>
       <div class="step reveal"><div class="stepnum">③</div><h3>运行，交给它</h3><p>立即运行、断点调试，或交给定时调度自动跑；也可以经 NetLink 把脚本批量分发到内网多台机器一起执行。</p></div>
     </div>
@@ -1217,11 +1217,11 @@
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="sec-tag">COMMAND SYSTEM</span>
-      <h2>命令系统 · 92 条内置命令</h2>
-      <p class="sec-desc">92 条内置命令，一行一条写进 Excel 即可直接使用（下方速查表按 9 大类完整列出），点击命令或示例可复制；完整说明见 <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a></p>
+      <h2>命令系统 · 94 条内置命令</h2>
+      <p class="sec-desc">94 条内置命令，一行一条写进 Excel 即可直接使用（下方速查表按 9 大类完整列出），点击命令或示例可复制；完整说明见 <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a></p>
     </div>
     <details class="cmd-fold">
-      <summary>展开「命令速查表」· 9 大类 · 92 条<span style="color:var(--dim);font-weight:400;font-size:13px">完整文档见 <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a></span></summary>
+      <summary>展开「命令速查表」· 9 大类 · 94 条<span style="color:var(--dim);font-weight:400;font-size:13px">完整文档见 <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a></span></summary>
     <div class="cmd-tabs reveal">
       <div class="cmd-tab on" data-tab="t1">🎯 基础操作</div>
       <div class="cmd-tab" data-tab="t2">🪟 窗口管理</div>
@@ -1333,6 +1333,7 @@
         <tr><td><code>停止监听</code></td><td>停止监听并清空队列</td><td class="ex">停止监听</td></tr>
         <tr><td><code>启动浏览器录制</code></td><td>调用 Playwright codegen 录制网页操作，并转为 DSL 追加到脚本</td><td class="ex">启动浏览器录制</td></tr>
         <tr><td><code>关闭浏览器</code></td><td>结束浏览器会话并释放进程，下条命令会按配置重新拉起</td><td class="ex">关闭浏览器</td></tr>
+        <tr><td><code>浏览器验证码</code></td><td>滑块验证码闭环：缺口测算（缺口包围盒几何法 / 背景图灰度列差分）+ 缓动拖拽 + 成功检测与刷新重试；纯 Playwright + PIL 自研，不依赖 OpenCV / OCR 组件</td><td class="ex">浏览器验证码, #slider, <b>#bg</b></td></tr>
       </table>
       <p class="cmd-note">浏览器命令基于 <code>Playwright</code> 实现，按需安装（约 155 MB，不随主程序打包）；未安装时命令会提示安装方法。流程与网页流程可在同一条脚本中串行编排。</p>
     </div>

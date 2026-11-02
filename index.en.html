@@ -1005,7 +1005,7 @@
 <!-- ================= Stats ================= -->
 <div class="stats">
   <div class="wrap stats-grid">
-    <div class="stat"><div class="num"><span class="grad count" data-target="92">0</span></div><div class="lab">Built-in automation commands</div></div>
+    <div class="stat"><div class="num"><span class="grad count" data-target="94">0</span></div><div class="lab">Built-in automation commands</div></div>
     <div class="stat"><div class="num"><span class="grad count" data-target="10">0</span></div><div class="lab">Ready-to-use script templates</div></div>
     <div class="stat"><div class="num"><span class="grad count" data-target="4">0</span></div><div class="lab">Step types · workflow orchestration</div></div>
     <div class="stat"><div class="num"><span class="grad" data-ver></span></div><div class="lab"><span data-date></span> Latest version</div></div>
@@ -1069,7 +1069,7 @@
       <p class="sec-desc">From "record it once" to "fully automated" — in as little as 3 minutes.</p>
     </div>
     <div class="steps">
-      <div class="step reveal"><div class="stepnum">①</div><h3>Record it, or write it in Excel</h3><p>Use the built-in recorder to run through the steps once and generate a script automatically; or write one command per row directly in a .xls sheet — 92 built-in commands, if you can fill a spreadsheet you can write a script.</p></div>
+      <div class="step reveal"><div class="stepnum">①</div><h3>Record it, or write it in Excel</h3><p>Use the built-in recorder to run through the steps once and generate a script automatically; or write one command per row directly in a .xls sheet — 94 built-in commands, if you can fill a spreadsheet you can write a script.</p></div>
       <div class="step reveal"><div class="stepnum">②</div><h3>Tune parameters, let AI locate</h3><p>Just adjust the window title and parameters; if fixed coordinates are unstable, switch to "AI Find Image" and describe the element in plain language, or use OCR "Click Text" to locate by text — small UI changes stay adaptive.</p></div>
       <div class="step reveal"><div class="stepnum">③</div><h3>Run it, then let it run</h3><p>Run immediately, debug with breakpoints, or hand it to the scheduler; you can also distribute scripts in bulk over NetLink to many machines on the LAN.</p></div>
     </div>
@@ -1217,11 +1217,11 @@
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="sec-tag">COMMAND SYSTEM</span>
-      <h2>Command System · 92 Built-in Commands</h2>
-      <p class="sec-desc">92 built-in commands: write one per row in Excel and use them right away (all 92 are listed in the quick reference below, grouped into 9 categories). Click any command or example to copy it. See the <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a> for full documentation.</p>
+      <h2>Command System · 94 Built-in Commands</h2>
+      <p class="sec-desc">94 built-in commands: write one per row in Excel and use them right away (all 94 are listed in the quick reference below, grouped into 9 categories). Click any command or example to copy it. See the <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a> for full documentation.</p>
     </div>
     <details class="cmd-fold">
-      <summary>Expand the Command Reference · 9 categories · 92 commands<span style="color:var(--dim);font-weight:400;font-size:13px">Full docs in the <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a></span></summary>
+      <summary>Expand the Command Reference · 9 categories · 94 commands<span style="color:var(--dim);font-weight:400;font-size:13px">Full docs in the <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a></span></summary>
     <div class="cmd-tabs reveal">
       <div class="cmd-tab on" data-tab="t1">🎯 Basic Ops</div>
       <div class="cmd-tab" data-tab="t2">🪟 Windows</div>
@@ -1333,6 +1333,7 @@
         <tr><td><code>停止监听</code></td><td>Stop listening and clear the queue</td><td class="ex">停止监听</td></tr>
         <tr><td><code>启动浏览器录制</code></td><td>Record web actions with Playwright codegen and append the result to the script as DSL</td><td class="ex">启动浏览器录制</td></tr>
         <tr><td><code>关闭浏览器</code></td><td>End the browser session and release the process; the next command relaunches it per your settings</td><td class="ex">关闭浏览器</td></tr>
+        <tr><td><code>浏览器验证码</code></td><td>Slider-captcha loop: gap offset measurement (gap bounding-box geometry, or grayscale column diff on the background image) + eased dragging + success detection with refresh-and-retry; self-implemented on Playwright + PIL, no OpenCV / OCR component required</td><td class="ex">浏览器验证码, #slider, <b>#bg</b></td></tr>
       </table>
       <p class="cmd-note">Browser commands are implemented on <code>Playwright</code>, installed on demand (about 155 MB, not bundled with the main program); if it is missing, the command shows how to install it. Workflow and web steps can be chained serially in the same script.</p>
     </div>

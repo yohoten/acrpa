@@ -4,13 +4,13 @@
 
 **会填 Excel， 就会做自动化——把重复操作写成一张表格，剩下的交给电脑。**
 
-Excel 即脚本 · 92 条内置命令 · 图像 / OCR / AI 三种定位 · 浏览器自动化 · 多机互联 · 单文件便携版
+Excel 即脚本 · 94 条内置命令 · 图像 / OCR / AI 三种定位 · 浏览器自动化 · 多机互联 · 单文件便携版
 
 [![Version](https://img.shields.io/badge/version-0.1.30--beta-0078D4?style=flat-square)](VERSION)
 [![License](https://img.shields.io/badge/license-MIT-107C10?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20x64-5C2D91?style=flat-square)](#quickstart)
 [![Python](https://img.shields.io/badge/python-3.8%2B-3776AB?style=flat-square)](#quickstart)
-[![Commands](https://img.shields.io/badge/commands-92%20%2F%2011%20groups-8B5CF6?style=flat-square)](#commands)
+[![Commands](https://img.shields.io/badge/commands-94%20%2F%2011%20groups-8B5CF6?style=flat-square)](#commands)
 [![Size](https://img.shields.io/badge/portable-~14%20MiB-C2410C?style=flat-square)](#download)
 
 [下载](#download) · [快速开始](#quickstart) · [命令总表](#commands) · [NetLink](#netlink) · [常见问题](#faq) · [合规边界](#compliance)
@@ -162,7 +162,7 @@ python run.py --script demos\ok.acrpas --var n=21 --json-report out.json --exit-
 
 ## 命令总表
 
-**92 条命令 / 11 个分组**，全部由 [`src/commands.py`](src/commands.py) 的注册表驱动，与 [`res/help/command_schema.json`](res/help/command_schema.json) 同源。应用内按 <kbd>Ctrl</kbd>+<kbd>K</kbd> 可模糊搜索全部命令。
+**94 条命令 / 11 个分组**，全部由 [`src/commands.py`](src/commands.py) 的注册表驱动，与 [`res/help/command_schema.json`](res/help/command_schema.json) 同源。应用内按 <kbd>Ctrl</kbd>+<kbd>K</kbd> 可模糊搜索全部命令。
 
 | 分组 | 条数 | 代表命令 | 说明 |
 | --- | --: | --- | --- |
@@ -301,6 +301,7 @@ python run.py --script demos\ok.acrpas --var n=21 --json-report out.json --exit-
 | `浏览器执行JS`（别名 `执行JS`） | `document.title, page_title, 是` | 执行 JS，返回值写回变量 |
 | `浏览器读取` | `#price, 文本, price` / `, 标题, t` | 一次性读取文本 / 属性 / 值 / HTML / 数量 / URL / 标题 / 存在 / 可见 |
 | `浏览器选择` | `#city, 北京, 标签` | 下拉框选择（标签 / 值 / 序号） |
+| `浏览器验证码` | `#slider, #bg` / `#slider, #bg, , .ok, .refresh, 1000, 40, 2, 8` | 滑块验证码闭环：缺口测算（缺口包围盒几何法 / 背景图灰度列差分）+ 缓动拖拽 + 成功检测与刷新重试（自研，无 OpenCV/OCR 依赖；限自有系统合规使用） |
 | `浏览器管理` | `打开, Edge, 否, D:\prof, https://…` | 打开 / 接管 / 关闭浏览器；可指定无头、用户数据目录（持久化登录态） |
 | `关闭浏览器` | 无参数 | 关闭当前浏览器上下文 |
 | `浏览器读取Cookie` | `cookie_json, json, D:\out\cookies.json` | 导出 Cookie（`json` / `header` / `netscape`） |
@@ -604,7 +605,7 @@ ACRPA/
 │   ├── app.py             # 组装窗口、注入上下文
 │   ├── ACRPA.py           # 主窗口
 │   ├── engine.py          # 执行引擎（重试 / 暂停 / 危险操作闸门）
-│   ├── commands.py        # 92 条命令注册表
+│   ├── commands.py        # 94 条命令注册表
 │   ├── workflow.py        # 工作流引擎
 │   ├── browser_backend.py # Playwright 后端
 │   ├── netlink/           # 多机互联（协议 / 配对 / 分发 / 审计）

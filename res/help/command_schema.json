@@ -2,11 +2,11 @@
   "app_version": "0.1.30-beta",
   "source": "src/commands.py::commands.list_all()",
   "stats": {
-    "commands": 92,
-    "with_schema": 82,
+    "commands": 94,
+    "with_schema": 84,
     "no_params": 10,
     "variadic": 1,
-    "with_choices": 32
+    "with_choices": 33
   },
   "commands": [
     {
@@ -2231,6 +2231,96 @@
       "has_handler": false
     },
     {
+      "name": "浏览器验证码",
+      "description": "滑块验证码闭环:测算缺口偏移+鼠标缓动拖拽+成功检测/重试/刷新",
+      "params_text": "滑块定位, 背景图定位, 缺口图定位(可选), 成功检测定位(可选), 刷新定位(可选), 拖动时长ms(可选,默认800), 拖动步数(可选,默认30), 偏移修正px(可选,默认0), 校验超时秒(可选,默认5)",
+      "signature": "滑块定位, 背景图定位, 缺口图定位?, 成功检测定位?, 刷新定位?, 拖动时长ms=800, 拖动步数=30, 偏移修正px=0, 校验超时秒=5",
+      "params": [
+        {
+          "name": "滑块定位",
+          "raw": "滑块定位",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "背景图定位",
+          "raw": "背景图定位",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "缺口图定位",
+          "raw": "缺口图定位(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "成功检测定位",
+          "raw": "成功检测定位(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "刷新定位",
+          "raw": "刷新定位(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "拖动时长ms",
+          "raw": "拖动时长ms(可选,默认800)",
+          "kind": "string",
+          "choices": [],
+          "default": "800",
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "拖动步数",
+          "raw": "拖动步数(可选,默认30)",
+          "kind": "string",
+          "choices": [],
+          "default": "30",
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "偏移修正px",
+          "raw": "偏移修正px(可选,默认0)",
+          "kind": "string",
+          "choices": [],
+          "default": "0",
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "校验超时秒",
+          "raw": "校验超时秒(可选,默认5)",
+          "kind": "number",
+          "choices": [],
+          "default": "5",
+          "optional": true,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
       "name": "复制文件",
       "description": "复制文件/目录(相对路径按脚本目录解析)",
       "params_text": "源路径, 目标路径, 覆盖(是/否), 目标变量名(可选)",
@@ -3138,6 +3228,54 @@
           ],
           "default": null,
           "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": true
+    },
+    {
+      "name": "模拟打字",
+      "description": "模拟真人打字(逐字输出,支持中文,CPM调速与人类化抖动)",
+      "params_text": "内容, 速度(CPM,默认300), 人类化(是/否), 开始延时(秒,默认0)",
+      "signature": "内容, 速度=300, 人类化(是/否), 开始延时=0",
+      "params": [
+        {
+          "name": "内容",
+          "raw": "内容",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "速度",
+          "raw": "速度(CPM,默认300)",
+          "kind": "number",
+          "choices": [],
+          "default": "300",
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "人类化",
+          "raw": "人类化(是/否)",
+          "kind": "string",
+          "choices": [
+            "是",
+            "否"
+          ],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "开始延时",
+          "raw": "开始延时(秒,默认0)",
+          "kind": "number",
+          "choices": [],
+          "default": "0",
+          "optional": true,
           "variadic": false
         }
       ],

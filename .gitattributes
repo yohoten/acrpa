@@ -1,0 +1,22 @@
+# ── L0-6: lib/ 大二进制处置 ─────────────────────────────────────────
+# 评估结论 (2026-11-02)：lib/ 下共 9 个被 git 跟踪的 DLL，合计约 200 MB。
+#
+#   lib/paddle_ocr/*.dll  (~196 MB)  → 走 Git LFS
+#     它是"可选 OCR 后端"(默认关闭，build.py 的 paddle_dll_packable() 按需打包)。
+#     该 DLL 来自第三方 PaddleOCRSharp 原生运行时"绿色版"，无官方稳定直链可
+#     构建期下载，故用 LFS 指针入库、本体存 LFS 服务器，避免仓库持续膨胀。
+#
+#   lib/dd_driver/dd63330.dll  (3.68 MB)  → 保持普通 git 纳管，不进 LFS
+#     它是输入自动化 (DD 驱动) 的硬依赖，被 ACRPA.spec 无条件打包；体积小、
+#     必须始终可用，走 LFS 反而增加 clone 复杂度，得不偿失。
+#
+# 迁移步骤（执行一次即可，需提交并推送到支持 LFS 的远程）：
+#   git lfs install
+#   git lfs migrate import --include="lib/paddle_ocr/*.dll" --everything
+#   git push --force-with-lease   # 重写历史需谨慎，团队协作时先对齐
+# 或保守做法（不重写历史，仅新提交指针）：
+#   git rm --cached lib/paddle_ocr/*.dll
+#   git add lib/paddle_ocr/*.dll
+#   git commit -m "chore(lib): paddle_ocr DLLs 转 Git LFS"
+# ─────────────────────────────────────────────────────────────────────
+lib/paddle_ocr/*.dll filter=lfs diff=lfs merge=lfs -text

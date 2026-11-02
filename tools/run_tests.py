@@ -35,6 +35,7 @@ except Exception:
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TOOLS = os.path.join(BASE, "tools")
+TESTS = os.path.join(BASE, "tests")
 
 # ── 分类规则 ────────────────────────────────────────────────────────
 # 键 = 排除原因(也是 SKIP 时打印的说明), 值 = 判定函数
@@ -56,6 +57,7 @@ SAFE_BROWSER_LOGIC = frozenset({
     "_test_browser_waiter.py",
     "_test_browser_codegen_convert.py",
     "_test_browser_manage.py",
+    "_test_browser_captcha.py",
 })
 
 
@@ -80,14 +82,24 @@ def _why_not_safe(name):
 
 
 def discover():
-    """→ [(名字, 绝对路径)] 排序后的测试脚本列表。"""
+    """→ [(名字, 绝对路径)] 排序后的测试脚本列表。
+
+    L0-3 分家后: 自动化回归测试 (_test_*) 位于 ``tests/``, GUI 冒烟 (_smoke_*)
+    与静态门禁留在 ``tools/``。
+    """
     out = []
+    if os.path.isdir(TESTS):
+        for name in sorted(os.listdir(TESTS)):
+            if name.endswith(".py") and name.startswith("_test_"):
+                out.append((name, os.path.join(TESTS, name)))
     for name in sorted(os.listdir(TOOLS)):
-        if not name.endswith(".py"):
-            continue
-        if name.startswith("_test_") or name.startswith(GUI_PREFIXES):
+        if name.endswith(".py") and name.startswith(GUI_PREFIXES):
             out.append((name, os.path.join(TOOLS, name)))
-    return out
+    # 静态门禁统一入口 (L0-1/L0-2): 名字非 _test_ 前缀, 显式纳入 CI。
+    sc = os.path.join(TOOLS, "static_checks.py")
+    if os.path.exists(sc):
+        out.append(("static_checks.py", sc))
+    return sorted(out)
 
 
 def run_one(path, timeout):

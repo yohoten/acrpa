@@ -43,8 +43,8 @@ KEYCAP_TUPLE = 'font=("Consolas", 8, "bold"), bg=C["ac"], fg="white",'
 WHITELIST = {
     ("src/ACRPA.py", 'font=("Consolas", 9, "bold"), fg=C["fgb"], bg=C["bgc"])'):
         "录制动作计数 = 等宽粗体; _FONT_SPECS 未定义 mono-bold 角色, 保留原视觉",
-    ("src/netlink_window.py", 'lbl_pin = tkinter.Label(dlg, text="—", font=("Consolas", 28, "bold"),'):
-        "配对码 28pt 大字, 无对应角色, 保留原视觉",
+    # L1-A: 原 netlink_window.py 的配对码大字早已改用 utils.FONT_PIN (角色 ACRPA_PIN),
+    # 已无硬编码字体元组; 实现迁至 ui/netlink/pairing.py 后该白名单条目彻底失效, 已移除。
     # 阶段二第 4 项: 快捷键键帽随卡片迁出 settings_window.py —— 录制键帽 → cards/record.py,
     # 系统卡全局快捷键键帽 → cards/system.py (定位更新, 白名单条目由 1 拆为 2)。
     ("src/ui/settings/cards/record.py", KEYCAP_TUPLE):
@@ -84,7 +84,11 @@ def _parse_ui():
 UI_MODULES = ("src/utils.py", "src/ui/theme.py", "src/ui/log_dock.py",
               "src/ui/exec_bar.py", "src/ui/workflow_view.py", "src/ACRPA.py",
               "src/settings_window.py", "src/dialogs.py", "src/tray.py",
-              "src/netlink_window.py",
+              # L1-A: 设备互联窗口拆分为 ui/netlink/ 包 (薄壳 netlink_window.py 无 UI 代码)。
+              "src/ui/netlink/window.py", "src/ui/netlink/common.py",
+              "src/ui/netlink/panels.py", "src/ui/netlink/sched.py",
+              "src/ui/netlink/shot.py", "src/ui/netlink/pairing.py",
+              "src/ui/netlink/remote.py", "src/ui/netlink/web.py", "src/ui/netlink/audit.py",
               # 阶段二第 4 项: 设置窗口拆分为门面 + 12 卡 (src/ui/settings/**),
               # 均经属性式/注入式引用字体角色, 纳入「字体角色名可解析」守护断言。
               # (第 12 张 extensions.py 为 阶段二新增项②「扩展」卡。)

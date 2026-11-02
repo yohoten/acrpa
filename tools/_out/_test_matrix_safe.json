@@ -1,0 +1,451 @@
+{
+  "mode": "safe",
+  "skipped": [
+    {
+      "name": "_smoke_dark_mode.py",
+      "reason": "GUI 冒烟: 需要真实窗口会话 (本机全量回归时用 --all)"
+    },
+    {
+      "name": "_smoke_editable_title.py",
+      "reason": "GUI 冒烟: 需要真实窗口会话 (本机全量回归时用 --all)"
+    },
+    {
+      "name": "_smoke_help_window.py",
+      "reason": "GUI 冒烟: 需要真实窗口会话 (本机全量回归时用 --all)"
+    },
+    {
+      "name": "_smoke_launch_app.py",
+      "reason": "GUI 冒烟: 需要真实窗口会话 (本机全量回归时用 --all)"
+    },
+    {
+      "name": "_smoke_main_geometry.py",
+      "reason": "GUI 冒烟: 需要真实窗口会话 (本机全量回归时用 --all)"
+    },
+    {
+      "name": "_smoke_marketplace.py",
+      "reason": "GUI 冒烟: 需要真实窗口会话 (本机全量回归时用 --all)"
+    },
+    {
+      "name": "_smoke_mini_bar.py",
+      "reason": "GUI 冒烟: 需要真实窗口会话 (本机全量回归时用 --all)"
+    },
+    {
+      "name": "_smoke_netlink.py",
+      "reason": "GUI 冒烟: 需要真实窗口会话 (本机全量回归时用 --all)"
+    },
+    {
+      "name": "_smoke_netlink_control_ui.py",
+      "reason": "GUI 冒烟: 需要真实窗口会话 (本机全量回归时用 --all)"
+    },
+    {
+      "name": "_smoke_netlink_pairing_ui.py",
+      "reason": "GUI 冒烟: 需要真实窗口会话 (本机全量回归时用 --all)"
+    },
+    {
+      "name": "_smoke_netlink_transfer_ui.py",
+      "reason": "GUI 冒烟: 需要真实窗口会话 (本机全量回归时用 --all)"
+    },
+    {
+      "name": "_smoke_netlink_window.py",
+      "reason": "GUI 冒烟: 需要真实窗口会话 (本机全量回归时用 --all)"
+    },
+    {
+      "name": "_smoke_settings_ui.py",
+      "reason": "GUI 冒烟: 需要真实窗口会话 (本机全量回归时用 --all)"
+    },
+    {
+      "name": "_smoke_ui_introspect.py",
+      "reason": "GUI 冒烟: 需要真实窗口会话 (本机全量回归时用 --all)"
+    },
+    {
+      "name": "_smoke_ui_scale.py",
+      "reason": "GUI 冒烟: 需要真实窗口会话 (本机全量回归时用 --all)"
+    },
+    {
+      "name": "_test_browser_cdp.py",
+      "reason": "浏览器: 需要 playwright 与 Chromium (未装时脚本会静默自跳过)"
+    },
+    {
+      "name": "_test_browser_codegen_convert.py",
+      "reason": "浏览器: 需要 playwright 与 Chromium (未装时脚本会静默自跳过)"
+    },
+    {
+      "name": "_test_browser_cookie.py",
+      "reason": "浏览器: 需要 playwright 与 Chromium (未装时脚本会静默自跳过)"
+    },
+    {
+      "name": "_test_browser_download.py",
+      "reason": "浏览器: 需要 playwright 与 Chromium (未装时脚本会静默自跳过)"
+    },
+    {
+      "name": "_test_browser_frame_tab.py",
+      "reason": "浏览器: 需要 playwright 与 Chromium (未装时脚本会静默自跳过)"
+    },
+    {
+      "name": "_test_browser_listen.py",
+      "reason": "浏览器: 需要 playwright 与 Chromium (未装时脚本会静默自跳过)"
+    },
+    {
+      "name": "_test_browser_locator.py",
+      "reason": "浏览器: 需要 playwright 与 Chromium (未装时脚本会静默自跳过)"
+    },
+    {
+      "name": "_test_browser_locator_chain.py",
+      "reason": "浏览器: 需要 playwright 与 Chromium (未装时脚本会静默自跳过)"
+    },
+    {
+      "name": "_test_browser_waiter.py",
+      "reason": "浏览器: 需要 playwright 与 Chromium (未装时脚本会静默自跳过)"
+    }
+  ],
+  "results": {
+    "_smoke_engine.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.6,
+      "tail": "  ✓ 循环内 IF 真分支执行\n  ✓ 嵌套循环执行(2×2=4次)\n  ✓ 跳出循环后继续执行\n  ✓ _chk() 正常时返回 True\n  ✓ _chk() 在 quit2 时抛 AbortSignal\n  ✓ 长命令被中断(耗时远小于30s)\n  ✓ 中断后后续命令未执行\n  ✓ 中断不算脚本失败(_script_failed 未置位)\n  ✓ quit2 前置时首条命令未执行\n  ✓ quit2 前置时脚本不被标记失败\n----------------------------------------\n全部通过 ✓"
+    },
+    "_test_ai_generation_flow.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.5,
+      "tail": "[OK  ] 400 错误消息含服务端原文: 请求被拒绝: HTTP 400（Model Not Exist）\n[OK  ] 401 归为认证失败并带原文\n\n── G8 响应字段暴露 ──\n[OK  ] finish_reason 暴露\n[OK  ] reasoning_content 暴露\n[OK  ] usage 暴露\n[OK  ] choices[0].message.content 兼容旧用法\n\n====================================================================\n通过 21 / 失败 0\n结论: PASS"
+    },
+    "_test_ai_provider.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 1.5,
+      "tail": "[OK] NetLink 守护 'start_netlink' 出现 1 次\n[OK] NetLink 守护 '_nl_hook_run' 出现 1 次\n[OK] Mini Bar 守护 _mb_animate_width 存在\n[OK] _destroy_mini_bar 含 after_cancel\n[OK] utils.py 的 def themed( 仍在\n[OK] devlink_btn 为图标按钮 (text 非空 + 命名字体角色)\n[OK] ACRPA.py 已无『地球图标+互联』旧文案\n[WARN] 依赖探测: python -c \"import pyautogui, xlrd, pyperclip\" 失败 (rc=1) :: ModuleNotFoundError: No module named 'pyautogui'\n[OK] 依赖探测: requests 已安装（走真实 requests，HTTP 仍被 monkeypatch）\n----------------------------------------------------------------\nwarns=1\nPASS (all assertions OK)"
+    },
+    "_test_atomic_save.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.2,
+      "tail": "[OK] Path 入参无残留 .tmp\n[OK] atomic_write_bytes 返回 None\n[OK] atomic_write_bytes 首写内容正确\n[OK] atomic_write_bytes 目标原本不存在时不产生 .bak\n[OK] atomic_write_bytes 首写后无残留 .tmp\n[OK] atomic_write_bytes 覆盖后内容正确\n[OK] atomic_write_bytes 覆盖时 .bak == 旧内容\n[OK] atomic_write_bytes 覆盖后无残留 .tmp\n\n============================================================\n结果: 0 项 FAIL\nP0-6 原子写辅助验收点全部通过。"
+    },
+    "_test_capabilities.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.7,
+      "tail": "PA=False\n\nENGINE=False)\n[OK  ] import capabilities 未加载 engine  (TK=False\n\nPA=False\n\nENGINE=False)\n\n====================================================================\ncapabilities 回归: 通过 23 项, 失败 0 项\n===================================================================="
+    },
+    "_test_cli_headless.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.5,
+      "tail": "\n── D. run.py 静态接线 ──\n[OK  ] run.py 调用了 cli.main(\n[OK  ] run.py 调用了 cli.parse_args(\n[OK  ] run.py 导入 cli\n[OK  ] run.py 保留 GUI 启动路径 (app.main())\n[OK  ] GUI 启动路径仍进 Tk 主循环 (mainloop)\n[OK  ] CLI 分支位于 GUI 启动之前 (去注释后比较)\n\n------------------------------------------------------------\nPASS=53 FAIL=0 WARN=0\n=== 结果: OK ==="
+    },
+    "_test_code_command.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.3,
+      "tail": "[OK] h2 sibling-prefix path rejected by commonpath (got False)\n[OK] h3 sibling-prefix logs 安全错误\n[OK] i1 legacy=True executes sandbox-rejected dunder .txt -> None (got None)\n[OK] i2 legacy path taken (log '(legacy)')\n[OK] i3 legacy=False back to sandbox -> False (got False)\n[OK] j1 full (disabled) rejected -> False (got False)\n[OK] j2 stable phrase 'full disabled'\n[OK] k1 missing file -> False (got False)\n[OK] k2 missing-file friendly message kept\n[OK] k3 empty name -> False (got False)\n\nSUMMARY: 0 FAIL, 0 WARN"
+    },
+    "_test_command_palette.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.6,
+      "tail": "[OK  ] ui.command_palette 未被顶层导入 (惰性)\n[OK  ] 命令下拉仍使用 display_names()\n\n── E. 弹窗冒烟 ──\n[OK  ] open_palette 建出 Toplevel\n[OK  ] 弹窗含搜索 Entry\n[OK  ] 弹窗含结果 Listbox\n[OK  ] Listbox 已填充条目  (rows=101)\n\n------------------------------------------------------------\nPASS=27 FAIL=0 WARN=0\n=== 结果: OK ==="
+    },
+    "_test_command_requires.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.6,
+      "tail": "[OK  ] 设置变量 → core\n[OK  ] 如果 → core\n\n── R7 下拉展示辅助 ──\n[OK  ] display_names() 长度 == 命令数\n[OK  ] strip_display_badge(display) 往返还原命令名\n[OK  ] 角标可被剥离\n[OK  ] 无角标命令名原样返回\n\n====================================================================\ncommand_requires 回归: 通过 35 项, 失败 0 项\n===================================================================="
+    },
+    "_test_command_schema.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.1,
+      "tail": "── S5 显式 schema 优先 ──\n[OK  ] 显式 schema 覆盖字符串解析 (解析结果 1 项)\n\n── S6 签名重建 ──\n[OK  ] signature(按键) = 按键名, 次数=1, 间隔=0.1\n[OK  ] signature(写入) = 内容, 按键间隔, 模式(auto/direct/simulate)\n[OK  ] 变长参数在签名中以 … 标注: 定位表达式, 文件路径1, 文件路径2?…, 是否清空?\n[OK  ] 全部命令 signature() 均可重建且不抛异常\n\n====================================================================\n通过 34 / 失败 0\n结论: PASS"
+    },
+    "_test_commands_l2.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 2.3,
+      "tail": "[OK  ] 音量控制非法动作被拒\n[OK  ] 启动程序 空参数被拒\n[OK  ] 结束进程 空参数被拒\n[OK  ] HTTP 请求 空参数被拒\n[OK  ] 打开系统面板 空参数被拒\n[OK  ] 电源操作 空参数被拒\n[OK  ] 磁盘空间 空参数被拒\n[OK  ] 设置窗口样式 空参数被拒\n\n====================================================================\nL2 冒烟: 通过 108 项, 失败 0 项, 跳过 0 项\n===================================================================="
+    },
+    "_test_cv_match_ext.py": {
+      "status": "fail",
+      "returncode": 1,
+      "seconds": 0.7,
+      "tail": "====================================================================\ncv.match 端到端回归: 通过 16 项, 失败 9 项\n====================================================================\n  [FAIL] 白名单 sha256 与构建一致 (固化正确)\n  [FAIL] install 返回 ok=True\n  [FAIL] extension.json 已落地\n  [FAIL] pure/cv_match_ext.py 已落地\n  [FAIL] installed.json 已登记\n  [FAIL] reason 含「扩展」\n  [FAIL] engine._resolve_matcher() 返回非空 matcher\n  [FAIL] provider('cv.match') 返回带 match() 的模块\n  [FAIL] uninstall 返回 ok=True"
+    },
+    "_test_download_name_sanitize.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.2,
+      "tail": "[OK] 净化后路径仍在 out_dir 内: '../../evil.bat' -> C:\\Users\\yohoten\\AppData\\Local\\Temp\\acrpa_dlname_45q1vmay\\evil.bat\n[OK] 对照组确认原始名 '../../evil.bat' 会越界 (C:\\Users\\yohoten\\AppData\\Local\\evil.bat)\n[OK] 净化后路径仍在 out_dir 内: '/etc/passwd' -> C:\\Users\\yohoten\\AppData\\Local\\Temp\\acrpa_dlname_45q1vmay\\passwd\n[OK] 对照组确认原始名 '/etc/passwd' 会越界 (C:\\etc\\passwd)\n[OK] 净化后路径仍在 out_dir 内: 'C:\\\\Windows\\\\x.txt' -> C:\\Users\\yohoten\\AppData\\Local\\Temp\\acrpa_dlname_45q1vmay\\x.txt\n[OK] 对照组确认原始名 'C:\\\\Windows\\\\x.txt' 会越界 (C:\\Windows\\x.txt)\n[OK] 净化后路径仍在 out_dir 内: '\\\\\\\\server\\\\share\\\\x' -> C:\\Users\\yohoten\\AppData\\Local\\Temp\\acrpa_dlname_45q1vmay\\x\n[OK] 对照组确认原始名 '\\\\\\\\server\\\\share\\\\x' 会越界 (\\\\server\\share\\x)\n[OK] 净化后路径仍在 out_dir 内: '..\\\\..\\\\..\\\\..\\\\Startup\\\\x.bat' -> C:\\Users\\yohoten\\AppData\\Local\\Temp\\acrpa_dlname_45q1vmay\\x.bat\n[OK] 对照组确认原始名 '..\\\\..\\\\..\\\\..\\\\Startup\\\\x.bat' 会越界 (C:\\Users\\yohoten\\Startup\\x.bat)\n------------------------------------------------------------\n[OK] 全部通过"
+    },
+    "_test_engine_requires.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.3,
+      "tail": "── E4 READY 放行 ──\n[OK  ] READY 能力命令正常执行  (True)\n\n── E5 失败开放 ──\n[OK  ] 未注册能力视为 READY, 放行  (True)\n\n── E6 CAPABILITY_ENFORCE=False opt-out ──\n[OK  ] 关闭门禁后 hard 缺失也放行  (True)\n\n====================================================================\nengine_requires 回归: 通过 10 项, 失败 0 项\n===================================================================="
+    },
+    "_test_exec_bar_split.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 1.9,
+      "tail": "[OK  ] exec_maxmin_var 由 exec_bar.get_widgets() 取回 (同一对象)\n[OK  ] wf_maxmin_var 经 workflow_view.get_widgets() 取回 (与执行栏同一 StringVar)\n\n── E. 实机 (真实 Tk) 断言 ──\n[OK  ] 实机: ACRPA.btn_run 非空\n[OK  ] 实机: ACRPA.script_name_var 非空\n[OK  ] 实机: ACRPA.wf_maxmin_var is ACRPA.exec_maxmin_var (同一 StringVar)\n[OK  ] 实机: ACRPA.script_name_var is exec_bar.get_script_name_var()\n[OK  ] 实机: ACRPA.exec_maxmin_var is exec_bar.get_exec_maxmin_var()\n[OK  ] 实机: ACRPA._script_switcher is exec_bar.get_script_switcher()\n\n=== 结果: OK (通过 66, 失败 0, WARN 0) ==="
+    },
+    "_test_extensions.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.7,
+      "tail": "\n── E9 manifest 校验纯函数 ──\n[OK  ] 合法清单 → 无错误\n[OK  ] 空 dict → 有错误\n[OK  ] 非法 id → 报错\n[OK  ] 空 capabilities → 报错\n[OK  ] version_gt(1.0.1,1.0.0)\n[OK  ] version_gt 不可解析 → False\n\n====================================================================\nextensions 回归: 通过 51 项, 失败 0 项\n===================================================================="
+    },
+    "_test_flow_analyze.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.1,
+      "tail": "[OK  ] 节点 b 已删\n[OK  ] 前驱→后继已重连\n[OK  ] 容器子节点不可删\n\n── E. 纯度 / 幂等 ──\n[OK  ] import flow_graph 未引入 tkinter\n[OK  ] promote→demote 幂等 (护栏未破)\n[OK  ] 再提升同构\n\n------------------------------------------------------------\nPASS=42 FAIL=0\n=== 结果: OK ==="
+    },
+    "_test_flow_canvas_interact.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.5,
+      "tail": "[OK  ] workflow_view 引用 wf_flow_check_lbl\n[OK  ] workflow_view ctx 打开 \"show_ports\": True\n\n── C. 实机冒烟 (render + 交互) ──\n[OK  ] render(show_ports=True) 未抛异常\n[OK  ] 画布存在 port: 前缀标签 (端口已渲染)\n[OK  ] bind_interactions 未抛异常\n[OK  ] fit_to_view 未抛异常\n\n------------------------------------------------------------\nPASS=19 FAIL=0 WARN=0\n=== 结果: OK ==="
+    },
+    "_test_flow_graph.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.1,
+      "tail": "[OK  ] 畸形输入 'x' 不崩\n[OK  ] 畸形输入 {'type': 'parallel'} 不崩\n[OK  ] 畸形输入 {'type': 'loop'} 不崩\n\n── ⑧ 纯逻辑守卫 (无 tkinter / workflow / engine import) ──\n[OK  ] flow_graph 不 import tkinter (文档串提及不算)\n[OK  ] flow_graph 不 import workflow\n[OK  ] flow_graph 不 import engine\n[OK  ] flow_graph 已成功 import\n[OK  ] 本测试进程未加载 tkinter (纯逻辑)\n\n=== 结果: 58 通过 / 0 失败 ==="
+    },
+    "_test_help_consistency.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.2,
+      "tail": "[OK]   有序列表解析正确\n[OK]   表格行解析正确\n[OK]   代码块解析正确\n[OK]   行内解析出 bold/code/link: ['bold', 'code', 'link', 'text']\n[OK]   链接 target 正确\n[OK]   段落 spans 含 bold/code/link\n[OK]   get_about_info() 字段完整: author=yohoten, version=0.1.29\n[OK]   qr_path 指向存在文件: d:\\CodingEmber\\ACRPA\\res\\wechat_qrcode.png\n[OK]   未映射/插件命令落入兜底分组（不丢失）\n----------------------------------------------------------------\n注册表命令数: 88 | FAIL=0 | WARN=0\n结论: PASS"
+    },
+    "_test_i18n.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.2,
+      "tail": "[OK  ] src/ui/exec_bar.py 旧字面量已移除: \"没有选择文件\"\n[OK  ] src/ui/exec_bar.py 旧字面量已移除: text=\"出错即停\"\n\n── E. t() 组装 == 旧字面量 (逐字一致) ──\n[OK  ] 就绪 状态串逐字一致  (' 就绪 * [AI]  |  5 行  |  请选择脚本文件开始')\n[OK  ] 运行中 状态串逐字一致  (' 运行中 — 正在执行自动化任务')\n[OK  ] 已暂停 状态串逐字一致  (' 已暂停 — 点击继续恢复执行')\n[OK  ] 已停止 状态串逐字一致  (' 已停止 — 点击开始运行重新启动')\n[OK  ] 仪表盘串逐字一致  ('循环 2/3  ·  行 1/3  ·  已用 00:05  ·  ETA 00:10')\n[OK  ] 计数片段逐字一致  ('  ·  成功 7  失败 2')\n\n=== 结果: OK (通过 35, 失败 0) ==="
+    },
+    "_test_import_side_effect_free.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 1.4,
+      "tail": "\n── I4  薄入口 src/app.py ──\n[OK  ] src/app.py 存在\n[OK  ] app.py 提供 build()\n[OK  ] app.py 提供 main()\n[OK  ] app.py 的 build() 调用 ACRPA.build_app()\n[OK  ] 子进程 import app 正常退出 (rc=0)\n[OK  ] app.ACRPA 可访问\n[OK  ] app.ACRPA.build_app 存在\n[OK  ] 仅 import app 不建窗 (构建仍需显式 build())\n\n=== 结果: 23 通过 / 0 失败 ==="
+    },
+    "_test_interp_l3.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.9,
+      "tail": "[OK  ] L2 新命令 哈希值 上 {arg:} 生效\n[OK  ] 如果 ${count} > 3 仍走 safe_eval 求值（老脚本行为不变）  ('yes')\n\n── 性能基准（单遍 O(n)） ──\n     1 万次 interpolate: 231.0 ms\n[OK  ] 1 万次 interpolate < 1000 ms  (231.0 ms)\n     100 变量 × 1000 次: 283.7 ms\n[OK  ] 100 变量 × 1000 次插值性能护栏（放宽到 500 ms）  (283.7 ms)\n\n==================================================================\nL3 变量插值自检: 88 通过 / 0 失败\n全部通过"
+    },
+    "_test_l5_engineering.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 1.0,
+      "tail": "==============================================================\n[OK  ] ACRPA.spec 与 build.py::_PROJECT_MODULES 一致 (门禁返回 0)\n[OK  ] L5 新模块已进 ACRPA.spec hiddenimports\n[OK  ] 漏模块/误排时可执行文件规范门禁返回非 0  (ACRPA.spec hiddenimports 缺少项目模块: scriptdata; ACRPA.spec hiddenimports 缺少项目模块: templates)\n[OK  ] 能指出被误排的具体模块  (ACRPA.spec hiddenimports 缺少项目模块: scriptdata; ACRPA.spec hiddenimports 缺少项目模块: templates)\n[OK  ] 体积门禁: 小文件通过  (ACRPA.exe: 0.00 MB (上限 15.0 MB))\n[OK  ] 体积门禁: 超上限返回 1  (ACRPA.exe: 0.00 MB (上限 0.0 MB))\n[OK  ] 体积门禁: 无产物返回 2 (与超限区分)  (未找到打包产物: C:\\Users\\yohoten\\AppData\\Local\\Temp\\acrpa_l5_gate_9yhlg3k1\\nope.exe)\n\n==============================================================\n结果: 通过 107 / 失败 0 / 跳过 0\n=============================================================="
+    },
+    "_test_log_dock_split.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.7,
+      "tail": "[OK  ] _refresh_theme 仍保留一次 ui_theme.publish (订阅驱动)\n\n── L8 set_tlog 契约 / L9 无反向依赖 ──\n[OK  ] `set_tlog(_tlog)` 在 src/ 内恰好一次且在 log_dock  (命中=['src/ui/log_dock.py'])\n[OK  ] src/ui/log_dock.py 的 import 节点无 ACRPA/app (无反向依赖)  (import 到=[])\n\n── L10 静态清单 / 既有自测定位同步 ──\n[OK  ] _smoke_ui_scale.UI_MODULES 收录 src/ui/log_dock.py\n[OK  ] _smoke_dark_mode 的日志 tag 断言指向 log_dock.py (强度不降)\n[OK  ] _debug_dark_theme 仍经 ACRPA.rz 读取日志 tag (转发别名契约)\n\n=== 结果: OK (通过 48, 失败 0) ==="
+    },
+    "_test_market_upload.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 1.0,
+      "tail": "[OK] 捕获的全部 log1 输出不含 token 明文\n[OK] 401 归类为需重新登录的提示\n[OK] 传输层异常经重试后报错且不含 token 明文\n\n== 10. 真实测试仓库 PR（可选） ==\n[SKIP] 未配置 ACRPA_MARKET_TOKEN 或 ACRPA_MARKET_TEST_REPO=owner/repo，跳过真实 PR（不伪造 PASS）\n\n============================================================\n汇总: FAIL=0  WARN=1  SKIP=1\n  [SKIP] 未配置 ACRPA_MARKET_TOKEN 或 ACRPA_MARKET_TEST_REPO=owner/repo，跳过真实 PR（不伪造 PASS）\n  [WARN] xlrd/xlwt 未安装，改用注入 fake xlrd 覆盖命令校验逻辑（真实 .xls 解析未覆盖）\n============================================================"
+    },
+    "_test_minibar_split.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.2,
+      "tail": "── M4 注入时机 ──\n[OK  ] _bind_minibar() 至少 3 处调用 (启动/主题/PIL/缩放), 实际 4\n[OK  ] 启动时 (build_app 内) 调用过一次 _bind_minibar()\n[OK  ] ACRPA 定义了 _bind_minibar 并接入主题刷新\n[OK  ] 单向依赖: ACRPA → mini_bar (mini_bar 不反向 import 宿主)\n\n── M5 ACRPA 无重复定义 ──\n[OK  ] ACRPA.py 不再定义已搬迁符号 (残留: 无)\n\n====================================================================\n通过 12 / 失败 0\n结论: PASS"
+    },
+    "_test_netlink_2node.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.8,
+      "tail": "[OK]   5. A.stop() idempotent + restartable\n6. live netlink threads at end: ['nl-client', 'nl-accept', 'nl-agent', 'nl-control', 'nl-disc-rx', 'nl-disc-tx', 'nl-hb', 'nl-client', 'nl-accept', 'nl-agent', 'nl-disc-rx', 'nl-disc-tx', 'nl-hb']\n[OK]   6. no exception escaped (fsm intact)\n------------------------------------------------------------\nmessage counts (busB):\n  TOPIC_PEER       : 1\n  TOPIC_PEER_STATE : 1\n  TOPIC_PEER_LOG   : 1\n  TOPIC_PEER_SCHED : 2\n  TOPIC_STATUS     : 2\n------------------------------------------------------------\nPASS (all assertions OK)"
+    },
+    "_test_netlink_auth.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 3.6,
+      "tail": "[OK]   9. 连续 5 次错误 PIN → 连接被 A 主动关闭\n[OK]   13a. 同 IP 经 5 个不同 socket 各 1 次错误 PIN → IP 锁定生效\n[OK]   13b. 换新 socket 仍被限流 → AUTH_FAIL(reason 含 locked)，不下发 challenge\n[OK]   13c. 锁定期 proof 请求入口被拦(reason=locked)，未消耗 nonce\n[OK]   14a. 少量失败后正确 PIN → AUTH_OK\n[OK]   14b. 成功配对后该 IP 失败计数清零\n[OK]   14c. 成功配对后该 IP 未被误锁\n[OK]   10a. 被控端 A2 start(require_auth=False)\n[OK]   10b. 关闭认证后免配对直接收到 STATE_SYNC\n----------------------------------------------------------------\nelapsed 3.36s, warns=0\nPASS (all assertions OK)"
+    },
+    "_test_netlink_control.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 7.8,
+      "tail": "[OK]   13c. 审计含 cmd=CMD_RUN / result= / actor=\n[OK]   13d. audit.tail(50) 非空\n[OK]   13e. config.json 不含审计内容（审计只写 logs 目录）\n[OK]   14a. 发起方 cli1 收到终态 CMD_ACK\n[OK]   14b. 另一条已认证连接 cli2 也收到该指令终态（broadcast）\n[OK]   15a. 未确认设备 → 被拒绝（user rejected / confirm timeout）\n[OK]   15b. 被拒后指令未执行（fake_run 未调用）\n[OK]   15c. 已确认设备重发 → 直通执行（终态 done）\n----------------------------------------------------------------\n[OK]   总耗时 7.5s (< 45.0s)\nwarns=0\nPASS (all assertions OK)"
+    },
+    "_test_netlink_e2e.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 13.2,
+      "tail": "[OK]   6b. state.quit2 未被置 True（本地执行未受影响）\n[OK]   7a. 字符串 '127.0.0.1:19920' 静态对端可连 (dt=3.027s)\n[OK]   7b. 序列 ['127.0.0.1', 19920] 静态对端可连 (dt=3.031s)\n[OK]   8a. 端口被占用时 start() 返回 False（无异常逃逸）\n[OK]   8b. 已启动节点 A/B 的 accept 线程仍存活\n[OK]   8c. 释放端口后重新启动成功\n[OK]   9a. 两节点 stop() 各调 2 次不抛异常\n[OK]   9b. start()→stop() 各一轮成功\n[OK]   10. 全部 stop() 后 nl-* 线程收敛为 0\n----------------------------------------------------------------\n[OK]   总耗时 13.0s (< 60.0s)\nPASS (all assertions OK; warns=0)"
+    },
+    "_test_netlink_phase2_e2e.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 9.0,
+      "tail": "[OK]   7a. 强断 B→A 后 ≤8s 重连成功（实测 3.018s）\n[OK]   7a'. 重连后为全新连接对象（旧 conn 已被替换）\n[OK]   7b. 重连后无需手工订阅，≤5s 再次收到 TOPIC_PEER_STATE（实测 0.507s）\n[OK]   8. 窗口设备表该行「状态」列非占位且「进度」列 != '—'\n       [info] 状态列='● 运行' 进度列='0/240 行 · 循环 0/3'\n[OK]   9a. logs/netlink_audit_YYYYMMDD.log 存在且含 cmd= / actor= / result=\n[OK]   9b. 临时 config.json 不含 cmd= / actor= / proof / secret\n[OK]   10. 两节点 stop + 窗口 close 后 nl-* 线程 ≤5s 收敛为 0（实测 0.00s）\n------------------------------------------------------------------\n[OK]   总耗时 8.8s (< 60.0s)\nwarns=0\nPASS (all assertions OK; warns=0)"
+    },
+    "_test_netlink_phase3_e2e.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 5.2,
+      "tail": "[OK]   5c. 被拒文件未落盘（远端失败后无 ck.xls）\n[OK]   6a. 不存在的 peer → skip 含该 peer 且原因非空\n[OK]   6b. 本地文件不存在 → ok 为空、skip 覆盖全部 peer 且原因非空\n[OK]   7. 详情区定时任务展示含 启用/09:30/3 个任务\n[OK]   8. 多选两台设备 → invoke [推脚本] → 「传输」列表新增 2 行\n[OK]   9a. 被控端审计含 cmd=SCRIPT_PUSH\n[OK]   9b. 临时 config.json 不含 cmd=/actor=/proof/secret\n[OK]   10. 三节点 stop 后 nl-* 线程收敛为 0 (实测 0.0s)\n------------------------------------------------------------------\n[OK]   总耗时 5.0s (< 60.0s)\nwarns=0\nPASS (all assertions OK; warns=0)"
+    },
+    "_test_netlink_screenshot.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 12.4,
+      "tail": "[OK]   6. A 审计含 cmd=SCREENSHOT_REQ 且 result=ok\n[OK]   7a. observe 时 [📷截图] disabled\n[OK]   7b. 改 control 后 ≤2s [📷截图] 变可用（0.48s）\n[OK]   8a. 存在标题含 '远程截图' 的 Toplevel（0.06s）\n[OK]   8b. 窗口内含已设置 image 的 Label 或降级路径文本\n[OK]   8c. PhotoImage 引用已保活（win._shot_img 非空）\n[OK]   9. request_screenshot('不存在的peer') 返回 False\n[OK]   10. nl-* 线程 ≤5s 收敛为 0（0.00s）\n------------------------------------------------------------------\n[OK]   总耗时 12.1s (< 60.0s)\nwarns=0 skips=0\nPASS (all assertions OK; warns=0, skips=0)"
+    },
+    "_test_netlink_tls.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 3.5,
+      "tail": "[OK]   2b. 总线收到 TOPIC_STATUS level=error\n[OK]   2c. _started 保持 False\n[OK]   2d. 关闭 TLS 后 start() 成功\n[OK]   7. pin_add 同一指纹两次 → 仍 1 条\n[WARN] 无可用证书（cryptography/openssl 均不可用）→ TLS 真实握手/配对/指令/指纹拒绝/审计断言记 WARN，不假通过\n[OK]   8a. 明文双节点 start 成功\n[OK]   8b. 明文 B→A 连接建立且 alive（3.02s）\n[OK]   8c. 明文（免认证）自动 SUBSCRIBE 后收到 STATE（0.02s）\n[OK]   10. 收尾：nl-* 线程 ≤5s 收敛为 0\n==================================================================\n耗时 3.33s (budget 60s)\nPASS (all assertions OK; warns=1)"
+    },
+    "_test_netlink_transfer.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 1.9,
+      "tail": "[OK]   13b. 权限拒绝后 recv_dir 无新增文件/无 .part 残留\n[OK]   11a. 中断前确实存在 .tmp_*.part（证明已建临时文件）\n[OK]   11b. conn.close() 后 ≤3s 无 .tmp_*.part 残留（0.02s）\n[OK]   12a. push_script(run=True) 返回 tid\n[OK]   12b. run=True 后 ≤3s fake_run 被调用（0.02s）\n[OK]   12c. state.filename 指向 recv_dir/autorun.xls\n[OK]   15a. _verify_netlink_package.py NL_MODULES 含 netlink.transfer\n[OK]   15b. NL_MODULES 交叉校验覆盖 17 项\n------------------------------------------------------------------\n[OK]   总耗时 1.7s (< 60.0s)\nwarns=0\nPASS (all assertions OK; warns=0)"
+    },
+    "_test_netlink_webui.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 7.6,
+      "tail": "[OK]   25c. /sw.js 免 token → 200 含 CACHE_VERSION 与 install/activate/fetch（含 /api/ 判定）\n[OK]   25d. /sw.js 响应含 Service-Worker-Allowed: /\n[OK]   25e. /offline.html 免 token → 200 text/html 含 acrpa.snap.v1\n[OK]   25f. /icons/* 免 token → 200 PNG 魔数 + 长缓存\n[OK]   25g. /favicon.ico 免 token → 200 非空\n[OK]   25h. 免 token GET /api/summary → 401（数据仍受令牌保护）\n[OK]   25i. _PAGE 含 manifest link/theme-color/控制区/CSRF 头/离线快照键/SW 注册\n[OK]   25j. _PAGE 不含 CMD_RUN/CMD_STOP/push_script（白名单仅 run/stop）\n------------------------------------------------------------------\n[OK]   总耗时 7.3s (< 90.0s)\nwarns=0 skips=0\nPASS (all assertions OK; warns=0, skips=0)"
+    },
+    "_test_netlink_webui_control.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 3.0,
+      "tail": "[OK]   5a. 串行：run(409)/stop(200)/run(200) 且钩子顺序 stop,run\n[OK]   6a. lock → 200；随后 control → 403 control locked\n[OK]   7a. 本地面板控制默认不弹桌面确认（_confirm_action 未被调用）\n[OK]   7b. 无 Tk root（headless 直执行，且不动 GUI）\n[OK]   8a. 审计含 CMD_RUN 且 actor=web-panel|\n[OK]   8b. 审计含 CMD_STOP\n[OK]   8c. 审计含 WEB_UNLOCK/WEB_LOCK/WEB_PIN_FAIL\n[OK]   9. 控制 + bind 0.0.0.0 → 自动收窄 127.0.0.1\n----------------------------------------------------------------------\n[OK]   总耗时 2.7s (< 90.0s)\nwarns=0 skips=0\nPASS (all assertions OK; warns=0, skips=0)"
+    },
+    "_test_netlink_webui_control_core.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 2.5,
+      "tail": "[OK]   G6. audit file exists under isolated logs dir\n[OK]   G7. config.json untouched by audit content\n--------------------------------------------------------------------\n[OK]   H1. remote handle() sends immediate accepted ack to caller\n[OK]   H2. remote CMD_RUN still executes through the same worker\n[OK]   H3. remote terminal ack broadcast (status=done)\n[OK]   H4. remote precheck still rejects (reason 'already running')\n[OK]   H5. legacy 6-tuple queue item still accepted by _process\n--------------------------------------------------------------------\n[OK]   elapsed 2.4s (< 60.0s)\nwarns=0\nPASS (all assertions OK)"
+    },
+    "_test_p0_cache_dd.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.3,
+      "tail": "[OK  ] D9 安装目录外 + 非显式指定 → 拒绝: DLL 不在安装目录内, 拒绝加载 (防 DLL 植入)\n[OK  ] D7 哈希不符时拒绝加载: sha256 与配置不符 (期望 000000000000… 实际 013030a49a57…)\n[OK  ] D7 哈希匹配时放行: sha256 校验通过 (013030a49a57…)\n\n── D6b 引擎侧调用点 ──\n[OK  ] _write 内部先过 dd_allowed() 门禁\n[OK  ] DD 仅在 auto/direct 模式下参与\n[OK  ] 未启用提示只打一次 (不刷屏)\n\n======================================================================\n通过 33 / 失败 0\n结论: PASS"
+    },
+    "_test_packaging_imports.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 1.2,
+      "tail": "[OK  ] cards.extensions 导出 build/apply\n\n── C. build.py 的项目模块声明 ──\n[OK  ] build.py 已声明全部必需模块  (缺失=[])\n\n── D. _card_modules 的静态 import ──\n[OK  ] window.py 定义 _card_modules\n[OK  ] 函数体内为静态 `from ui.settings.cards import ...` (PyInstaller 可发现)\n\n------------------------------------------------------------\nPASS=19 FAIL=0\n=== 结果: OK ==="
+    },
+    "_test_param_form.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.4,
+      "tail": "[OK  ] 编辑行窗口关闭时退订 (unsubscribe)\n[OK  ] F2 绑定「编辑行」\n[OK  ] 工具栏「✎ 编辑」入口指向 _cmd_edit_row_dialog\n[OK  ] 「+ 添加」按钮字面量保持不变 (theme_bus 断言依赖)\n[OK  ] 内联编辑 <Double-1> 绑定语义未被改动\n\n── P6 GUI 冒烟 (ACRPA_GUI_TEST=1 opt-in) ──\n[SKIP] P6 未启用 (设置 ACRPA_GUI_TEST=1 运行)\n\n====================================================================\n通过 35 / 失败 0 / 跳过 1\n结论: PASS"
+    },
+    "_test_python_sandbox.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 10.4,
+      "tail": "[OK] v0 watchdog async-inject (PyThreadState_SetAsyncExc) present\n[OK] v0b trace-guard (_block_trace_call) present\n[OK] v1 settrace(None)+deadloop timed_out (timed_out=True)\n[OK] v2 settrace(None) bypass interrupted in time (1.00s <5s)\n[OK] v3 pure-python deadloop timed_out (timed_out=True)\n[OK] v4 pure-python deadloop interrupted in time (1.00s <5s)\n[WARN] v5 KNOWN LIMITATION (方案 B): C 层阻塞 time.sleep 无法按时中断，仅在阻塞返回后抛超时 (elapsed=4.00s, timed_out=True)\n[OK] v6 trusted normal result preserved (got '42')\n[OK] v7 trusted normal exception preserved (error='ZeroDivisionError: division by zero')\n[OK] v8 no watchdog thread leak (active=1 base=1)\n\nSUMMARY: 0 FAIL, 4 WARN"
+    },
+    "_test_scheduler_l0l1.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.3,
+      "tail": "PASS  开机执行: 同一进程启动只触发一次\nPASS  触发器注册表含 L0/L1 全部 8 种 kind\nPASS  统一 Task: workflow 目标归一化\nPASS  统一 Task: command 目标归一化 + 参数保留\nPASS  统一 Task: 三种目标的可读标签\nPASS  任务库备份: 落点为 <数据目录>/backups/\nPASS  任务库备份: 写盘前生成 <库文件名>.bak.<时间戳>\nPASS  任务库备份: 数据目录根不再散落 .bak 文件\nPASS  任务库备份: 超量备份被清理，保留最近 N=3 份\nPASS  任务库备份: 最新的备份未被误删\n------------------------------------------------------------\n全部通过"
+    },
+    "_test_script_io.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.3,
+      "tail": "\n== 8. 稳定行 id 往返 ==\n[OK]   8a. SCHEMA_VERSION 仍为 1 (id 为可选字段, 未升版)\n[OK]   8b. 源行 id 非空且唯一\n[OK]   8c. rows_to_acrpas 每行写出 id 字段\n[OK]   8d. 写出的 id 与源行一致\n[OK]   8e. load 后逐行 id 一致\n[OK]   8f. 旧文档(无 id) 读入 id 非空且唯一\n[OK]   8g. 旧文档读入内容不变 (to_tuple)\n[WARN] 缺 xlrd/xlwt，跳过 xls id 断言\n\n=== ALL PASS (FAIL=0, WARN=4) ==="
+    },
+    "_test_script_model.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.2,
+      "tail": "[OK]   4k. 单个订阅者异常不影响其它订阅者\n[OK]   4l. off_row_invalidated 后不再回调\n\n== 5. to_tuple 10 列契约 (回归护栏) ==\n[OK]   5a. to_tuple 长度 == 10\n[OK]   5b. id 不在 to_tuple 中\n[OK]   5c. from_xlrd_row_values 仍 ok 且生成非空 id\n\n== 6. (可选) _update_row_inplace vs 全量重建 实机等价 ==\n[WARN] 跳过实机等价 (设 ACRPA_GUI_TEST=1 启用, 需真实窗口会话)\n\n=== ALL PASS (FAIL=0, WARN=1) ==="
+    },
+    "_test_script_package.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 2.9,
+      "tail": "[OK] updater.compare_versions('0.1.26','0.1.26-beta') == 1\n[OK] updater.compare_versions('0.1.26-beta','0.1.26') == -1\n[OK] updater.compare_versions('abc','0.1.26') == 0\n[OK] updater.compare_versions 预发布键排序 (-rc.1 < -rc.2)\n[OK] updater._parse_version 委托 utils 且返回结构不变\n[OK] updater._compare_versions 旧接口语义不变 (latest > current)\n[OK] updater 与 utils 比较结果一致\n\n============================================================\n结果: 全部 项通过, 0 项 FAIL, 1 项 WARN\n  [WARN] builtin 生成跳过 (可能缺 xlwt): ModuleNotFoundError(\"No module named 'xlwt'\")\n所有批次1基础设施验收点通过。"
+    },
+    "_test_script_validate.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.5,
+      "tail": "[OK  ] message 含能力名与状态  ([{'row': 1, 'level': 'error', 'code': 'missing_capability', 'message': \"第 1 行 '打开网页' 需要扩展/能力 '🌐 Playwright 浏览器', 当前 disabled\"}])\n[OK  ] soft 能力缺失 → warning/missing_capability  ([{'row': 1, 'level': 'warning', 'code': 'missing_capability', 'message': \"第 1 行 '写入' 需要扩展/能力 '⌨ DD 内核输入', 当前 disabled\"}])\n[OK  ] core 命令不产生 missing_capability  ([])\n\n── V10 纯函数: 不写盘 / 不加载 GUI ──\n[OK  ] validate_script 不写盘 (无写模式 open)  ({'n': 0})\n[OK  ] validate_script 未加载 pyautogui\n[OK  ] validate_script 未加载 tkinter\n\n====================================================================\nscript_validate 回归: 通过 18 项, 失败 0 项\n===================================================================="
+    },
+    "_test_settings_split.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 8.5,
+      "tail": "\n── D. ThemeBus 订阅 / refresh_theme 字面量 ──\n[OK  ] 薄壳保留 _ui_theme.subscribe(_on_theme_publish)\n[OK  ] 薄壳保留 def refresh_theme(prev=None):\n\n── E. 实机: open_settings_window 后 12 卡句柄 ──\n[OK  ] _nav_cards 覆盖 12 卡  (count=12)\n[OK  ] 导航卡 key 与 12 卡一致  (keys=['advanced', 'ai', 'exec', 'extensions', 'log', 'market', 'netlink', 'python', 'quick', 'record', 'sched', 'system'])\n[OK  ] _apply_map 覆盖 11 卡 (无 quick)  (缺失=[])\n[OK  ] quick 卡不注册 apply (与原语义一致)\n\n=== 结果: OK (通过 45, 失败 0, 警告 0) ==="
+    },
+    "_test_settings_wired.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.6,
+      "tail": "[OK] 本地版本来自安装目录 manifest.json (有可靠来源, 非误报)\n[OK] 更新自检在 daemon 后台线程执行 (不阻塞主线程)\n-- 运行时行为检查 --\n[OK] ocr_backend.preload() 返回 bool (本机结果 False, 无后端时应为 False)\n[OK] 本地版本来源 = 安装目录 manifest.json, 异常目录被跳过: {'demo.script': '1.0.0'}\n[OK] check_update 以 (script_id, local_version) 被调用: [('demo.script', '1.0.0')]\n[OK] 可更新脚本被正确筛出 (不误报): ['demo.script']\n[OK] 安装目录不存在时返回空映射, 不抛异常\n[OK] 默认值 Ctrl+Alt+F12 可解析为 (mods={Ctrl,Alt}, F12)\n[OK] 空/非法值解析为 None → 退回仅硬编码热键 (不抛异常)\n\n[OK] 全部通过"
+    },
+    "_test_theme_bus.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 1.6,
+      "tail": "[OK  ] src/mini_bar.py 声明自管换肤 (claim_window)\n[OK  ] src/netlink_window.py 声明自管换肤 (claim_window)\n[OK  ] src/help_window.py 声明自管换肤 (claim_window)\n[OK  ] src/market_window.py 声明自管换肤 (claim_window)\n\n── T11 token→角色 约定 (工厂解析) ──\n[OK  ] utils._btn 经 ui.theme.resolve_bg 解析 色板键名/字面色\n[OK  ] utils._btn 按解析出的角色登记 set_role\n[OK  ] ACRPA._tbtn 同样经 resolve_bg 解析并登记角色\n[OK  ] _tbtn 调用点改为传色板键名 (声明语义角色)\n\n=== 结果: OK (通过 67, 失败 0) ==="
+    },
+    "_test_ui.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.1,
+      "tail": ""
+    },
+    "_test_ui_a11y_tokens.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 2.0,
+      "tail": "[OK  ] ACRPA_BODY ≥ 9pt  (= 9pt)\n[OK  ] ACRPA_BUTTON ≥ 9pt  (= 9pt)\n\n── D. 标题栏图标可达性 (实机, WARN 守卫) ──\n[OK  ] 标题栏图标控件数 ≥ 6 (含可访问名)  (实测 12)\n[OK  ] 全部图标 cget('takefocus') 为真  ([])\n[OK  ] 全部图标 bind('<Return>') 非空  ([])\n[OK  ] 全部图标 bind('<space>') 非空  ([])\n\n------------------------------------------------------------\nPASS=51 FAIL=0 WARN=0\n=== 结果: OK ==="
+    },
+    "_test_ui_l4.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 2.9,
+      "tail": "[OK  ] 「稍后提醒我」回调被调用  (minutes=5)\n[OK  ] 「不再提醒（本次）」回调被调用\n[OK  ] 「彻底关闭该任务」回调被调用\n[OK  ] 编辑器含 ttk.Notebook\n[OK  ] 四页签名字与顺序正确  (['任务', '计划', '热键', '执行'])\n[OK  ] 计划页含触发器列表 Treeview\n[OK  ] 触发器列表列绑定正确  (['kind', 'param'])\n[OK  ] 旧任务的 2 条触发器均已载入  (2 条)\n[OK  ] 编辑器创建后可安全销毁\n\n--------------------------------------------------------------\n通过 83 / 失败 0 / 跳过 1"
+    },
+    "_test_ui_zoom_shortcuts.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 1.6,
+      "tail": "[OK  ] 放大 3 档后字号 = 基准+3 (9 → 12)\n[OK  ] 倍率已写入 state.EDITOR_ZOOM\n[OK  ] Ctrl+0 复位回基准字号\n[OK  ] 下限被钳制 (最小 6pt)\n[OK  ] 上限被钳制 (最大 21pt)\n[OK  ] tree 使用独立样式\n[OK  ] Ctrl+S 已注册到窗口\n[OK  ] 存在主窗口聚焦护栏\n\n====================================================================\n通过 28 / 失败 0\n结论: PASS"
+    },
+    "_test_updater_flow.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.5,
+      "tail": "[OK  ] _package_ext(unknown) == .zip\n\n── U6 自更新助手脚本分支 ──\n[OK  ] 存在 exe 分支\n[OK  ] 保留 zip 解压分支\n[OK  ] exe 分支会重写无 BOM 的 VERSION (BOM 会让版本号比对失败)\n[OK  ] 助手改用 ACRPA_PKG (zip 专属命名已移除)\n[OK  ] 主程序替换收敛为单一函数 (含 .new 原子替换)\n\n==================================================================\n通过 30 / 失败 0\n结论: PASS"
+    },
+    "_test_version_unify.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 0.2,
+      "tail": "[OK]   index.html 存在 ACRPA_RELEASE 单一源\n[OK]   index.html 单一源 version 非空\n[OK]   index.html 除单一源外无其它版本字面量\n[OK]   index.en.html 存在 ACRPA_RELEASE 单一源\n[OK]   index.en.html 单一源 version 非空\n[OK]   index.en.html 除单一源外无其它版本字面量\n── V5 tools/README.md 指令修正 ──\n[OK]   README.md 不再含『修改 updater.py 中的 VERSION』\n[OK]   README.md 指明唯一来源为根 VERSION 文件\n\n通过 16 / 失败 0 / 警告 0\n结论: PASS"
+    },
+    "_test_workflow_view_split.py": {
+      "status": "pass",
+      "returncode": 0,
+      "seconds": 2.1,
+      "tail": "[OK  ] workflow_view 的 _FLOW_COLORS 含 #9CA3AF (wait 色, 刻意固定)\n\n── F. 实机 (真实 Tk) 断言 ──\n[OK  ] 实机: ACRPA.tab_workflow 非空\n[OK  ] 实机: ACRPA.wf_tree 非空\n[OK  ] 实机: ACRPA.wf_flow_canvas 非空\n[OK  ] 实机: ACRPA.wf_maxmin_var is ACRPA.exec_maxmin_var (同一 StringVar)\n[OK  ] 实机: ACRPA.wf_tree is workflow_view.get_wf_tree()\n[OK  ] 实机: ACRPA.tab_workflow is workflow_view.get_tab_workflow()\n[OK  ] 实机: ACRPA.wf_maxmin_var is workflow_view.get_wf_maxmin_var()\n\n=== 结果: OK (通过 60, 失败 0, WARN 0) ==="
+    }
+  }
+}

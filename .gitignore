@@ -1,4 +1,4 @@
-# Python
+# ===== Python =====
 __pycache__/
 *.py[cod]
 *$py.class
@@ -7,14 +7,8 @@ __pycache__/
 build/
 develop-eggs/
 backups/
-# dist/ 下有三类文件，处置不同：
-#   · dist/*.exe    —— 每次构建都变的产物，不入库
-#   · dist/*.sha256 —— make_release.py 生成的本地校验和旁挂文件，不入库
-#   · dist/ACRPA.zip —— 发布包，是更新机制里"仓库内镜像直链"的兜底通道，必须纳管
-#     注意：该通道不带版本信息，客户端只在 VERSION 里配了 sha256 时才会使用它 ——
-#     否则宁可报错也不会静默装上旧包。因此建议同时把 sha256 写进 VERSION
-#     （python tools/make_release.py --write-sha256）。
-# 发布包由 tools/make_release.py 生成，务必与 VERSION 同一次提交、同版本。
+
+# dist/
 dist/*.exe
 dist/*.spec
 dist/*.pkg
@@ -24,95 +18,68 @@ dist/*.sha256
 .eggs/
 lib/python*/
 
-# Virtual Environment
+# ===== 虚拟环境 =====
 venv/
 env/
 ENV/
 .venv
 
-# IDE
+# ===== IDE =====
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# ACRPA 运行时文件
+# ===== 运行时文件 =====
 logs/
 screenshots/
-# img/
+## img/
 *.log
 config.json
-# recent.json / recent_workflow.json 由 ACRPA.py 在运行时写入 (最近脚本 / 最近工作流节点)，
-# 属于用户本机状态，不应入库
+## recent.json / recent_workflow.json
 recent.json
 recent_workflow.json
-# 任务库自动备份 (L0-⑤ save_config 写盘前备份 → 现落在 <数据目录>/backups/)：
-#   · backups/            数据目录下的备份子目录 (含便携模式 userdata/backups/)
-#   · config.json.bak.*   旧版本曾直接堆在数据目录根的备份名，一并忽略
-#   · *.bak               atomic_save / save_script 覆盖写时留下的同名备份
-# 三者都是"跑一遍就多几个"的本机运行产物，不入库。
 backups/
 config.json.bak.*
 *.bak
+## res/
 
-# ACRPA 构建资源（构建输入，必须纳入版本控制）
-# res/ 内含 automation.ico / wechat_qrcode.png，被 ACRPA.spec 引用，请勿加入忽略规则
-
-# Test coverage reports
+# ===== 测试覆盖率 =====
 htmlcov/
 .coverage
 coverage.xml
 .pytest_cache/
 
-# OS
+# ===== OS =====
 .DS_Store
 Thumbs.db
 
-# PyInstaller
-# 生成的 spec 默认忽略；ACRPA.spec 目前作为例外纳管
-# 注意：ACRPA.spec 由 build.py 生成（build.py:186-187 先删除、202-232 再重建），
-#      每次构建都会被重写，因此纳管它会在 git status 中产生变更噪声。
+# ===== PyInstaller =====
 *.spec
 !ACRPA.spec
 
-# PyInstaller 构建产物
+# 构建产物
 dist/
 build/
 
-# UPX (如果使用)
+# UPX
 upx.exe
 
-# 脚本市场 v2 运行时产物 —— 均为本机下载 / 安装 / 仓库勘察产生，不入库
+# ===== 脚本市场 v2 运行时产物 =====
 .tmp_recon/
 market_scripts/
 *.acrpapkg
-# 根目录散落的脚本下载残留（脚本模板应放 template/，该目录已纳管）
 /*.xls
 template/
 
-# 测试/冒烟运行产物 —— 每次执行都会被重写，本不该入库：
-#   · _smoke_result_phase2/*.out  由 *_smoke_*.py 写出的结论与输出
-#   · _ui_screenshots/*.png        由 _smoke_ui_introspect.py 截取的界面快照
-#   · _test_matrix_*.json          由 tools/run_tests.py --json 写出的结果
-# 此前它们是纳管的，于是"跑一遍测试 => 工作区变脏"，噪声混淆真正的改动。
+# ===== 测试/冒烟产物 =====
 tools/_smoke_result_phase2/
 tools/_ui_screenshots/
 tools/_test_matrix_*.json
-# CI 归档用（由 .github/workflows/ci.yml 生成并作为 artifact 上传）
 ci-test-results.json
 
-# 内置脚本编辑模板资源（res/template/ 需随包分发，勿忽略）
-!res/template/
-!res/template/*.xlsx
-
-# 单实例 IPC 密钥：每次启动按本机生成（single_instance.py），属本机状态而非源码，
-# 入库会让每台机器启动后都变脏，且密钥本身不应跨机器共享。
+# ===== 本机状态 =====
 .ipc_key
-
-# 脚本版本历史库（version_manager.py 的 SQLite）：纯运行时数据，随机器/使用累积。
 script_versions.db
-
-# AI 助手会话/计划产物（.codebuddy/plans 等）：工具生成的过程性文件，内容最终
-# 落进 docs/*.md。若日后在此放团队共用的 rules/skills，再单独 `!` 例外即可。
 .codebuddy/

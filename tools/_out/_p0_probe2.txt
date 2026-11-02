@@ -1,0 +1,139 @@
+########## A. _bind_scroll_recursive 漏绑新增子树 ##########
+第一次调用后 老 Label.bind('<MouseWheel>') = 'if {"[2780454684352handler %# %b %f %h %k %s %t %w %x %y %A %E %K %N %W %T %X %Y %D]" == "break"} break\n'
+             outer.bind                = 'if {"[2780454685120handler %# %b %f %h %k %s %t %w %x %y %A %E %K %N %W %T %X %Y %D]" == "break"} break\n'
+第二次调用后 新增 Label.bind('<MouseWheel>') = 'if {"[2780454683904handler %# %b %f %h %k %s %t %w %x %y %A %E %K %N %W %T %X %Y %D]" == "break"} break\n'
+             outer._scroll_handler is handler = True
+             mid._scroll_handler   is handler = True
+=> 新增子树被跳过(缺陷成立)? False
+改绑新 handler 后 新增 Label.bind = 'if {"[2780454697280handler2 %# %b %f %h %k %s %t %w %x %y %A %E %K %N %W %T %X %Y %D]" == "break"} break\n'
+
+########## B-20行上限10 灌 20 行, LOG_MAX_LINES=10 ##########
+  flush 后行数 = 21 (上限 10, 滞回门槛 = 210)
+  裁剪前 连续两行同样式(zebra相同)的对数 = 0 前 5 对 = []
+  裁剪前 zebra 位置(行号) = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20]
+  _log_trim() 返回 excess = 0  裁剪后行数 = 21
+  _cbar_state['done'] = 20
+  裁剪后逐行 (行号, 有lzebra, 首字符是▌):
+      (1, False, True)
+      (2, True, True)
+      (3, False, True)
+      (4, True, True)
+      (5, False, True)
+      (6, True, True)
+      (7, False, True)
+      (8, True, True)
+      (9, False, True)
+      (10, True, True)
+      (11, False, True)
+      (12, True, True)
+      (13, False, True)
+      (14, True, True)
+      (15, False, True)
+      (16, True, True)
+      (17, False, True)
+      (18, True, True)
+      (19, False, True)
+      (20, True, True)
+      (21, False, False)
+  裁剪后 连续两行同样式(zebra相同)的对数 = 0 前 5 对 = []
+  裁剪后 zebra 位置(行号) = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20]
+  追加 3 行后逐行:
+      (1, False, True)
+      (2, True, True)
+      (3, False, True)
+      (4, True, True)
+      (5, False, True)
+      (6, True, True)
+      (7, False, True)
+      (8, True, True)
+      (9, False, True)
+      (10, True, True)
+      (11, False, True)
+      (12, True, True)
+      (13, False, True)
+      (14, True, True)
+      (15, False, True)
+      (16, True, True)
+      (17, False, True)
+      (18, True, True)
+      (19, False, True)
+      (20, True, True)
+      (21, False, True)
+      (22, True, True)
+      (23, False, True)
+      (24, False, False)
+  追加后 连续两行同样式(zebra相同)的对数 = 1 前 5 对 = [(23, 24, False)]
+  追加后 zebra 位置(行号) = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22]
+
+########## B-221行上限10 灌 221 行, LOG_MAX_LINES=10 ##########
+  flush 后行数 = 222 (上限 10, 滞回门槛 = 210)
+  裁剪前 连续两行同样式(zebra相同)的对数 = 1 前 5 对 = [(221, 222, False)]
+  裁剪前 zebra 位置(行号) = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 62, 64, 66, 68, 70, 72, 74, 76, 78, 80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100, 102, 104, 106, 108, 110, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134, 136, 138, 140, 142, 144, 146, 148, 150, 152, 154, 156, 158, 160, 162, 164, 166, 168, 170, 172, 174, 176, 178, 180, 182, 184, 186, 188, 190, 192, 194, 196, 198, 200, 202, 204, 206, 208, 210, 212, 214, 216, 218, 220]
+  _log_trim() 返回 excess = 212  裁剪后行数 = 10
+  _cbar_state['done'] = 9
+  裁剪后逐行 (行号, 有lzebra, 首字符是▌):
+      (1, False, True)
+      (2, True, True)
+      (3, False, True)
+      (4, True, True)
+      (5, False, True)
+      (6, True, True)
+      (7, False, True)
+      (8, True, True)
+      (9, False, True)
+      (10, False, False)
+  裁剪后 连续两行同样式(zebra相同)的对数 = 1 前 5 对 = [(9, 10, False)]
+  裁剪后 zebra 位置(行号) = [2, 4, 6, 8]
+  追加 3 行后逐行:
+      (1, False, True)
+      (2, True, True)
+      (3, False, True)
+      (4, True, True)
+      (5, False, True)
+      (6, True, True)
+      (7, False, True)
+      (8, True, True)
+      (9, False, True)
+      (10, True, True)
+      (11, False, True)
+      (12, True, True)
+      (13, False, False)
+  追加后 连续两行同样式(zebra相同)的对数 = 0 前 5 对 = []
+  追加后 zebra 位置(行号) = [2, 4, 6, 8, 10, 12]
+
+########## B-220行上限10奇数裁剪 灌 220 行, LOG_MAX_LINES=10 ##########
+  flush 后行数 = 221 (上限 10, 滞回门槛 = 210)
+  裁剪前 连续两行同样式(zebra相同)的对数 = 0 前 5 对 = []
+  裁剪前 zebra 位置(行号) = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 62, 64, 66, 68, 70, 72, 74, 76, 78, 80, 82, 84, 86, 88, 90, 92, 94, 96, 98, 100, 102, 104, 106, 108, 110, 112, 114, 116, 118, 120, 122, 124, 126, 128, 130, 132, 134, 136, 138, 140, 142, 144, 146, 148, 150, 152, 154, 156, 158, 160, 162, 164, 166, 168, 170, 172, 174, 176, 178, 180, 182, 184, 186, 188, 190, 192, 194, 196, 198, 200, 202, 204, 206, 208, 210, 212, 214, 216, 218, 220]
+  _log_trim() 返回 excess = 211  裁剪后行数 = 10
+  _cbar_state['done'] = 9
+  裁剪后逐行 (行号, 有lzebra, 首字符是▌):
+      (1, False, True)
+      (2, True, True)
+      (3, False, True)
+      (4, True, True)
+      (5, False, True)
+      (6, True, True)
+      (7, False, True)
+      (8, True, True)
+      (9, False, True)
+      (10, False, False)
+  裁剪后 连续两行同样式(zebra相同)的对数 = 1 前 5 对 = [(9, 10, False)]
+  裁剪后 zebra 位置(行号) = [2, 4, 6, 8]
+  追加 3 行后逐行:
+      (1, False, True)
+      (2, True, True)
+      (3, False, True)
+      (4, True, True)
+      (5, False, True)
+      (6, True, True)
+      (7, False, True)
+      (8, True, True)
+      (9, False, True)
+      (10, True, True)
+      (11, False, True)
+      (12, True, True)
+      (13, False, False)
+  追加后 连续两行同样式(zebra相同)的对数 = 0 前 5 对 = []
+  追加后 zebra 位置(行号) = [2, 4, 6, 8, 10, 12]
+=== DONE

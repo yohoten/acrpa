@@ -116,6 +116,32 @@ _CBAR_LEVEL_OF = {"info": "cbar_info", "success": "cbar_success",
 _cbar_state = {"done": 0}
 
 
+# ── 运行时回退开关 (v5 §3.4 L4 / §7.2; 默认全开, 置 0/false/off 回退) ──
+def _env_flag(name, default=True):
+    """环境变量开关: 缺失/空 → default; 0/false/no/off → False。"""
+    try:
+        v = os.environ.get(name)
+    except Exception:
+        return default
+    if v is None or str(v).strip() == "":
+        return default
+    return str(v).strip().lower() not in ("0", "false", "no", "off")
+
+
+# LOG_CBAR_INLINE 与生产端 (core/log.py) **同源**: 生产端已把 ▌ 拼进文本,
+# 本模块只需批量 tag_add; 置 False 时恢复「逐行 insert("▌") + tag_add」旧路径。
+try:
+    from core.log import LOG_CBAR_INLINE as _CORE_CBAR_INLINE
+    LOG_CBAR_INLINE = bool(_CORE_CBAR_INLINE)
+except Exception:                      # core.log 不可用 (孤立导入) → 按环境变量
+    LOG_CBAR_INLINE = _env_flag("LOG_CBAR_INLINE", True)
+
+# LOG_EXPORT_ASYNC : 导出「拼装 + 写盘」交给后台池 (False → 主线程逐行拼装, 旧行为)
+# LOG_FLUSH_IDLE_SKIP: 日志队列为空时整段跳过 flush_and_apply 的全部 Tcl 调用
+LOG_EXPORT_ASYNC = _env_flag("LOG_EXPORT_ASYNC", True)
+LOG_FLUSH_IDLE_SKIP = _env_flag("LOG_FLUSH_IDLE_SKIP", True)
+
+
 # ══════════════════════════════════════════════════════════════════════
 # 依赖注入
 # ══════════════════════════════════════════════════════════════════════
@@ -392,7 +418,9 @@ def _log_trim():
         total = int(float(_rz.index("end-1c")))
     except Exception:
         return 0
-    if total <= limit + max(200, limit // 10):
+    # D6: 滞回门槛原为 limit + max(200, limit//10), limit<200 时永远达不到 →
+    #   小上限配置 (LOG_MAX_LINES=10/50) 事实上不裁剪, 行数无上限增长。
+    if total <= limit + max(20, min(200, limit // 2)):
         return 0
     excess = total - limit
     try:
@@ -401,7 +429,71 @@ def _log_trim():
         return 0
     _cbar_state["done"] = max(0, _cbar_state["done"] - excess)
     _logfilter["applied"] = max(0, _logfilter["applied"] - excess)
+    # D6: 裁掉奇数行会让 zebra 奇偶整体反转 (后续追加新行时出现连续两行同样式),
+    #   故裁剪后按新行号整段重建 zebra (一次 tag_remove + 一次批量 tag_add)。
+    try:
+        _log_rebuild_zebra()
+    except Exception:
+        pass
     return excess
+
+
+def _log_rebuild_zebra():
+    """按当前行号重建斑马纹 (lzebra) —— 裁剪后行号整体左移, 奇偶必须重算。
+
+    只对「已处理行」上 zebra (即行首已插过 ▌ 的行, 1.._cbar_state["done"]):
+    未处理行由 _log_apply_cbar 自己加, 这里不抢跑, 避免与增量游标交叉。
+    批量 tag_add (一次 Tcl 调用) 取代逐行 tag_add, 保持热路径成本可控。
+    """
+    try:
+        total = int(float(_rz.index("end-1c")))
+    except Exception:
+        return
+    try:
+        done = max(0, min(int(_cbar_state.get("done", 0) or 0), total))
+    except Exception:
+        done = total
+    try:
+        _rz.tag_remove("lzebra", "1.0", "end")
+    except Exception:
+        return
+    pairs = []
+    for i in range(1, done + 1):
+        if i % 2 == 0:
+            pairs.append("{}.1".format(i))
+            pairs.append("{}.end".format(i))
+    if pairs:
+        try:
+            _rz.tag_add("lzebra", *pairs)
+        except Exception:
+            pass
+
+
+def _log_has_pending():
+    """生产端队列里是否还有待渲染的日志行。
+
+    v5 §3.5 G3 的「事件驱动短路」判据: 队列空 = 没有新内容 = 本轮 flush 什么都不用做。
+    旧实现每 100/250 ms 无条件 flush 一次 (4 次/秒空转), 这是空闲唤醒的大头之一。
+    """
+    if _log_flush_force:
+        return True
+    hp = getattr(_tlog, "has_pending", None)
+    if hp is None:
+        return True
+    try:
+        return bool(hp())
+    except Exception:
+        return True
+
+
+# 一次性强制 flush (建面板后首帧/换肤/清空后重绘用), 见 force_flush()
+_log_flush_force = False
+
+
+def force_flush():
+    """下一次 flush_and_apply 忽略「队列空短路」, 强制跑一遍全链路。"""
+    global _log_flush_force
+    _log_flush_force = True
 
 
 def flush_and_apply():
@@ -409,9 +501,16 @@ def flush_and_apply():
 
     ③ 自动滚动: 关闭时保留当前视口, 避免新日志把视图强行拉到底部。
     返回 False 表示 flush 失败 (原实现此处 `return` 提前结束 _periodic, 宿主须沿用)。
+
+    开关 `LOG_FLUSH_IDLE_SKIP` (默认开): 队列空时**立即返回**, 0 次 Tcl 调用;
+    置 False 回到旧行为 (每轮无条件 flush)。
     """
+    global _log_flush_force
     if _tlog is None or _rz is None:
         return True
+    if LOG_FLUSH_IDLE_SKIP and not _log_has_pending():
+        return True
+    _log_flush_force = False
     if _log_auto_scroll is not None and _log_auto_scroll.get():
         try:
             _tlog.flush(_CTX.get("root"))
@@ -519,7 +618,12 @@ def _log_autoscroll_changed():
 
 
 def _log_line_tag(line_no):
-    """返回某行(1-based)命中的级别 tag, 无则返回空串"""
+    """返回某行(1-based)命中的级别 tag, 无则返回空串。
+
+    v5 §3.4 L4: 级别 tag 的区间仍从行首开始 (只是被优先级更高的 cbar_* 在
+    第 1 个字符上盖住), 故 `tag_names(line.0)` 依然能取到级别 tag —— 原「由
+    cbar_<tag> 反推级别」的反查分支已按文档删除 (不再需要)。
+    """
     try:
         names = _rz.tag_names("{}.0".format(line_no))
     except Exception:
@@ -527,10 +631,6 @@ def _log_line_tag(line_no):
     for t in _LOG_LEVEL_TAGS:
         if t in names:
             return t
-    # 行首字形 ▌ 覆盖了级别 tag 起点时, 由 cbar_<tag> 反推级别 (§4.6)
-    for _ct, _lv in _CBAR_LEVEL_OF.items():
-        if _ct in names:
-            return _lv
     return ""
 
 
@@ -550,11 +650,26 @@ def _log_level_runs(start, total):
         except Exception:
             continue
         for k in range(0, len(rngs), 2):
+            # D1: 相邻同 tag 的日志在 ThreadSafeLog 里被合并成**一个跨多行**的
+            # tag range, 只登记左端会让第 2..N 行丢级别 (色条回退 cbar_info、
+            # 级别过滤把这些行一起隐藏) → 必须把整个区间摊平进 line_level。
             try:
-                ln = int(float(str(rngs[k])))
+                a = int(float(str(rngs[k])))
             except Exception:
                 continue
-            if start <= ln <= total:
+            b = a
+            if k + 1 < len(rngs):
+                try:
+                    end = float(str(rngs[k + 1]))
+                    b = int(end)
+                    # end 落在 "N.0" 表示区间止于上一行行尾 → 归到 N-1 行
+                    if end - b < 1e-9 and b > a:
+                        b -= 1
+                except Exception:
+                    b = a
+            if b < a:
+                b = a
+            for ln in range(max(a, start), min(b, total) + 1):
                 line_level.setdefault(ln, lv)
     runs = []
     i = start
@@ -569,16 +684,22 @@ def _log_level_runs(start, total):
 
 
 def _log_apply_cbar():
-    """为新增日志行: 行首插入 ▌ 并上 cbar_<tag> 色, 偶行加极淡 zebra (§4.6)。
+    """为新增日志行: 行首色条着色 + 偶行加极淡 zebra (§4.6)。
 
     机制: tkinter Text 无 per-row 边框, 故按文档 §4.6 以「行首窄形字符 ▌(U+258C)
     + cbar_<tag> 颜色 tag」承载左缘 2px 色条; 级别由 tag 判定 (§2.5)。
-    D1 幂等: **逐行处理成功后立即推进** _cbar_state["done"], 并以「行首已含 ▌」二次
-    防重 —— 旧实现仅在整循环结束后赋值, 一旦中途抛错 (异常被外层吞掉) 会重入并对
-    已插过 ▌ 的行再次插入, 造成色条重复。
 
-    批量读: 全文 get 一次 + 每级 tag_ranges 一次, 替代逐行 get/tag_names
-    (每行省 2 次 Tcl 往返, 是日志面板"越滚越卡"的主要成本项)。
+    v5 §3.4 L4 收敛 (开关 LOG_CBAR_INLINE, 默认开):
+      ① ▌ 字形由生产端 (core/log.py::flush) 内联进整批文本 → 本函数 0 次 insert;
+      ② 着色改为「先收集区间列表, 再按 tag 一次 tag_add(*flat_ranges)」——
+         单级别 400 行一批只需 **2 次** tag_add (cbar 1 次 + lzebra 1 次),
+         改造前是 400 次 insert + 400~600 次 tag_add ≈1200 次 Tcl 往返。
+         混合级别时次数 = 出现的级别数 + (有偶数行 ? 1 : 0), 仍远低于逐行方案。
+    TEXT 的 tag_add 支持一次传多组 (i1,i2,i3,i4,...) 区间, 这是收敛的关键。
+    回退: LOG_CBAR_INLINE=False → 走下面的逐行分支, 行为与改造前一致。
+
+    幂等: 以 _cbar_state["done"] 游标为准; 内联分支额外用「行首 ▌」二次防重。
+    批量读: 全文切片 get 一次 + 每级 tag_ranges 一次, 替代逐行 get/tag_names。
     """
     start = _cbar_state["done"] + 1
     try:
@@ -596,6 +717,44 @@ def _log_apply_cbar():
         if lv:
             for n in range(a, b + 1):
                 line_level[n] = lv
+    if LOG_CBAR_INLINE:
+        # ── 批量分支: 收集区间 → 每 tag 一次 tag_add ──
+        groups = {}          # ctag → [i1, i2, i3, i4, ...] (成对区间)
+        zebra = []           # lzebra 的扁平区间列表
+        done = _cbar_state["done"]
+        for i in range(start, total + 1):
+            try:
+                line = lines[i - start]
+            except Exception:
+                break
+            if line == "":
+                # Text 末尾隐含空行: 不推进游标, 留待有内容后再处理
+                continue
+            if not line.startswith("▌"):
+                # 未内联 (开关中途翻转/外部直接 insert): 就地补一次字形
+                try:
+                    _rz.insert("{}.0".format(i), "▌")
+                except Exception:
+                    continue
+            ctag = _CBAR_LEVEL_OF.get(line_level.get(i, ""), "cbar_info")
+            groups.setdefault(ctag, []).extend(
+                ["{}.0".format(i), "{}.1".format(i)])
+            if i % 2 == 0:
+                zebra.extend(["{}.1".format(i), "{}.end".format(i)])
+            done = i
+        for ctag, rngs in groups.items():
+            try:
+                _rz.tag_add(ctag, *rngs)
+            except Exception:
+                pass
+        if zebra:
+            try:
+                _rz.tag_add("lzebra", *zebra)
+            except Exception:
+                pass
+        _cbar_state["done"] = done
+        return
+    # ── 逐行分支 (LOG_CBAR_INLINE=False 的回退路径, 与改造前一致) ──
     for i in range(start, total + 1):
         try:
             line = lines[i - start]
@@ -695,8 +854,58 @@ def _log_clear_view():
         pass
 
 
+def _log_export_snapshot():
+    """主线程一次性取走导出所需数据 (纯 Python 快照, 后台线程不再碰控件)。
+
+    改造前: 逐行 `tag_names` + 逐行 `get` → 6000 行 = 12000 次 Tcl 往返 (30~80 ms
+    全在主线程)。现在只需 2 次固定 Tcl 调用:
+      ① `get("1.0","end-1c")` 一次取全文;
+      ② `tag_ranges("lf_hide")` 一次取被过滤隐藏的行区间。
+    返回 (lines, hidden_line_numbers)。
+    """
+    text = _rz.get("1.0", "end-1c")
+    lines = text.split("\n")
+    hidden = set()
+    try:
+        rngs = list(_rz.tag_ranges("lf_hide"))
+    except Exception:
+        rngs = []
+    for k in range(0, len(rngs) - 1, 2):
+        try:
+            a = int(float(str(rngs[k])))
+            end = float(str(rngs[k + 1]))
+            b = int(end)
+            if end - b < 1e-9 and b > a:
+                b -= 1                      # end 落在 "N.0" = 止于上一行
+        except Exception:
+            continue
+        for ln in range(max(1, a), b + 1):
+            hidden.add(ln)
+    return lines, hidden
+
+
+def _log_export_write(fp, lines, hidden):
+    """后台线程: 过滤隐藏行 + 去掉行首色条字形 ▌ 后写盘 (不碰任何 Tk 对象)。"""
+    out = []
+    for i, ln in enumerate(lines, 1):
+        if i in hidden:
+            continue
+        # L4 副作用①: ▌ 是纯装饰字形, 导出文本必须 strip 掉 (与旧版逐字节一致)
+        if ln.startswith("▌"):
+            ln = ln[1:]
+        out.append(ln)
+    with open(fp, "w", encoding="utf-8") as f:
+        f.write("\n".join(out) + ("\n" if out else ""))
+    return len(out)
+
+
 def _log_export_view():
-    """导出当前(可见)日志视图到文件"""
+    """导出当前(可见)日志视图到文件。
+
+    v5 P1-7: 主线程只做「文件对话框 + 一次性快照」(≤10 ms), 文本拼装与写盘
+    交给 `ui_bg_task` 的 IO 池。开关 `LOG_EXPORT_ASYNC` (默认开) 置 False 时
+    回到「主线程逐行 tag_names + get + 写盘」的旧实现。
+    """
     try:
         default_name = "acrpa_log_{}.txt".format(
             datetime.datetime.now().strftime("%Y%m%d_%H%M%S"))
@@ -705,14 +914,33 @@ def _log_export_view():
             defaultextension=".txt", filetypes=[("文本文件", "*.txt"), ("日志", "*.log")])
         if not fp:
             return
+        if LOG_EXPORT_ASYNC:
+            lines, hidden = _log_export_snapshot()
+            try:
+                import ui.bg_task as _bg
+                def _ok(n):
+                    _toast("日志已导出: {} ({} 行)".format(
+                        os.path.basename(fp), n), "success")
+                def _fail(e):
+                    _log1("日志导出失败: {}".format(e), "error")
+                    _toast("日志导出失败: {}".format(e), "error")
+                if _bg.submit(lambda: _log_export_write(fp, lines, hidden),
+                              _ok, _fail, name="log-export", pool="io"):
+                    return
+                # 无事件循环 (测试/CLI) → submit 已同步执行完毕
+                return
+            except Exception as e:
+                _log1("日志导出降级为主线程: {}".format(e), "warning")
+        # 回退路径: 主线程同步 (行为与改造前一致)
         total = int(float(_rz.index("end-1c")))
-        lines = []
+        out = []
         for i in range(1, total + 1):
             if "lf_hide" in _rz.tag_names("{}.0".format(i)):
                 continue
-            lines.append(_rz.get("{}.0".format(i), "{}.end".format(i)))
+            line = _rz.get("{}.0".format(i), "{}.end".format(i))
+            out.append(line[1:] if line.startswith("▌") else line)
         with open(fp, "w", encoding="utf-8") as f:
-            f.write("\n".join(lines) + ("\n" if lines else ""))
+            f.write("\n".join(out) + ("\n" if out else ""))
         _toast("日志已导出: {}".format(os.path.basename(fp)), "success")
     except Exception as e:
         _log1("日志导出失败: {}".format(e), "error")

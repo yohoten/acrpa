@@ -1,0 +1,143 @@
+diff --git a/src/ui/bg_task.py b/src/ui/bg_task.py
+index 89a5ec8..aa73f4a 100644
+--- a/src/ui/bg_task.py
++++ b/src/ui/bg_task.py
+@@ -33,6 +33,28 @@ _POLL_ID = None
+ _STARTED = False
+ _PENDING = 0          # 已提交未回调完成的任务数 (仅统计异步)
+ _LOCK = threading.Lock()
++_CLOSING = False      # D8: shutdown 置位; worker 在入队前检查, 为真则丢弃在飞结果
++_THREADS = set()      # D8: 在飞 worker 句柄, shutdown 时 join (单个上限 1.0 s)
++_EPOCH = 0            # D8: 轮次号; shutdown 递增, 上一轮的迟到结果不得污染下一轮
++
++
++def _log_error(msg):
++    """D7: 后台异常落日志 (惰性 import —— 本模块可能被更早导入, 避免循环依赖)。
++
++    log1 只是入队写, 工作线程调用安全 (src/core/log.py 队列实现); 优先直接用
++    core.log 以免在 worker 里拉起整个 utils。
++    """
++    try:
++        from core.log import log1
++    except Exception:
++        try:
++            from utils import log1
++        except Exception:
++            return
++    try:
++        log1(msg, "error")
++    except Exception:
++        pass
+ 
+ 
+ def start(root, poll_ms=60):
+@@ -40,7 +62,7 @@ def start(root, poll_ms=60):
+ 
+     root 需提供 `after(ms, fn)`; 传入 None 等价 shutdown。
+     """
+-    global _ROOT, _POLL_MS, _STARTED
++    global _ROOT, _POLL_MS, _STARTED, _CLOSING
+     if root is None:
+         shutdown()
+         return False
+@@ -50,6 +72,9 @@ def start(root, poll_ms=60):
+     except Exception:
+         _POLL_MS = 60
+     _STARTED = True
++    # D8: 清理关闭标志, 使 shutdown 之后可以重新 start; 轮次号只由 shutdown
++    # 递增, 故重复 start 不会误伤本轮仍在飞的任务 (只关闭「上一轮」的迟到结果)。
++    _CLOSING = False
+     _schedule()
+     return True
+ 
+@@ -65,8 +90,17 @@ def pending():
+ 
+ 
+ def shutdown():
+-    """停止轮询 (窗口销毁前调用); 已入队结果直接丢弃。"""
+-    global _ROOT, _POLL_ID, _STARTED, _PENDING
++    """停止轮询 (窗口销毁前调用); 已入队结果直接丢弃。
++
++    D8 改造: ① 先置 _CLOSING 再清队列 —— 在飞 worker 会在 `_QUEUE.put` 之前
++    发现标志并直接丢弃, 不再往无人消费的队列里堆结果; ② 递增 _EPOCH, 即使某个
++    worker 在 join 超时后仍在飞, 其迟到结果也进不了下一轮; ③ 末尾 join 所有
++    worker (单个上限 1.0 s)。worker 只做「计算 + put」, 不依赖主线程泵, 故主
++    线程 join 不会死锁; 总关闭时长最多 1.0 s。
++    """
++    global _ROOT, _POLL_ID, _STARTED, _PENDING, _CLOSING, _EPOCH
++    _CLOSING = True
++    _EPOCH += 1
+     _STARTED = False
+     if _POLL_ID is not None and _ROOT is not None:
+         try:
+@@ -82,6 +116,13 @@ def shutdown():
+             _QUEUE.get_nowait()
+     except queue.Empty:
+         pass
++    with _LOCK:
++        threads = list(_THREADS)
++    for t in threads:
++        try:
++            t.join(timeout=1.0)
++        except Exception:
++            pass
+ 
+ 
+ def _schedule():
+@@ -131,13 +172,17 @@ def _safe_call(fn, arg):
+ 
+ def _run_item(item):
+     global _PENDING
+-    on_done, on_error, ok, payload, name = item
++    on_done, on_error, ok, payload, name, tb = item
+     with _LOCK:
+         if _PENDING > 0:
+             _PENDING -= 1
+     if ok:
+         _safe_call(on_done, payload)
+     else:
++        # D7: on_error 为 None 时也必须落日志 —— 否则后台失败完全无痕。
++        #     带 traceback, 便于定位是哪个后台任务炸了。
++        _log_error("[bg:{}] 任务异常: {}{}".format(
++            name or "task", payload, ("\n" + tb) if tb else ""))
+         _safe_call(on_error, payload)
+     return name
+ 
+@@ -165,21 +210,33 @@ def submit(fn, on_done=None, on_error=None, name=""):
+         _PENDING += 1
+ 
+     def _work():
++        epoch = _EPOCH
+         try:
+-            payload = (True, fn(), None)
+-        except Exception as e:
+-            payload = (False, e, None)
+-        _QUEUE.put((on_done, on_error, payload[0], payload[1], name))
++            try:
++                payload = (True, fn(), None)
++            except Exception as e:
++                # D7: traceback 一并放进 payload (第三位不再恒为 None)
++                payload = (False, e, traceback.format_exc())
++            # D8: 关窗 / 换轮之后绝不再入队, 主线程也就永远不会执行旧回调
++            if _CLOSING or epoch != _EPOCH:
++                return
++            _QUEUE.put((on_done, on_error, payload[0], payload[1], name, payload[2]))
++        finally:
++            with _LOCK:
++                _THREADS.discard(threading.current_thread())
+ 
+     try:
+         t = threading.Thread(target=_work, name="bg:{}".format(name or "task"))
+         t.daemon = True
++        with _LOCK:
++            _THREADS.add(t)
+         t.start()
+     except Exception as e:
+         # 线程创建失败 (极端环境): 回退同步执行, 保证任务不丢
+         with _LOCK:
+             if _PENDING > 0:
+                 _PENDING -= 1
++            _THREADS.discard(t)
+         try:
+             result = fn()
+         except Exception as ee:

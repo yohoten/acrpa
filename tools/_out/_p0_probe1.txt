@@ -1,0 +1,33 @@
+=== [1] flush 后 Text 行数 = 5
+    行1 内容='[19:43:15] [ERROR] E1 第一条错误'
+    行2 内容='[19:43:15] [ERROR] E2 第二条错误'
+    行3 内容='[19:43:15] [ERROR] E3 第三条错误'
+    行4 内容='[19:43:15] [INFO] I1 一条信息'
+    行5 内容=''
+=== [2] 每个级别 tag 的实际区间 (注意 error 是 1 个跨 3 行的 range)
+    tag_ranges('info') = (<textindex object: '4.0'>, <textindex object: '5.0'>)
+    tag_ranges('success') = ()
+    tag_ranges('warning') = ()
+    tag_ranges('error') = (<textindex object: '1.0'>, <textindex object: '4.0'>)
+=== [3] _log_level_runs(1, 5) 返回的 runs
+    runs = [('error', 1, 3), ('info', 4, 4), ('', 5, 5)]
+=== [4] 由 runs 摊平出的 line_level 字典 (即 _log_apply_cbar 的输入)
+    line_level = {1: 'error', 2: 'error', 3: 'error', 4: 'info'}
+    行1 → 级别='error'
+    行2 → 级别='error'
+    行3 → 级别='error'
+    行4 → 级别='info'
+    行5 → 级别=''
+=== [5] _log_apply_cbar() 后每行的色条 tag (error 行应带 cbar_error)
+    行1 首字符='▌' tags=['cbar_error']
+    行2 首字符='▌' tags=['error', 'cbar_error']
+    行3 首字符='▌' tags=['error', 'cbar_error']
+    行4 首字符='▌' tags=['cbar_info']
+    行5 首字符='' tags=[]
+=== [6] 级别过滤 = ERROR 时哪些行被 lf_hide 隐藏 (期望: 3 条 error 全显示)
+    行1 隐藏=False 内容='▌[19:43:15] [ERROR] E1 第一条错误'
+    行2 隐藏=False 内容='▌[19:43:15] [ERROR] E2 第二条错误'
+    行3 隐藏=False 内容='▌[19:43:15] [ERROR] E3 第三条错误'
+    行4 隐藏=True 内容='▌[19:43:15] [INFO] I1 一条信息'
+    行5 隐藏=True 内容=''
+=== DONE

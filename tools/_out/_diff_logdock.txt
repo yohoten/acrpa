@@ -1,0 +1,91 @@
+diff --git a/src/ui/log_dock.py b/src/ui/log_dock.py
+index 3473e21..2902dd5 100644
+--- a/src/ui/log_dock.py
++++ b/src/ui/log_dock.py
+@@ -392,7 +392,9 @@ def _log_trim():
+         total = int(float(_rz.index("end-1c")))
+     except Exception:
+         return 0
+-    if total <= limit + max(200, limit // 10):
++    # D6: 滞回门槛原为 limit + max(200, limit//10), limit<200 时永远达不到 →
++    #   小上限配置 (LOG_MAX_LINES=10/50) 事实上不裁剪, 行数无上限增长。
++    if total <= limit + max(20, min(200, limit // 2)):
+         return 0
+     excess = total - limit
+     try:
+@@ -401,9 +403,46 @@ def _log_trim():
+         return 0
+     _cbar_state["done"] = max(0, _cbar_state["done"] - excess)
+     _logfilter["applied"] = max(0, _logfilter["applied"] - excess)
++    # D6: 裁掉奇数行会让 zebra 奇偶整体反转 (后续追加新行时出现连续两行同样式),
++    #   故裁剪后按新行号整段重建 zebra (一次 tag_remove + 一次批量 tag_add)。
++    try:
++        _log_rebuild_zebra()
++    except Exception:
++        pass
+     return excess
+ 
+ 
++def _log_rebuild_zebra():
++    """按当前行号重建斑马纹 (lzebra) —— 裁剪后行号整体左移, 奇偶必须重算。
++
++    只对「已处理行」上 zebra (即行首已插过 ▌ 的行, 1.._cbar_state["done"]):
++    未处理行由 _log_apply_cbar 自己加, 这里不抢跑, 避免与增量游标交叉。
++    批量 tag_add (一次 Tcl 调用) 取代逐行 tag_add, 保持热路径成本可控。
++    """
++    try:
++        total = int(float(_rz.index("end-1c")))
++    except Exception:
++        return
++    try:
++        done = max(0, min(int(_cbar_state.get("done", 0) or 0), total))
++    except Exception:
++        done = total
++    try:
++        _rz.tag_remove("lzebra", "1.0", "end")
++    except Exception:
++        return
++    pairs = []
++    for i in range(1, done + 1):
++        if i % 2 == 0:
++            pairs.append("{}.1".format(i))
++            pairs.append("{}.end".format(i))
++    if pairs:
++        try:
++            _rz.tag_add("lzebra", *pairs)
++        except Exception:
++            pass
++
++
+ def flush_and_apply():
+     """等价原 _periodic 的日志段: flush + 裁剪 + 左缘色条 + 增量级别过滤。
+ 
+@@ -550,11 +589,26 @@ def _log_level_runs(start, total):
+         except Exception:
+             continue
+         for k in range(0, len(rngs), 2):
++            # D1: 相邻同 tag 的日志在 ThreadSafeLog 里被合并成**一个跨多行**的
++            # tag range, 只登记左端会让第 2..N 行丢级别 (色条回退 cbar_info、
++            # 级别过滤把这些行一起隐藏) → 必须把整个区间摊平进 line_level。
+             try:
+-                ln = int(float(str(rngs[k])))
++                a = int(float(str(rngs[k])))
+             except Exception:
+                 continue
+-            if start <= ln <= total:
++            b = a
++            if k + 1 < len(rngs):
++                try:
++                    end = float(str(rngs[k + 1]))
++                    b = int(end)
++                    # end 落在 "N.0" 表示区间止于上一行行尾 → 归到 N-1 行
++                    if end - b < 1e-9 and b > a:
++                        b -= 1
++                except Exception:
++                    b = a
++            if b < a:
++                b = a
++            for ln in range(max(a, start), min(b, total) + 1):
+                 line_level.setdefault(ln, lv)
+     runs = []
+     i = start

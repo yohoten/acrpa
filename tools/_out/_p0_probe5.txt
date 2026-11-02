@@ -1,0 +1,10 @@
+state.CONFIG_PATH          = 'd:\\CodingEmber\\ACRPA\\config.json'
+state.CONFIG_PATH is file  = True
+_default_profile_dir()     = 'd:\\CodingEmber\\ACRPA\\browser_profile'
+dirname(p) 存在?            = True
+dirname(p) 是文件?          = False
+=== 模拟 browser_backend.py:272  os.makedirs(user_data_dir, exist_ok=True)
+makedirs 成功 (缺陷不成立)
+=== 对照: 正确口径 dirname(CONFIG_PATH)/browser_profile
+alt                        = 'd:\\CodingEmber\\ACRPA\\browser_profile'
+alt makedirs 成功

@@ -1,0 +1,107 @@
+diff --git a/src/ACRPA.py b/src/ACRPA.py
+index c0a9963..b7b8f94 100644
+--- a/src/ACRPA.py
++++ b/src/ACRPA.py
+@@ -318 +318 @@ def _theme_sync_cmd_tags(dark=None, palette=None, prev=None):
+-    """订阅: 命令配色 tag + 图例圆点换肤重取色 (v4 §4.3)。"""
++    """订阅: 命令 tag 反查 + 图例圆点换肤重取色 (v4 §4.2 B2)。"""
+@@ -1667,3 +1667,5 @@ _LEGEND_ITEMS = [
+-# ── §4.5 选中左缘 2px 强调条 (主方案: #0 树列 per-item image) ──
+-#   ttk Treeview 无 per-row 边框能力, 故在 #0 列每项挂 2px 宽 ac 竖条贴图;
+-#   #0 列 minwidth=32 可容纳「2px 图 + 行号文本」, 且不干扰 #0 断点点击。
++# ── §4.5 选中左缘 2px 强调条 + §4.2 B2 行首分类色条 (主方案: #0 树列 per-item image) ──
++#   ttk Treeview 无 per-row 边框能力, 故在 #0 列每项挂竖条贴图:
++#   · 未选中: 4px 分类色条 (B2, 命令名已中性化, 分类色只落这里 + 图例色块);
++#   · 选中:   [2px ac 强调条][4px 分类色条] 复合 (选中左缘仍保留 ac 强调)。
++#   #0 列 width=40 可容纳「6px 图 + 行号文本」, 且不干扰 #0 断点点击。
+@@ -1670,0 +1673,3 @@ _bar_ac = None
++_CAT_BAR_W = 4                      # B2: 行首分类色条宽 (px)
++_cat_bars = {}                      # 分类组 -> 4px 分类色条 PhotoImage (未选中)
++_cat_bars_sel = {}                  # 分类组 -> [2px ac][4px 分类色] 复合条 (选中)
+@@ -1674 +1679 @@ def _build_sel_bar():
+-    """构造 2px 宽 x row_h 高的 ac 竖条 PhotoImage (随主题/DPI 变更重建)。"""
++    """构造 ac 选中竖条 + B2 行首分类色条 PhotoImage (随主题/DPI 变更重建)。"""
+@@ -1685,0 +1691,36 @@ def _build_sel_bar():
++    # B2: 每分类一组 4px 色条; 选中态复合 [2px ac][4px 分类色]。
++    _cat_bars.clear()
++    _cat_bars_sel.clear()
++    try:
++        for group in set(_CMD_COLORS.values()):
++            color = ui_theme.cat_color(group)
++            bar = tkinter.PhotoImage(width=_CAT_BAR_W, height=h)
++            bar.put(color, to=(0, 0, _CAT_BAR_W, h))
++            _cat_bars[group] = bar
++            sel = tkinter.PhotoImage(width=2 + _CAT_BAR_W, height=h)
++            sel.put(C["ac"], to=(0, 0, 2, h))
++            sel.put(color, to=(2, 0, 2 + _CAT_BAR_W, h))
++            _cat_bars_sel[group] = sel
++    except Exception:
++        _cat_bars.clear()
++        _cat_bars_sel.clear()
++
++
++def _cmd_type_of(tree_, item):
++    """按行 tag 反查该行 cmd_type (供行首分类色条取色, 避免 O(n) index 查找)。"""
++    try:
++        tags = tree_.item(item, "tags")
++        first = tags[0] if tags else ""
++        return first if first in _CMD_COLORS else ""
++    except Exception:
++        return ""
++
++
++def _cat_bar_image(cmd_type, selected=False):
++    """返回该行的行首色条贴图: 分类色条(未选中) / [ac+分类](选中) / 空。"""
++    group = _CMD_COLORS.get(cmd_type)
++    if group is None:
++        return (_bar_ac if (selected and _bar_ac is not None) else "")
++    if selected:
++        return _cat_bars_sel.get(group) or _cat_bars.get(group, "")
++    return _cat_bars.get(group, "")
+@@ -1690 +1731 @@ def _sel_bar(tree_, item, on):
+-        tree_.item(item, image=(_bar_ac if (on and _bar_ac is not None) else ""))
++        tree_.item(item, image=_cat_bar_image(_cmd_type_of(tree_, item), on))
+@@ -2606 +2647,2 @@ def _editor_load_xls(fp):
+-# 命令 → 分类键 (v4 §4.3): 结构不变、宿主调用点不动; 实际取色走 ui_theme.cat_color()。
++# 命令 → 分类键 (v4 §4.2 B2): 结构不变、宿主调用点不动; 分类色不再上整行文字前景,
++# 改由 _build_sel_bar 生成行首 4px 色条 (经 _cat_bar_image 挂到 #0 列 image)。
+@@ -2631 +2673 @@ def _configure_cmd_tags(dark=None):
+-    """配置/重配全部命令配色 tag + 图例圆点色 (v4 §4.3, 同源取色)。
++    """B2 (§4.2): 命令名/参数统一中性, 分类色只落行首色条 + 图例色块。
+@@ -2633,2 +2675,3 @@ def _configure_cmd_tags(dark=None):
+-    主题切换时在 ThemeBus 回调里重配 10 个 tag (10 次调用, 可忽略),
+-    并同步图例圆点前景色 (图例色 == 行内文字色)。
++    命令 tag 不再上前景色 (否则会覆盖样式「选中 fgt」的提亮), 让整行文字
++    继承 Treeview 样式 (未选中 fgb / 选中 fgt); 分类色改由 per-item image
++    行首 4px 色条承载。主题切换时在 ThemeBus 回调里重取图例圆点色。
+@@ -2636,2 +2678,0 @@ def _configure_cmd_tags(dark=None):
+-    for name, group in _CMD_COLORS.items():
+-        tree.tag_configure(name, foreground=ui_theme.cat_color(group, dark))
+@@ -2646 +2687 @@ def _preconfig_cmd_tags():
+-    """启动期一次性配置全部命令配色 tag (v3 §4.2)。
++    """启动期一次性预配置命令配色 tag (v3 §4.2)。
+@@ -2648,2 +2689,2 @@ def _preconfig_cmd_tags():
+-    改造前每行都要 `tree.tag_has()` + 首次命中才 `tag_configure`, 是 O(n) 次
+-    Tcl 往返; 这里一次性配完 20 个 tag, 运行期只按名挂 tag、不再查询。
++    B2 后命令 tag 不再上前景色, 但仍按名挂到每行 (供 _cmd_type_of 反查分类
++    以取行首色条); 这里一次性建齐全部命令 tag, 运行期只挂名、不再查询。
+@@ -2654,0 +2696,2 @@ def _preconfig_cmd_tags():
++        for name in _CMD_COLORS:
++            tree.tag_configure(name)
+@@ -2663 +2706 @@ def _row_tags(cmd_type, index):
+-    """单行的 tags: 命令配色 tag (命中才挂) + 偶数行斑马纹 (v3 §4.2)。"""
++    """单行的 tags: 命令分类 tag (命中才挂, 供行首色条反查) + 偶数行斑马纹 (v3 §4.2)。"""
+@@ -2995,0 +3039 @@ def _tree_tail_sync(new_keys):
++                                  image=_cat_bar_image(sd.cmd_type),
+@@ -3028,0 +3073 @@ def _update_row_inplace(index, sd=None):
++                  image=_cat_bar_image(sd.cmd_type, item in tree.selection()),
+@@ -3073 +3118,2 @@ def _editor_sync_to_tree():
+-                           values=vals, tags=_row_tags(sd.cmd_type, i))
++                           values=vals, image=_cat_bar_image(sd.cmd_type),
++                           tags=_row_tags(sd.cmd_type, i))
+@@ -6025 +6071 @@ def build_app():
+-    tree.heading("#0",text="#"); tree.column("#0",width=32,minwidth=32,stretch=False)
++    tree.heading("#0",text="#"); tree.column("#0",width=40,minwidth=40,stretch=False)
+@@ -6088 +6134 @@ def build_app():
+-        # 图例圆点的前景 = 分类色 (v4 §4.3: 与行内文字同源, 随主题切换重取色)。
++        # 图例圆点的前景 = 分类色 (v4 §4.2 B2: 与行首色条同源, 随主题切换重取色)。

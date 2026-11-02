@@ -1,0 +1,16 @@
+[OK]   A0. 共写入 4 行正文 (Text 末尾另有隐含空行)
+[OK]   A0b. error tag 是 1 个跨多行 range (缺陷前提成立)
+[OK]   A1. 第 1 行级别 = error
+[OK]   A2. 第 2 行级别 = error (合并 range 第 2 行不丢)
+[OK]   A3. 第 3 行级别 = error (合并 range 第 3 行不丢)
+[OK]   A4. 第 4 行级别 = info
+[OK]   B1. 第 1 行色条 = cbar_error
+[OK]   B2. 第 2 行色条 = cbar_error
+[OK]   B3. 第 3 行色条 = cbar_error
+[OK]   B4. 第 4 行色条 = cbar_info
+[OK]   C1. ERROR 过滤下第 1 行可见
+[OK]   C2. ERROR 过滤下第 2 行可见
+[OK]   C3. ERROR 过滤下第 3 行可见
+[OK]   C4. ERROR 过滤下第 4 行 (info) 被隐藏
+
+结果: PASS=14 FAIL=0

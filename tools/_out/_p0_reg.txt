@@ -1,0 +1,29 @@
+======================================================================
+ACRPA 测试运行器 | 模式: safe | 选中 24 / 跳过 0 / 共 24
+======================================================================
+PASS  _test_bg_task.py                            0.3s
+PASS  _test_bg_task_error.py                      1.2s
+PASS  _test_command_schema.py                     0.1s
+PASS  _test_editor_cells.py                       0.1s
+PASS  _test_import_side_effect_free.py            1.5s
+PASS  _test_log_dock_split.py                     0.7s
+PASS  _test_log_level_runs.py                     0.3s
+PASS  _test_log_trim_zebra.py                     0.6s
+PASS  _test_minibar_split.py                      0.3s
+PASS  _test_param_form.py                         0.7s
+PASS  _test_script_io.py                          0.3s
+PASS  _test_script_model.py                       0.2s
+PASS  _test_script_package.py                     3.3s
+PASS  _test_script_validate.py                    1.5s
+PASS  _test_settings_split.py                    12.4s
+PASS  _test_settings_wired.py                     0.6s
+PASS  _test_theme_bus.py                          1.7s
+PASS  _test_ui.py                                 0.1s
+PASS  _test_ui_a11y_tokens.py                     2.5s
+PASS  _test_ui_contrast.py                        0.2s
+PASS  _test_ui_l4.py                              3.2s
+PASS  _test_ui_layout.py                          0.7s
+PASS  _test_ui_spacing.py                         0.6s
+PASS  _test_ui_zoom_shortcuts.py                  2.0s
+----------------------------------------------------------------------
+通过 24 / 失败 0 / 超时 0 (跳过 0)

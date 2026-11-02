@@ -17,6 +17,24 @@ import glob
 
 import state
 
+
+# ── 运行时回退开关 (v5 §3.4 L4 / §7.2) ──
+def _env_flag(name, default=True):
+    """环境变量开关: 缺失/空 → default; 0/false/no/off → False。"""
+    try:
+        v = os.environ.get(name)
+    except Exception:
+        return default
+    if v is None or str(v).strip() == "":
+        return default
+    return str(v).strip().lower() not in ("0", "false", "no", "off")
+
+
+# True : 行首色条字形 ▌ 由生产端拼进文本 → flush 的 1 次 insert 就带好字形,
+#        ui.log_dock 不必再逐行 insert("▌") (400 行/批 ≈1200 次 Tcl → 0 次额外)。
+# False: 恢复旧行为 —— 由 ui.log_dock._log_apply_cbar 逐行插入 ▌ 并 tag_add。
+LOG_CBAR_INLINE = _env_flag("LOG_CBAR_INLINE", True)
+
 # ── LogLevel constants ──
 LOG_DEBUG = 0
 LOG_INFO = 1
@@ -181,6 +199,17 @@ class ThreadSafeLog:
         _broadcast_log(msg, tag, level, caller_file, caller_func)
         self._q.put((msg, tag, caller_file, caller_func, level))
 
+    def has_pending(self):
+        """GUI 队列里是否还有待渲染的日志行 (v5 §3.5 G3 的事件驱动判据)。
+
+        宿主 `flush_and_apply` 用它做「队列空 → 本轮 0 次 Tcl 调用」的短路;
+        返回 True 时按保守处理 (宁可多刷一次, 也不丢日志)。
+        """
+        try:
+            return not self._q.empty()
+        except Exception:
+            return True
+
     def flush(self, root_widget):
         """Flush queue to GUI widget and batched file write with LogLevel filtering.
 
@@ -222,6 +251,12 @@ class ThreadSafeLog:
                 ts = time.strftime("%H:%M:%S")
                 badge = _log_badge(tag, level)
                 line = "[{}] [{}] {}\n".format(ts, badge, msg)
+                if LOG_CBAR_INLINE:
+                    # L4: 色条字形并入生产文本。级别 tag 的区间仍从行首开始
+                    # (覆盖 ▌), 而 cbar_* tag 后配置、优先级更高 → ▌ 显示色条色,
+                    # 文本其余部分仍是级别色, 视觉与旧版逐像素一致。
+                    # 副作用: 导出/复制路径需 strip("▌") —— 见 ui/log_dock.py。
+                    line = "▌" + line
                 parts.append(line)
                 if tag:
                     # 相邻同 tag 合并成一段, 减少 tag_add 次数

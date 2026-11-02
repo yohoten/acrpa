@@ -418,14 +418,21 @@ def save_xls(path, rows):
     return atomic_save(path, lambda tmp: wb.save(tmp), backup=True)
 
 
-def save_script(path, rows, meta=None):
+def save_script(path, rows, meta=None, allow_empty=False):
     """按扩展名分派原子写入脚本。
 
     ``.acrpas`` → JSON；其它（``.xls``）→ xls（xlwt）。失败不破坏原文件
     （``utils.atomic_save``：同目录 ``.tmp`` + ``.bak`` 前像 + ``os.replace``）。
+
+    D3 空行守卫: ``rows`` 为空且 ``allow_empty`` 为 False 时抛 ``ValueError``。
+    这是「写盘原语」的最后一道闸 —— 加载窗口期编辑器 rows 尚未灌入时若被调用，
+    原子写会把 5 行文件覆盖成 0 行（.bak 只留前像，用户视角就是数据丢失）。
+    确有必要的场景（新建空脚本另存）由调用方显式传 ``allow_empty=True``。
     """
     if not path:
         raise ValueError("脚本路径为空")
+    if not rows and not allow_empty:
+        raise ValueError("脚本内容为空，已拒绝写入（避免把文件覆盖成 0 行）")
     ext = os.path.splitext(str(path))[1].lower()
     if ext == ACRPAS_EXT:
         return save_acrpas(path, rows, meta=meta)

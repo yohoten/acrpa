@@ -1,0 +1,13 @@
+[OK]   A1. on_error=None 时异常仍落 error 日志
+[OK]   A2. 日志含异常类型与信息 (RuntimeError/bg-boom)
+[OK]   A3. 日志含 traceback (≥3 行)
+[OK]   A4. 日志标明任务名 (bg:boom)
+[OK]   A5. 异常任务处理后 pending 归零
+[OK]   B0. 重新 start 成功
+[OK]   B1. shutdown 在 1.2 s 内返回
+[OK]   B2. shutdown 后 pending == 0
+[OK]   B3. 在飞任务的结果被丢弃 (回调未执行)
+[OK]   C1. 重新 start 后旧回调不会被执行
+[OK]   D1. 重启后新任务正常回调
+
+结果: PASS=11 FAIL=0

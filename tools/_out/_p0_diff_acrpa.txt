@@ -1,0 +1,136 @@
+diff --git a/src/ACRPA.py b/src/ACRPA.py
+index b7b8f94..1bb5929 100644
+--- a/src/ACRPA.py
++++ b/src/ACRPA.py
+@@ -627,3 +627,6 @@ def _bind_scroll_recursive(parent, handler):
+-    幂等: 同一 handler 已绑过的控件直接跳过。工具栏/运行栏/工作流在初始化与重建
+-    时可能被多次调用, 重复 bind 会让 Tk 事件表不断变长 (每行 bind 都要解析 pattern),
+-    且旧 handler 覆盖新 handler 时顺序不可控 —— 这是"滚动偶发不响应"的常见来源。
++    幂等: 同一 handler 已绑过的**控件本身**跳过 bind。工具栏/运行栏/工作流在初始化
++    与重建时可能被多次调用, 重复 bind 会让 Tk 事件表不断变长 (每行 bind 都要解析
++    pattern), 且旧 handler 覆盖新 handler 时顺序不可控 —— 这是"滚动偶发不响应"的常见来源。
++
++    D4: 幂等判定**只作用于当前 widget**, 之后无条件继续递归子树。旧实现在函数开头
++    直接 `return`, 一旦父控件已绑过就跳过整棵子树, 导致此后新增的子控件永久漏绑滚轮。
+@@ -632,4 +635,3 @@ def _bind_scroll_recursive(parent, handler):
+-        if getattr(parent, "_scroll_handler", None) is handler:
+-            return
+-        parent._scroll_handler = handler
+-        parent.bind("<MouseWheel>", handler)
++        if getattr(parent, "_scroll_handler", None) is not handler:
++            parent._scroll_handler = handler
++            parent.bind("<MouseWheel>", handler)
+@@ -2599 +2601 @@ def _cmd_move_down():
+-def _editor_load_xls(fp):
++def _editor_load_xls(fp, on_loaded=None):
+@@ -2609,0 +2612,5 @@ def _editor_load_xls(fp):
++
++    D2: `on_loaded` 为可选回调, 在 `_done` 里**令牌校验通过之后**(表格已建好、
++    state 已就绪)才调用 —— 热字串「加载并执行」必须等脚本真的进编辑器再执行,
++    不能在 submit 返回后立刻执行 (那时读到的还是上一个脚本)。默认 None 时行为
++    与旧实现完全一致, 既有调用方无需改动。
+@@ -2610,0 +2618 @@ def _editor_load_xls(fp):
++    global _LOAD_IN_FLIGHT
+@@ -2612,0 +2621 @@ def _editor_load_xls(fp):
++    _LOAD_IN_FLIGHT = True        # D3: 标记「加载中」, 保存侧据此提示「请稍候」
+@@ -2630,0 +2640 @@ def _editor_load_xls(fp):
++        global _LOAD_IN_FLIGHT
+@@ -2633,0 +2644 @@ def _editor_load_xls(fp):
++        _LOAD_IN_FLIGHT = False       # D3: 加载窗口结束, 空守卫随之放行
+@@ -2635,0 +2647,6 @@ def _editor_load_xls(fp):
++        # D2: 令牌校验通过 = 本次加载结果确实已生效, 此时才回调「加载并执行」
++        if on_loaded is not None:
++            try:
++                on_loaded()
++            except Exception as e:
++                log1("加载后回调失败: {}".format(e), "error")
+@@ -2637,0 +2655 @@ def _editor_load_xls(fp):
++        global _LOAD_IN_FLIGHT
+@@ -2639,0 +2658 @@ def _editor_load_xls(fp):
++        _LOAD_IN_FLIGHT = False       # D3: 失败也要摘掉「加载中」标记
+@@ -2990,0 +3010,3 @@ _LOAD_TOKEN = 0
++# D3: 是否有后台脚本加载在飞。保存守卫用它区分「脚本正在加载」与「脚本为空」,
++# 不做任何启发式猜测 (只由 _editor_load_xls 的进入/完成/失败三处置位)。
++_LOAD_IN_FLIGHT = False
+@@ -3223 +3245,19 @@ def _script_save_dir():
+-def _persist_script(fp, action="保存"):
++def _load_in_flight():
++    """是否有后台脚本加载在飞 (D3: 保存守卫据此区分「加载中」与「脚本为空」)。"""
++    return bool(_LOAD_IN_FLIGHT)
++
++
++def _is_new_empty_script():
++    """当前是否为「用户显式新建的空脚本」(允许另存为空文件)。
++
++    判别完全基于**显式状态**, 不做启发式猜测: ``_cmd_new`` 之后 state.has_script
++    为 False 且没有在途加载; 只要脚本有来源 (has_script=True) 或正在加载, 都不算。
++    """
++    try:
++        return (not state._editor_rows) and (not state.has_script) \
++            and (not _load_in_flight())
++    except Exception:
++        return False
++
++
++def _persist_script(fp, action="保存", allow_empty=False):
+@@ -3227,0 +3268,5 @@ def _persist_script(fp, action="保存"):
++
++    D3 空行守卫: 编辑区 rows 为空时默认**拒绝写盘** —— 否则「加载窗口期 rows 尚
++    未灌入」时一次保存就能把既有 5 行文件覆盖成 0 行。显式新建空脚本走
++    ``allow_empty=True``; 加载中/脚本为空两种情形用 ``_LOAD_IN_FLIGHT`` 与
++    ``state.has_script`` 显式状态区分, 不做启发式猜测。
+@@ -3228,0 +3274,7 @@ def _persist_script(fp, action="保存"):
++    rows = state._editor_rows or []
++    if not rows and not allow_empty:
++        if _load_in_flight():
++            log1("{}已取消: 脚本正在加载, 请稍候再保存 ({})".format(action, fp), "warning")
++        else:
++            log1("{}已取消: 脚本为空, 拒绝把文件写成 0 行 ({})".format(action, fp), "warning")
++        return False
+@@ -3233,2 +3285,3 @@ def _persist_script(fp, action="保存"):
+-            fp, state._editor_rows,
+-            meta={"name": os.path.splitext(os.path.basename(fp))[0]})
++            fp, rows,
++            meta={"name": os.path.splitext(os.path.basename(fp))[0]},
++            allow_empty=allow_empty)
+@@ -3302,2 +3355,6 @@ def _cmd_save():
+-    if not state._editor_rows:
+-        messagebox.showwarning("提示", "脚本为空，无法保存")
++    if not state._editor_rows and not _is_new_empty_script():
++        # D3: 区分「正在加载」(rows 还没灌进来) 与「真的空」, 避免用户按提示反复重试
++        if _load_in_flight():
++            messagebox.showwarning("提示", "脚本正在加载，请稍候再保存")
++        else:
++            messagebox.showwarning("提示", "脚本为空，无法保存")
+@@ -3315,2 +3372,7 @@ def _cmd_save_as():
+-    if not state._editor_rows:
+-        messagebox.showwarning("提示", "脚本为空，无法保存")
++    # D3: 显式新建的空脚本允许另存 (allow_empty), 其余空态一律拒绝
++    empty_ok = _is_new_empty_script()
++    if not state._editor_rows and not empty_ok:
++        if _load_in_flight():
++            messagebox.showwarning("提示", "脚本正在加载，请稍候再保存")
++        else:
++            messagebox.showwarning("提示", "脚本为空，无法保存")
+@@ -3333 +3395 @@ def _cmd_save_as():
+-    _persist_script(fp, "另存为")
++    _persist_script(fp, "另存为", allow_empty=empty_ok)
+@@ -5217 +5279,10 @@ def _hotstring_load_and_run(path):
+-    """主线程: 载入脚本到编辑器并运行 (复用既有 load/main_run 路径, 不新建执行通道)。"""
++    """主线程: 载入脚本到编辑器并运行 (复用既有 load/main_run 路径, 不新建执行通道)。
++
++    D2: 两处必须改 ——
++    ① `_editor_load_xls` 只把行灌进编辑器, **从不设置** state.filename/has_script/
++       script_dir; 而 main_run → autorun 是从 `script_io.load_script(state.filename)`
++       读盘的, 不先落下这三项就会执行**上一个**脚本, 或 has_script=False 直接弹
++       「没有选择要执行的脚本文件」。故入口先设置它们。
++    ② `_editor_load_xls` 是**异步**的 (ui_bg_task), 所以执行必须交给 on_loaded
++       回调 (令牌校验通过、表格已建好之后), 不能在 submit 返回后立刻 main_run。
++    """
+@@ -5219,2 +5290,4 @@ def _hotstring_load_and_run(path):
+-        _editor_load_xls(path)
+-        main_run()
++        state.filename = path
++        state.has_script = True
++        state.script_dir = os.path.dirname(path)
++        _editor_load_xls(path, on_loaded=main_run)

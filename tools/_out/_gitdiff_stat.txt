@@ -1,0 +1,6 @@
+ src/ACRPA.py           | 111 ++++++++++++++++++++++++++++++++++++++++---------
+ src/browser_backend.py |   9 +++-
+ src/script_io.py       |   9 +++-
+ src/ui/bg_task.py      |  73 ++++++++++++++++++++++++++++----
+ src/ui/log_dock.py     |  60 ++++++++++++++++++++++++--
+ 5 files changed, 229 insertions(+), 33 deletions(-)

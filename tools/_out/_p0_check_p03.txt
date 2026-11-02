@@ -1,0 +1,5 @@
+1) 初始落盘行数 = 5
+2) save_script(fp, []) 抛 ValueError: 脚本内容为空，已拒绝写入（避免把文件覆盖成 0 行）
+3) 拒绝后磁盘行数 = 5 (期望仍为 5)
+4) allow_empty=True 写入空脚本行数 = 0 (期望 0)
+VERDICT = PASS

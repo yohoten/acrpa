@@ -1,0 +1,37 @@
+ src/ACRPA.py           | 111 ++++++++++++++++++++++++++++++++++++++++---------
+ src/browser_backend.py |   9 +++-
+ src/script_io.py       |   9 +++-
+ src/ui/bg_task.py      |  73 ++++++++++++++++++++++++++++----
+ src/ui/log_dock.py     |  60 ++++++++++++++++++++++++--
+ 5 files changed, 229 insertions(+), 33 deletions(-)
+ M src/ACRPA.py
+ M src/browser_backend.py
+ M src/script_io.py
+ M src/ui/bg_task.py
+ M src/ui/log_dock.py
+?? docs/design/UI性能与线程优化方案-v5.md
+?? tests/_test_bg_task_error.py
+?? tests/_test_log_level_runs.py
+?? tests/_test_log_trim_zebra.py
+?? tests/_test_scroll_bind_recursive.py
+?? tools/_out/_acrpa_diff.txt
+?? tools/_out/_p0_diffstat.txt
+?? tools/_out/_p0_probe1.txt
+?? tools/_out/_p0_probe2.txt
+?? tools/_out/_p0_probe5.txt
+?? tools/_out/_p0_reg.txt
+?? tools/_out/_p0_t1.txt
+?? tools/_out/_p0_t2.txt
+?? tools/_out/_p0_t3.txt
+?? tools/_out/_p0_t4.txt
+?? tools/_out/_tmp_defect3/
+?? tools/_out/probe_defect1_log_runs.py
+?? tools/_out/probe_defect2_bgtask_async.py
+?? tools/_out/probe_defect3_empty_save.py
+?? tools/_out/probe_defect5_profile_dir.py
+?? tools/_out/probe_perf.py
+?? tools/_out/probe_perf2_inplace.py
+?? tools/_out/probe_perf3_cbar_first.py
+?? tools/_out/probe_task4_scroll_and_zebra.py
+?? tools/_out/run_tests_safe.txt
+?? tools/_out/run_tests_subset.txt

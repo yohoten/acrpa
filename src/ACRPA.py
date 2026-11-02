@@ -624,15 +624,17 @@ def _toggle_fold():
 def _bind_scroll_recursive(parent, handler):
     """递归绑定 MouseWheel 到 parent 及其所有后代, 使滚轮在按钮等子控件上也生效。
 
-    幂等: 同一 handler 已绑过的控件直接跳过。工具栏/运行栏/工作流在初始化与重建
-    时可能被多次调用, 重复 bind 会让 Tk 事件表不断变长 (每行 bind 都要解析 pattern),
-    且旧 handler 覆盖新 handler 时顺序不可控 —— 这是"滚动偶发不响应"的常见来源。
+    幂等: 同一 handler 已绑过的**控件本身**跳过 bind。工具栏/运行栏/工作流在初始化
+    与重建时可能被多次调用, 重复 bind 会让 Tk 事件表不断变长 (每行 bind 都要解析
+    pattern), 且旧 handler 覆盖新 handler 时顺序不可控 —— 这是"滚动偶发不响应"的常见来源。
+
+    D4: 幂等判定**只作用于当前 widget**, 之后无条件继续递归子树。旧实现在函数开头
+    直接 `return`, 一旦父控件已绑过就跳过整棵子树, 导致此后新增的子控件永久漏绑滚轮。
     """
     try:
-        if getattr(parent, "_scroll_handler", None) is handler:
-            return
-        parent._scroll_handler = handler
-        parent.bind("<MouseWheel>", handler)
+        if getattr(parent, "_scroll_handler", None) is not handler:
+            parent._scroll_handler = handler
+            parent.bind("<MouseWheel>", handler)
     except Exception:
         pass
     for child in parent.winfo_children():
@@ -2596,7 +2598,7 @@ def _cmd_move_down():
 
 
 # Editor ops
-def _editor_load_xls(fp):
+def _editor_load_xls(fp, on_loaded=None):
     """加载脚本到编辑器（.xls/.xlsx/.acrpas；自动清理旧状态）。
 
     读取统一委托 script_io.load_script（唯一实现）；本函数只保留编辑器状态
@@ -2607,9 +2609,16 @@ def _editor_load_xls(fp):
     在 UI 线程执行会白屏/掉帧 → 丢给 ui_bg_task 工作线程, 回主线程再建树
     (Tk 控件只在主线程碰)。无 GUI 事件循环时 submit() 自动退化为同步, 既有
     "调用返回即加载完成"的断言与调用方语义保持不变。
+
+    D2: `on_loaded` 为可选回调, 在 `_done` 里**令牌校验通过之后**(表格已建好、
+    state 已就绪)才调用 —— 热字串「加载并执行」必须等脚本真的进编辑器再执行,
+    不能在 submit 返回后立刻执行 (那时读到的还是上一个脚本)。默认 None 时行为
+    与旧实现完全一致, 既有调用方无需改动。
     """
+    global _LOAD_IN_FLIGHT
     _push_undo()
     token = _invalidate_load_token()
+    _LOAD_IN_FLIGHT = True        # D3: 标记「加载中」, 保存侧据此提示「请稍候」
     state._editor_rows = []
     state.breakpoints.clear()
     state._editor_modified = False
@@ -2628,15 +2637,25 @@ def _editor_load_xls(fp):
         pass
 
     def _done(rows):
+        global _LOAD_IN_FLIGHT
         if token != _LOAD_TOKEN:      # 加载期间又新建/打开了别的脚本 → 丢弃过期结果
             return
         state._editor_rows = rows
+        _LOAD_IN_FLIGHT = False       # D3: 加载窗口结束, 空守卫随之放行
         _editor_sync_to_tree()        # 统一走增量/全量路径, 序号列与配色一致
         _sync_idle_bg()
+        # D2: 令牌校验通过 = 本次加载结果确实已生效, 此时才回调「加载并执行」
+        if on_loaded is not None:
+            try:
+                on_loaded()
+            except Exception as e:
+                log1("加载后回调失败: {}".format(e), "error")
 
     def _fail(e):
+        global _LOAD_IN_FLIGHT
         if token != _LOAD_TOKEN:
             return
+        _LOAD_IN_FLIGHT = False       # D3: 失败也要摘掉「加载中」标记
         log1("加载失败: {}".format(e), "error")
         messagebox.showerror("加载失败", str(e))
         _sync_idle_bg()
@@ -2905,6 +2924,80 @@ def _log_breakpoint_on_configure(event=None):
         _LOG_COLLAPSE_AFTER = None
 
 
+# ── 跨屏 DPI 失效钩子 (v5 §5.2 P1-12) ──
+# 背景: `utils.refresh_dpi_cache()` 此前**无任何调用方** —— 窗口从 100% 屏拖到 150%
+# 屏后 dpi_factor() 仍是旧缓存, 表现为「字体/行高/色条半放大」。这里挂一个钩子:
+#   · 复用既有 `_debounce_cb` 的 120ms 去抖 (不新增无去抖的 <Configure> 绑定);
+#   · **值相同即返回**: 布局重算如果又触发 <Configure>, 下一轮判定 DPI 未变立刻退出,
+#     不会形成「重算 → Configure → 重算」的自激环。
+_DPI_WATCH = {"applied": None, "handler": None}
+_DPI_TOLERANCE = 0.02      # 倍率容差: 同屏内 Tk 的 fpixels 抖动不触发重建
+
+
+def _check_dpi_change():
+    """<Configure> 去抖后的 DPI 检查: 仅倍率真变化时重算字体/间距。"""
+    if not _DPICHECK_ON or root is None:
+        return False
+    try:
+        dpi = float(root.winfo_fpixels("1i")) / 96.0
+    except Exception:
+        return False
+    dpi = max(0.5, min(4.0, dpi))
+    old = _DPI_WATCH.get("applied")
+    if old is None:
+        _DPI_WATCH["applied"] = dpi     # 首帧只记基线, 不重建 (避免启动期布局抖动)
+        return False
+    if abs(float(old) - dpi) < _DPI_TOLERANCE:
+        return False                    # 守卫: 值相同 → 直接返回 (防自激)
+    _DPI_WATCH["applied"] = dpi
+    try:
+        utils.refresh_dpi_cache(root)   # 唯一调用点 (此前该函数无调用方)
+    except Exception:
+        pass
+    # 命名字体按新 dpi_factor 改配 → 全 UI 的字号/行高自动跟随
+    try:
+        utils.init_fonts(root)
+    except Exception:
+        pass
+    # 依赖像素尺寸的资源重算 (行高 / 列宽 / 待机背景贴图)
+    for fn in (globals().get("_apply_editor_zoom"),
+               globals().get("_apply_tree_columns"),
+               globals().get("_sync_idle_bg")):
+        if fn is None:
+            continue
+        try:
+            if getattr(fn, "__name__", "") == "_apply_tree_columns":
+                fn(force=True)
+            else:
+                fn()
+        except Exception:
+            pass
+    try:
+        log1("显示器 DPI 变化 → 已重算字体/间距 (倍率 {:.2f})".format(dpi))
+    except Exception:
+        pass
+    return True
+
+
+def _dpi_on_configure(event=None):
+    """<Configure> 入口: 只认主窗自身, 交给 120ms 去抖后再检查 DPI。
+
+    开关 `DPI_CHECK_ON_CONFIGURE` (默认开) 置 False 时完全注销本钩子行为。
+    """
+    if not _DPICHECK_ON:
+        return
+    if event is not None and getattr(event, "widget", None) is not root:
+        return
+    handler = _DPI_WATCH.get("handler")
+    if handler is None:
+        try:
+            handler = _debounce_cb(root, "dpi_watch", 120, _check_dpi_change)
+        except Exception:
+            return
+        _DPI_WATCH["handler"] = handler
+    handler()
+
+
 # ── 图例按需显示 (v3 §2.1b) ──
 _LEGEND_AUTO = True         # 开关: False 恢复「图例常驻」
 _LEGEND_GROUPS = []         # [(names_tuple, frame)] 由 build 时填充
@@ -2988,6 +3081,9 @@ _tree_render_cache = {"keys": [], "iids": []}
 
 # 脚本加载令牌: 后台加载期间若又新建/打开了别的脚本, 旧结果必须丢弃 (防串档)。
 _LOAD_TOKEN = 0
+# D3: 是否有后台脚本加载在飞。保存守卫用它区分「脚本正在加载」与「脚本为空」,
+# 不做任何启发式猜测 (只由 _editor_load_xls 的进入/完成/失败三处置位)。
+_LOAD_IN_FLIGHT = False
 
 
 def _tree_cache_invalidate():
@@ -3220,18 +3316,49 @@ def _script_save_dir():
     return APP_ROOT
 
 
-def _persist_script(fp, action="保存"):
+def _load_in_flight():
+    """是否有后台脚本加载在飞 (D3: 保存守卫据此区分「加载中」与「脚本为空」)。"""
+    return bool(_LOAD_IN_FLIGHT)
+
+
+def _is_new_empty_script():
+    """当前是否为「用户显式新建的空脚本」(允许另存为空文件)。
+
+    判别完全基于**显式状态**, 不做启发式猜测: ``_cmd_new`` 之后 state.has_script
+    为 False 且没有在途加载; 只要脚本有来源 (has_script=True) 或正在加载, 都不算。
+    """
+    try:
+        return (not state._editor_rows) and (not state.has_script) \
+            and (not _load_in_flight())
+    except Exception:
+        return False
+
+
+def _persist_script(fp, action="保存", allow_empty=False):
     """把编辑器内容原子写盘, 并同步 state/标题/最近列表/版本快照。
 
     ``action`` 只影响日志与提示文案 ("保存" / "另存为")。
     返回 True 表示已成功落盘 (state.filename 随之切换为 fp)。
+
+    D3 空行守卫: 编辑区 rows 为空时默认**拒绝写盘** —— 否则「加载窗口期 rows 尚
+    未灌入」时一次保存就能把既有 5 行文件覆盖成 0 行。显式新建空脚本走
+    ``allow_empty=True``; 加载中/脚本为空两种情形用 ``_LOAD_IN_FLIGHT`` 与
+    ``state.has_script`` 显式状态区分, 不做启发式猜测。
     """
+    rows = state._editor_rows or []
+    if not rows and not allow_empty:
+        if _load_in_flight():
+            log1("{}已取消: 脚本正在加载, 请稍候再保存 ({})".format(action, fp), "warning")
+        else:
+            log1("{}已取消: 脚本为空, 拒绝把文件写成 0 行 ({})".format(action, fp), "warning")
+        return False
     old_path = str(getattr(state, "filename", "") or "")
     try:
         # 统一 I/O: .acrpas → JSON; 其它 → xls(xlwt); 均经 utils.atomic_save 原子写
         script_io.save_script(
-            fp, state._editor_rows,
-            meta={"name": os.path.splitext(os.path.basename(fp))[0]})
+            fp, rows,
+            meta={"name": os.path.splitext(os.path.basename(fp))[0]},
+            allow_empty=allow_empty)
     except ImportError:
         messagebox.showerror("错误", "需要安装 xlwt: pip install xlwt")
         return False
@@ -3299,8 +3426,12 @@ def _commit_inline_edit():
 def _cmd_save():
     """保存 (Ctrl+S): 已有目标文件 → 原地覆盖不弹框; 尚未落盘 → 转为「另存为」。"""
     _commit_inline_edit()
-    if not state._editor_rows:
-        messagebox.showwarning("提示", "脚本为空，无法保存")
+    if not state._editor_rows and not _is_new_empty_script():
+        # D3: 区分「正在加载」(rows 还没灌进来) 与「真的空」, 避免用户按提示反复重试
+        if _load_in_flight():
+            messagebox.showwarning("提示", "脚本正在加载，请稍候再保存")
+        else:
+            messagebox.showwarning("提示", "脚本为空，无法保存")
         return
     cur = str(getattr(state, "filename", "") or "").strip()
     if cur and os.path.splitext(cur)[1].lower() in _SAVE_INPLACE_EXTS:
@@ -3312,8 +3443,13 @@ def _cmd_save():
 def _cmd_save_as():
     """另存为 (Ctrl+Shift+S): 总是询问新路径, 成功后该路径成为当前文件。"""
     _commit_inline_edit()
-    if not state._editor_rows:
-        messagebox.showwarning("提示", "脚本为空，无法保存")
+    # D3: 显式新建的空脚本允许另存 (allow_empty), 其余空态一律拒绝
+    empty_ok = _is_new_empty_script()
+    if not state._editor_rows and not empty_ok:
+        if _load_in_flight():
+            messagebox.showwarning("提示", "脚本正在加载，请稍候再保存")
+        else:
+            messagebox.showwarning("提示", "脚本为空，无法保存")
         return
     cur = str(getattr(state, "filename", "") or "").strip()
     if cur and os.path.splitext(cur)[1].lower() in _SAVE_INPLACE_EXTS:
@@ -3330,7 +3466,7 @@ def _cmd_save_as():
     # 扩展名容错: 用户手输 "abc" → 补 .xls; 大小写归一
     if not os.path.splitext(fp)[1]:
         fp += ".xls"
-    _persist_script(fp, "另存为")
+    _persist_script(fp, "另存为", allow_empty=empty_ok)
 
 
 # ── 版本历史管理 ──
@@ -4844,12 +4980,49 @@ _DASH_EMPTY = i18n.t("status.dash_empty")
 # ======================================================================
 # Periodic Updates
 # ======================================================================
+# ── 运行时回退开关 (v5 §3.5 / §7.2; 默认全开, 置 0/false/off 回退) ──
+def _env_flag(name, default=True):
+    """环境变量开关: 缺失/空 → default; 0/false/no/off → False。"""
+    try:
+        v = os.environ.get(name)
+    except Exception:
+        return default
+    if v is None or str(v).strip() == "":
+        return default
+    return str(v).strip().lower() not in ("0", "false", "no", "off")
+
+
+# PERIODIC_SPLIT : True → _periodic(G1) 与 _periodic_g2(G2) 各自独立 after 链;
+#                  False → 回到单函数串行执行 (与改造前一致)。
+PERIODIC_SPLIT = _env_flag("PERIODIC_SPLIT", True)
+_DPICHECK_ON = _env_flag("DPI_CHECK_ON_CONFIGURE", True)   # A7 跨屏 DPI 钩子开关
+_PERIODIC_G2_MS = 200          # G2 忙时周期 (文档 §3.5)
+_PERIODIC_G2_IDLE_MS = 1000    # G2 无事可做时的自泊周期 (空闲不再 5 次/秒空转)
+_PERIODIC_G2_ON = False        # G2 链是否已挂载 (幂等)
+_g2_tick = 0                   # G2 轮次计数 (待机背景兜底节流用)
+
+
+def _g2_needed():
+    """G2 组本轮是否有活可干 (无 → 自泊到 1 s, 见 v5 §2.3 唤醒预算)。"""
+    try:
+        if state.running or state.recording or state.folded or state.SCHED_ENABLED:
+            return True
+        if getattr(state, "highlight_row", 0):
+            return True
+        if getattr(state, "SCHED_NEXT_RUN", None):
+            return True
+    except Exception:
+        pass
+    return False
+
 
 def _periodic():
     if state._closing: return
     # ③ 日志面板: flush + 左缘色条 + 增量级别过滤 (自动滚动关闭时保留视口)。
     #    内联实现已迁至 src/ui/log_dock.py::flush_and_apply —— 其返回 False 等价原
     #    「flush 失败 → return」语义 (提前结束本轮 _periodic)。
+    #    v5 §3.5 G3: 生产端队列为空时 flush_and_apply 内部直接短路 (0 次 Tcl 调用),
+    #    故这里不再需要额外判定 —— 空闲期日志段成本为 0。
     if not ui_log_dock.flush_and_apply():
         return
     _pc = getattr(_periodic, "_cache", {})
@@ -4929,49 +5102,97 @@ def _periodic():
                 tags = list(tree.item(children[ni],"tags"))
                 if "running" not in tags: tags.append("running"); tree.item(children[ni],tags=tags)
         _pc["hl"] = hl; _pc["hl_old"] = hl
-    # 待机背景兜底轮询: exec_bar / netlink / scheduler 等跨模块写入点无法回调本文件
-    # 的 _sync_idle_bg, 这里每 8 轮 (≈0.8s) 校正一次显隐。_sync_idle_bg 幂等且
-    # 状态/尺寸未变时不做任何重绘, 不会有持续开销。
-    try:
-        _idle_tick = int(_pc.get("idle_bg_tick", 0)) + 1
-        _pc["idle_bg_tick"] = _idle_tick
-        if _idle_tick % 8 == 0:
-            _sync_idle_bg()
-    except Exception:
-        pass
     _periodic._cache = _pc
+    # ⑩ 录制计数 (原 G3「事件驱动」项的廉价替代: 只在 len(recorded_actions) 变化时刷新,
+    #    未引入事件总线 —— 本轮按 v5 §7.1 S8 只做「拆组 + 空队列短路」)。
     if is_recording:
         n = len(state.recorded_actions)
         if _pc.get("rec_n") != n:
             _pc["rec_n"] = n
             status_text.config(text=i18n.t("status.recording", n=n),fg=C["dg"])
             status_dot.config(text=i18n.t("status.dot_recording"),fg=C["dg"])
-    if state.SCHED_ENABLED or state.SCHED_NEXT_RUN:
-        sched_val = state.SCHED_NEXT_RUN if state.SCHED_NEXT_RUN else "--:--"
-        if _pc.get("sched_val") != sched_val:
-            _pc["sched_val"] = sched_val
-            settings_window.update_sched_next_label(sched_val)
-    if state.SCHED_ENABLED and not state._sched_thread_active:
-        sched.start_scheduler(main_run, state.save_config)
-    # 同步 Mini Bar 状态（如果折叠模式激活）
-    if state.folded:
-        _sync_mini_bar_status()
-    # 工作流执行高亮 (运行中刷新流程图当前节点)
-    #   工作流 Tab 为延迟构建 (v3 §5.2 P1): 未构建时控件句柄均为 None, 直接跳过,
-    #   避免 100ms 周期内反复抛异常。
-    if _WF_LAZY["ok"]:
-        try:
-            _wf_update_workflow_highlight()
-        except Exception:
-            pass
-    # 自适应心跳: 运行/录制/折叠/高亮时 100ms 保实时; 空闲 250ms, 降低无谓重绘与 CPU。
+    if PERIODIC_SPLIT:
+        _periodic_g2_start()          # ④⑤⑥⑦⑨: 独立 200ms 链 (幂等挂载)
+    else:
+        _periodic_g2(inline=True)     # 回退: 与 G1 串行, 等价改造前的单函数行为
+    # 自适应心跳 (v5 §3.5 G1): 运行/录制/折叠/高亮 60ms 保实时; 空闲 250ms。
     # (Tk 每次 config/insert 都排队重绘, 空闲期高频轮询是"长期挂机发热/卡顿"主要来源)
     try:
         _busy = bool(state.running or state.recording or state.folded
                      or getattr(state, "highlight_row", 0))
     except Exception:
         _busy = False
-    root.after(100 if _busy else 250, _periodic)
+    root.after(60 if _busy else 250, _periodic)
+
+
+def _periodic_g2_start():
+    """挂载 G2 组 (幂等)。独立 after 链, 与 G1 解耦 —— G1 卡住不影响它。"""
+    global _PERIODIC_G2_ON
+    if _PERIODIC_G2_ON or state._closing:
+        return
+    _PERIODIC_G2_ON = True
+    try:
+        root.after(_PERIODIC_G2_MS, _periodic_g2)
+    except Exception:
+        _PERIODIC_G2_ON = False
+
+
+def _periodic_g2(inline=False):
+    """G2 组 (v5 §3.5): ④待机背景兜底 ⑤计划任务标签 ⑥调度器保活 ⑦Mini Bar ⑨工作流高亮。
+
+    **每段独立 try/except**: 任一段抛异常只跳过该段, 不得终止整条链 (改造前是单函数
+    串行, 一段异常就把同轮其余刷新一起吃掉)。
+    `inline=True` 由 G1 串行调用 (PERIODIC_SPLIT=False 的回退路径), 此时不自排期。
+    空闲自泊: `_g2_needed()` 为假时周期退到 `_PERIODIC_G2_IDLE_MS` (1 s),
+    把「无事可做仍在 5 次/秒空转」的成本消掉。
+    """
+    global _PERIODIC_G2_ON, _g2_tick
+    if state._closing:
+        _PERIODIC_G2_ON = False
+        return
+    _g2_tick += 1
+    busy = _g2_needed()
+    # ④ 待机背景兜底轮询: exec_bar / netlink / scheduler 等跨模块写入点无法回调本文件
+    #    的 _sync_idle_bg; 忙时每 4 轮 (≈0.8s) 校正一次显隐, 空闲时每轮 (已降到 1s)。
+    if not busy or _g2_tick % 4 == 0 or inline:
+        try:
+            _sync_idle_bg()
+        except Exception:
+            pass
+    # ⑤ 计划任务「下次执行」标签 (仅变化时写控件)
+    try:
+        if state.SCHED_ENABLED or state.SCHED_NEXT_RUN:
+            sched_val = state.SCHED_NEXT_RUN if state.SCHED_NEXT_RUN else "--:--"
+            pc = getattr(_periodic, "_cache", None)
+            if pc is None or pc.get("sched_val") != sched_val:
+                if pc is not None:
+                    pc["sched_val"] = sched_val
+                settings_window.update_sched_next_label(sched_val)
+    except Exception:
+        pass
+    # ⑥ 调度器保活
+    try:
+        if state.SCHED_ENABLED and not state._sched_thread_active:
+            sched.start_scheduler(main_run, state.save_config)
+    except Exception:
+        pass
+    # ⑦ Mini Bar 状态同步 (折叠模式激活时)
+    try:
+        if state.folded:
+            _sync_mini_bar_status()
+    except Exception:
+        pass
+    # ⑨ 工作流执行高亮 (工作流 Tab 为延迟构建: 未构建时控件句柄均为 None, 直接跳过)
+    try:
+        if _WF_LAZY["ok"]:
+            _wf_update_workflow_highlight()
+    except Exception:
+        pass
+    if not inline:
+        try:
+            root.after(_PERIODIC_G2_MS if busy else _PERIODIC_G2_IDLE_MS, _periodic_g2)
+        except Exception:
+            _PERIODIC_G2_ON = False
 
 # ══════════════════════════════════════════════════════════════════════
 # 通用快捷键 (窗口级)
@@ -5214,10 +5435,21 @@ def _hotstring_run_script(path):
 
 
 def _hotstring_load_and_run(path):
-    """主线程: 载入脚本到编辑器并运行 (复用既有 load/main_run 路径, 不新建执行通道)。"""
+    """主线程: 载入脚本到编辑器并运行 (复用既有 load/main_run 路径, 不新建执行通道)。
+
+    D2: 两处必须改 ——
+    ① `_editor_load_xls` 只把行灌进编辑器, **从不设置** state.filename/has_script/
+       script_dir; 而 main_run → autorun 是从 `script_io.load_script(state.filename)`
+       读盘的, 不先落下这三项就会执行**上一个**脚本, 或 has_script=False 直接弹
+       「没有选择要执行的脚本文件」。故入口先设置它们。
+    ② `_editor_load_xls` 是**异步**的 (ui_bg_task), 所以执行必须交给 on_loaded
+       回调 (令牌校验通过、表格已建好之后), 不能在 submit 返回后立刻 main_run。
+    """
     try:
-        _editor_load_xls(path)
-        main_run()
+        state.filename = path
+        state.has_script = True
+        state.script_dir = os.path.dirname(path)
+        _editor_load_xls(path, on_loaded=main_run)
     except Exception as e:
         log1("热字串脚本运行失败: {}".format(e), "warning")
 
@@ -6080,6 +6312,13 @@ def build_app():
     tree.bind("<Configure>", _tree_columns_on_configure, add=True)
     # 高度断点 (v3 §2.1): 窗口变矮自动收起日志面板, 变高再展开; 与列策略同一条 150ms 去抖
     root.bind("<Configure>", _log_breakpoint_on_configure, add=True)
+    # 跨屏 DPI 失效钩子 (v5 §5.2 P1-12): 复用同一条既有 120ms 去抖 (`_debounce_cb`),
+    # 只在「当前所在显示器倍率真变化」时才重算字体/间距; 值相同立即返回 → 不自激。
+    try:
+        if _DPICHECK_ON:
+            root.bind("<Configure>", _dpi_on_configure, add=True)
+    except Exception:
+        pass
     try:
         root.after_idle(_apply_log_auto_collapse)
         root.after(300, _apply_log_auto_collapse)

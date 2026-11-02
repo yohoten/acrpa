@@ -222,8 +222,13 @@ def _launch_options():
 
 
 def _default_profile_dir():
-    """持久化上下文的默认用户数据目录（按机器/用户隔离，落在配置目录下）。"""
-    base = str(_sopt("CONFIG_PATH", "") or "").strip() or os.getcwd()
+    """持久化上下文的默认用户数据目录（按机器/用户隔离，落在配置目录下）。
+
+    D5: CONFIG_PATH 是**文件**路径（…/config.json），旧实现把它当目录 →
+    `makedirs(…/config.json/browser_profile)` 必抛 FileNotFoundError (WinError 3)。
+    取 dirname 后与同文件 1186/3045 处 `os.path.dirname(state.CONFIG_PATH)` 口径统一。
+    """
+    base = os.path.dirname(str(_sopt("CONFIG_PATH", "") or "").strip()) or os.getcwd()
     return os.path.join(base, "browser_profile")
 
 

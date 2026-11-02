@@ -954,7 +954,7 @@
 <!-- ================= Stats ================= -->
 <div class="stats">
   <div class="wrap stats-grid">
-    <div class="stat"><div class="num"><span class="grad count" data-target="88">0</span></div><div class="lab">内置自动化命令</div></div>
+    <div class="stat"><div class="num"><span class="grad count" data-target="92">0</span></div><div class="lab">内置自动化命令</div></div>
     <div class="stat"><div class="num"><span class="grad count" data-target="10">0</span></div><div class="lab">即用型脚本模板</div></div>
     <div class="stat"><div class="num"><span class="grad count" data-target="4">0</span></div><div class="lab">步骤类型 · 工作流编排</div></div>
     <div class="stat"><div class="num"><span class="grad" data-ver></span></div><div class="lab"><span data-date></span> 最新版本</div></div>
@@ -1018,7 +1018,7 @@
       <p class="sec-desc">从「录一遍」到「全自动」，最快 3 分钟。</p>
     </div>
     <div class="steps">
-      <div class="step reveal"><div class="stepnum">①</div><h3>录一遍，或写进 Excel</h3><p>用内置「录制」把操作跑一遍，自动生成脚本；或直接在 .xls 表格里一行写一条命令 —— 88 条内置命令，会填表就会写。</p></div>
+      <div class="step reveal"><div class="stepnum">①</div><h3>录一遍，或写进 Excel</h3><p>用内置「录制」把操作跑一遍，自动生成脚本；或直接在 .xls 表格里一行写一条命令 —— 92 条内置命令，会填表就会写。</p></div>
       <div class="step reveal"><div class="stepnum">②</div><h3>调参数，AI 定位</h3><p>改改窗口标题与参数即可；固定坐标不稳就换「AI 找图」用大白话描述元素，或 OCR「点击文字」按文字定位，界面小改也自适应。</p></div>
       <div class="step reveal"><div class="stepnum">③</div><h3>运行，交给它</h3><p>立即运行、断点调试，或交给定时调度自动跑；也可以经 NetLink 把脚本批量分发到内网多台机器一起执行。</p></div>
     </div>
@@ -1166,11 +1166,11 @@
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="sec-tag">COMMAND SYSTEM</span>
-      <h2>命令系统 · 88 条内置命令</h2>
-      <p class="sec-desc">88 条内置命令，一行一条写进 Excel 即可直接使用（下方速查表按 9 大类完整列出），点击命令或示例可复制；完整说明见 <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a></p>
+      <h2>命令系统 · 92 条内置命令</h2>
+      <p class="sec-desc">92 条内置命令，一行一条写进 Excel 即可直接使用（下方速查表按 9 大类完整列出），点击命令或示例可复制；完整说明见 <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a></p>
     </div>
     <details class="cmd-fold">
-      <summary>展开「命令速查表」· 9 大类 · 88 条<span style="color:var(--dim);font-weight:400;font-size:13px">完整文档见 <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a></span></summary>
+      <summary>展开「命令速查表」· 9 大类 · 92 条<span style="color:var(--dim);font-weight:400;font-size:13px">完整文档见 <a class="doc-link" href="https://github.com/yohoten/acrpa" target="_blank" rel="noopener">README →</a></span></summary>
     <div class="cmd-tabs reveal">
       <div class="cmd-tab on" data-tab="t1">🎯 基础操作</div>
       <div class="cmd-tab" data-tab="t2">🪟 窗口管理</div>
@@ -1260,8 +1260,11 @@
       <table class="cmd-table">
         <tr><th class="col-cmd">命令</th><th class="col-desc">说明</th><th>示例</th></tr>
         <tr><td><code>打开网页</code></td><td>用内置浏览器打开网址，适用于登录后取数、网页填表等流程</td><td class="ex">打开网页, https://example.com</td></tr>
+        <tr><td><code>浏览器管理</code></td><td>打开 / 接管 / 关闭浏览器会话，可指定浏览器类型、无头模式与用户数据目录（给了即持久化登录态）</td><td class="ex">浏览器管理, <b>打开</b>, Edge, 否, E:/ACRPA/profile</td></tr>
         <tr><td><code>浏览器点击</code></td><td>按 CSS 选择器或可见文字点击网页元素</td><td class="ex">浏览器点击, #login-btn</td></tr>
         <tr><td><code>浏览器输入</code></td><td>向指定输入框填入文本（选择器定位）</td><td class="ex">浏览器输入, #username, admin</td></tr>
+        <tr><td><code>浏览器选择</code></td><td>下拉框按标签 / 值 / 序号选择，非 select 控件自动降级为点击</td><td class="ex">浏览器选择, #city, <b>北京</b>, 标签</td></tr>
+        <tr><td><code>浏览器读取</code></td><td>读取元素文本 / 属性 / 值 / HTML / 数量 / 可见性，或页面 URL / 标题，写回变量</td><td class="ex">浏览器读取, #price, <b>文本</b>, price</td></tr>
         <tr><td><code>等待元素</code></td><td>等待网页元素出现 / 消失，可设超时</td><td class="ex">等待元素, .result, 10, 出现</td></tr>
         <tr><td><code>浏览器截图</code></td><td>整页或指定元素截图保存</td><td class="ex">浏览器截图, result, page</td></tr>
         <tr><td><code>浏览器执行JS / 执行JS</code></td><td>在页面执行 JS 并把返回值写入变量（两者互为别名）</td><td class="ex">浏览器执行JS, document.title, title</td></tr>
@@ -1278,6 +1281,7 @@
         <tr><td><code>等待数据包</code></td><td>等待并取回命中的数据包，可写回变量或导出落盘</td><td class="ex">等待数据包, */api/*, 1, 30, <b>resp</b></td></tr>
         <tr><td><code>停止监听</code></td><td>停止监听并清空队列</td><td class="ex">停止监听</td></tr>
         <tr><td><code>启动浏览器录制</code></td><td>调用 Playwright codegen 录制网页操作，并转为 DSL 追加到脚本</td><td class="ex">启动浏览器录制</td></tr>
+        <tr><td><code>关闭浏览器</code></td><td>结束浏览器会话并释放进程，下条命令会按配置重新拉起</td><td class="ex">关闭浏览器</td></tr>
       </table>
       <p class="cmd-note">浏览器命令基于 <code>Playwright</code> 实现，按需安装（约 155 MB，不随主程序打包）；未安装时命令会提示安装方法。桌面流程与网页流程可在同一条脚本中串行编排。</p>
     </div>

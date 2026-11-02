@@ -8,7 +8,7 @@
 覆盖 (卡内验收断言 1~5 + 用户口径 2~6):
   A  导入无副作用 : import ui.module_catalog 后 sys.modules 无 tkinter / pyautogui / engine;
                     源码文本无 tkinter 导入语句 (零 GUI 依赖, H8)。
-  B  树规模       : 11 组 / 88 命令 / 每组 items 非空 / 子族数为 0 (数据层无子族声明)。
+  B  树规模       : 11 组 / 92 命令 / 每组 items 非空 / 子族数为 0 (数据层无子族声明)。
   C  注册表交叉   : iter_command_names() 与 commands.list_names() 集合相等、无重复。
   D  参数签名     : params_text / sig 取自 schema (含 `HTTP 请求` 这种带半角空格的命令);
                     无参数条数 == schema stats.no_params。
@@ -16,7 +16,7 @@
                     大小写不敏感; 命中自带高亮区间。
   F  失败开放     : 路径不存在 / JSON 损坏 → 不抛异常; 默认退兜底 45 条;
                     fallback=False → 空目录 + 非空原因 (区分"加载失败"与"没有命令");
-                    schema 缺失 → 命令仍 88 条 (只是签名退化)。
+                    schema 缺失 → 命令仍 92 条 (只是签名退化)。
   G  UI 辅助      : group_label / node_label / tooltip_text / get_command 可用且无控件依赖。
 
 退出码: 0=全部通过 / 1=有失败。
@@ -103,7 +103,7 @@ def t_tree_shape():
     check(isinstance(cat, list), "Catalog 是 list 子类（卡契约 list[{group,...}]）")
     check(cat.ok, "json 加载成功 (ok=True)", "reason={!r}".format(cat.reason))
     check(cat.group_count == 11, "分组数 == 11", "实际={}".format(cat.group_count))
-    check(cat.command_count == 88, "命令数 == 88", "实际={}".format(cat.command_count))
+    check(cat.command_count == 92, "命令数 == 92", "实际={}".format(cat.command_count))
     check(all(g.get("items") for g in cat), "每个分组的 items 非空")
     check(cat.subfamily_count == 0,
           "子族数 == 0（数据层无子族声明 → 退化两级）", "实际={}".format(cat.subfamily_count))
@@ -127,15 +127,15 @@ def t_registry_crosscheck():
     cat = mc.load_catalog()
     names = mc.iter_command_names(cat)
     reg = commands.list_names()
-    check(len(names) == 88, "命令节点数 == 88", "实际={}".format(len(names)))
+    check(len(names) == 92, "命令节点数 == 92", "实际={}".format(len(names)))
     check(len(set(names)) == len(names), "无重复命令", "去重后={}".format(len(set(names))))
     miss = sorted(set(reg) - set(names))
     extra = sorted(set(names) - set(reg))
     check(not miss and not extra, "与 commands.list_names() 集合相等",
           "缺={} 多={}".format(miss, extra))
     pairs = mc.iter_commands(cat)
-    check(len(pairs) == 88 and all(isinstance(p, tuple) and len(p) == 2 for p in pairs),
-          "iter_commands() 返回 88 个 (group, cmd)")
+    check(len(pairs) == 92 and all(isinstance(p, tuple) and len(p) == 2 for p in pairs),
+          "iter_commands() 返回 92 个 (group, cmd)")
     check(cat.missing_schema == [], "所有命令都能在 schema 里找到", str(cat.missing_schema))
 
 
@@ -179,7 +179,7 @@ def t_search():
           "高亮区间切出的文本恰为关键字")
     check(len(mc.search("zzz不存在zzz", cat)) == 0, "怪词 0 命中")
     all_hits = mc.search("", cat)
-    check(len(all_hits) == 88, "空关键字返回全量 88", "实际={}".format(len(all_hits)))
+    check(len(all_hits) == 92, "空关键字返回全量 92", "实际={}".format(len(all_hits)))
     check(not all_hits[0].matched, "空关键字条目标记为未命中(matched=False)")
     lower = [h.cmd for h in mc.search("ai", cat)]
     check("AI找图" in lower, "大小写不敏感: 'ai' 命中 AI找图", str(lower[:5]))
@@ -243,10 +243,10 @@ def t_fail_open():
               "合法空目录: ok=True + reason='' + 0 条（区别于加载失败）",
               "ok={} reason={!r}".format(zerocat.ok, zerocat.reason))
 
-        # 6. schema 缺失 → 命令照出 88 条（只退化签名）
+        # 6. schema 缺失 → 命令照出 92 条（只退化签名）
         noschema = mc.load_catalog(schema_json=missing)
-        check(noschema.command_count == 88 and not noschema.ok and noschema.reason,
-              "schema 缺失 → 仍出 88 条命令 + 原因",
+        check(noschema.command_count == 92 and not noschema.ok and noschema.reason,
+              "schema 缺失 → 仍出 92 条命令 + 原因",
               "count={} reason={!r}".format(noschema.command_count, noschema.reason[:40]))
         check(all(it["sig"] == "" and it["params"] == []
                   for it in mc.iter_command_items(noschema)),

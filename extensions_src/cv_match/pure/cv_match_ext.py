@@ -1,26 +1,27 @@
 # -*- coding: utf-8 -*-
-"""cv_match_ext — ``cv.match`` 扩展提供者 (纯 Python + Pillow, 路线图 阶段二新增项③)。
+"""
+cv_match_ext — ``cv.match`` 扩展提供者 (纯 Python + Pillow)
+===========================================================
 
-本模块是**首个上线扩展**的功能主体: 用 Pillow 实现模板匹配, 为引擎 ``找图`` 系列
-命令提供一个可选的「高精度匹配」落地路径 (无需真实 OpenCV wheel)。
+用 Pillow 实现模板匹配, 为引擎 ``找图`` 系列命令提供可选「高精度匹配」路径
+(无需真实 OpenCV wheel)。
 
 硬约束 (与扩展管理器契约一致)
 ------------------------------
-* **纯 Python**, 仅依赖已内置的 Pillow; 模块 import 期**不** import ``cv2`` /
-  ``tkinter`` / ``pyautogui`` / ``engine`` —— 保证 ``extensions.provider`` 导入时零副作用;
-* 需要的 Pillow 子模块一律**函数内惰性 import**;
-* ``match`` 对任何文件/解码/计算失败**返回 None 而非抛异常** (失败开放);
-* **无 numpy 也能工作** (纯 Python 逐像素计算; 测试用图较小, 代价可接受)。
+* 纯 Python, 仅依赖内置 Pillow;
+* import 期不 import ``cv2`` / ``tkinter`` / ``pyautogui`` / ``engine`` (零副作用);
+* Pillow 子模块一律函数内惰性 import;
+* ``match`` 失败开放: 任何文件/解码/计算失败返回 None 而非抛异常;
+* 无 numpy 也能工作 (纯 Python 逐像素; 小图代价可接受)。
 
 对外 API
 --------
-    match(screen_img, template_path, confidence=0.96, region=None, grayscale=True)
-        -> (x, y, score) | None
-        screen_img: None(截屏) | PIL.Image | 路径;  template_path: PIL.Image | 路径
-        region: (left, top, width, height) 屏幕限定区域 (可选)
-    self_check() -> (ok: bool, reason: str)
+match(screen_img, template_path, confidence=0.96, region=None, grayscale=True)
+    -> (x, y, score) | None
+    screen_img: None(截屏) | PIL.Image | 路径;  template_path: PIL.Image | 路径
+    region: (left, top, width, height) 屏幕限定区域 (可选); grayscale: 转灰度提速
+self_check() -> (ok: bool, reason: str)  扩展健康检查
 """
-
 __all__ = ["match", "self_check"]
 
 _DEFAULT_CONFIDENCE = 0.96

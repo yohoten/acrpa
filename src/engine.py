@@ -2634,6 +2634,7 @@ try:
         _browser_wait_download, _browser_upload,
         _browser_connect_cdp, _browser_start_listen, _browser_wait_packets,
         _browser_stop_listen, _browser_record,
+        _browser_manage, _browser_close_cmd, _browser_read, _browser_select,
     )
     commands._set_handler("打开网页", _browser_navigate)
     commands._set_handler("浏览器点击", _browser_click)
@@ -2660,6 +2661,11 @@ try:
     commands._set_handler("等待数据包", _browser_wait_packets)
     commands._set_handler("停止监听", _browser_stop_listen)
     commands._set_handler("启动浏览器录制", _browser_record)
+    # 浏览器后端增强 P3 新命令（会话管理 / 读取 / 选择，纯追加绑定）
+    commands._set_handler("浏览器管理", _browser_manage)
+    commands._set_handler("关闭浏览器", _browser_close_cmd)
+    commands._set_handler("浏览器读取", _browser_read)
+    commands._set_handler("浏览器选择", _browser_select)
 except ImportError:
     pass
 

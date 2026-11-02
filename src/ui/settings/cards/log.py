@@ -70,20 +70,35 @@ def build(parent, ctx):
     tkinter.Label(log_retention_frame, text="天 (0=永久保留)", font=FONT_TINY,
         fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(4,0))
 
+    # 面板行数上限: Text 控件行数无上限增长会越跑越慢 (insert/重绘成本线性上升),
+    # 超过上限裁掉最早的行; 0 = 不限 (想保留全部历史时用)。
+    log_max_frame = tkinter.Frame(content, bg=C["bgc"])
+    log_max_frame.grid(row=3, column=0, sticky="ew", padx=8, pady=(1,1))
+    tkinter.Label(log_max_frame, text="面板行数上限", font=ctx.FONT_SMALL,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0,6))
+    log_max_var = tkinter.StringVar(value=str(state.LOG_MAX_LINES))
+    log_max_spin = _validate_number(tkinter.Spinbox(log_max_frame, textvariable=log_max_var,
+        from_=0, to=200000, width=8, font=ctx.FONT_SMALL,
+        bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1), log_max_var,
+        "日志面板行数上限", 6000, int, 0, 200000, card_key="log")
+    log_max_spin.pack(side="left")
+    tkinter.Label(log_max_frame, text="行 (0=不限, 超出裁掉最早的行)", font=FONT_TINY,
+        fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(4,0))
+
     # 日志保存路径提示
     _log_dir_display = os.path.join(APP_ROOT, "logs")
     _log_path_label = tkinter.Label(content,
         text="保存位置: {}".format(_log_dir_display),
         font=FONT_TINY, fg=C["fgm"], bg=C["bgc"])
-    _log_path_label.grid(row=3, column=0, sticky="w", padx=8, pady=(0,6))
+    _log_path_label.grid(row=4, column=0, sticky="w", padx=8, pady=(0,6))
 
     # 绑定防抖保存 (日志卡)
-    _track_card_vars("log", (log_save_var, log_level_var, log_retention_var))
+    _track_card_vars("log", (log_save_var, log_level_var, log_retention_var, log_max_var))
 
     return {
         "card": card, "content": content, "title": title,
         "log_save_var": log_save_var, "log_level_var": log_level_var,
-        "log_retention_var": log_retention_var,
+        "log_retention_var": log_retention_var, "log_max_var": log_max_var,
     }
 
 
@@ -98,3 +113,7 @@ def apply(ctx, handles):
         state.LOG_RETENTION_DAYS = int(handles["log_retention_var"].get())
     except ValueError:
         state.LOG_RETENTION_DAYS = 7
+    try:
+        state.LOG_MAX_LINES = max(0, int(handles["log_max_var"].get()))
+    except (ValueError, TypeError):
+        state.LOG_MAX_LINES = 6000

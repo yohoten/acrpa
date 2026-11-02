@@ -12,9 +12,9 @@
     `res/help/*.json` 一个字节都不动; 最近使用落盘指向临时目录。
 
 覆盖 (卡内验收断言 2~3 + 用户口径):
-  A  数据源驱动 : 模块库树 11 个分组节点 / 88 个命令叶子; 叶子命令名集合 == commands.list_names();
+  A  数据源驱动 : 模块库树 11 个分组节点 / 92 个命令叶子; 叶子命令名集合 == commands.list_names();
                   子族恒空 → 不造空节点 (分组节点下直接是命令);
-  B  检索       : `文件` → 命中命令数 >0 且 <=88; `zzz不存在zzz` → 0 条 (树为空);
+  B  检索       : `文件` → 命中命令数 >0 且 <=92; `zzz不存在zzz` → 0 条 (树为空);
   C  兜底分支   : groups_json 指到不存在路径 → 仍建成树、叶子数 == 45 (8 分类快照)、无异常;
                   且产生 1 条降级提示 (log1 日志 + `_WF_LIB_STATUS`), 第二次不重复刷日志;
   D  双击添加   : 老动作 `按键` → 与改造前逐字段一致 (走 `_WF_LIB_ACTIONS`);
@@ -134,13 +134,13 @@ def main():
         getattr(wv._module_catalog, "__name__", None)))
 
     try:
-        # ── A. 数据源驱动: 11 组 / 88 命令 / 集合一致 ────────────────────
+        # ── A. 数据源驱动: 11 组 / 92 命令 / 集合一致 ────────────────────
         print("\n── A. 数据源驱动 (module_catalog → 树) ──")
         leaves = wv._wf_populate_library()
         groups = tree.get_children()
         check(len(groups) == 11, "分组节点数 == 11", "实际 {}".format(len(groups)))
-        check(leaves == 88 and len(_leaves(tree)) == 88,
-              "命令叶子节点数 == 88", "返回 {} / 树内 {}".format(leaves, len(_leaves(tree))))
+        check(leaves == 92 and len(_leaves(tree)) == 92,
+              "命令叶子节点数 == 92", "返回 {} / 树内 {}".format(leaves, len(_leaves(tree))))
         names = _leaf_names(tree, wv)
         want = set(commands.list_names())
         check(len(names) == len(set(names)), "命令叶子无重复",
@@ -163,7 +163,7 @@ def main():
         # ── B. 检索 ──────────────────────────────────────────────────────
         print("\n── B. 检索 (module_catalog.search 驱动) ──")
         n_file = wv._wf_populate_library("文件")
-        check(0 < n_file <= 88, "搜索 `文件` 后可见命令数 >0 且 <=88", "实际 {}".format(n_file))
+        check(0 < n_file <= 92, "搜索 `文件` 后可见命令数 >0 且 <=92", "实际 {}".format(n_file))
         hit_tags = 0
         for cid in _leaves(tree):
             if "wf_lib_hit" in (tree.item(cid, "tags") or ()):
@@ -175,7 +175,7 @@ def main():
               "搜索怪词后可见命令数 == 0 (树为空)",
               "返回 {} / 树内 {}".format(n_none, len(_leaves(tree))))
         n_all = wv._wf_populate_library("")
-        check(n_all == 88, "清空搜索框恢复 88 条", "实际 {}".format(n_all))
+        check(n_all == 92, "清空搜索框恢复 92 条", "实际 {}".format(n_all))
 
         # ── C. 兜底分支 (注入坏路径, 不改仓库 json) ──────────────────────
         print("\n── C. 兜底分支 (groups_json 不存在) ──")

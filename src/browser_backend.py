@@ -31,6 +31,10 @@ Browser Automation Backend for ACRPA — Playwright-powered web automation.
 - 等待数据包      : 等待并取回命中数据包，写回变量/落盘（P2）
 - 停止监听        : 停止监听并清空队列（P2）
 - 启动浏览器录制  : 调用 playwright codegen 并转为 DSL 追加（可选入口，P2）
+- 浏览器管理      : 打开/接管/关闭 会话，含 浏览器类型(通道)/无头/用户数据目录/起始网址（P3）
+- 关闭浏览器      : 关闭会话并复位启动参数（P3）
+- 浏览器读取      : 读取元素 文本/属性/值/HTML/数量，或页面 URL/标题/HTML（P3）
+- 浏览器选择      : 下拉框按 标签/值/序号 选择，非 select 控件自动降级点击（P3）
 
 codegen → DSL 转换器（P2，纯函数、仅 stdlib、不依赖 playwright）:
   `codegen_to_dsl(code_text, strict=False) -> (rows, warnings)`
@@ -68,6 +72,7 @@ import os
 import re
 import ast
 import time
+import atexit
 import json
 import collections
 import state
@@ -114,9 +119,112 @@ def _check_playwright_available():
     return _available
 
 
+# ======================================================================
+# 0) 启动参数层（对标 AutomationOperation「浏览器管理」）
+#    通道(chrome/msedge 免装内核) / 持久化上下文(保登录态) / 视口
+# ======================================================================
+_LAUNCH_OVERRIDE = {}   # 命令级启动覆盖（浏览器管理写入，_cleanup 复位）
+
+_CHANNEL_ALIASES = {
+    "chrome": "chrome", "googlechrome": "chrome", "谷歌": "chrome", "谷歌浏览器": "chrome",
+    "edge": "msedge", "msedge": "msedge", "microsoftedge": "msedge", "微软": "msedge",
+    "chromium": "chromium", "内置": "chromium", "自带": "chromium", "默认": "chromium",
+    "firefox": "firefox", "火狐": "firefox",
+    "webkit": "webkit", "safari": "webkit",
+}
+
+_MODE_ALIASES = {
+    "打开": "open", "启动": "open", "新建": "open", "open": "open", "launch": "open",
+    "接管": "attach", "连接": "attach", "附加": "attach", "attach": "attach",
+    "connect": "attach", "cdp": "attach",
+    "关闭": "close", "退出": "close", "close": "close", "quit": "close",
+}
+
+_WAIT_UNTIL_ALIASES = {
+    "": "domcontentloaded", "默认": "domcontentloaded", "快速": "domcontentloaded",
+    "dom": "domcontentloaded", "dom准备好": "domcontentloaded",
+    "domcontentloaded": "domcontentloaded", "结构就绪": "domcontentloaded",
+    "加载完成": "load", "完整加载": "load", "load": "load",
+    "网络空闲": "networkidle", "networkidle": "networkidle", "空闲": "networkidle",
+    "提交": "commit", "commit": "commit",
+}
+
+
+def browser_channel_kwargs(text):
+    """浏览器类型文本 → (browser_type, launch_kwargs)。
+
+    对齐 B 的 BrowserType：Chrome/Edge 走 channel（复用系统已装浏览器，免下内核），
+    Firefox/WebKit 走对应引擎，其余（空/Chromium/未知）回退内置 Chromium。
+    """
+    key = str(text or "").strip().lower().replace(" ", "")
+    name = _CHANNEL_ALIASES.get(key, "")
+    if name == "firefox":
+        return ("firefox", {})
+    if name == "webkit":
+        return ("webkit", {})
+    if name in ("chrome", "msedge"):
+        return ("chromium", {"channel": name})
+    return ("chromium", {})
+
+
+def parse_browser_mode(text):
+    """模式文本 → "open"|"attach"|"close"|""（无法识别返回空串）。"""
+    return _MODE_ALIASES.get(str(text or "").strip().lower().replace(" ", ""), "")
+
+
+def parse_wait_until(text):
+    """等待模式文本 → Playwright wait_until 值（默认 domcontentloaded，保持旧行为）。"""
+    return _WAIT_UNTIL_ALIASES.get(str(text or "").strip().lower().replace(" ", ""), "domcontentloaded")
+
+
+def _sopt(name, default):
+    """安全读取 state 配置项（缺键时用默认值）。"""
+    try:
+        return getattr(state, name)
+    except Exception:
+        return default
+
+
+def _launch_options():
+    """合并 state 默认值 + 命令级覆盖 → 启动参数字典（纯 stdlib，可单测）。"""
+    def _num(v):
+        try:
+            return int(float(v or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    opts = {
+        "headless": bool(_sopt("BROWSER_HEADLESS", True)),
+        "slow_mo": _num(_sopt("BROWSER_SLOW_MO", 0)),
+        "channel": str(_sopt("BROWSER_CHANNEL", "") or "").strip(),
+        "user_data_dir": str(_sopt("BROWSER_USER_DATA_DIR", "") or "").strip(),
+        "persistent": bool(_sopt("BROWSER_PERSISTENT", False)),
+        "user_agent": str(_sopt("BROWSER_USER_AGENT", "") or "").strip(),
+        "width": _num(_sopt("BROWSER_WINDOW_WIDTH", 0)),
+        "height": _num(_sopt("BROWSER_WINDOW_HEIGHT", 0)),
+        "args": [],
+    }
+    for k, v in _LAUNCH_OVERRIDE.items():
+        opts[k] = v
+    if opts["width"] > 0 and opts["height"] > 0:
+        opts["viewport"] = {"width": opts["width"], "height": opts["height"]}
+    else:
+        opts["viewport"] = None
+    # 视口尺寸缺省且非无头时，用 --start-maximized 让窗口铺开（B 的 StartMaximized 语义）
+    if opts["viewport"] is None and not opts["headless"]:
+        opts["args"] = list(opts["args"]) + ["--start-maximized"]
+    return opts
+
+
+def _default_profile_dir():
+    """持久化上下文的默认用户数据目录（按机器/用户隔离，落在配置目录下）。"""
+    base = str(_sopt("CONFIG_PATH", "") or "").strip() or os.getcwd()
+    return os.path.join(base, "browser_profile")
+
+
 def _get_page():
     """Lazy-init Playwright browser + page. Returns page or None."""
-    global _page, _browser, _playwright, _init_attempted, _session_mode
+    global _page, _browser, _playwright, _init_attempted, _session_mode, _context
 
     if _page is not None:
         # Check if page is still alive
@@ -139,28 +247,58 @@ def _get_page():
     try:
         from playwright.sync_api import sync_playwright  # 函数内 import
 
+        opts = _launch_options()
         _playwright = sync_playwright().start()
 
-        # Launch browser (headless by default for RPA; can be configured)
-        headless = getattr(state, 'BROWSER_HEADLESS', True) if hasattr(state, 'BROWSER_HEADLESS') else True
-        slow_mo = getattr(state, 'BROWSER_SLOW_MO', 0) if hasattr(state, 'BROWSER_SLOW_MO') else 0
+        btype, channel_kwargs = browser_channel_kwargs(opts.get("channel"))
+        engine = getattr(_playwright, btype, _playwright.chromium)
+        launch_kwargs = dict(channel_kwargs)
+        launch_kwargs["headless"] = bool(opts.get("headless"))
+        if opts.get("slow_mo"):
+            launch_kwargs["slow_mo"] = int(opts["slow_mo"])
+        if opts.get("args"):
+            launch_kwargs["args"] = list(opts["args"])
 
-        _browser = _playwright.chromium.launch(
-            headless=headless,
-            slow_mo=slow_mo,
-        )
-        _page = _browser.new_page()
+        user_data_dir = str(opts.get("user_data_dir") or "")
+        # 持久化上下文：复用磁盘 profile，登录态/cookie 跨脚本保留（B 的 UsePersistentContext）
+        if opts.get("persistent") or user_data_dir:
+            if not user_data_dir:
+                user_data_dir = _default_profile_dir()
+            os.makedirs(user_data_dir, exist_ok=True)
+            if opts.get("viewport"):
+                launch_kwargs["viewport"] = opts["viewport"]
+            _context = engine.launch_persistent_context(user_data_dir, **launch_kwargs)
+            pages = list(_context.pages)
+            _page = pages[0] if pages else _context.new_page()
+            _pages[:] = pages if pages else [_page]
+            _session_mode = "persistent"
+            log1("浏览器已启动 (通道={} 无头={} 持久化={})".format(
+                opts.get("channel") or "chromium", bool(opts.get("headless")), user_data_dir), "info")
+        else:
+            _browser = engine.launch(**launch_kwargs)
+            if opts.get("user_agent") or opts.get("viewport"):
+                ctx_kwargs = {}
+                if opts.get("user_agent"):
+                    ctx_kwargs["user_agent"] = opts["user_agent"]
+                if opts.get("viewport"):
+                    ctx_kwargs["viewport"] = opts["viewport"]
+                _context = _browser.new_context(**ctx_kwargs)
+                _page = _context.new_page()
+            else:
+                _page = _browser.new_page()
+            _session_mode = "launch"  # P2: 自启路径标记会话模式
+            log1("浏览器已启动 (通道={} 无头={})".format(
+                opts.get("channel") or "chromium", bool(opts.get("headless"))), "info")
+
         _page.set_default_timeout(30000)  # 30s default timeout
         _register_page(_page)  # P1: 登记到 _pages + 挂载下载监听（默认行为不变）
-        _session_mode = "launch"  # P2: 自启路径标记会话模式
 
-        log1("Playwright 浏览器已启动 (headless={})".format(headless), "info")
         _init_attempted = True
         return _page
 
     except Exception as e:
         _init_attempted = True
-        log1("Playwright 浏览器启动失败: {}".format(e), "error")
+        log1("浏览器启动失败: {}".format(e), "error")
         _cleanup()
         return None
 
@@ -168,6 +306,7 @@ def _get_page():
 def _cleanup():
     """Close browser and stop Playwright."""
     global _page, _browser, _playwright, _context, _active_index, _frame, _session_mode
+    global _init_attempted
     try:
         _stop_listen()  # P2: 清理监听注册，避免遗留回调
     except Exception:
@@ -181,6 +320,11 @@ def _cleanup():
     try:
         if _page:
             _page.close()
+    except Exception:
+        pass
+    try:
+        if _context:
+            _context.close()   # 持久化上下文只能经 context 关闭（browser 句柄为空）
     except Exception:
         pass
     try:
@@ -203,6 +347,21 @@ def _cleanup():
     _playwright = None
     _context = None
     _session_mode = "launch"  # P2: 复位会话模式
+    # 允许关闭后重新打开（原实现关闭一次后 _init_attempted 常驻 True，会话无法重建）
+    _init_attempted = False
+    _LAUNCH_OVERRIDE.clear()   # 启动覆盖随会话结束复位，避免污染下一个脚本
+
+
+def _atexit_cleanup():
+    """进程退出兜底关闭浏览器（避免残留 chrome/driver 进程）。"""
+    try:
+        if _page is not None or _browser is not None or _context is not None:
+            _cleanup()
+    except Exception:
+        pass
+
+
+atexit.register(_atexit_cleanup)
 
 
 def browser_close():
@@ -235,6 +394,52 @@ def _looks_native_or_css(spec):
     if _BARE_TAG_RE.match(spec):
         return True
     return False
+
+
+# ── 选择器类型归一（兼容 AutomationOperation 的 SelectorType 枚举） ──
+# B 用「选择器 + 类型」两个字段显式声明语义；ACRPA 用前缀 DSL。此函数做双向桥接，
+# 使 B 导出的模板字段可直接落进定位解析器，也消除「文本里含 # . 」被误判为 CSS 的问题。
+_SEL_TYPE_MAP = {
+    "css": ("css:", ""), "css选择器": ("css:", ""), "选择器": ("css:", ""),
+    "xpath": ("xpath:", ""), "xpath表达式": ("xpath:", ""),
+    "text": ("text:", ""), "文本": ("text:", ""), "文本内容": ("text:", ""),
+    "linktext": ("text=", ""), "链接文本": ("text=", ""),
+    "partiallinktext": ("text:", ""), "部分链接文本": ("text:", ""),
+    "id": ("#", ""), "标识": ("#", ""), "标识符": ("#", ""),
+    "name": ("", '[name="{0}"]'), "名称": ("", '[name="{0}"]'),
+    "class": (".", ""), "classname": (".", ""), "类名": (".", ""),
+    "tag": ("tag:", ""), "tagname": ("tag:", ""), "标签": ("tag:", ""), "标签名": ("tag:", ""),
+}
+
+
+def parse_selector(spec, sel_type=""):
+    """把「选择器 + 类型」归一为 ACRPA 定位 DSL 串（纯函数）。
+
+    sel_type 为空/auto/dsl 时原样透传（保持既有 DSL 规则）；类型无法识别时也原样透传。
+    """
+    s = str(spec or "").strip()
+    if not s:
+        return ""
+    t = str(sel_type or "").strip().lower().replace(" ", "")
+    if t in ("", "auto", "自动", "dsl"):
+        return s
+    mapped = _SEL_TYPE_MAP.get(t)
+    if not mapped:
+        return s
+    prefix, template = mapped
+    if template:
+        return template.format(s.replace('"', '\\"'))
+    if t in ("id", "标识", "标识符") and s.startswith("#"):
+        return s
+    if prefix == "css:" and s.startswith("css:"):
+        return s
+    if prefix == "xpath:" and s.startswith("xpath:"):
+        return s
+    if prefix == "." and s.startswith("."):
+        return s
+    if prefix == ".":
+        return "." + s.replace(" ", ".")
+    return prefix + s
 
 
 def _css_attr(expr):
@@ -1996,9 +2201,18 @@ def _browser_navigate(row, script_dir=""):
     """打开网页 — navigate to URL.
 
     Excel: 打开网页, https://example.com
+           打开网页, https://example.com, 网络空闲, 30
+
+    参数2 等待模式（对标 B 的 页面跳转）：默认/快速=domcontentloaded，加载完成=load，
+    网络空闲=networkidle；参数3 超时秒（缺省 30s）。
     """
     url = str(_row_arg(row, 0, "")).strip()
     url = _resolve_vars(url)
+    wait_until = parse_wait_until(_row_arg(row, 1, ""))
+    try:
+        timeout_s = float(_row_arg(row, 2, 0) or 0)
+    except (TypeError, ValueError):
+        timeout_s = 0.0
 
     if not url:
         log1("打开网页: 未指定URL", "error")
@@ -2013,7 +2227,10 @@ def _browser_navigate(row, script_dir=""):
 
     try:
         log1("打开网页: {}".format(url))
-        page.goto(url, wait_until="domcontentloaded")
+        goto_kwargs = {"wait_until": wait_until}
+        if timeout_s > 0:
+            goto_kwargs["timeout"] = int(timeout_s * 1000)
+        page.goto(url, **goto_kwargs)
         # Store current URL in variables
         variables = _engine_variables()
         if variables is not None:
@@ -2027,6 +2244,237 @@ def _browser_navigate(row, script_dir=""):
     except Exception as e:
         log1("打开网页失败: {}".format(e), "error")
         _set_last_error("NAV_FAILED", "网页打开失败: {}".format(e))
+
+
+# ── 命令: 浏览器管理（P3，对标 B 的 浏览器管理） ──
+def _browser_manage(row, script_dir=""):
+    """浏览器管理 — 打开 / 接管 / 关闭 浏览器会话。
+
+    Excel: 浏览器管理, 打开, Edge, 否, D:\\profiles\\work, https://example.com
+           浏览器管理, 打开, Chrome, 是
+           浏览器管理, 接管, http://127.0.0.1:9222
+           浏览器管理, 关闭
+
+    参数: 模式(打开/接管/关闭), 浏览器类型(Chrome/Edge/内置/Firefox/WebKit),
+          无头(是/否，可空=沿用配置), 用户数据目录(可空，给了即启用持久化上下文),
+          起始网址(可空；接管模式下本列用于填 endpoint)
+
+    返回: 成功 None；失败 False。
+    """
+    mode_text = str(_row_arg(row, 0, "打开") or "打开").strip()
+    mode = parse_browser_mode(mode_text)
+    if not mode:
+        return _fail("INVALID_ARGUMENT",
+                     "浏览器管理: 未知模式 '{}'（可用: 打开/接管/关闭）".format(mode_text))
+
+    if mode == "close":
+        browser_close()
+        _clear_last_error()
+        return None
+
+    if mode == "attach":
+        ep_arg = str(_row_arg(row, 1, "") or "").strip()
+        default_ep = str(getattr(state, "BROWSER_CDP_ENDPOINT", "") or "")
+        ep = parse_cdp_endpoint(ep_arg, default_ep)
+        if not ep:
+            return _fail("INVALID_ARGUMENT",
+                         "浏览器管理: 接管模式缺少 endpoint（示例 http://127.0.0.1:9222）")
+        ok, code, detail = _connect_cdp(ep, True)
+        if not ok:
+            return _fail(code or "CDP_CONNECT_FAILED", detail or "接管浏览器失败")
+        _refresh_page_vars(_active_top_page())
+        _clear_last_error()
+        log1("已接管浏览器: {}".format(ep))
+        return None
+
+    # open: 先收尾旧会话（避免参数不生效），再按本次参数启动
+    if _page is not None or _pages or _context is not None:
+        browser_close()
+    type_text = str(_row_arg(row, 1, "") or "").strip()
+    headless_raw = str(_row_arg(row, 2, "") or "").strip()
+    udd = str(_row_arg(row, 3, "") or "").strip()
+    start_url = _resolve_vars(str(_row_arg(row, 4, "") or "").strip())
+
+    btype, _chan_kwargs = browser_channel_kwargs(type_text)
+    _LAUNCH_OVERRIDE.clear()
+    _LAUNCH_OVERRIDE["channel"] = type_text
+    if headless_raw:
+        _LAUNCH_OVERRIDE["headless"] = headless_raw not in _BOOL_FALSE
+    if udd:
+        _LAUNCH_OVERRIDE["user_data_dir"] = udd
+        _LAUNCH_OVERRIDE["persistent"] = True
+
+    page = get_top_page()
+    if not page:
+        return _fail("PW_NOT_INSTALLED", "浏览器后端未安装(Playwright)")
+    if start_url:
+        try:
+            page.goto(start_url, wait_until="domcontentloaded")
+        except Exception as e:
+            return _fail("NAV_FAILED", "浏览器管理: 起始网址打开失败 {}".format(e))
+    _refresh_page_vars(_active_top_page())
+    _clear_last_error()
+    log1("浏览器管理: 已打开 引擎={} 类型={} 无头={} 持久化目录={} 起始页={}".format(
+        btype, type_text or "chromium",
+        _LAUNCH_OVERRIDE.get("headless", bool(getattr(state, "BROWSER_HEADLESS", True))),
+        udd or "-", start_url or "-"))
+    return None
+
+
+# ── 命令: 关闭浏览器（P3） ──
+def _browser_close_cmd(row, script_dir=""):
+    """关闭浏览器 — 结束会话并释放浏览器进程（下次命令会按配置重新拉起）。
+
+    Excel: 关闭浏览器
+    """
+    if _page is None and not _pages and _browser is None and _context is None:
+        log1("关闭浏览器: 当前没有活动会话")
+        _clear_last_error()
+        return None
+    browser_close()
+    _clear_last_error()
+    return None
+
+
+# ── 命令: 浏览器读取（P3，对标 B 的 浏览器输出） ──
+_READ_MODE_ALIASES = {
+    "文本": "text", "内容": "text", "内文": "text", "text": "text", "innertext": "text",
+    "属性": "attr", "attr": "attr", "attribute": "attr",
+    "值": "value", "输入值": "value", "value": "value",
+    "html": "html", "源码": "html", "outerhtml": "html",
+    "数量": "count", "个数": "count", "count": "count",
+    "url": "url", "网址": "url", "地址": "url",
+    "标题": "title", "title": "title",
+    "存在": "exists", "是否存在": "exists", "exists": "exists",
+    "可见": "visible", "visible": "visible",
+}
+
+
+def _browser_read(row, script_dir=""):
+    """浏览器读取 — 读取元素/页面信息并写回变量。
+
+    Excel: 浏览器读取, .price, 文本, price
+           浏览器读取, a.item, 数量, count
+           浏览器读取, img.logo, 属性, logo_src, src
+           浏览器读取, , 标题, page_title
+           浏览器读取, #agree, 可见, agree_visible
+
+    参数: 定位(可空=页面级), 模式(文本/属性/值/HTML/数量/URL/标题/存在/可见),
+          写回变量(可空=browser_read), 属性名(属性模式用), 选择器类型(可空)
+
+    返回: 读取到的值；失败 False。
+    """
+    selector_raw = str(_row_arg(row, 0, "") or "").strip()
+    mode_text = str(_row_arg(row, 1, "文本") or "文本").strip().lower().replace(" ", "")
+    var_name = str(_row_arg(row, 2, "") or "").strip() or "browser_read"
+    attr = str(_row_arg(row, 3, "") or "").strip()
+    sel_type = str(_row_arg(row, 4, "") or "").strip()
+
+    mode = _READ_MODE_ALIASES.get(mode_text)
+    if not mode:
+        return _fail("INVALID_ARGUMENT", "浏览器读取: 未知模式 '{}'".format(mode_text))
+
+    page = get_active_page()
+    if not page:
+        return _fail("PW_NOT_INSTALLED", "浏览器后端未安装(Playwright)")
+
+    try:
+        if mode == "url":
+            value = page.url
+        elif mode == "title":
+            value = page.title()
+        elif mode == "html" and not selector_raw:
+            value = page.content()
+        elif not selector_raw:
+            return _fail("INVALID_ARGUMENT", "浏览器读取: 模式 {} 需要定位表达式".format(mode))
+        else:
+            plan = parse_locator(parse_selector(selector_raw, sel_type))
+            if plan.get("engine") == "error":
+                return _fail("INVALID_LOCATOR", "浏览器读取: 定位表达式无效")
+            loc = build_locator(page, plan)
+            if loc is None:
+                return _fail("INVALID_LOCATOR", "浏览器读取: 定位表达式无效")
+            if mode == "count":
+                value = loc.count()
+            elif mode == "exists":
+                value = loc.count() > 0
+            elif mode == "visible":
+                value = bool(loc.first.is_visible())
+            elif mode == "attr":
+                if not attr:
+                    return _fail("INVALID_ARGUMENT", "浏览器读取: 属性模式需要属性名")
+                value = loc.first.get_attribute(attr)
+            elif mode == "value":
+                value = loc.first.input_value()
+            elif mode == "html":
+                value = loc.first.inner_html()
+            else:
+                value = loc.first.inner_text()
+    except Exception as e:
+        return _fail("READ_FAILED", "浏览器读取失败: {}".format(e))
+
+    _write_var(var_name, value)
+    _clear_last_error()
+    log1("浏览器读取: {} ← {} ({})".format(var_name, mode, str(value)[:80]))
+    return value
+
+
+# ── 命令: 浏览器选择（P3，对标 B 的 浏览器选择框下拉） ──
+def _browser_select(row, script_dir=""):
+    """浏览器选择 — 下拉框按 标签/值/序号 选择；非 select 控件自动降级为首点开再点项。
+
+    Excel: 浏览器选择, #city, 北京
+           浏览器选择, #city, cn-bj, 值
+           浏览器选择, #city, 2, 序号
+
+    参数: 定位, 选项, 方式(标签/值/序号，缺省标签), 选择器类型(可空)
+    """
+    selector = parse_selector(_row_arg(row, 0, ""), _row_arg(row, 3, ""))
+    option = _resolve_vars(_row_arg(row, 1, ""))
+    by = str(_row_arg(row, 2, "标签") or "标签").strip().lower().replace(" ", "")
+
+    if not selector:
+        return _fail("INVALID_ARGUMENT", "浏览器选择: 未指定选择器")
+
+    page = get_active_page()
+    if not page:
+        return _fail("PW_NOT_INSTALLED", "浏览器后端未安装(Playwright)")
+
+    plan = parse_locator(selector)
+    if plan.get("engine") == "error":
+        return _fail("INVALID_LOCATOR", "浏览器选择: 定位表达式无效")
+
+    mode = "label"
+    if by in ("值", "value", "val"):
+        mode = "value"
+    elif by in ("序号", "index", "下标", "索引"):
+        mode = "index"
+
+    try:
+        loc = build_locator(page, plan)
+        if loc is None:
+            return _fail("INVALID_LOCATOR", "浏览器选择: 定位表达式无效")
+        target = loc.first
+        try:
+            if mode == "value":
+                target.select_option(value=str(option))
+            elif mode == "index":
+                target.select_option(index=int(option))
+            else:
+                target.select_option(label=str(option))
+        except Exception as native_err:
+            # 自定义下拉（div/ul 模拟）：点开容器，再按选项文本点
+            try:
+                target.click(timeout=8000)
+                page.get_by_text(str(option), exact=True).first.click(timeout=8000)
+            except Exception:
+                return _fail("SELECT_FAILED", "浏览器选择失败: {}".format(native_err))
+    except Exception as e:
+        return _fail("SELECT_FAILED", "浏览器选择失败: {}".format(e))
+
+    _clear_last_error()
+    log1("浏览器选择: {} = {} ({})".format(selector, option, mode))
+    return None
 
 
 # ── 命令: 浏览器点击 ──

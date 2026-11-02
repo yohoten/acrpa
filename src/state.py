@@ -77,6 +77,7 @@ _config_schema = [
     ("log_level",             1,        int),    # 日志级别: 0=DEBUG, 1=INFO, 2=WARNING, 3=ERROR
     ("enable_log_saving",     True,     bool),   # 启用日志文件保存
     ("log_retention_days",    7,        int),    # 日志文件保留天数(超过自动删除)
+    ("log_max_lines",         6000,     int),    # 日志面板最大行数(超出裁掉最早的行, 0=不限)
     # OCR 增强 (PaddleOCR 可选后端)
     ("ocr_preferred_backend", "auto",   str),    # OCR后端偏好: auto/paddle/winrt/tesseract
     ("ocr_paddle_dir",        "",       str),    # PaddleOCR自定义模型目录(空=自动下载)
@@ -109,6 +110,12 @@ _config_schema = [
     ("browser_listen_max",             200,  int),   # 监听队列上限(超出丢弃最旧)
     ("browser_listen_default_timeout", 15.0, float), # 等待数据包缺省超时(秒)
     ("browser_user_agent",             "",   str),   # 自定义UA(预留)
+    # 浏览器后端增强 P3 (启动参数层, 默认值不改变现有行为)
+    ("browser_channel",        "",    str),   # 浏览器类型/通道: 空=内置chromium | chrome | edge | firefox | webkit
+    ("browser_user_data_dir",  "",    str),   # 持久化上下文用户数据目录(空=CONFIG_PATH/browser_profile)
+    ("browser_persistent",     False, bool),  # 持久化上下文(保留登录态/cookie, 跨脚本复用)
+    ("browser_window_width",   0,     int),   # 视口宽(0=默认/最大化)
+    ("browser_window_height",  0,     int),   # 视口高(0=默认/最大化)
     # 录制增强
     ("recording_mode",        "absolute", str),  # 录制模式: absolute(绝对坐标) / relative(相对窗口)
     ("recording_stop_hotkey", "Ctrl+Alt+F12", str),  # 停止录制快捷键
@@ -169,6 +176,10 @@ _config_schema = [
     # py_sandbox 沙箱内核（AST 预检 / 超时 / 审计 / AcrpaAPI / print 转发）。
     ("legacy_code_command", False,     bool),
     ("ui_scale", 1.0, float),   # 界面缩放 0.8-1.5
+    # Tk 缩放策略: False(默认)=auto, 1pt = 1/72 英寸, 由 Tk 随系统 DPI 换算;
+    # True = `tk scaling=1.0` + 命名字体改用负像素字号 (视觉等价, 但绕开 Tk 的
+    # pt→px 换算)。默认 False 保证与既有视觉/布局一致。
+    ("tk_scaling_fixed", False, bool),
     # 脚本编辑区「Excel 表格」独立字号增量 (Ctrl+滚轮 / Ctrl+± / Ctrl+0 复位)。
     # 与 ui_scale 分开: 用户常想让表格比其它界面更密或更大, 且它是唯一的高频阅读区。
     ("editor_zoom", 0, int),

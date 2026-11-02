@@ -47,6 +47,17 @@ SAFE_HEADLESS_SMOKE = frozenset({
     "_smoke_engine.py",
 })
 
+# 「_test_browser_*」默认排除(需要 playwright + Chromium)。但以下脚本实测是纯函数/
+# 纯逻辑用例: 不 import playwright、不启动浏览器、不联网, 属核心子集, 应进 CI,
+# 否则解析层/等待层/转换器的回归会被前缀规则整体误伤。
+SAFE_BROWSER_LOGIC = frozenset({
+    "_test_browser_locator.py",
+    "_test_browser_locator_chain.py",
+    "_test_browser_waiter.py",
+    "_test_browser_codegen_convert.py",
+    "_test_browser_manage.py",
+})
+
 
 def _why_not_safe(name):
     """返回排除原因; None 表示属于核心子集。
@@ -62,6 +73,8 @@ def _why_not_safe(name):
     if name.startswith(GUI_PREFIXES):
         return "GUI 冒烟: 需要真实窗口会话 (本机全量回归时用 --all)"
     if name.startswith("_test_browser_"):
+        if name in SAFE_BROWSER_LOGIC:
+            return None
         return "浏览器: 需要 playwright 与 Chromium (未装时脚本会静默自跳过)"
     return None
 

@@ -352,8 +352,60 @@ def refresh_theme(dark=None, colors=None, prev=None):
 # 周期刷新 (原 ACRPA._periodic 内联段, 现收敛为一个调用)
 # ══════════════════════════════════════════════════════════════════════
 
+_LOG_MAX_LINES = 6000   # 兜底上限, 实际由 state.LOG_MAX_LINES 覆盖 (0=不限)
+
+
+def _log_max_lines():
+    """日志面板行数上限 (state.LOG_MAX_LINES; 缺省/异常时用模块兜底值)。
+
+    注意 state 的配置项在模块里是大写属性 (``globals()[key.upper()]``), 配置键
+    ``log_max_lines`` 对应 ``state.LOG_MAX_LINES``; 这里顺带兼容小写访问, 避免
+    调用方/测试自行 setattr 小写名时"设了不生效"。0 表示不限, 是合法值, 不能
+    用 ``or`` 兜底。
+    """
+    try:
+        import state
+    except Exception:
+        return _LOG_MAX_LINES
+    for name in ("LOG_MAX_LINES", "log_max_lines"):
+        value = getattr(state, name, None)
+        if value is not None:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                continue
+    return _LOG_MAX_LINES
+
+
+def _log_trim():
+    """裁剪超限的早期日志行 (行数环形上限), 并按裁剪行数回退增量游标。
+
+    为什么需要: Text 控件行数无上限增长, 长时间运行时 insert/tag_add 与重绘
+    成本线性上升, 表现为「越跑越卡、滚动发涩」。这里用一次 delete 裁掉最早的行,
+    同时把 _cbar_state/_logfilter 的 1-based 游标左移, 避免游标与新行号错位。
+    带滞回 (超出上限 10%/200 行才裁), 避免每批日志都触发整段删除重绘。
+    """
+    limit = _log_max_lines()
+    if limit <= 0:
+        return 0
+    try:
+        total = int(float(_rz.index("end-1c")))
+    except Exception:
+        return 0
+    if total <= limit + max(200, limit // 10):
+        return 0
+    excess = total - limit
+    try:
+        _rz.delete("1.0", "{}.0".format(excess + 1))
+    except Exception:
+        return 0
+    _cbar_state["done"] = max(0, _cbar_state["done"] - excess)
+    _logfilter["applied"] = max(0, _logfilter["applied"] - excess)
+    return excess
+
+
 def flush_and_apply():
-    """等价原 _periodic 的日志段: flush + 左缘色条 + 增量级别过滤。
+    """等价原 _periodic 的日志段: flush + 裁剪 + 左缘色条 + 增量级别过滤。
 
     ③ 自动滚动: 关闭时保留当前视口, 避免新日志把视图强行拉到底部。
     返回 False 表示 flush 失败 (原实现此处 `return` 提前结束 _periodic, 宿主须沿用)。
@@ -365,6 +417,7 @@ def flush_and_apply():
             _tlog.flush(_CTX.get("root"))
         except Exception:
             return False
+        _log_trim()
         _log_apply_cbar()
     else:
         _prev_y = _rz.yview()
@@ -372,6 +425,10 @@ def flush_and_apply():
             _tlog.flush(_CTX.get("root"))
         except Exception:
             return False
+        try:
+            _log_trim()
+        except Exception:
+            pass
         try:
             _log_apply_cbar()
         except Exception:
@@ -477,6 +534,40 @@ def _log_line_tag(line_no):
     return ""
 
 
+def _log_level_runs(start, total):
+    """一次性把「行号 → 级别」摊平, 返回按级别分组的连续区间 [(lv, a, b), ...]。
+
+    改造前 `_log_apply_cbar` / `_log_apply_filter` 对**每一行**都做
+    `tag_names(line)` 查询 (一次 Tcl 往返/行), 6000 行日志就是 6000 次解释器调用;
+    这里改成对每个级别各取一次 `tag_ranges`, 在 Python 里建行号映射。
+
+    复杂度: Tcl 往返从 O(行) 降到 O(级别数=5), 其余全在内存里算。
+    """
+    line_level = {}
+    for lv in _LOG_LEVEL_TAGS:
+        try:
+            rngs = _rz.tag_ranges(lv)
+        except Exception:
+            continue
+        for k in range(0, len(rngs), 2):
+            try:
+                ln = int(float(str(rngs[k])))
+            except Exception:
+                continue
+            if start <= ln <= total:
+                line_level.setdefault(ln, lv)
+    runs = []
+    i = start
+    while i <= total:
+        lv = line_level.get(i, "")
+        j = i
+        while j + 1 <= total and line_level.get(j + 1, "") == lv:
+            j += 1
+        runs.append((lv, i, j))
+        i = j + 1
+    return runs
+
+
 def _log_apply_cbar():
     """为新增日志行: 行首插入 ▌ 并上 cbar_<tag> 色, 偶行加极淡 zebra (§4.6)。
 
@@ -485,14 +576,29 @@ def _log_apply_cbar():
     D1 幂等: **逐行处理成功后立即推进** _cbar_state["done"], 并以「行首已含 ▌」二次
     防重 —— 旧实现仅在整循环结束后赋值, 一旦中途抛错 (异常被外层吞掉) 会重入并对
     已插过 ▌ 的行再次插入, 造成色条重复。
+
+    批量读: 全文 get 一次 + 每级 tag_ranges 一次, 替代逐行 get/tag_names
+    (每行省 2 次 Tcl 往返, 是日志面板"越滚越卡"的主要成本项)。
     """
+    start = _cbar_state["done"] + 1
     try:
         total = int(float(_rz.index("end-1c")))
     except Exception:
         return
-    for i in range(_cbar_state["done"] + 1, total + 1):
+    if start > total:
+        return
+    try:
+        lines = _rz.get("{}.0".format(start), "end-1c").split("\n")
+    except Exception:
+        return
+    line_level = {}
+    for lv, a, b in _log_level_runs(start, total):
+        if lv:
+            for n in range(a, b + 1):
+                line_level[n] = lv
+    for i in range(start, total + 1):
         try:
-            line = _rz.get("{}.0".format(i), "{}.end".format(i))
+            line = lines[i - start]
             # 幂等: 行首已含 ▌ → 本行已处理过, 直接推进而不重复插入
             if line.startswith("▌"):
                 _cbar_state["done"] = i
@@ -500,7 +606,7 @@ def _log_apply_cbar():
             # Text 末尾隐含空行: 跳过且不推进, 留待有内容后再处理
             if line == "":
                 continue
-            lv = _log_line_tag(i)
+            lv = line_level.get(i, "")
             ctag = _CBAR_LEVEL_OF.get(lv, "cbar_info")
             _rz.insert("{}.0".format(i), "▌")
             _rz.tag_add(ctag, "{}.0".format(i), "{}.1".format(i))
@@ -513,26 +619,39 @@ def _log_apply_cbar():
 
 
 def _log_apply_filter(full=False):
-    """按级别过滤日志行 (用 elide 隐藏不匹配行). 全部=显示所有"""
+    """按级别过滤日志行 (用 elide 隐藏不匹配行). 全部=显示所有
+
+    批量: 用 _log_level_runs 得到「级别连续段」, 每段一次 tag_add/tag_remove,
+    取代逐行 tag_names+tag_add (6000 行时从 12000 次 Tcl 调用降到几十次)。
+    """
     try:
         sel = _log_level_var.get()
         total = int(float(_rz.index("end-1c")))
         start = 1 if full else (_logfilter["applied"] + 1)
         if start < 1:
             start = 1
-        for i in range(start, total + 1):
-            line_tag = _log_line_tag(i)
+        if start <= total:
             if sel == "全部":
-                match = True
+                _match = lambda _lv: True            # noqa: E731 (分支内小型判定)
             elif sel == "INFO":
-                match = line_tag in ("", "info")
+                _match = lambda lv: lv in ("", "info")   # noqa: E731
             else:
-                match = (line_tag == sel.lower())
-            a = "{}.0".format(i); b = "{}.end+1c".format(i)
-            if match:
-                _rz.tag_remove("lf_hide", a, b)
-            else:
-                _rz.tag_add("lf_hide", a, b)
+                _want = sel.lower()
+                _match = lambda lv, _w=_want: lv == _w   # noqa: E731
+
+            # 合并相邻且判定一致的段, 一段一次 tag 操作
+            segs = []
+            for lv, a, b in _log_level_runs(start, total):
+                ok = _match(lv)
+                if segs and segs[-1][0] == ok and segs[-1][2] + 1 == a:
+                    segs[-1] = (ok, segs[-1][1], b)
+                else:
+                    segs.append((ok, a, b))
+            for ok, a, b in segs:
+                if ok:
+                    _rz.tag_remove("lf_hide", "{}.0".format(a), "{}.end+1c".format(b))
+                else:
+                    _rz.tag_add("lf_hide", "{}.0".format(a), "{}.end+1c".format(b))
         _logfilter["applied"] = total
         # 过滤生效时, 自动滚动到最后一个可见行
         if _log_auto_scroll.get() and sel != "全部":
@@ -605,6 +724,7 @@ on_sash_release = _on_log_sash_release
 autoscroll_changed = _log_autoscroll_changed
 apply_cbar = _log_apply_cbar
 apply_filter = _log_apply_filter
+trim = _log_trim
 search_next = _log_search_next
 clear_view = _log_clear_view
 export_view = _log_export_view

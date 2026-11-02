@@ -25,6 +25,11 @@ _OCR_BACKEND_MAP = {"自动": "auto", "PaddleOCR": "paddle",
                     "PaddleOCR.dll": "paddle_dll",
                     "Windows OCR": "winrt", "Tesseract": "tesseract"}
 
+# 浏览器类型（通道）↔ state 存储值；空串=内置 Chromium
+_CHANNEL_LABEL_OF = {"": "内置 Chromium", "chrome": "Chrome", "edge": "Edge",
+                     "firefox": "Firefox", "webkit": "WebKit"}
+_CHANNEL_VALUE_OF = {v: k for k, v in _CHANNEL_LABEL_OF.items()}
+
 
 def _int_or(var, fallback, lo=None, hi=None):
     """取整数; 非法或越界 → 回退 fallback, 绝不抛异常。
@@ -365,6 +370,31 @@ def build(parent, ctx):
     _add(row(adv_content, ctx, "慢放", lambda p: _spin(
         p, browser_slowmo_var, 0, 5000, 50, 6, "浏览器慢放", 0, 0, 5000),
         unit="ms", help="0=最快"))
+    # 通道 / 持久化上下文: 复用系统已装 Chrome/Edge (免下 150MB 内核), 并保留登录态
+    browser_channel_var = tkinter.StringVar(
+        value=_CHANNEL_LABEL_OF.get(getattr(state, "BROWSER_CHANNEL", ""), "内置 Chromium"))
+    _add(row(adv_content, ctx, "类型", lambda p: ttk.Combobox(
+        p, textvariable=browser_channel_var, values=tuple(_CHANNEL_LABEL_OF.values()),
+        state="readonly", width=13),
+        help="Chrome/Edge 复用系统浏览器, 免装内核"))
+    browser_persistent_var = tkinter.BooleanVar(value=getattr(state, "BROWSER_PERSISTENT", False))
+    _add(row(adv_content, ctx, "持久化", lambda p: ttk.Checkbutton(
+        p, text="复用浏览器 profile", variable=browser_persistent_var),
+        help="开启后每次运行复用同一 profile, 保留登录态"))
+    browser_profile_var = tkinter.StringVar(value=getattr(state, "BROWSER_USER_DATA_DIR", ""))
+
+    def _mk_profile(p):
+        f = tkinter.Frame(p, bg=C["bgc"])
+        tkinter.Entry(f, textvariable=browser_profile_var, width=18,
+            font=ctx.FONT_SMALL, bg=C["ebg"], fg=C["fgb"],
+            relief="solid", bd=1).pack(side="left", padx=(0, 4))
+        _btn(f, "浏览", lambda: browser_profile_var.set(filedialog.askdirectory(
+            title="选择浏览器用户数据目录") or browser_profile_var.get()),
+            C["ac"], "white", tip="浏览器 profile 目录").pack(side="left")
+        return f
+
+    _add(row(adv_content, ctx, "Profile", _mk_profile,
+             help="留空=配置目录/browser_profile"))
 
     _sec("调度与驱动")
     sched_poll_var = tkinter.StringVar(value=str(state.SCHED_POLL_INTERVAL))
@@ -394,7 +424,8 @@ def build(parent, ctx):
     # 绑定防抖保存 (高级设置卡)
     _track_card_vars("advanced", (max_minutes_var, bound_window_var, stop_on_error_var,
         ocr_backend_var, ocr_paddle_var, ocr_preload_var, ocr_threads_var,
-        browser_headless_var, browser_slowmo_var, sched_poll_var, dd_dll_path_var,
+        browser_headless_var, browser_slowmo_var, browser_channel_var,
+        browser_persistent_var, browser_profile_var, sched_poll_var, dd_dll_path_var,
         paddle_dll_enabled_var, paddle_dll_dir_var, paddle_dll_model_dir_var,
         paddle_dll_config_var, paddle_dll_license_var,
         paddle_dll_proto_init_var, paddle_dll_proto_detect_var))
@@ -407,6 +438,9 @@ def build(parent, ctx):
         "ocr_threads_var": ocr_threads_var,
         "browser_headless_var": browser_headless_var,
         "browser_slowmo_var": browser_slowmo_var,
+        "browser_channel_var": browser_channel_var,
+        "browser_persistent_var": browser_persistent_var,
+        "browser_profile_var": browser_profile_var,
         "sched_poll_var": sched_poll_var, "dd_dll_path_var": dd_dll_path_var,
         "paddle_dll_enabled_var": paddle_dll_enabled_var,
         "paddle_dll_dir_var": paddle_dll_dir_var,
@@ -432,6 +466,10 @@ def apply(ctx, handles):
     state.OCR_THREADS = _int_or(handles["ocr_threads_var"], 8, 1, 32)
     state.BROWSER_HEADLESS = bool(handles["browser_headless_var"].get())
     state.BROWSER_SLOW_MO = _int_or(handles["browser_slowmo_var"], 0, 0, 5000)
+    state.BROWSER_CHANNEL = _CHANNEL_VALUE_OF.get(
+        handles["browser_channel_var"].get(), "")
+    state.BROWSER_PERSISTENT = bool(handles["browser_persistent_var"].get())
+    state.BROWSER_USER_DATA_DIR = handles["browser_profile_var"].get().strip()
     state.SCHED_POLL_INTERVAL = _int_or(handles["sched_poll_var"], 30, 5, 600)
     state.DD_DLL_PATH = handles["dd_dll_path_var"].get().strip()
     # PaddleOCR.dll 原生后端（默认关闭；依赖/模型缺失时自动回退其它后端）

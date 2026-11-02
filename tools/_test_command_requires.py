@@ -2,7 +2,7 @@
 """commands 可选依赖声明回归 (路线图 阶段二新增项①)。
 
 断言:
-  R1 向后兼容    : list_all() 仍返回四元组且 list_names() 与之一致 (88 条)
+  R1 向后兼容    : list_all() 仍返回四元组且 list_names() 与之一致 (92 条)
   R2 register    : register(requires=) 末位新增且默认兼容 (旧调用不传 → ())
   R3 契约        : requires() 未声明返回 (); list_requires() 为 dict 快照
   R4 覆盖率 ≥95% : requires(name) != () 的命令数 / 总数 ≥ 0.95
@@ -51,8 +51,8 @@ def main():
     check(total > 0 and all(len(t) == 4 for t in allc),
           "list_all() 仍返回四元组 ({} 条)".format(len(allc)))
     check(names == [t[0] for t in allc], "list_names() 与 list_all() 顺序一致")
-    # L2 动作库扩充后 68 → 88 (新增 20 条, 见方案文档 §5 L2 清单)
-    check(total == 88, "命令总数 = 88 (实际 {})".format(total))
+    # L2 动作库扩充后 68 → 92 (4 条浏览器会话 + 20 条 L2, 见方案文档 §5 清单)
+    check(total == 92, "命令总数 = 92 (实际 {})".format(total))
 
     # ── R2 register(requires=) 默认兼容 ──
     print("\n── R2 register(requires=) 默认兼容 ──")

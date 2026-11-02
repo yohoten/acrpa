@@ -1,12 +1,12 @@
 {
-  "app_version": "0.1.29",
+  "app_version": "0.1.30-beta",
   "source": "src/commands.py::commands.list_all()",
   "stats": {
-    "commands": 88,
-    "with_schema": 79,
-    "no_params": 9,
+    "commands": 92,
+    "with_schema": 82,
+    "no_params": 10,
     "variadic": 1,
-    "with_choices": 29
+    "with_choices": 32
   },
   "commands": [
     {
@@ -2040,6 +2040,194 @@
       "params_text": "无参数",
       "signature": "无参数",
       "params": [],
+      "has_handler": false
+    },
+    {
+      "name": "浏览器管理",
+      "description": "打开/接管/关闭浏览器会话,可指定浏览器类型/无头/用户数据目录/起始网址",
+      "params_text": "模式(打开/接管/关闭), 浏览器类型(Chrome/Edge/内置/Firefox/WebKit, 可空), 无头(是/否, 可空), 用户数据目录(可空, 给了即持久化登录态), 起始网址(接管模式下填 endpoint)",
+      "signature": "模式(打开/接管/关闭), 浏览器类型(Chrome/Edge/内置/Firefox/WebKit), 无头(是/否), 用户数据目录, 起始网址",
+      "params": [
+        {
+          "name": "模式",
+          "raw": "模式(打开/接管/关闭)",
+          "kind": "string",
+          "choices": [
+            "打开",
+            "接管",
+            "关闭"
+          ],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "浏览器类型",
+          "raw": "浏览器类型(Chrome/Edge/内置/Firefox/WebKit, 可空)",
+          "kind": "string",
+          "choices": [
+            "Chrome",
+            "Edge",
+            "内置",
+            "Firefox",
+            "WebKit"
+          ],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "无头",
+          "raw": "无头(是/否, 可空)",
+          "kind": "string",
+          "choices": [
+            "是",
+            "否"
+          ],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "用户数据目录",
+          "raw": "用户数据目录(可空, 给了即持久化登录态)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "起始网址",
+          "raw": "起始网址(接管模式下填 endpoint)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "关闭浏览器",
+      "description": "结束浏览器会话并释放进程(下次命令会按配置重新拉起)",
+      "params_text": "无参数",
+      "signature": "无参数",
+      "params": [],
+      "has_handler": false
+    },
+    {
+      "name": "浏览器读取",
+      "description": "读取元素文本/属性/值/HTML/数量/可见性,或页面URL/标题/HTML并写回变量",
+      "params_text": "定位(可空=页面级), 模式(文本/属性/值/HTML/数量/URL/标题/存在/可见), 写回变量(可空), 属性名(可选), 选择器类型(可选)",
+      "signature": "定位, 模式(文本/属性/值/HTML/数量/URL/标题/存在/可见), 写回变量, 属性名?, 选择器类型?",
+      "params": [
+        {
+          "name": "定位",
+          "raw": "定位(可空=页面级)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "模式",
+          "raw": "模式(文本/属性/值/HTML/数量/URL/标题/存在/可见)",
+          "kind": "string",
+          "choices": [
+            "文本",
+            "属性",
+            "值",
+            "HTML",
+            "数量",
+            "URL",
+            "标题",
+            "存在",
+            "可见"
+          ],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "写回变量",
+          "raw": "写回变量(可空)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "属性名",
+          "raw": "属性名(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        },
+        {
+          "name": "选择器类型",
+          "raw": "选择器类型(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        }
+      ],
+      "has_handler": false
+    },
+    {
+      "name": "浏览器选择",
+      "description": "下拉框按标签/值/序号选择,非select控件自动降级点击",
+      "params_text": "定位, 选项, 方式(标签/值/序号), 选择器类型(可选)",
+      "signature": "定位, 选项, 方式(标签/值/序号), 选择器类型?",
+      "params": [
+        {
+          "name": "定位",
+          "raw": "定位",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "选项",
+          "raw": "选项",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "方式",
+          "raw": "方式(标签/值/序号)",
+          "kind": "string",
+          "choices": [
+            "标签",
+            "值",
+            "序号"
+          ],
+          "default": null,
+          "optional": false,
+          "variadic": false
+        },
+        {
+          "name": "选择器类型",
+          "raw": "选择器类型(可选)",
+          "kind": "string",
+          "choices": [],
+          "default": null,
+          "optional": true,
+          "variadic": false
+        }
+      ],
       "has_handler": false
     },
     {

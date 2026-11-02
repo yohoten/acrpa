@@ -281,7 +281,7 @@ def case4_no_interp_table():
     print("\n── ④ NO_INTERP 白名单（commands 层） ──")
     names = commands.list_names()
     unchecked = [n for n in names if n not in commands.NO_INTERP]
-    check(not unchecked, "88 条在册命令全部登记进 NO_INTERP",
+    check(not unchecked, "92 条在册命令全部登记进 NO_INTERP",
           "未登记 {}".format(unchecked))
 
     whole, _ = commands.get_no_interp("如果")

@@ -2,7 +2,7 @@
 """L2 动作库扩充冒烟自测 —— 20 条 P0 新命令（方案文档 §5 L2）。
 
 覆盖断言（全部**无 GUI 依赖**，窗口样式一节在无 Tk 时跳过并说明）：
-  A 注册表契约 : 命令总数 88（68 + 20）；既有 68 条顺序/名称未被改动；
+  A 注册表契约 : 命令总数 92（68 + 4 浏览器会话 + 20 L2）；既有 68 条顺序/名称未被改动；
                  20 条新命令均有已绑定的 handler、可解析 schema、非空 requires
   B 文件族     : 写入/读取/复制/移动(改名)/列目录/建目录/存在性 一圈闭环
   C 回收站删除 : 临时文件送回收站后原路径消失；永久删除在无确认界面时被拒
@@ -49,6 +49,10 @@ import net_ops                                      # noqa: E402
 import sys_ops                                      # noqa: E402
 
 _PASS, _FAIL, _SKIP = [], [], []
+
+BROWSER_SESSION_COMMANDS = [
+    "浏览器管理", "关闭浏览器", "浏览器读取", "浏览器选择",
+]
 
 L2_COMMANDS = [
     "复制文件", "移动文件", "删除文件", "创建目录", "列出目录",
@@ -122,13 +126,16 @@ def run(cmd, *args):
 def t_registry():
     print("\n── A. 注册表契约 ──")
     names = commands.list_names()
-    check(len(names) == 88, "命令总数 = 88 (实际 {})".format(len(names)))
+    check(len(names) == 92, "命令总数 = 92 (实际 {})".format(len(names)))
     check(len(set(names)) == len(names), "命令名无重复")
     check(names[0] == "找图" and names[67] == "启动浏览器录制",
           "既有 68 条顺序未变（首=找图 / 第68=启动浏览器录制）",
           "{} / {}".format(names[0], names[67]))
-    check(names[68:] == L2_COMMANDS,
-          "新 20 条按文档顺序追加在末尾", str(names[68:]))
+    # 第 69~72 条为浏览器会话/读写族 (在浏览器组尾部追加, 不在 L2 批次里)
+    check(names[68:72] == BROWSER_SESSION_COMMANDS,
+          "浏览器会话族 4 条紧随浏览器组", str(names[68:72]))
+    check(names[72:] == L2_COMMANDS,
+          "L2 的 20 条按文档顺序追加在末尾", str(names[72:]))
     for name in L2_COMMANDS:
         handler = commands.get_handler(name)
         schema = commands.schema(name)

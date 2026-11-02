@@ -113,6 +113,10 @@ def restyle_combobox_popdown(widget, colors=None):
 
 # === Toast Notification System ===
 
+# 复用单例提示条 (Toplevel 创建/销毁成本高, 提示又是高频反馈)
+_toast = {"win": None, "frame": None, "label": None, "job": None}
+
+
 def show_toast(root, message, msg_type="info", duration=2000):
     """
     Display a toast notification.
@@ -133,36 +137,65 @@ def show_toast(root, message, msg_type="info", duration=2000):
     fg_color = text_on(bg_color)
     icon = icon_map.get(msg_type, icon_map["info"])
     
-    # Create toast window
-    toast = tkinter.Toplevel(root)
-    toast.overrideredirect(True)  # No window decorations
-    toast.attributes("-topmost", True)
-    toast.attributes("-alpha", 0.95)
-    
+    # 复用单例窗口: 每次提示都新建 Toplevel 会有明显的创建/销毁开销 (Windows 上
+    # 数十 ms 且伴随一次映射闪烁), 而提示条是高频 UI 反馈 (保存/撤销/复制/校验)。
+    # 这里保留一个隐藏的 Toplevel + Frame + Label, 再次提示只改文本/配色/位置。
+    win = _toast["win"]
+    try:
+        alive = win is not None and bool(win.winfo_exists())
+    except Exception:
+        alive = False
+    if not alive:
+        win = tkinter.Toplevel(root)
+        win.overrideredirect(True)          # No window decorations
+        win.attributes("-topmost", True)
+        win.attributes("-alpha", 0.95)
+        content = tkinter.Frame(win)
+        content.pack(padx=16, pady=10)
+        label = tkinter.Label(content, font=FONT_BUTTON)
+        label.pack()
+        _toast.update({"win": win, "frame": content, "label": label, "job": None})
+    else:
+        content, label = _toast["frame"], _toast["label"]
+
     # Calculate position (center-top of main window)
-    x = root.winfo_x() + root.winfo_width() // 2 - 120
-    y = root.winfo_y() + 60
-    toast.geometry("+{}+{}".format(x, y))
-    
-    # Style the toast
-    toast.configure(bg=bg_color)
-    
-    # Content frame
-    content = tkinter.Frame(toast, bg=bg_color)
-    content.pack(padx=16, pady=10)
-    
-    # Icon and message
-    label_text = "{}  {}".format(icon, message)
-    label = tkinter.Label(content, text=label_text,
-        font=FONT_BUTTON,
-        fg=fg_color, bg=bg_color)
-    label.pack()
-    
-    # Auto-dismiss
+    try:
+        x = root.winfo_x() + root.winfo_width() // 2 - 120
+        y = root.winfo_y() + 60
+        win.geometry("+{}+{}".format(x, y))
+    except Exception:
+        pass
+
+    win.configure(bg=bg_color)
+    content.configure(bg=bg_color)
+    label.configure(text="{}  {}".format(icon, message), fg=fg_color, bg=bg_color)
+    try:
+        win.deiconify()
+        win.lift()
+        # withdraw/deiconify 后部分 Tk 版本会丢失置顶与透明度, 重新声明一次
+        win.attributes("-topmost", True)
+        win.attributes("-alpha", 0.95)
+    except Exception:
+        pass
+
+    # Auto-dismiss (复用窗口用 withdraw 而非 destroy, 下次 show 直接 deiconify)
+    job = _toast.get("job")
+    if job is not None:
+        try:
+            win.after_cancel(job)
+        except Exception:
+            pass
+        _toast["job"] = None
     if duration > 0:
-        toast.after(duration, toast.destroy)
-    
-    return toast
+        def _hide(w=win):
+            try:
+                w.withdraw()
+            except Exception:
+                pass
+            _toast["job"] = None
+        _toast["job"] = win.after(duration, _hide)
+
+    return win
 
 
 # === Theme & colors ===
@@ -239,20 +272,95 @@ _font_root = None   # init_fonts() 记录的 root, 供 dpi_factor()/set_ui_scale
 # 若不保留引用, 刚建好的命名字体立刻被回收删除 (实测 TclError: does not already exist)。
 _font_cache = {}
 
+# ── DPI 缓存 ──
+# 为什么缓存: dpi_factor() 被 scaled() 间接调用, 而 scaled() 在控件构建里是高频
+# 热路径 (res/ 全量约 900 处控件构造 × 每处若干 sp())。winfo_fpixels("1i") 是
+# 一次 **Tcl 往返**, 不缓存等于把 DPI 查询放大成上千次解释器调用, 这是"启动慢/
+# 布局慢"里最容易被忽略的一项。DPI 在进程内基本恒定, 缓存后只在 init_fonts()
+# (root 建好) 与显式 refresh_dpi_cache() 时刷新。
+_dpi_cache = {"root": None, "value": 1.0, "valid": False}
 
-def dpi_factor():
-    """屏幕 DPI 相对 96 的倍率; 需 root 存在 (winfo_fpixels("1i")/96)。
 
-    无 root 或取值失败 -> 1.0。DPI 档位 (100%/150%/200% 的写死因子) 暂不固化:
-    需在实机三档实测后再决定是否切换到像素制, 此处只提供可配置骨架。
+def refresh_dpi_cache(root=None):
+    """重算 DPI 倍率缓存 (root 变更 / 跨屏移动 / 系统缩放变化后调用)。
+
+    返回新的倍率; 无 root 时保持 1.0 且不置 valid (下次有 root 再算)。
     """
-    r = _font_root
+    r = root if root is not None else _font_root
     if r is None:
+        _dpi_cache.update({"root": None, "value": 1.0, "valid": False})
         return 1.0
     try:
-        return max(0.5, min(4.0, float(r.winfo_fpixels("1i")) / 96.0))
+        v = max(0.5, min(4.0, float(r.winfo_fpixels("1i")) / 96.0))
     except Exception:
+        v = 1.0
+    _dpi_cache.update({"root": r, "value": v, "valid": True})
+    return v
+
+
+def dpi_factor():
+    """屏幕 DPI 相对 96 的倍率; 需 root 存在 (winfo_fpixels("1i")/96), 结果缓存。
+
+    无 root 或取值失败 -> 1.0。缓存根因见 _dpi_cache 注释: 未缓存时每次
+    scaled() 都触发一次 Tcl 往返。DPI 变化用 refresh_dpi_cache() 显式刷新。
+    """
+    if _dpi_cache["valid"] and _dpi_cache["root"] is _font_root:
+        return _dpi_cache["value"]
+    return refresh_dpi_cache(_font_root)
+
+
+# pt → px 的固定换算 (96 DPI 基准): Tk 的 `tk scaling` 语义即 "1pt = 多少 px"。
+PT_PER_INCH = 72.0
+PX_PER_INCH = 96.0
+
+
+def apply_tk_scaling(root, fixed=None):
+    """统一设置 `tk scaling`, 返回实际生效值 (px per pt)。
+
+    auto (默认): scaling = fpixels("1i")/72 —— 即让 1pt 恒等于 1/72 英寸,
+                 字体按 pt 书写, 由 Tk 换算, 视觉随系统 DPI 正确放大。
+    fixed:       scaling 固定为 1.0 (1pt = 1px, 消除 Tk 内的 pt→px 换算),
+                 此时命名字体必须改用**负像素字号**才能保持同样的视觉大小,
+                 否则 150% DPI 下字会突然变小 (这是"直接 scaling=1.0"最常见的坑)。
+
+    fixed 由 state.TK_SCALING_FIXED 控制 (默认 False = auto, 零行为变化)。
+    """
+    global _font_px_mode
+    if not _dpi_cache["valid"] or _dpi_cache["root"] is not root:
+        refresh_dpi_cache(root)
+    if fixed is None:
+        try:
+            fixed = bool(getattr(state, "TK_SCALING_FIXED", False))
+        except Exception:
+            fixed = False
+    try:
+        if fixed:
+            root.tk.call("tk", "scaling", 1.0)
+            _font_px_mode = True
+            return 1.0
+        v = float(root.winfo_fpixels("1i")) / PT_PER_INCH
+        root.tk.call("tk", "scaling", v)
+        _font_px_mode = False
+        return v
+    except Exception:
+        _font_px_mode = False
         return 1.0
+
+
+# 是否处于「像素制字体」模式 (apply_tk_scaling 设置; init_fonts/set_ui_scale 读取)
+_font_px_mode = False
+
+
+def _font_size_value(base_size, scale):
+    """基准 pt → 传给 Tk 的字号值: 像素制返回负像素, 否则返回 pt。"""
+    pt = fit_pt(base_size, scale)
+    if not _font_px_mode:
+        return pt
+    try:
+        px = int(round(pt * (PX_PER_INCH / PT_PER_INCH) * dpi_factor()))
+    except Exception:
+        return pt
+    return -max(6, px)
 
 
 def current_ui_scale():
@@ -304,8 +412,12 @@ def init_fonts(root):
         return
     _font_root = root
     scale = current_ui_scale()
+    # root 就绪 → 刷新 DPI 缓存 (一次性 Tcl 往返, 之后 scaled() 全走内存)。
+    # 同一 root 已算过就不重复查询 (apply_tk_scaling 可能刚算过)。
+    if not _dpi_cache["valid"] or _dpi_cache["root"] is not root:
+        refresh_dpi_cache(root)
     for role, (family, size, weight) in _FONT_SPECS.items():
-        pt = fit_pt(size, scale)
+        pt = _font_size_value(size, scale)
         f = None
         try:
             # 已存在: 仅改属性 (幂等; exists=True 包装既有命名, 不删底层字体)。
@@ -326,7 +438,7 @@ def init_fonts(root):
             f.configure(family=family, size=pt, weight=weight)
         except Exception as e:
             # 不再静默吞掉: 改配失败必须可见, 否则「字体未生效」会被掩盖。
-            log1("命名字体改配失败: {} -> {}pt ({})".format(role, pt, e))
+            log1("命名字体改配失败: {} -> {} ({})".format(role, pt, e))
 
 
 # ── UI 缩放切换钩子 ──
@@ -361,11 +473,11 @@ def set_ui_scale(scale):
                 # 同 init_fonts: 3.9 不支持 nametofont(root=), 用 Font(exists=True)
                 # 取命名句柄后改字号。
                 tkinter.font.Font(root=_font_root, name=role,
-                                  exists=True).configure(size=fit_pt(size, v))
+                                  exists=True).configure(size=_font_size_value(size, v))
             except Exception as e:
                 # 不再静默吞掉: 缩放档位切换时的改配失败必须可见。
-                log1("界面缩放字体改配失败: {} -> {}pt ({})".format(
-                    role, fit_pt(size, v), e))
+                log1("界面缩放字体改配失败: {} -> {} ({})".format(
+                    role, _font_size_value(size, v), e))
     # 缩放切换后通知已注册的资源重建回调 (如选中左缘条 PhotoImage), 失败不影响缩放本身
     for _fn in list(_ui_scale_hooks):
         try:

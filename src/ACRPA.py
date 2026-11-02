@@ -83,6 +83,10 @@ from ui import exec_bar as ui_exec_bar
 # src/ui/workflow_view.py。本文件只保留「转发别名」(tab_workflow / wf_* / _wf_run /
 # _wf_stop / _wf_refresh_tree 等) 与构建期的 get_widgets() 取回; 领域层 src/workflow.py 不迁、不改。
 from ui import workflow_view as ui_workflow_view
+# 通用后台任务执行器 (threading 工作 + queue 投递 + root.after 轮询回主线程)。
+# Tk 非线程安全: 耗时 IO/解析一律丢给 bg_task, 控件操作只在主线程回调里做。
+# 未 start 时 submit() 退化为同步执行 → 无 GUI 环境/测试脚本的既有断言不变。
+from ui import bg_task as ui_bg_task
 
 # 托盘图标全局引用
 _tray = None  # type: SystemTray | None
@@ -609,10 +613,54 @@ def _toggle_fold():
 
 
 def _bind_scroll_recursive(parent, handler):
-    """递归绑定 MouseWheel 到 parent 及其所有后代 widget，确保滚轮在按钮等子控件上也生效"""
-    parent.bind("<MouseWheel>", handler)
+    """递归绑定 MouseWheel 到 parent 及其所有后代, 使滚轮在按钮等子控件上也生效。
+
+    幂等: 同一 handler 已绑过的控件直接跳过。工具栏/运行栏/工作流在初始化与重建
+    时可能被多次调用, 重复 bind 会让 Tk 事件表不断变长 (每行 bind 都要解析 pattern),
+    且旧 handler 覆盖新 handler 时顺序不可控 —— 这是"滚动偶发不响应"的常见来源。
+    """
+    try:
+        if getattr(parent, "_scroll_handler", None) is handler:
+            return
+        parent._scroll_handler = handler
+        parent.bind("<MouseWheel>", handler)
+    except Exception:
+        pass
     for child in parent.winfo_children():
         _bind_scroll_recursive(child, handler)
+
+
+# 高频事件去抖: <Configure>/<Motion> 在拖动窗口或鼠标移动时会连续触发几十次,
+# 每次都做 bbox/布局计算会把主线程塞满 (表现为"拖窗口一顿一顿")。
+_DEBOUNCE_JOBS = {}
+
+
+def _debounce_cb(widget, key, ms, fn):
+    """返回一个「同 key 在 ms 内只执行最后一次」的事件回调 (无 event 参数也可调用)。
+
+    用途: `<Configure>` 这类成串事件只处理最终状态, 中间态直接丢弃。
+    key 需全局唯一 (如 "tb_layout"), 避免不同区域互相取消定时器。
+    """
+    def _fire():
+        _DEBOUNCE_JOBS.pop(key, None)
+        try:
+            fn()
+        except Exception:
+            pass
+
+    def _handler(_event=None):
+        job = _DEBOUNCE_JOBS.pop(key, None)
+        if job is not None:
+            try:
+                widget.after_cancel(job)
+            except Exception:
+                pass
+        try:
+            _DEBOUNCE_JOBS[key] = widget.after(ms, _fire)
+        except Exception:
+            _fire()
+
+    return _handler
 
 
 
@@ -1065,6 +1113,11 @@ def window_close():
 def _do_close():
     """Perform the actual close sequence."""
     state._closing = True
+    # 停止后台任务轮询: 避免窗口销毁后 after 回调打到已失效的 Tk 对象
+    try:
+        ui_bg_task.shutdown()
+    except Exception:
+        pass
     # 记忆主窗口几何 + 最大化状态 (紧凑模式下不覆盖用户记忆的普通几何)
     try:
         if root.wm_state() == "zoomed":
@@ -1453,16 +1506,28 @@ def toggle_dark():
     dark_btn.config(text="◑" if state.DARK_MODE else "◐")
     state.save_config()
 
-def _tb_update_overflow(event=None):
+def _tb_sync_layout(event=None):
+    """工具栏布局同步: 一次 bbox 同时更新 scrollregion 与溢出提示。
+
+    改造前: `<Configure>` 处理里先 bbox 设 scrollregion, 再调 _tb_update_overflow
+    又 bbox 一次 —— 每次尺寸变化 2 次 Tcl 往返 + 2 次 grid 重排, 拖动窗口时成串
+    触发。现在合并为一次 bbox、一次判断, 并由 <Configure> 去抖 120ms 调用。
+    """
     try:
-        bb = toolbar_canvas.bbox("all")
-        need = bb[2] if bb else 0
-        if need > toolbar_canvas.winfo_width() + utils.sp(2):
-            toolbar_overflow_hint.grid(row=0,column=1,sticky="ne",padx=(utils.sp(2),0))
+        bb = toolbar_canvas.bbox("all") or (0, 0, 0, 0)
+        toolbar_canvas.configure(scrollregion=bb)
+        if bb[2] > toolbar_canvas.winfo_width() + utils.sp(2):
+            toolbar_overflow_hint.grid(row=0, column=1, sticky="ne",
+                                       padx=(utils.sp(2), 0))
         else:
             toolbar_overflow_hint.grid_remove()
     except Exception:
         pass
+
+
+def _tb_update_overflow(event=None):
+    """兼容旧调用点: 溢出提示刷新 (现在与 scrollregion 合并为 _tb_sync_layout)。"""
+    _tb_sync_layout()
 
 # 鼠标滚轮横向滚动 - handler 定义（递归绑定在 _init_toolbar_buttons() 之后）
 def _tb1_on_wheel(event):
@@ -2419,23 +2484,46 @@ def _editor_load_xls(fp):
     读取统一委托 script_io.load_script（唯一实现）；本函数只保留编辑器状态
     清理（撤销/重做栈、断点、modified）与树重建逻辑。函数名/签名保持不变，
     供 _market_on_install / exec_bar / 市场冒烟测试继续调用。
+
+    线程模型: `script_io.load_script` 是磁盘 IO + xlrd 解析, 大脚本可达数百 ms,
+    在 UI 线程执行会白屏/掉帧 → 丢给 ui_bg_task 工作线程, 回主线程再建树
+    (Tk 控件只在主线程碰)。无 GUI 事件循环时 submit() 自动退化为同步, 既有
+    "调用返回即加载完成"的断言与调用方语义保持不变。
     """
     _push_undo()
+    token = _invalidate_load_token()
     state._editor_rows = []
     state.breakpoints.clear()
     state._editor_modified = False
     state._undo_stack.clear()
     state._redo_stack.clear()
     tree.delete(*tree.get_children())
+    _tree_cache_invalidate()
+    # 后台加载期间界面是空的: 立刻刷新空态并给出可见反馈 (否则用户以为没加载)
     try:
-        rows = script_io.load_script(fp)
+        _sync_idle_bg()
+    except Exception:
+        pass
+    try:
+        log1("正在加载: {}".format(os.path.basename(str(fp))), "info")
+    except Exception:
+        pass
+
+    def _done(rows):
+        if token != _LOAD_TOKEN:      # 加载期间又新建/打开了别的脚本 → 丢弃过期结果
+            return
         state._editor_rows = rows
-        for sd in rows:
-            tree.insert("", "end", values=sd.to_tuple())
-    except Exception as e:
+        _editor_sync_to_tree()        # 统一走增量/全量路径, 序号列与配色一致
+        _sync_idle_bg()
+
+    def _fail(e):
+        if token != _LOAD_TOKEN:
+            return
         log1("加载失败: {}".format(e), "error")
         messagebox.showerror("加载失败", str(e))
-    _sync_idle_bg()
+        _sync_idle_bg()
+
+    ui_bg_task.submit(lambda: script_io.load_script(fp), _done, _fail, name="load-script")
 
 # Command-type color map
 _CMD_COLORS = {
@@ -2488,11 +2576,20 @@ def _row_tags(cmd_type, index):
     return tags
 
 
-def _tree_column_plan(width):
-    """按可用宽度决定可见数据列 (纯函数, 便于自测; v3 §2.1a)。
+# 大脚本阈值: 超过后自动收窄可见列。Treeview 逐单元格生成显示项, 成本 ≈ 行 × 可见列,
+# 10 列 × 数千行会让滚动与重绘明显发涩; 被隐藏的参数不丢, 选中行后仍可在参数区编辑。
+_TREE_WIDE_SCRIPT_ROWS = 1200
+
+
+def _tree_column_plan(width, rows=None):
+    """按可用宽度 (与行数规模) 决定可见数据列 (纯函数, 便于自测; v3 §2.1a)。
 
     依据: 68 条命令加权平均元数 2.24, ≤2 参数占 69% —— 窄窗口没有必要
     为极少数 5+ 参数命令保留 9 个参数列, 否则最小窗口必然横向滚动。
+
+    rows > _TREE_WIDE_SCRIPT_ROWS 时收窄到 4 列 (命令 + 前 3 参数): 这是
+    「承载力不足」的第一道闸 —— 不改列结构与单元格编辑逻辑 (displaycolumns
+    只影响显示), 大脚本的绘制成本随可见列数线性下降。
     """
     try:
         width = int(width)
@@ -2504,6 +2601,11 @@ def _tree_column_plan(width):
         n = 6
     else:
         n = 9
+    try:
+        if rows is not None and int(rows) > _TREE_WIDE_SCRIPT_ROWS:
+            n = min(n, 3)
+    except Exception:
+        pass
     return _TREE_DATA_COLS[:n + 1]
 
 
@@ -2540,6 +2642,27 @@ def _tree_display_to_logical(display_no):
     return _TREE_COL_INDEX.get(cols[display_no - 1])
 
 
+_TREE_WIDE_HINTED = False
+
+
+def _hint_wide_columns(plan):
+    """大脚本折叠参数列时提示一次 (否则用户会以为参数列"丢了")。"""
+    global _TREE_WIDE_HINTED
+    try:
+        collapsed = (len(plan) <= 4
+                     and len(state._editor_rows) > _TREE_WIDE_SCRIPT_ROWS)
+    except Exception:
+        collapsed = False
+    if collapsed and not _TREE_WIDE_HINTED:
+        _TREE_WIDE_HINTED = True
+        try:
+            log1("行数较多: 参数列已折叠为 3 列 (双击行可编辑全部参数)", "info")
+        except Exception:
+            pass
+    elif not collapsed:
+        _TREE_WIDE_HINTED = False
+
+
 def _apply_tree_columns(force=False):
     """按当前宽度应用可见列 (幂等: 仅在计划变化时才动 displaycolumns)。"""
     global _TREE_COLS_APPLIED, _TREE_COLS_AFTER
@@ -2552,12 +2675,13 @@ def _apply_tree_columns(force=False):
         return
     if w <= 1:      # 布局尚未落定
         return
-    plan = _tree_column_plan(w)
+    plan = _tree_column_plan(w, len(state._editor_rows))
     if not force and plan == _TREE_COLS_APPLIED:
         return
     try:
         tree.configure(displaycolumns=plan)
         _TREE_COLS_APPLIED = plan
+        _hint_wide_columns(plan)
     except Exception:
         pass
 
@@ -2711,6 +2835,78 @@ def _row_text_for(row_num, sd=None):
     return num_text + bp_mark + cond_mark
 
 
+# ── 树渲染缓存 + 尾部增量刷新 ──
+# 缓存与 tree 当前内容严格对应 (顺序一致的 (text, values) 与 iid), 结构性操作时
+# 用它做「前缀 diff」: 只在尾部增删时走增量刷新, 避免 n 行 delete+insert 全量重建。
+# 任何绕过 _editor_sync_to_tree/_update_row_inplace 直接改 tree 的路径, 必须先调用
+# _tree_cache_invalidate(), 否则会与过期快照比对。
+_tree_render_cache = {"keys": [], "iids": []}
+
+# 脚本加载令牌: 后台加载期间若又新建/打开了别的脚本, 旧结果必须丢弃 (防串档)。
+_LOAD_TOKEN = 0
+
+
+def _tree_cache_invalidate():
+    _tree_render_cache["keys"] = []
+    _tree_render_cache["iids"] = []
+
+
+def _invalidate_load_token():
+    """作废在途的后台脚本加载 (新建/清空/重新加载时调用), 返回新令牌。"""
+    global _LOAD_TOKEN
+    _LOAD_TOKEN += 1
+    return _LOAD_TOKEN
+
+
+def _tree_row_key(sd, index):
+    """行渲染键: (#0 文本, values 元组), 与 tree 中该行可见内容一一对应。"""
+    return (_row_text_for(index + 1, sd), sd.to_tuple())
+
+
+def _tree_tail_sync(new_keys):
+    """尾部增量刷新: 差异全部落在末尾时执行, 返回 True 表示已处理。
+
+    - 纯尾部追加 (新增行/粘贴在末尾) → 只 insert 新增行, 选中与视口完全不动;
+    - 纯尾部删除 → 只 delete 尾部 iid;
+    - 中部出现任何差异 (插入/移动/undo 重排) → 返回 False, 退回全量重建兜底。
+    """
+    cache = _tree_render_cache
+    old_keys = cache["keys"]
+    old_iids = cache["iids"]
+    try:
+        if len(tree.get_children()) != len(old_iids):
+            return False
+    except Exception:
+        return False
+    if len(old_keys) != len(old_iids):
+        return False
+    limit = min(len(old_keys), len(new_keys))
+    prefix = 0
+    while prefix < limit and old_keys[prefix] == new_keys[prefix]:
+        prefix += 1
+    if prefix < limit:
+        return False
+    try:
+        if len(new_keys) > len(old_keys):
+            for i in range(len(old_keys), len(new_keys)):
+                sd = state._editor_rows[i]
+                text, vals = new_keys[i]
+                iid = tree.insert("", "end", text=text, values=vals,
+                                  tags=_row_tags(sd.cmd_type, i))
+                cache["iids"].append(iid)
+                cache["keys"].append(new_keys[i])
+        elif len(new_keys) < len(old_keys):
+            drop = old_iids[len(new_keys):]
+            if drop:
+                tree.delete(*drop)
+            del cache["iids"][len(new_keys):]
+            del cache["keys"][len(new_keys):]
+        return True
+    except Exception:
+        _tree_cache_invalidate()
+        return False
+
+
 def _update_row_inplace(index, sd=None):
     """就地刷新单行 (index 为 0-based): 仅改该 iid 的 text/values/tags, 不 delete。
 
@@ -2727,8 +2923,12 @@ def _update_row_inplace(index, sd=None):
             return
         item = children[index]
         _preconfig_cmd_tags()      # 一次性预配置, 运行期不再 tag_has/tag_configure
-        tree.item(item, text=_row_text_for(index + 1, sd),
-                  values=sd.to_tuple(), tags=_row_tags(sd.cmd_type, index))
+        key = _tree_row_key(sd, index)
+        tree.item(item, text=key[0], values=key[1],
+                  tags=_row_tags(sd.cmd_type, index))
+        # 同步渲染缓存, 否则后续尾部 diff 会拿旧值比对而误判为"无需刷新"
+        if index < len(_tree_render_cache["keys"]):
+            _tree_render_cache["keys"][index] = key
     except Exception:
         # 就地刷新异常 → 回退全量重建 (行为安全网)
         _editor_sync_to_tree()
@@ -2740,6 +2940,15 @@ def _editor_sync_to_tree():
     重建前记录选中行的“内容签名”与“稳定 id”；重建后优先按内容签名恢复
     （对重排/删除/undo/redo 正确），签名失配时回退按 id（对原地改注释等正确）。
     """
+    new_keys = [_tree_row_key(sd, i) for i, sd in enumerate(state._editor_rows)]
+    _preconfig_cmd_tags()      # 20 个命令配色 tag 一次性预配置 (v3 §4.2)
+    # 尾部增量优先: 追加/尾部删除不再重建整棵树 (大脚本下这是主要卡顿来源)
+    if _tree_tail_sync(new_keys):
+        _apply_tree_columns()   # 行数跨过大脚本阈值时收窄可见列 (幂等, 计划未变即返回)
+        _sync_legend()
+        _sync_empty_hint()
+        return
+
     prev_sel_sigs = []
     prev_sel_ids = []
     try:
@@ -2751,20 +2960,24 @@ def _editor_sync_to_tree():
     except Exception:
         prev_sel_sigs = []
         prev_sel_ids = []
-    _preconfig_cmd_tags()      # 20 个命令配色 tag 一次性预配置 (v3 §4.2)
     tree.delete(*tree.get_children())
     # 单次遍历: 插入时直接带好 tags, 并顺带建立「签名/id → iid」映射供选中恢复
     # (改造前每行 4 次 Tcl 往返: insert + tag_has + item 读 + item 写)
     sig_to_iid = {}
     id_to_iid = {}
+    new_iids = []
     for i, sd in enumerate(state._editor_rows):
-        vals = sd.to_tuple()
-        item = tree.insert("", "end", text=_row_text_for(i + 1, sd),
+        text, vals = new_keys[i]
+        item = tree.insert("", "end", text=text,
                            values=vals, tags=_row_tags(sd.cmd_type, i))
+        new_iids.append(item)
         sig_to_iid.setdefault(vals, item)
         rid = getattr(sd, "id", None)
         if rid is not None:
             id_to_iid.setdefault(rid, item)
+    # 全量重建后刷新渲染缓存 (供下一次尾部 diff 使用)
+    _tree_render_cache["keys"] = list(new_keys)
+    _tree_render_cache["iids"] = new_iids
     # 恢复选中: 优先内容签名, 失配时回退稳定 id
     if prev_sel_sigs or prev_sel_ids:
         try:
@@ -2784,6 +2997,7 @@ def _editor_sync_to_tree():
                     tree.selection_add(iid)
         except Exception:
             pass
+    _apply_tree_columns()   # 行数跨过大脚本阈值时收窄可见列 (幂等, 计划未变即返回)
     _sync_legend()      # 图例与行内容同源一次判定, 不额外遍历
     _sync_empty_hint()  # 空态指引 (零行 → 显示 Ctrl+N/O/I 提示, v3 §3 D8)
 
@@ -2794,6 +3008,8 @@ def _cmd_clear():
     if messagebox.askyesno("确认","确定要清空所有行吗？"):
         _push_undo()
         state._editor_rows=[]; state.breakpoints.clear(); tree.delete(*tree.get_children())
+        _tree_cache_invalidate()
+        _invalidate_load_token()          # 作废在途的后台加载结果
         _sync_legend()
         _sync_empty_hint()
         from utils import show_toast; show_toast(root, "已清空所有行", "warning")
@@ -2808,6 +3024,8 @@ def _cmd_new():
     state._undo_stack.clear(); state._redo_stack.clear()
     state._editor_modified=False
     tree.delete(*tree.get_children())
+    _tree_cache_invalidate()
+    _invalidate_load_token()          # 作废在途的后台加载结果
     _sync_legend()
     _sync_empty_hint()
     state.has_script=False; state.filename=None; state.script_dir=None
@@ -4599,7 +4817,14 @@ def _periodic():
             _wf_update_workflow_highlight()
         except Exception:
             pass
-    root.after(100,_periodic)
+    # 自适应心跳: 运行/录制/折叠/高亮时 100ms 保实时; 空闲 250ms, 降低无谓重绘与 CPU。
+    # (Tk 每次 config/insert 都排队重绘, 空闲期高频轮询是"长期挂机发热/卡顿"主要来源)
+    try:
+        _busy = bool(state.running or state.recording or state.folded
+                     or getattr(state, "highlight_row", 0))
+    except Exception:
+        _busy = False
+    root.after(100 if _busy else 250, _periodic)
 
 # ══════════════════════════════════════════════════════════════════════
 # 通用快捷键 (窗口级)
@@ -5092,10 +5317,8 @@ def _setup_scroll_bindings():
         _bind_scroll_recursive(run_bar, _run_on_wheel)
         run_canvas.bind("<MouseWheel>", _run_on_wheel)
     except Exception: pass
-    try:
-        _bind_scroll_recursive(wf_toolbar, _wf_on_wheel)
-        wf_canvas.bind("<MouseWheel>", _wf_on_wheel)
-    except Exception: pass
+    # 工作流栏的滚轮绑定统一放在工作流 Tab 构建完成之后 (_build_workflow_view 内):
+    # 此处 wf_toolbar 可能还是占位控件, 重复绑定只会让事件表变长 (幂等后亦无收益)。
 
 # 注意: mainloop() 调用已移至 run.py,避免重复调用
 # root.mainloop()
@@ -5451,11 +5674,18 @@ def build_app():
     root = tkinter.Tk()
     # 命名字体必须在创建任何 widget 之前建立。先设 tk scaling (pt→px 换算), 再建字体:
     # 旧实现建两次 (scaling 前后各一次) 属重复工作, v3 §4.4 收敛为一次。
+    # 统一入口 apply_tk_scaling: 默认 auto (随系统 DPI); state.TK_SCALING_FIXED=True
+    # 时改「scaling=1.0 + 负像素字号」, 视觉不变但绕开 Tk 的 pt→px 换算。
     try:
-        root.tk.call("tk", "scaling", root.winfo_fpixels("1i") / 72.0)
+        utils.apply_tk_scaling(root)
     except Exception:
         pass
     utils.init_fonts(root)
+    # 后台任务执行器: root 就绪后启动轮询 (之后所有 ui_bg_task.submit 走异步)
+    try:
+        ui_bg_task.start(root, poll_ms=60)
+    except Exception:
+        pass
     try:
         root.title(_window_title())     # 标题栏 / 任务栏 / Alt-Tab 统一带版本号
     except Exception:
@@ -5649,17 +5879,16 @@ def build_app():
     toolbar_overflow_hint = tkinter.Label(tb_scroll,text="⇄",font=FONT_SMALL,
         fg=C["fgm"],bg=C["bg"])
 
-    toolbar_inner.bind(
-        "<Configure>",
-        lambda e: (toolbar_canvas.configure(scrollregion=toolbar_canvas.bbox("all")),
-                   _tb_update_overflow())
-    )
+    # 布局同步 (scrollregion + 溢出提示) 合并成一个去抖回调: 拖动窗口时 <Configure>
+    # 成串触发, 每次都 bbox+grid 重排会让主线程排队 (改造前在这里做 2 次 bbox)。
+    _tb_sync_debounced = _debounce_cb(toolbar_canvas, "tb_layout", 120, _tb_sync_layout)
+    toolbar_inner.bind("<Configure>", _tb_sync_debounced)
 
     toolbar_canvas.create_window((0, 0), window=toolbar_inner, anchor="w")
 
     toolbar_canvas.configure(xscrollcommand=toolbar_scrollbar.set)
 
-    toolbar_canvas.bind("<Configure>", lambda e: _tb_update_overflow())
+    toolbar_canvas.bind("<Configure>", _tb_sync_debounced)
     toolbar_canvas.grid(row=0,column=0,sticky="ew")
     toolbar_scrollbar.grid(row=1,column=0,sticky="ew")
 

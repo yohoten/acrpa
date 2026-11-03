@@ -65,7 +65,7 @@ KNOWN_LAZY_CYCLE_EDGES = frozenset({
     ('workflow', 'scriptdata'),
 })
 
-_PASS, _FAIL, _INFO = [], [], []
+_PASS, _FAIL, _INFO, _WARN = [], [], [], []
 
 
 def _check(cond, msg):
@@ -76,6 +76,12 @@ def _check(cond, msg):
 def _info(msg):
     _INFO.append(msg)
     print("[INFO] {}".format(msg))
+
+
+def _warn(msg):
+    """告警: **只提示不判失败** (不写入 _FAIL, 不影响退出码)。"""
+    _WARN.append(msg)
+    print("[WARN] {}".format(msg))
 
 
 # ── 模块名解析 ────────────────────────────────────────────────────────
@@ -235,6 +241,105 @@ def check_lazy_cycles():
     return current
 
 
+# ── L0-3 图片/截图 API 主线程门禁 (v5 §4.4; 本项目按约定只报 WARN) ──
+# 判定: `Image.open(` / `ImageGrab.grab(` / `.resize(` 出现在**非 worker 路径**。
+# 「worker 路径」= 所在函数名命中下面任一规则 (后缀 worker/thread/bg、前缀 _grab_/_do_、
+# 或显式白名单 —— 白名单都是「已知在主线程也安全」的位置: 合成/缓存/尺寸计算等,
+# 真正的解码/缩放已经由缓存或后台池承担)。
+_IMG_FUNC_PREFIX = ("_grab_", "_do_", "_shot_")
+_IMG_FUNC_SUFFIX = ("_worker", "_thread", "_bg", "_save")
+_IMG_FUNC_ALLOW = frozenset({
+    # bg_image: 全部是「缓存命中才执行」的合成/缩放, 首次调用发生在主线程但成本已被缓存摊薄
+    "load_bg_photo", "load_icon_photo", "_cached_tile", "_cover_resize",
+    "_fit_no_upscale", "_open_rgba", "_trim_transparent", "_tile_to_size",
+    "_pick_resample", "resolve_icon_path", "_cached_source",
+    # mini_bar: 两级缓存后的图标缩放 (3~8 ms, 且第二次起 0 次重采样)
+    "_mb_set_icon", "_mb_icon_photo",
+    # 日志导出: 纯文本拼装/写盘, 与图片无关 (仅因 `.resize` 名字撞规则, 若有)
+    "_log_export_write",
+    # 远端截图: 解码在后台池, PhotoImage 主线程 (函数本身只做目标尺寸计算)
+    "_shot_pick_resample", "_shot_target_size", "_shot_pil_try",
+    # 后台池里的解码闭包 (提交给 ui.bg_task 执行, 名字不含 worker 后缀)
+    "_decode", "_crop_save", "_do_export", "_grab_region",
+})
+
+
+def _img_api_hits(path):
+    """→ [(lineno, funcname, api)]: 文件内命中的图片/截图 API 调用。"""
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            tree = ast.parse(f.read())
+    except Exception:
+        return []
+    out = []
+
+    def _api_of(call):
+        func = getattr(call, "func", None)
+        if not isinstance(func, ast.Attribute):
+            return ""
+        if func.attr == "open" and isinstance(func.value, ast.Name) \
+                and func.value.id == "Image":
+            return "Image.open"
+        if func.attr == "grab":
+            return "ImageGrab.grab"
+        if func.attr == "resize":
+            return ".resize"
+        return ""
+
+    def _visit(node, stack):
+        for child in ast.iter_child_nodes(node):
+            fns = stack
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                fns = stack + [child.name]
+            if isinstance(child, ast.Call):
+                api = _api_of(child)
+                if api:
+                    out.append((child.lineno,
+                                fns[-1] if fns else "<module>", api))
+            _visit(child, fns)
+
+    _visit(tree, [])
+    return out
+
+
+def _img_func_is_worker(name):
+    name = str(name or "")
+    if name.endswith(_IMG_FUNC_SUFFIX):
+        return True
+    if name.startswith(_IMG_FUNC_PREFIX):
+        return True
+    return name in _IMG_FUNC_ALLOW
+
+
+def check_img_main_thread():
+    """L0-3: 扫描 src/ 下的图片/截图 API, 非 worker 路径只报 WARN (不判失败)。
+
+    为什么只 WARN: 静态判定无法区分「这确实在主线程」与「这已被缓存摊薄」,
+    真正的红线由 v5 §2.1 T4 / §6.3（worker 里禁止碰 Tk）在运行期保证; 门禁若
+    FAIL 会把整个 CI 卡死在一个无法 100% 静态判定的规则上 (方案 §4.4 原为 FAIL,
+    按本批约定降级为 WARN)。
+    """
+    hits = []
+    for dirpath, _dirs, files in os.walk(SRC):
+        for fn in sorted(files):
+            if not fn.endswith(".py"):
+                continue
+            path = os.path.join(dirpath, fn)
+            for lineno, fname, api in _img_api_hits(path):
+                if _img_func_is_worker(fname):
+                    continue
+                hits.append((os.path.relpath(path, ROOT), lineno, fname, api))
+    if not hits:
+        _info("L0-3 图片/截图 API 主线程门禁: 未发现非 worker 路径调用")
+        return []
+    for rel, lineno, fname, api in hits:
+        _warn("L0-3 图片 API 可能占用主线程: {}:{} ({} → {})".format(
+            rel, lineno, fname, api))
+    _info("L0-3 告警 {} 处 (仅提示, 不阻塞) —— 建议确认该路径已被缓存或已提交后台池".format(
+        len(hits)))
+    return hits
+
+
 # ── 打包规范门禁 ──────────────────────────────────────────────────────
 def check_spec_excludes():
     import _check_spec_excludes as gate
@@ -260,11 +365,15 @@ def main(argv=None):
             print("    ({!r}, {!r}),".format(u, v))
         print("})")
 
+    print("\n── L0-3 图片/截图 API 主线程门禁 (WARN, 不计入退出码) ──")
+    check_img_main_thread()
+
     print("\n── 打包规范门禁 ──")
     check_spec_excludes()
 
     print("\n" + "=" * 70)
-    print("通过 {} / 失败 {} / 提示 {}".format(len(_PASS), len(_FAIL), len(_INFO)))
+    print("通过 {} / 失败 {} / 提示 {} / 告警 {}".format(
+        len(_PASS), len(_FAIL), len(_INFO), len(_WARN)))
     return 1 if _FAIL else 0
 
 

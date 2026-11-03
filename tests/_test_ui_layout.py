@@ -126,8 +126,11 @@ def t_log_batch():
 
     joined = "".join(w.text)
     first = joined.split("\n")[0]
-    check("3d. 首行格式仍为 [时间] [级别] 消息",
-          first.startswith("[") and "] [INFO] 行-0000" in first, first)
+    # v5 §3.4 L4 (P1-6): 色条字形 ▌ 由生产端 (core.log.flush) 内联进行首,
+    # 故首行现在是「▌[时间] [级别] 消息」; 正文格式不变 (仅多一个装饰字形,
+    # 导出/复制侧会 strip 掉)。开关 LOG_CBAR_INLINE=False 时恢复旧格式。
+    check("3d. 首行格式为 [▌][时间] [级别] 消息",
+          first.startswith("▌[") and "] [INFO] 行-0000" in first, first)
     idx = [joined.find("行-{:04d}".format(i)) for i in range(n)]
     check("3e. 1000 条全部落地", all(i >= 0 for i in idx), idx[:5])
     check("3f. 顺序与写入顺序一致", idx == sorted(idx))
@@ -195,9 +198,15 @@ def t_static(A):
           "text=TITLE_DEFAULT_TEXT" in code)
     check("5e. 背景合成改为首帧后调度",
           "root.after_idle(_sync_idle_bg)" in code)
-    check("5f. init_fonts 只调用一次",
-          code.count("utils.init_fonts(root)") == 1,
+    # 允许两处: ① build_app 内的一次性初始化; ② 跨屏 DPI 失效钩子
+    # (_check_dpi_change, v5 §5.2 P1-12) —— 后者只在「显示器倍率真变化」时执行,
+    # 且有「值相同即返回」守卫, 不在构建路径上, 不构成启动期重复初始化。
+    check("5f. init_fonts 调用点为「构建时 1 次 + DPI 变化钩子 1 次」",
+          code.count("utils.init_fonts(root)") == 2,
           code.count("utils.init_fonts(root)"))
+    check("5f2. 构建路径内 init_fonts 仍只有一次",
+          code[code.index("def build_app("):].count("utils.init_fonts(root)") == 1,
+          code[code.index("def build_app("):].count("utils.init_fonts(root)"))
     check("5g. 命令配色 tag 一次性预配置入口存在",
           "def _preconfig_cmd_tags(" in code)
     # v3 §7: 三个回退开关必须真实存在 (置 False 即恢复旧行为), 否则回退承诺是空的

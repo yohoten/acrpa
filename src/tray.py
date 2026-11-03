@@ -91,7 +91,20 @@ IMAGE_ICON       = 1
 LR_LOADFROMFILE  = 0x00000010
 
 # 轮询间隔 (ms)
-POLL_INTERVAL = 80
+# v5 §2.3 唤醒预算: 托盘菜单交互由**系统事件驱动** (NOTIFYICONDATA 回调), 不依赖
+# 轮询频率 → 80ms 的空转纯属浪费 (12.5 次/秒, 占「空闲唤醒 ≤18 次/秒」预算的大头)。
+# 改 400ms 后降到 2.5 次/秒, 托盘响应无感 (最坏延迟 0.4s, 仅影响自绘气泡的收起时机)。
+# 回退开关: 环境变量 TRAY_POLL_MS 可覆盖 (设为 80 即完全恢复旧行为)。
+def _tray_poll_interval():
+    try:
+        import os as _os
+        v = int(_os.environ.get("TRAY_POLL_MS") or 400)
+    except Exception:
+        v = 400
+    return max(50, min(2000, v))
+
+
+POLL_INTERVAL = _tray_poll_interval()
 
 # 托盘底座文案（性能/倒计时会追加在后面）
 BASE_TIP = "A/C RPA"

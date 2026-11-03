@@ -34,6 +34,8 @@ ENV/
 # ===== 运行时文件 =====
 logs/
 screenshots/
+## 浏览器持久化 profile (browser_backend._default_profile_dir 的默认落点)
+browser_profile/
 ## img/
 *.log
 config.json

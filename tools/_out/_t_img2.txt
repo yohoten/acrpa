@@ -1,0 +1,23 @@
+── 1. 小图标 (目标长边 ≤64) → LANCZOS ──
+  PASS 1a. 256×256 → 32×32 = LANCZOS
+  PASS 1b. 256×256 → 64×64 = LANCZOS
+  PASS 1c. 24×24 图标放大到 48×48 仍走小图标分支 (LANCZOS)
+── 2. 大面积背景 (目标面积 ≥400k) → BOX ──
+  PASS 2a. 256×256 → 1920×1080 = BOX
+  PASS 2b. 256×256 → 800×600 (480k) = BOX
+  PASS 2c. 400k 恰好等于阈值 → BOX
+── 3. 中等面积 (100k ≤ 面积 < 400k) → BILINEAR ──
+  PASS 3a. 100×100 → 500×500 (250k) = BILINEAR
+  PASS 3b. 100×100 → 400×300 (120k) = BILINEAR
+  PASS 3c. 100×100 → 100×100 (10k, 不放不缩) = LANCZOS
+── 4. 缩小类 (目标 < 源, 且不是小图标) → BOX ──
+  PASS 4a. 2000×1000 → 800×400 = BOX
+  PASS 4b. 1600×1200 → 1000×750 = BOX
+── 5. 小面积放大 (面积 <100k) → LANCZOS ──
+  PASS 5a. 10×10 → 100×100 (10k) = LANCZOS
+── 6. 非法尺寸 / 回退开关 ──
+  PASS 6a. 零尺寸 → LANCZOS (不抛异常)
+  PASS 6b. None 尺寸 → LANCZOS (不抛异常)
+  PASS 6c. BG_RESAMPLE_AUTO=False → 全部回 LANCZOS
+
+结果: PASS=15 FAIL=0

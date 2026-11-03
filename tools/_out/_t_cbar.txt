@@ -1,0 +1,21 @@
+── 1. LOG_CBAR_INLINE 生效 (生产端已内联 ▌) ──
+  PASS 1a. log_dock 与 core.log 的开关同源为 True
+── 2. 400 行一批: tag_add ≤2 次, 0 次逐行 insert ──
+  PASS 2a. 单批 400 行 tag_add 次数 ≤2
+  PASS 2b. 未发生逐行 insert(▌) (0 次)
+  PASS 2c. 游标推进到 400
+  PASS 2d. 400 行行首仍为 ▌
+  PASS 2e. cbar_info 区间覆盖 400 行 (800 个索引)
+  PASS 2f. lzebra 区间覆盖偶数行 (200 行 = 400 个索引)
+── 3. 幂等: 二次调用不再改变任何东西 ──
+  PASS 3a. 二次调用不再 tag_add (游标已到 400)
+── 4. 导出文本 strip 掉 ▌ ──
+  PASS 4a. 导出行数 = 400
+  PASS 4b. 导出文本不含 ▌
+  PASS 4c. 首行内容与去掉 ▌ 后一致
+  PASS 4d. 末行内容与去掉 ▌ 后一致
+── 5. 过滤隐藏行在导出时被跳过 ──
+  PASS 5a. 隐藏 2 行后导出 398 行
+  PASS 5b. 第 2 行内容未被导出
+
+结果: PASS=14 FAIL=0

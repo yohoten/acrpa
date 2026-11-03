@@ -1,0 +1,120 @@
+======================================================================
+ACRPA 静态门禁 (L0-1 统一入口 + L0-2 惰性环冻结)
+======================================================================
+
+── L0-2 惰性 import 环冻结 ──
+[OK  ] 无新增惰性 import 环 (当前 26 条, 基线 26 条)
+
+── L0-3 图片/截图 API 主线程门禁 (WARN, 不计入退出码) ──
+[WARN] L0-3 图片 API 可能占用主线程: src\browser_backend.py:2642 (_pil_open → Image.open)
+[WARN] L0-3 图片 API 可能占用主线程: src\browser_backend.py:2661 (_image_column_profile → .resize)
+[WARN] L0-3 图片 API 可能占用主线程: src\dialogs.py:302 (_show_help_dialog_legacy → Image.open)
+[WARN] L0-3 图片 API 可能占用主线程: src\dialogs.py:305 (_show_help_dialog_legacy → .resize)
+[WARN] L0-3 图片 API 可能占用主线程: src\ocr_backend.py:501 (_ocr_tesseract → Image.open)
+[WARN] L0-3 图片 API 可能占用主线程: src\netlink\screen.py:93 (capture → ImageGrab.grab)
+[WARN] L0-3 图片 API 可能占用主线程: src\netlink\screen.py:119 (capture → .resize)
+[WARN] L0-3 图片 API 可能占用主线程: src\netlink\screen.py:121 (capture → .resize)
+[WARN] L0-3 图片 API 可能占用主线程: src\netlink\webui.py:531 (_scale_icon → Image.open)
+[WARN] L0-3 图片 API 可能占用主线程: src\netlink\webui.py:532 (_scale_icon → .resize)
+[INFO] L0-3 告警 10 处 (仅提示, 不阻塞) —— 建议确认该路径已被缓存或已提交后台池
+
+── 打包规范门禁 ──
+[FAIL] 打包规范门禁通过 (hiddenimports 覆盖 / excludes 无误排)
+[FAIL] ACRPA.spec 未解析出 hiddenimports（文件缺失或结构变化）
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: app
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: state
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: scriptdata
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: templates
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: utils
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: commands
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: engine
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: recorder
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: scheduler
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: updater
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: triggers
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: marketplace
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ocr_backend
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: dd_backend
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: paddle_dll
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: safe_eval
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: netlink_window
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: acrpa_api
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: py_sandbox
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: settings_window
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: dialogs
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: help_content
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: help_window
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: version_info
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: snippets
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: mini_bar
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: tray
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ai_client
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ai_enhance
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: browser_backend
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: market_window
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: market_upload
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: accounts
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: flow_graph
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: script_io
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: script_model
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: script_validate
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: capabilities
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: i18n
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: cli
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: failure_policy
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: native_check
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ocr_consts
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: hotkey_win
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: file_ops
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: sys_ops
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: net_ops
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: interp
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: sys_perf
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: reminder
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.tray_menu
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: single_instance
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: crashlog
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: history
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: extensions
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: extensions.manifest
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: extensions.package
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: extensions.manager
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: extensions.index
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: extensions.loader
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.theme
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.log_dock
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.exec_bar
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.workflow_view
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.flow_canvas
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.command_palette
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.param_form
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.module_catalog
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.settings
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.settings.window
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.settings.cards
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.settings.cards.exec
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.settings.cards.ai
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.settings.cards.sched
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.settings.cards.record
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.settings.cards.log
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.settings.cards.system
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.settings.cards.quick
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.settings.cards.advanced
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.settings.cards.netlink
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.settings.cards.python
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.settings.cards.market
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.settings.cards.extensions
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.netlink
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.netlink.common
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.netlink.window
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.netlink.panels
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.netlink.sched
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.netlink.shot
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.netlink.pairing
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.netlink.remote
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.netlink.web
+[FAIL] ACRPA.spec hiddenimports 缺少项目模块: ui.netlink.audit
+
+======================================================================
+通过 1 / 失败 96 / 提示 1 / 告警 10

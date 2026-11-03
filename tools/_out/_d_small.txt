@@ -1,0 +1,223 @@
+diff --git a/src/netlink/control.py b/src/netlink/control.py
+index fdd9a3e..17e7fcc 100644
+--- a/src/netlink/control.py
++++ b/src/netlink/control.py
+@@ -33,6 +33,20 @@ from .protocol import (
+ )
+ 
+ 
++# 主线程动作泵是否「有帧才泵」(v5 §2.3; 置 0 恢复固定 40ms 自续订)
++def _env_flag(name, default=True):
++    """环境变量开关: 缺失/空 → default; 0/false/no/off → False。"""
++    try:
++        v = os.environ.get(name)
++    except Exception:
++        return default
++    if v is None or str(v).strip() == "":
++        return default
++    return str(v).strip().lower() not in ("0", "false", "no", "off")
++
++
++_PUMP_ON_DEMAND = _env_flag("NETLINK_PUMP_ON_DEMAND", True)
++
+ # 本内核接受的指令集合（其余 CMD_* 一律回 unsupported command）
+ _CMD_SET = (T_CMD_RUN, T_CMD_PAUSE, T_CMD_RESUME, T_CMD_STOP, T_CMD_RUN_SCRIPT)
+ # 需首次操控确认的指令（PAUSE/RESUME 也纳入，保持一致）
+@@ -81,6 +95,8 @@ class ControlExecutor(object):
+         # 主线程动作泵：worker 只投递，主线程（root.after 注册的轮询）执行
+         self._ui_q = queue.Queue()
+         self._pump_on = False
++        # v5 §2.3「有帧才泵」: 泵是否已排期 (防重复 arm); 空闲时不再 40ms 自续订
++        self._pump_armed = False
+         try:
+             from .audit import AuditLog
+             self._audit = AuditLog()
+@@ -126,22 +142,49 @@ class ControlExecutor(object):
+ 
+     # ── 主线程动作泵（必须在主线程注册；worker 不得直接调用 Tk）──────────
+     def _ensure_pump(self):
+-        """在主线程注册 root.after 轮询泵（start() 于主线程调用）。"""
++        """在主线程注册 root.after 轮询泵（start() 于主线程调用）。
++
++        v5 §2.3「有帧才泵」: 泵只在队列里**真有动作**时才排期/续订, 空闲时不占
++        唤醒预算 (改造前固定 40ms 自我续订 = 25 次/秒, 是空闲唤醒的最大单项)。
++        回退开关: 环境变量 `NETLINK_PUMP_ON_DEMAND=0` → 恢复「固定 40ms 自续订」。
++        """
+         try:
+             if self._pump_on:
+                 return True
+             root = self._root()
+             if root is None:
+                 return False
+-            root.after(40, self._pump_ui)
+             self._pump_on = True
++            if not _PUMP_ON_DEMAND:
++                self._pump_armed = True
++                root.after(40, self._pump_ui)
+             return True
+         except Exception as e:
+             _nl_log("control ensure pump failed: {}".format(e), "WARN")
+             return False
+ 
++    def _arm_pump(self):
++        """确保泵已排期 (幂等; 停止/关窗后不再排期)。"""
++        if self._pump_armed or not self._pump_on or self._stop_evt.is_set():
++            return False
++        try:
++            root = self._root()
++            if root is None:
++                return False
++            self._pump_armed = True
++            root.after(40, self._pump_ui)
++            return True
++        except Exception:
++            self._pump_armed = False
++            return False
++
+     def _pump_ui(self):
+-        """主线程轮询：执行 worker 投递的动作，再自我续订。"""
++        """主线程轮询：执行 worker 投递的动作。
++
++        `NETLINK_PUMP_ON_DEMAND` (默认开) 时**队列空就不再续订** —— 下一次动作
++        由 `_post` 直接 arm, 因此响应延迟上限仍是 40ms, 但空闲唤醒降到 0。
++        """
++        self._pump_armed = False
+         try:
+             while True:
+                 try:
+@@ -154,13 +197,24 @@ class ControlExecutor(object):
+                     _nl_log("control ui action error: {}".format(e), "WARN")
+         except Exception as e:
+             _nl_log("control pump error: {}".format(e), "WARN")
+-        if not self._stop_evt.is_set():
++        if self._stop_evt.is_set():
++            self._pump_on = False
++            return
++        if not _PUMP_ON_DEMAND:
+             try:
+                 root = self._root()
+-                if root is not None:
++                if root is not None and not self._pump_armed:
++                    self._pump_armed = True
+                     root.after(40, self._pump_ui)
+             except Exception:
+                 self._pump_on = False
++            return
++        try:
++            more = not self._ui_q.empty()
++        except Exception:
++            more = False
++        if more:
++            self._arm_pump()
+ 
+     def _post(self, fn):
+         """把动作投递到主线程泵；泵未就绪返回 False（调用方自行降级）。"""
+@@ -168,9 +222,10 @@ class ControlExecutor(object):
+             return False
+         try:
+             self._ui_q.put(fn)
+-            return True
+         except Exception:
+             return False
++        self._arm_pump()          # 有帧才泵: 投递即唤醒 (空闲期不占唤醒预算)
++        return True
+ 
+     # ── 钩子 / 审计 ───────────────────────────────────────────────────
+     def set_hooks(self, run=None, stop=None):
+diff --git a/src/tray.py b/src/tray.py
+index 5feb0a0..4d0eaee 100644
+--- a/src/tray.py
++++ b/src/tray.py
+@@ -91,7 +91,20 @@ IMAGE_ICON       = 1
+ LR_LOADFROMFILE  = 0x00000010
+ 
+ # 轮询间隔 (ms)
+-POLL_INTERVAL = 80
++# v5 §2.3 唤醒预算: 托盘菜单交互由**系统事件驱动** (NOTIFYICONDATA 回调), 不依赖
++# 轮询频率 → 80ms 的空转纯属浪费 (12.5 次/秒, 占「空闲唤醒 ≤18 次/秒」预算的大头)。
++# 改 400ms 后降到 2.5 次/秒, 托盘响应无感 (最坏延迟 0.4s, 仅影响自绘气泡的收起时机)。
++# 回退开关: 环境变量 TRAY_POLL_MS 可覆盖 (设为 80 即完全恢复旧行为)。
++def _tray_poll_interval():
++    try:
++        import os as _os
++        v = int(_os.environ.get("TRAY_POLL_MS") or 400)
++    except Exception:
++        v = 400
++    return max(50, min(2000, v))
++
++
++POLL_INTERVAL = _tray_poll_interval()
+ 
+ # 托盘底座文案（性能/倒计时会追加在后面）
+ BASE_TIP = "A/C RPA"
+diff --git a/src/ui/bg_task.py b/src/ui/bg_task.py
+index 2f84fc4..6d74650 100644
+--- a/src/ui/bg_task.py
++++ b/src/ui/bg_task.py
+@@ -397,6 +397,13 @@ def drain(limit=32):
+     return done
+ 
+ 
++def _inc_pending():
++    """必须在函数里用 (worker 闭包内直接写 _PENDING 会退化成局部变量)。"""
++    global _PENDING
++    with _LOCK:
++        _PENDING += 1
++
++
+ def _dec_pending():
+     global _PENDING
+     with _LOCK:
+@@ -619,14 +626,12 @@ def submit_chunked(iterable, chunk_fn, on_chunk, chunk_size=200,
+                     return
+                 partial = chunk_fn(chunk)
+                 last = partial
+-                with _LOCK:
+-                    _PENDING += 1      # 每批结果各自计一次待回调
++                _inc_pending()          # 每批结果各自计一次待回调
+                 if not _enqueue((on_chunk, None, True, partial, name, None,
+                                  epoch, token), prio):
+                     return
+             if on_done is not None:
+-                with _LOCK:
+-                    _PENDING += 1
++                _inc_pending()
+                 _enqueue((on_done, None, True, last, name, None, epoch, token), prio)
+         except Exception as e:
+             tb = traceback.format_exc()
+diff --git a/tests/_test_ui_layout.py b/tests/_test_ui_layout.py
+index 47f6bdd..258ea9c 100644
+--- a/tests/_test_ui_layout.py
++++ b/tests/_test_ui_layout.py
+@@ -126,8 +126,11 @@ def t_log_batch():
+ 
+     joined = "".join(w.text)
+     first = joined.split("\n")[0]
+-    check("3d. 首行格式仍为 [时间] [级别] 消息",
+-          first.startswith("[") and "] [INFO] 行-0000" in first, first)
++    # v5 §3.4 L4 (P1-6): 色条字形 ▌ 由生产端 (core.log.flush) 内联进行首,
++    # 故首行现在是「▌[时间] [级别] 消息」; 正文格式不变 (仅多一个装饰字形,
++    # 导出/复制侧会 strip 掉)。开关 LOG_CBAR_INLINE=False 时恢复旧格式。
++    check("3d. 首行格式为 [▌][时间] [级别] 消息",
++          first.startswith("▌[") and "] [INFO] 行-0000" in first, first)
+     idx = [joined.find("行-{:04d}".format(i)) for i in range(n)]
+     check("3e. 1000 条全部落地", all(i >= 0 for i in idx), idx[:5])
+     check("3f. 顺序与写入顺序一致", idx == sorted(idx))
+@@ -195,9 +198,15 @@ def t_static(A):
+           "text=TITLE_DEFAULT_TEXT" in code)
+     check("5e. 背景合成改为首帧后调度",
+           "root.after_idle(_sync_idle_bg)" in code)
+-    check("5f. init_fonts 只调用一次",
+-          code.count("utils.init_fonts(root)") == 1,
++    # 允许两处: ① build_app 内的一次性初始化; ② 跨屏 DPI 失效钩子
++    # (_check_dpi_change, v5 §5.2 P1-12) —— 后者只在「显示器倍率真变化」时执行,
++    # 且有「值相同即返回」守卫, 不在构建路径上, 不构成启动期重复初始化。
++    check("5f. init_fonts 调用点为「构建时 1 次 + DPI 变化钩子 1 次」",
++          code.count("utils.init_fonts(root)") == 2,
+           code.count("utils.init_fonts(root)"))
++    check("5f2. 构建路径内 init_fonts 仍只有一次",
++          code[code.index("def build_app("):].count("utils.init_fonts(root)") == 1,
++          code[code.index("def build_app("):].count("utils.init_fonts(root)"))
+     check("5g. 命令配色 tag 一次性预配置入口存在",
+           "def _preconfig_cmd_tags(" in code)
+     # v3 §7: 三个回退开关必须真实存在 (置 False 即恢复旧行为), 否则回退承诺是空的

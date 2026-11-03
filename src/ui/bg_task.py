@@ -397,6 +397,13 @@ def drain(limit=32):
     return done
 
 
+def _inc_pending():
+    """必须在函数里用 (worker 闭包内直接写 _PENDING 会退化成局部变量)。"""
+    global _PENDING
+    with _LOCK:
+        _PENDING += 1
+
+
 def _dec_pending():
     global _PENDING
     with _LOCK:
@@ -619,14 +626,12 @@ def submit_chunked(iterable, chunk_fn, on_chunk, chunk_size=200,
                     return
                 partial = chunk_fn(chunk)
                 last = partial
-                with _LOCK:
-                    _PENDING += 1      # 每批结果各自计一次待回调
+                _inc_pending()          # 每批结果各自计一次待回调
                 if not _enqueue((on_chunk, None, True, partial, name, None,
                                  epoch, token), prio):
                     return
             if on_done is not None:
-                with _LOCK:
-                    _PENDING += 1
+                _inc_pending()
                 _enqueue((on_done, None, True, last, name, None, epoch, token), prio)
         except Exception as e:
             tb = traceback.format_exc()

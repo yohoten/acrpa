@@ -1,0 +1,8 @@
+3235702 design/UI性能与线程优化
+69eb8d3 update img/
+59c2738 feat(ui): P2-1 B2 — 命令名中性化 + 行首分类色条
+5bcdcb9 test(ui): P2-3 — C5 硬编码色白名单断言 + dialogs 间距 lint
+471a3a7 docs: 首页/帮助/README 更新（命令分组与浏览器自动化说明）
+00db594 feat(ui): UI 美化 P0/P1 — 主题色族收口、画布去字面量(31→0)、对话框间距 token 化
+63dd99e refactor(core): 设备互联拆包(ui/netlink) + 核心包(core) + 步骤级失败策略/类型模拟器
+c8022f8 chore(repo): 目录重组 — docs/tools 归档、测试迁入 tests/、lib paddle_ocr DLL 移除(走 LFS)

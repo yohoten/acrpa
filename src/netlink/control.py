@@ -33,6 +33,20 @@ from .protocol import (
 )
 
 
+# 主线程动作泵是否「有帧才泵」(v5 §2.3; 置 0 恢复固定 40ms 自续订)
+def _env_flag(name, default=True):
+    """环境变量开关: 缺失/空 → default; 0/false/no/off → False。"""
+    try:
+        v = os.environ.get(name)
+    except Exception:
+        return default
+    if v is None or str(v).strip() == "":
+        return default
+    return str(v).strip().lower() not in ("0", "false", "no", "off")
+
+
+_PUMP_ON_DEMAND = _env_flag("NETLINK_PUMP_ON_DEMAND", True)
+
 # 本内核接受的指令集合（其余 CMD_* 一律回 unsupported command）
 _CMD_SET = (T_CMD_RUN, T_CMD_PAUSE, T_CMD_RESUME, T_CMD_STOP, T_CMD_RUN_SCRIPT)
 # 需首次操控确认的指令（PAUSE/RESUME 也纳入，保持一致）
@@ -81,6 +95,8 @@ class ControlExecutor(object):
         # 主线程动作泵：worker 只投递，主线程（root.after 注册的轮询）执行
         self._ui_q = queue.Queue()
         self._pump_on = False
+        # v5 §2.3「有帧才泵」: 泵是否已排期 (防重复 arm); 空闲时不再 40ms 自续订
+        self._pump_armed = False
         try:
             from .audit import AuditLog
             self._audit = AuditLog()
@@ -126,22 +142,49 @@ class ControlExecutor(object):
 
     # ── 主线程动作泵（必须在主线程注册；worker 不得直接调用 Tk）──────────
     def _ensure_pump(self):
-        """在主线程注册 root.after 轮询泵（start() 于主线程调用）。"""
+        """在主线程注册 root.after 轮询泵（start() 于主线程调用）。
+
+        v5 §2.3「有帧才泵」: 泵只在队列里**真有动作**时才排期/续订, 空闲时不占
+        唤醒预算 (改造前固定 40ms 自我续订 = 25 次/秒, 是空闲唤醒的最大单项)。
+        回退开关: 环境变量 `NETLINK_PUMP_ON_DEMAND=0` → 恢复「固定 40ms 自续订」。
+        """
         try:
             if self._pump_on:
                 return True
             root = self._root()
             if root is None:
                 return False
-            root.after(40, self._pump_ui)
             self._pump_on = True
+            if not _PUMP_ON_DEMAND:
+                self._pump_armed = True
+                root.after(40, self._pump_ui)
             return True
         except Exception as e:
             _nl_log("control ensure pump failed: {}".format(e), "WARN")
             return False
 
+    def _arm_pump(self):
+        """确保泵已排期 (幂等; 停止/关窗后不再排期)。"""
+        if self._pump_armed or not self._pump_on or self._stop_evt.is_set():
+            return False
+        try:
+            root = self._root()
+            if root is None:
+                return False
+            self._pump_armed = True
+            root.after(40, self._pump_ui)
+            return True
+        except Exception:
+            self._pump_armed = False
+            return False
+
     def _pump_ui(self):
-        """主线程轮询：执行 worker 投递的动作，再自我续订。"""
+        """主线程轮询：执行 worker 投递的动作。
+
+        `NETLINK_PUMP_ON_DEMAND` (默认开) 时**队列空就不再续订** —— 下一次动作
+        由 `_post` 直接 arm, 因此响应延迟上限仍是 40ms, 但空闲唤醒降到 0。
+        """
+        self._pump_armed = False
         try:
             while True:
                 try:
@@ -154,13 +197,24 @@ class ControlExecutor(object):
                     _nl_log("control ui action error: {}".format(e), "WARN")
         except Exception as e:
             _nl_log("control pump error: {}".format(e), "WARN")
-        if not self._stop_evt.is_set():
+        if self._stop_evt.is_set():
+            self._pump_on = False
+            return
+        if not _PUMP_ON_DEMAND:
             try:
                 root = self._root()
-                if root is not None:
+                if root is not None and not self._pump_armed:
+                    self._pump_armed = True
                     root.after(40, self._pump_ui)
             except Exception:
                 self._pump_on = False
+            return
+        try:
+            more = not self._ui_q.empty()
+        except Exception:
+            more = False
+        if more:
+            self._arm_pump()
 
     def _post(self, fn):
         """把动作投递到主线程泵；泵未就绪返回 False（调用方自行降级）。"""
@@ -168,9 +222,10 @@ class ControlExecutor(object):
             return False
         try:
             self._ui_q.put(fn)
-            return True
         except Exception:
             return False
+        self._arm_pump()          # 有帧才泵: 投递即唤醒 (空闲期不占唤醒预算)
+        return True
 
     # ── 钩子 / 审计 ───────────────────────────────────────────────────
     def set_hooks(self, run=None, stop=None):

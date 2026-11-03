@@ -1,0 +1,18 @@
+── 1. CancelToken: 取消后回调不再执行 ──
+  PASS 1a. 取消后 pending 归零 (不泄漏计数)
+  PASS 1b. 取消后 on_done 未被调用
+  PASS 1c. is_cancelled() 为真
+  PASS 1d. 未取消 → on_done 正常执行 (对照组)
+── 2. submit_chunked: 分块回主线程且顺序正确 ──
+  PASS 2a. 返回 True 表示异步提交
+  PASS 2b. 1000 项按 200 切片 = 5 块
+  PASS 2c. 分块拼接后与原序列完全一致 (顺序正确)
+  PASS 2d. 每块长度 ≤ chunk_size
+── 3. 有界队列背压: low 队列满时不阻塞主线程 ──
+  PASS 3a. 单次 submit 主线程耗时 ≤50ms
+  PASS 3b. low 队列长度不超过 256
+  PASS 3c. 背压生效 (发生丢弃计数)
+  PASS 3d. shutdown 后 pending 归零
+  PASS 3e. shutdown 后 is_started() 为 False
+
+结果: PASS=13 FAIL=0

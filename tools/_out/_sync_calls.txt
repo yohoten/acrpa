@@ -1,0 +1,22 @@
+1878:                _editor_sync_to_tree()
+1897:            _editor_sync_to_tree()  # 刷新以移除 [C:...] 标记
+2077:    调用方负责 _push_undo() / _editor_sync_to_tree()。
+2150:    _editor_sync_to_tree()
+2210:    _editor_sync_to_tree()
+2223:    _editor_sync_to_tree()
+2246:    _editor_sync_to_tree()
+2270:    _editor_sync_to_tree()
+2311:    _editor_sync_to_tree()
+2447:        _editor_sync_to_tree()
+2489:    _editor_sync_to_tree()
+2561:    _editor_sync_to_tree()
+2589:    _editor_sync_to_tree()
+2645:        _editor_sync_to_tree()        # 统一走增量/全量路径, 序号列与配色一致
+3176:        _editor_sync_to_tree()
+3179:def _editor_sync_to_tree():
+3536:        _editor_sync_to_tree()
+3553:    _editor_sync_to_tree()
+3911:        _editor_sync_to_tree()
+4145:        _editor_sync_to_tree()
+4844:        _editor_sync_to_tree()
+4970:    _editor_sync_to_tree()

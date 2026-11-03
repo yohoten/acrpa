@@ -1,0 +1,30 @@
+src\ACRPA.py:2928:# 背景: `utils.refresh_dpi_cache()` 此前**无任何调用方** —— 窗口从 100% 屏拖到 150%
+src\ACRPA.py:2937:def _check_dpi_change():
+src\ACRPA.py:2954:        utils.refresh_dpi_cache(root)   # 唯一调用点 (此前该函数无调用方)
+src\ACRPA.py:2994:            handler = _debounce_cb(root, "dpi_watch", 120, _check_dpi_change)
+src\ACRPA.py:4995:# PERIODIC_SPLIT : True → _periodic(G1) 与 _periodic_g2(G2) 各自独立 after 链;
+src\ACRPA.py:4997:PERIODIC_SPLIT = _env_flag("PERIODIC_SPLIT", True)
+src\ACRPA.py:5114:    if PERIODIC_SPLIT:
+src\ACRPA.py:5115:        _periodic_g2_start()          # ④⑤⑥⑦⑨: 独立 200ms 链 (幂等挂载)
+src\ACRPA.py:5117:        _periodic_g2(inline=True)     # 回退: 与 G1 串行, 等价改造前的单函数行为
+src\ACRPA.py:5128:def _periodic_g2_start():
+src\ACRPA.py:5135:        root.after(_PERIODIC_G2_MS, _periodic_g2)
+src\ACRPA.py:5140:def _periodic_g2(inline=False):
+src\ACRPA.py:5145:    `inline=True` 由 G1 串行调用 (PERIODIC_SPLIT=False 的回退路径), 此时不自排期。
+src\ACRPA.py:5193:            root.after(_PERIODIC_G2_MS if busy else _PERIODIC_G2_IDLE_MS, _periodic_g2)
+src\ui\log_dock.py:131:# LOG_CBAR_INLINE 与生产端 (core/log.py) **同源**: 生产端已把 ▌ 拼进文本,
+src\ui\log_dock.py:134:    from core.log import LOG_CBAR_INLINE as _CORE_CBAR_INLINE
+src\ui\log_dock.py:135:    LOG_CBAR_INLINE = bool(_CORE_CBAR_INLINE)
+src\ui\log_dock.py:137:    LOG_CBAR_INLINE = _env_flag("LOG_CBAR_INLINE", True)
+src\ui\log_dock.py:692:    v5 §3.4 L4 收敛 (开关 LOG_CBAR_INLINE, 默认开):
+src\ui\log_dock.py:699:    回退: LOG_CBAR_INLINE=False → 走下面的逐行分支, 行为与改造前一致。
+src\ui\log_dock.py:720:    if LOG_CBAR_INLINE:
+src\ui\log_dock.py:757:    # ── 逐行分支 (LOG_CBAR_INLINE=False 的回退路径, 与改造前一致) ──
+src\core\log.py:36:LOG_CBAR_INLINE = _env_flag("LOG_CBAR_INLINE", True)
+src\core\log.py:254:                if LOG_CBAR_INLINE:
+src\utils.py:245:# (root 建好) 与显式 refresh_dpi_cache() 时刷新。
+src\utils.py:249:def refresh_dpi_cache(root=None):
+src\utils.py:270:    scaled() 都触发一次 Tcl 往返。DPI 变化用 refresh_dpi_cache() 显式刷新。
+src\utils.py:274:    return refresh_dpi_cache(_font_root)
+src\utils.py:295:        refresh_dpi_cache(root)
+src\utils.py:383:        refresh_dpi_cache(root)

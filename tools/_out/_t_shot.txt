@@ -1,0 +1,31 @@
+==================================================================
+NetLink Phase 4-1 remote screenshot self-test
+==================================================================
+[OK]   1a. capture() ok=True, format=jpeg, width<=640, height>0, bytes>0
+[OK]   1b. data_b64 可 base64 解码且可被 PIL.Image.open 打开
+[OK]   2a. capture(max_width=200) → width<=200
+[OK]   2b. capture(max_width=99999) → width<=1280（夹取上限）
+[OK]   2c. capture(quality=999) 不报错（返回 dict，非 rate limited）
+[OK]   3a. 连续两次 capture() → 第二次 error == 'rate limited'
+[OK]   3b. sleep(MIN_INTERVAL+0.2) 后再调 → 不再 rate limited
+[OK]   0. 被控端 A start (tcp 19983)
+[OK]   0b. 控制端 C start (tcp 19993, 静态对端→A)
+[OK]   0c. 配对完成（A 白名单出现 C, 0.16s）
+[OK]   4a. perm=observe 时 C.request_screenshot 发出（连接存在）
+[OK]   4b. observe → C 收到 CMD_ERR reason 含 'permission denied'（0.16s）
+[OK]   4c. A 未写成功审计（无 cmd=SCREENSHOT_REQ result=ok）
+[OK]   5a. control → C.request_screenshot 发出
+[OK]   5b. ≤3s C 的 TOPIC_SCREENSHOT 收到 ok=True（实测 0.16s）
+[OK]   5c. 载荷含 data_b64/width/height
+[OK]   6. A 审计含 cmd=SCREENSHOT_REQ 且 result=ok
+[OK]   7a. observe 时 [📷截图] disabled
+[OK]   7b. 改 control 后 ≤2s [📷截图] 变可用（1.08s）
+[OK]   8a. 存在标题含 '远程截图' 的 Toplevel（0.09s）
+[OK]   8b. 窗口内含已设置 image 的 Label 或降级路径文本
+[OK]   8c. PhotoImage 引用已保活（win._shot_img 非空）
+[OK]   9. request_screenshot('不存在的peer') 返回 False
+[OK]   10. nl-* 线程 ≤5s 收敛为 0（0.00s）
+------------------------------------------------------------------
+[OK]   总耗时 14.1s (< 60.0s)
+warns=0 skips=0
+PASS (all assertions OK; warns=0, skips=0)

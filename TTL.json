@@ -1,0 +1,501 @@
+{
+  "name": "未命名工作流",
+  "steps": [
+    {
+      "type": "command",
+      "cmd": "区域找图",
+      "params": [
+        "img.png",
+        "0.96",
+        "0",
+        "0",
+        "800",
+        "600",
+        "True",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "热键",
+      "params": [
+        "ctrl",
+        "c",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "wait",
+      "seconds": 1
+    },
+    {
+      "type": "command",
+      "cmd": "拖拽",
+      "params": [
+        "0",
+        "0",
+        "0.1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "按下",
+      "params": [
+        "ctrl",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "复制",
+      "params": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "循环结束",
+      "params": [
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "variable",
+      "var_name": "var",
+      "var_value": "",
+      "enabled": true,
+      "comment": ""
+    },
+    {
+      "type": "loop",
+      "times": "3",
+      "steps": [],
+      "enabled": true,
+      "comment": ""
+    },
+    {
+      "type": "variable",
+      "var_name": "var",
+      "var_value": "",
+      "enabled": true,
+      "comment": ""
+    },
+    {
+      "type": "variable",
+      "var_name": "var",
+      "var_value": "",
+      "enabled": true,
+      "comment": ""
+    },
+    {
+      "type": "variable",
+      "var_name": "var",
+      "var_value": "",
+      "enabled": true,
+      "comment": ""
+    },
+    {
+      "type": "variable",
+      "var_name": "var",
+      "var_value": "",
+      "enabled": true,
+      "comment": ""
+    },
+    {
+      "type": "variable",
+      "var_name": "var",
+      "var_value": "",
+      "enabled": true,
+      "comment": ""
+    },
+    {
+      "type": "variable",
+      "var_name": "var",
+      "var_value": "",
+      "enabled": true,
+      "comment": ""
+    },
+    {
+      "type": "variable",
+      "var_name": "var",
+      "var_value": "",
+      "enabled": true,
+      "comment": ""
+    },
+    {
+      "type": "variable",
+      "var_name": "var",
+      "var_value": "",
+      "enabled": true,
+      "comment": ""
+    },
+    {
+      "type": "variable",
+      "var_name": "var",
+      "var_value": "",
+      "enabled": true,
+      "comment": ""
+    },
+    {
+      "type": "variable",
+      "var_name": "var",
+      "var_value": "",
+      "enabled": true,
+      "comment": ""
+    },
+    {
+      "type": "wait",
+      "seconds": 5,
+      "enabled": true,
+      "comment": ""
+    },
+    {
+      "type": "wait",
+      "seconds": 5,
+      "enabled": true,
+      "comment": ""
+    },
+    {
+      "type": "wait",
+      "seconds": 5,
+      "enabled": true,
+      "comment": ""
+    },
+    {
+      "type": "command",
+      "cmd": "拖拽",
+      "params": [
+        "0",
+        "0",
+        "0.1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "拖拽",
+      "params": [
+        "0",
+        "0",
+        "0.1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "拖拽",
+      "params": [
+        "0",
+        "0",
+        "0.1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "拖拽",
+      "params": [
+        "0",
+        "0",
+        "0.1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "拖拽",
+      "params": [
+        "0",
+        "0",
+        "0.1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "相移",
+      "params": [
+        "10",
+        "10",
+        "0.1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "相移",
+      "params": [
+        "10",
+        "10",
+        "0.1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "相移",
+      "params": [
+        "10",
+        "10",
+        "0.1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "相移",
+      "params": [
+        "10",
+        "10",
+        "0.1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "相移",
+      "params": [
+        "10",
+        "10",
+        "0.1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "相移",
+      "params": [
+        "10",
+        "10",
+        "0.1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "相移",
+      "params": [
+        "10",
+        "10",
+        "0.1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "相移",
+      "params": [
+        "10",
+        "10",
+        "0.1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "相移",
+      "params": [
+        "10",
+        "10",
+        "0.1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "相移",
+      "params": [
+        "10",
+        "10",
+        "0.1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "相移",
+      "params": [
+        "10",
+        "10",
+        "0.1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "相移",
+      "params": [
+        "10",
+        "10",
+        "0.1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "相移",
+      "params": [
+        "10",
+        "10",
+        "0.1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "相移",
+      "params": [
+        "10",
+        "10",
+        "0.1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "type": "command",
+      "cmd": "相移",
+      "params": [
+        "10",
+        "10",
+        "0.1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ]
+    }
+  ]
+}

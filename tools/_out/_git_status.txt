@@ -1,0 +1,32 @@
+ M src/mini_bar.py
+ M src/netlink/control.py
+ M src/tray.py
+ M src/ui/bg_image.py
+ M src/ui/bg_task.py
+ M src/ui/exec_bar.py
+ M src/ui/netlink/shot.py
+ M src/ui/workflow_view.py
+ M tests/_test_ui_layout.py
+ M tools/static_checks.py
+?? tests/_test_bg_task_cancel.py
+?? tests/_test_img_resample_pick.py
+?? tests/_test_log_cbar_batch.py
+?? tools/_out/_git_status.txt
+?? tools/_out/_pc_a5.txt
+?? tools/_out/_pc_a6.txt
+?? tools/_out/_pc_acrpa.txt
+?? tools/_out/_pc_all.txt
+?? tools/_out/_pc_ctl.txt
+?? tools/_out/_probe_grab_thread.py
+?? tools/_out/_probe_grab_thread.txt
+?? tools/_out/_probe_img_resample.py
+?? tools/_out/_probe_img_resample.txt
+?? tools/_out/_probe_wakeup.py
+?? tools/_out/_probe_wakeup.txt
+?? tools/_out/_regress.txt
+?? tools/_out/_regress2.txt
+?? tools/_out/_static.txt
+?? tools/_out/_t_cancel.txt
+?? tools/_out/_t_cbar.txt
+?? tools/_out/_t_img.txt
+?? tools/_out/_t_layout.txt

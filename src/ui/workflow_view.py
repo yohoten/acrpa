@@ -2318,8 +2318,45 @@ def _wf_edit_step(event=None):
     dlg.bind("<Escape>", lambda e: dlg.destroy())
 
 
+# ── 运行时回退开关 (v5 §4.3 / §7.2; 默认开, 置 0/false/off 回退) ──
+def _env_flag(name, default=True):
+    """环境变量开关: 缺失/空 → default; 0/false/no/off → False。"""
+    try:
+        v = os.environ.get(name)
+    except Exception:
+        return default
+    if v is None or str(v).strip() == "":
+        return default
+    return str(v).strip().lower() not in ("0", "false", "no", "off")
+
+
+# WF_EXPORT_ASYNC : True → 流程图导出的 grab+save 走后台池; False → 主线程同步 (旧行为)
+WF_EXPORT_ASYNC = _env_flag("WF_EXPORT_ASYNC", True)
+
+
+def _wf_submit_bg(fn, on_done, on_error, name):
+    """把 fn 交给后台池; 无事件循环/通道不可用时同步执行 (返回 False)。"""
+    if WF_EXPORT_ASYNC:
+        try:
+            import ui.bg_task as _bg
+            return bool(_bg.submit(fn, on_done, on_error, name=name, priority=0))
+        except Exception:
+            pass
+    try:
+        on_done(fn())
+    except Exception as e:
+        on_error(e)
+    return False
+
+
 def _wf_export_screenshot():
-    """导出流程图截图为 PNG"""
+    """导出流程图截图为 PNG。
+
+    v5 §4.3 要点 4: `ImageGrab.grab` 依赖**实时屏幕坐标与画布内容**, 故坐标系仍在
+    主线程 `update_idletasks()` 后同步取; 取完把「grab + save」整段提交后台
+    (20~120 ms 不再占主线程), 回调里只 toast/log。
+    开关 `WF_EXPORT_ASYNC` (默认开) 置 False 回到主线程同步实现。
+    """
     if not _wf_data.get("steps"):
         messagebox.showwarning("提示", "工作流为空，无法导出")
         return
@@ -2331,18 +2368,35 @@ def _wf_export_screenshot():
             load_pil = _CTX.get("load_pil")
             if load_pil:
                 load_pil()
-            # 确保流程图已渲染
+            # 确保流程图已渲染 (坐标系必须主线程取, 见 docstring)
             wf_flow_canvas.update_idletasks()
             x = wf_flow_canvas.winfo_rootx()
             y = wf_flow_canvas.winfo_rooty()
             w = wf_flow_canvas.winfo_width()
             h = wf_flow_canvas.winfo_height()
             if w > 0 and h > 0:
-                grab = _CTX.get("get_image_grab")
-                img = grab().grab(bbox=(x, y, x + w, y + h))
-                img.save(fp)
-                _toast("流程图已保存: {}".format(os.path.basename(fp)), "success")
-                _log1("流程图导出: {}".format(fp))
+                box = (x, y, x + w, y + h)
+                # ImageGrab 模块句柄在主线程解析一次, 后台不再触碰 _CTX/控件
+                getter = _CTX.get("get_image_grab")
+                grab_mod = getter() if getter else None
+
+                def _do_export(box=box, mod=grab_mod, fp=fp):
+                    """后台: 屏幕 grab + 写盘 (不碰任何 Tk 对象)。"""
+                    if mod is None:
+                        raise RuntimeError("ImageGrab 不可用")
+                    img = mod.grab(bbox=box)
+                    img.save(fp)
+                    return fp
+
+                def _done(saved):
+                    _toast("流程图已保存: {}".format(os.path.basename(saved)), "success")
+                    _log1("流程图导出: {}".format(saved))
+
+                def _err(e):
+                    _log1("流程图导出失败: {}".format(e), "error")
+                    _toast("流程图导出失败: {}".format(e), "error")
+
+                _wf_submit_bg(_do_export, _done, _err, "wf-export-png")
             else:
                 messagebox.showwarning("提示", "流程图区域不可见，请先切换到工作流Tab")
         except Exception as e:

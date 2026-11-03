@@ -146,6 +146,68 @@ _MB_ICON_MAX = 32           # 应用图标最大边长
 _MB_DOT_H = 10              # 状态点直径
 
 
+# ── 图标两级缓存 (v5 §4.2) ──
+# 改造前: 每次条高/UI 缩放变化都 `Image.open().convert("RGBA").resize(LANCZOS)`
+# (3~8 ms), 拖动窗口时反复解码同一个文件。现在两级:
+#   _MB_ICON_SRC: abs_path → 已 convert("RGBA") 的源图 (同一文件绝不二次解码)
+#   _MB_ICON_TK : (abs_path, size) → PhotoImage (LRU 4; 尺寸档位只有几个)
+# 回退开关: MINIBAR_ICON_CACHE=False → 每次重新解码 + 缩放 (旧行为)。
+def _mb_env_flag(name, default=True):
+    """环境变量开关: 缺失/空 → default; 0/false/no/off → False。"""
+    try:
+        v = os.environ.get(name)
+    except Exception:
+        return default
+    if v is None or str(v).strip() == "":
+        return default
+    return str(v).strip().lower() not in ("0", "false", "no", "off")
+
+
+_MB_ICON_CACHE = _mb_env_flag("MINIBAR_ICON_CACHE", True)
+_MB_ICON_SRC = {}
+_MB_ICON_TK = {}
+_MB_ICON_SRC_MAX = 8
+_MB_ICON_TK_MAX = 4
+
+
+def _mb_icon_photo(path, size):
+    """取 (path, size) 的 PhotoImage (源图 + 成品两级缓存)。
+
+    图标尺寸 ≤ `_MB_ICON_MAX`(32 px) 属 v5 §4.1 的「小图标」行 → **保持 LANCZOS**
+    (小尺寸下锐度差异肉眼可见, 3~8 ms 成本可接受), 收益全部来自缓存。
+    """
+    key = (str(path), int(size))
+    if _MB_ICON_CACHE:
+        hit = _MB_ICON_TK.get(key)
+        if hit is not None:
+            try:                        # LRU: 命中即移到末尾 (最近最少用在前)
+                _MB_ICON_TK.pop(key, None)
+                _MB_ICON_TK[key] = hit
+            except Exception:
+                pass
+            return hit
+    src = _MB_ICON_SRC.get(str(path)) if _MB_ICON_CACHE else None
+    if src is None:
+        src = Image.open(path).convert("RGBA")
+        if _MB_ICON_CACHE:
+            try:
+                if len(_MB_ICON_SRC) >= _MB_ICON_SRC_MAX:
+                    _MB_ICON_SRC.clear()
+                _MB_ICON_SRC[str(path)] = src
+            except Exception:
+                pass
+    img = src.resize((int(size), int(size)), Image.LANCZOS)
+    photo = ImageTk.PhotoImage(img)
+    if _MB_ICON_CACHE:
+        try:
+            if len(_MB_ICON_TK) >= _MB_ICON_TK_MAX:
+                _MB_ICON_TK.pop(next(iter(_MB_ICON_TK)), None)
+            _MB_ICON_TK[key] = photo
+        except Exception:
+            pass
+    return photo
+
+
 def _mb_set_icon(label):
     """在 Mini Bar 左侧加载并显示应用图标（尺寸随条高自适应, 垂直居中）。
 
@@ -178,9 +240,7 @@ def _mb_set_icon(label):
     if png_path:
         try:
             _load_pil()
-            img = Image.open(png_path).convert("RGBA").resize(
-                (size, size), Image.LANCZOS)
-            photo = ImageTk.PhotoImage(img)
+            photo = _mb_icon_photo(png_path, size)
             label.configure(image=photo, text="")
             label._photo = photo  # 保存引用防止被 GC
             return

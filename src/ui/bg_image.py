@@ -63,6 +63,60 @@ _src_cache = {}
 _tile_cache = {}
 _TILE_CACHE_MAX = 16
 
+# ── 重采样算法分级 (v5 §4.1) ──
+# 回退开关: BG_RESAMPLE_AUTO=False → 全部回到 Image.LANCZOS (改造前行为)。
+def _env_flag(name, default=True):
+    """环境变量开关: 缺失/空 → default; 0/false/no/off → False。"""
+    try:
+        v = os.environ.get(name)
+    except Exception:
+        return default
+    if v is None or str(v).strip() == "":
+        return default
+    return str(v).strip().lower() not in ("0", "false", "no", "off")
+
+
+BG_RESAMPLE_AUTO = _env_flag("BG_RESAMPLE_AUTO", True)
+
+_RS_ICON_MAX_PX = 64          # 目标长边 ≤64 px → 小图标 (LANCZOS)
+_RS_LARGE_AREA = 400 * 1000   # 目标像素面积 ≥400k px → 大面积 (BOX)
+_RS_MID_AREA = 100 * 1000     # 100k ≤ 面积 < 400k → 中等 (BILINEAR)
+
+
+def _pick_resample(src_size, dst_size):
+    """按源/目标尺寸自动选重采样算法 (v5 §4.1, **纯函数**, 可单测)。
+
+    实测基线 (res/bg-ac.png 256×256 → 1920×1080 一次缩放):
+        LANCZOS 51.95 ms / BOX 20.95 ms / BILINEAR 25.35 ms / NEAREST 4.25 ms。
+
+    判定顺序 (先特例后面积; 返回 PIL 的算法常量):
+      1. 目标长边 ≤ 64 px  → LANCZOS   —— 图标/Logo 小尺寸锐度差异肉眼明显, 成本 3~8 ms
+      2. 目标 < 源 (降采样) → BOX       —— 大比例降采样比单级 LANCZOS 快 ≥40% 且无混叠
+      3. 目标面积 ≥ 400k   → BOX       —— 大比例放大的锐化收益肉眼不可见, 成本仅 0.4×
+      4. 100k ≤ 面积 <400k → BILINEAR  —— 折中
+      5. 其余 (面积 <100k) → LANCZOS   —— 小图重采样本身很便宜, 直接用质量最好的
+    非法尺寸 → LANCZOS (与改造前一致, 绝不因分级逻辑抛异常)。
+    """
+    if not BG_RESAMPLE_AUTO or Image is None:
+        return Image.LANCZOS if Image is not None else None
+    try:
+        sw, sh = int(src_size[0]), int(src_size[1])
+        dw, dh = int(dst_size[0]), int(dst_size[1])
+    except Exception:
+        return Image.LANCZOS
+    if sw <= 0 or sh <= 0 or dw <= 0 or dh <= 0:
+        return Image.LANCZOS
+    if max(dw, dh) <= _RS_ICON_MAX_PX:
+        return Image.LANCZOS
+    if dw < sw or dh < sh:
+        return Image.BOX
+    area = dw * dh
+    if area >= _RS_LARGE_AREA:
+        return Image.BOX
+    if area >= _RS_MID_AREA:
+        return Image.BILINEAR
+    return Image.LANCZOS
+
 # 最近一次失败原因：供调用方写日志（打包后无控制台，必须能自证原因）
 _last_error = ""
 
@@ -154,7 +208,7 @@ def _cached_tile(path, src, tsize, a):
         return hit
     try:
         tile = (src if tuple(src.size) == tuple(tsize)
-                else src.resize(tuple(tsize), Image.LANCZOS))
+                else src.resize(tuple(tsize), _pick_resample(src.size, tsize)))
         if tile is None:
             return None
         canvas = Image.new("RGBA", tile.size, (0, 0, 0, 0))
@@ -267,7 +321,7 @@ def _cover_resize(img, size):
         scale = max(float(w) / float(sw), float(h) / float(sh))
         nw = max(w, int(round(sw * scale)))
         nh = max(h, int(round(sh * scale)))
-        img = img.resize((nw, nh), Image.LANCZOS)
+        img = img.resize((nw, nh), _pick_resample(img.size, (nw, nh)))
         left = max(0, (nw - w) // 2)
         top = max(0, (nh - h) // 2)
         return img.crop((left, top, left + w, top + h))
@@ -292,7 +346,7 @@ def _fit_no_upscale(img, size):
         nh = max(1, int(round(sh * scale)))
         if nw == sw and nh == sh:
             return img
-        return img.resize((nw, nh), Image.LANCZOS)
+        return img.resize((nw, nh), _pick_resample(img.size, (nw, nh)))
     except Exception:
         return None
 
@@ -537,7 +591,7 @@ def load_icon_photo(res_dir, name="bg-ac.ico", max_width=None, master=None):
             if mw > 1 and img.size[0] > mw:
                 scale = float(mw) / float(img.size[0])
                 nh = max(1, int(round(img.size[1] * scale)))
-                img = img.resize((mw, nh), Image.LANCZOS)
+                img = img.resize((mw, nh), _pick_resample(img.size, (mw, nh)))
         photo = (ImageTk.PhotoImage(img, master=master)
                  if master is not None else ImageTk.PhotoImage(img))
         return photo

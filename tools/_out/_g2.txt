@@ -1,0 +1,4 @@
+H src/ACRPA.py
+H src/core/log.py
+H src/ui/log_dock.py
+H src/utils.py

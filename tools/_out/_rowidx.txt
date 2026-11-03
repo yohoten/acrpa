@@ -1,0 +1,30 @@
+1822:    row_idx = tree.index(item) + 1
+1823:    if row_idx in state.breakpoints:
+1824:        state.breakpoints.discard(row_idx)
+1826:        state.breakpoints.add(row_idx)
+1828:    _update_row_inplace(row_idx - 1)
+1837:    row_idx = tree.index(item) + 1  # 1-based
+1847:        cond_win.title("设置条件断点 - 行{}".format(row_idx))
+1869:        if hasattr(engine, 'conditional_breakpoints') and row_idx in engine.conditional_breakpoints:
+1870:            cond_entry.insert(0, engine.conditional_breakpoints[row_idx])
+1875:                engine.set_conditional_breakpoint(row_idx, cond)
+1877:                state.breakpoints.add(row_idx)
+1896:            engine.set_conditional_breakpoint(row_idx, "")
+1903:        log1("跳过第{}行".format(row_idx))
+1904:        from utils import show_toast; show_toast(root, "跳过第{}行".format(row_idx), "info")
+1908:        state._run_to_row = row_idx
+1910:        log1("运行到第{}行".format(row_idx))
+1911:        from utils import show_toast; show_toast(root, "运行到第{}行".format(row_idx), "info")
+1919:        if not (0 < row_idx <= len(rows_now)):
+1921:        sd = rows_now[row_idx - 1]
+1927:        win.title("失败策略 - 行{}".format(row_idx))
+1953:            okv, msg = failure_policy.validate_policy(code, target, len(rows_now), row_idx)
+1961:            _update_row_inplace(row_idx - 1)
+1963:            show_toast(root, "行{}：{}".format(row_idx,
+1991:        if row_idx in state._exec_timings:
+1992:            t = state._exec_timings[row_idx]
+2281:    row_idx = tree.index(item) + 1
+2282:    if row_idx in state.breakpoints:
+2283:        state.breakpoints.discard(row_idx)
+2285:        state.breakpoints.add(row_idx)
+2287:    _update_row_inplace(row_idx - 1)

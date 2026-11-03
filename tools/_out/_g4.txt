@@ -1,0 +1,18 @@
+112:_logfilter = {"applied": 0}   # 已应用过滤到的行号 (增量)
+139:# LOG_EXPORT_ASYNC : 导出「拼装 + 写盘」交给后台池 (False → 主线程逐行拼装, 旧行为)
+141:LOG_EXPORT_ASYNC = _env_flag("LOG_EXPORT_ASYNC", True)
+406:def _log_trim():
+411:    同时把 _cbar_state/_logfilter 的 1-based 游标左移, 避免游标与新行号错位。
+431:    _logfilter["applied"] = max(0, _logfilter["applied"] - excess)
+499:def flush_and_apply():
+620:def _log_line_tag(line_no):
+686:def _log_apply_cbar():
+780:def _log_apply_filter(full=False):
+789:        start = 1 if full else (_logfilter["applied"] + 1)
+814:        _logfilter["applied"] = total
+824:def _log_search_next(reset=False):
+850:        _logfilter["applied"] = 0
+902:def _log_export_view():
+906:    交给 `ui_bg_task` 的 IO 池。开关 `LOG_EXPORT_ASYNC` (默认开) 置 False 时
+917:        if LOG_EXPORT_ASYNC:
+920:                import ui.bg_task as _bg

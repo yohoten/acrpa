@@ -1,0 +1,12 @@
+warning: in the working copy of 'src/ui/netlink/shot.py', LF will be replaced by CRLF the next time Git touches it
+ src/mini_bar.py          |  66 +++++++++++++++++-
+ src/netlink/control.py   |  67 ++++++++++++++++--
+ src/tray.py              |  15 +++-
+ src/ui/bg_image.py       |  62 +++++++++++++++--
+ src/ui/bg_task.py        |  13 ++--
+ src/ui/exec_bar.py       | 176 ++++++++++++++++++++++++++++++++++++++++++++--
+ src/ui/netlink/shot.py   | 178 +++++++++++++++++++++++++++++++++++++++++++----
+ src/ui/workflow_view.py  |  68 ++++++++++++++++--
+ tests/_test_ui_layout.py |  17 +++--
+ tools/static_checks.py   | 113 +++++++++++++++++++++++++++++-
+ 10 files changed, 728 insertions(+), 47 deletions(-)

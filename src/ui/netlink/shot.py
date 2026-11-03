@@ -19,6 +19,103 @@ from ui.netlink.common import (
     _screenshot_topic, _screen, _safe_int, _script_root, _fmt_size, _fmt_mtime,
 )
 
+# ══════════════════════════════════════════════════════════════════════
+# 远端截图预览: 预缩放 / 上限 / PhotoImage 复用 (v5 §4.2)
+# ══════════════════════════════════════════════════════════════════════
+# 回退开关: NETLINK_SHOT_ASYNC=False → 解码与缩放回到主线程 (旧行为)。
+def _env_flag(name, default=True):
+    """环境变量开关: 缺失/空 → default; 0/false/no/off → False。"""
+    try:
+        v = os.environ.get(name)
+    except Exception:
+        return default
+    if v is None or str(v).strip() == "":
+        return default
+    return str(v).strip().lower() not in ("0", "false", "no", "off")
+
+
+NETLINK_SHOT_ASYNC = _env_flag("NETLINK_SHOT_ASYNC", True)
+SHOT_MAX_EDGE = 1600        # 预览图长边上限 (超出先缩, 解码+PhotoImage 成本降 60%+)
+_SHOT_TK_CACHE = {}         # (w, h, 帧长度, ts) → PhotoImage (同尺寸同帧只建一次)
+_SHOT_TK_MAX = 4
+
+
+def _shot_cache_key(width, height, data_b64, ts):
+    try:
+        return (int(width), int(height), len(data_b64), int(ts or 0))
+    except Exception:
+        return None
+
+
+def _shot_cache_put(key, photo):
+    if key is None:
+        return
+    try:
+        if len(_SHOT_TK_CACHE) >= _SHOT_TK_MAX:
+            _SHOT_TK_CACHE.pop(next(iter(_SHOT_TK_CACHE)), None)
+        _SHOT_TK_CACHE[key] = photo
+    except Exception:
+        pass
+
+
+def _shot_target_size(width, height, label=None):
+    """预览目标尺寸: 长边 ≤ `SHOT_MAX_EDGE`, 且不超过预览区尺寸 (不放大)。
+
+    拿不到预览区尺寸时按 1600 兜底; 帧本身已小于上限则原样返回 (返回源尺寸 = 不缩放)。
+    """
+    try:
+        w, h = int(width), int(height)
+    except Exception:
+        return None
+    if w <= 0 or h <= 0:
+        return None
+    lim = SHOT_MAX_EDGE
+    if label is not None:
+        try:
+            lw = int(label.winfo_width())
+            lh = int(label.winfo_height())
+            if lw > 120 and lh > 120:
+                # 预留 12px 内边距, 避免贴边抖动; 下限 120px 防止极小窗口导致缩成糊
+                lim = min(SHOT_MAX_EDGE, max(min(lim, lw - 12, lh - 12), 120))
+        except Exception:
+            pass
+    longest = max(w, h)
+    if longest <= lim:
+        return (w, h)
+    scale = float(lim) / float(longest)
+    return (max(1, int(round(w * scale))), max(1, int(round(h * scale))))
+
+
+def _shot_pick_resample(src_size, dst_size):
+    """缩小类走 BOX (v5 §4.1「缩小类」行: 比单级 LANCZOS 快 ≥40% 且无混叠)。"""
+    try:
+        from PIL import Image
+        sw, sh = int(src_size[0]), int(src_size[1])
+        dw, dh = int(dst_size[0]), int(dst_size[1])
+        if dw < sw or dh < sh:
+            return Image.BOX
+        return Image.LANCZOS
+    except Exception:
+        return None
+
+
+def _netlink_bg_submit(fn, on_done, on_error, name):
+    """解码提交到后台池; 通道不可用/未启动时同步执行 (返回 False)。"""
+    if NETLINK_SHOT_ASYNC:
+        try:
+            import ui.bg_task as _bg
+            if _bg.is_started():
+                _bg.submit(fn, on_done, on_error, name=name, priority=1)
+                return True
+        except Exception:
+            pass
+    try:
+        on_done(fn())
+    except Exception as e:
+        on_error(e)
+    return False
+
+
 class ShotMixin(object):
     # _shot_state
     def _shot_state(self):
@@ -179,22 +276,26 @@ class ShotMixin(object):
             self._shot_info.config(text=info)
         except Exception:
             pass
-        # 1) PIL 内嵌显示
-        try:
-            import io as _io
-            import base64 as _b64
-            from PIL import Image, ImageTk
-            raw = _b64.b64decode(data_b64)
-            img = Image.open(_io.BytesIO(raw))
-            photo = ImageTk.PhotoImage(img)
-            self._shot_img = photo           # 保活，避免被 GC 白屏
-            self._shot_img_lbl.config(image=photo, text="")
-            self._shot_cleanup_temp()
-            self._shot_open_btn_pack(False)
+        # 1) PIL 内嵌预览 (解码/预缩放下放 IO 池; PhotoImage 必须主线程建)
+        if self._shot_pil_try(data_b64, width, height, ts):
             return
+        # 2) 降级：写临时文件 + [打开文件]
+        self._shot_fallback_temp(data_b64)
+
+    # _shot_img_apply
+    def _shot_img_apply(self, photo):
+        """主线程: 把 PhotoImage 贴到预览 Label (含保活与降级按钮状态复位)。"""
+        self._shot_img = photo               # 保活，避免被 GC 白屏
+        try:
+            self._shot_img_lbl.config(image=photo, text="")
         except Exception:
             pass
-        # 2) 降级：写临时文件 + [打开文件]
+        self._shot_cleanup_temp()
+        self._shot_open_btn_pack(False)
+
+    # _shot_fallback_temp
+    def _shot_fallback_temp(self, data_b64):
+        """降级路径: 写临时文件 + 提示「不支持内嵌预览」(行为与改造前一致)。"""
         path = self._shot_write_temp(data_b64)
         self._shot_img = None
         if path:
@@ -213,6 +314,59 @@ class ShotMixin(object):
             except Exception:
                 pass
             self._set_status("截图渲染失败", "warning")
+
+    # _shot_pil_try
+    def _shot_pil_try(self, data_b64, width, height, ts):
+        """PIL 内嵌预览: 预缩放 + 缓存复用 + 解码外移 (v5 §4.2)。
+
+        返回 True 表示已接管 (同步贴图或已提交后台);
+        返回 False 表示 PIL/base64 不可用 → 交给临时文件降级路径。
+        PhotoImage 的创建**始终在主线程** (工作线程只做 decode + resize)。
+        """
+        try:
+            import io as _io
+            import base64 as _b64
+            from PIL import Image, ImageTk      # noqa: F401 (可用性探针)
+        except Exception:
+            return False
+        key = _shot_cache_key(width, height, data_b64, ts)
+        hit = _SHOT_TK_CACHE.get(key) if key is not None else None
+        if hit is not None:
+            self._shot_img_apply(hit)           # 同尺寸同帧: 0 次解码/0 次 PhotoImage
+            return True
+        try:
+            raw = _b64.b64decode(data_b64)
+        except Exception:
+            return False
+        target = _shot_target_size(width, height, self._shot_img_lbl)
+
+        def _decode():
+            """后台: 解码 + 预缩放 (长边 ≤1600 且不超过预览区)。"""
+            img = Image.open(_io.BytesIO(raw))
+            try:
+                img.load()                      # 明确在此处完成解码 (不留给 PhotoImage)
+            except Exception:
+                pass
+            if target and tuple(img.size) != tuple(target):
+                img = img.resize(tuple(target),
+                                 _shot_pick_resample(img.size, target))
+            return img
+
+        def _done(img):
+            """主线程: 建 PhotoImage (Tk 对象只能主线程), 再贴图 + 入缓存。"""
+            try:
+                photo = ImageTk.PhotoImage(img)
+            except Exception:
+                self._shot_fallback_temp(data_b64)
+                return
+            _shot_cache_put(key, photo)
+            self._shot_img_apply(photo)
+
+        def _err(_e):
+            self._shot_fallback_temp(data_b64)
+
+        _netlink_bg_submit(_decode, _done, _err, "nl-shot-decode")
+        return True
 
     # _shot_open_btn_pack
     def _shot_open_btn_pack(self, show):

@@ -661,14 +661,183 @@ def set_state(code):
         pass
 
 
+# ── 运行时回退开关 (v5 §4.3 / §7.2; 默认开, 置 0/false/off 回退) ──
+def _env_flag(name, default=True):
+    """环境变量开关: 缺失/空 → default; 0/false/no/off → False。"""
+    try:
+        v = os.environ.get(name)
+    except Exception:
+        return default
+    if v is None or str(v).strip() == "":
+        return default
+    return str(v).strip().lower() not in ("0", "false", "no", "off")
+
+
+# SHOT_ASYNC : True → 截图全链路异步 (after 替代 sleep + grab/save 走 IO 池);
+#              False → 完全回到旧实现 (主线程 sleep(0.3) + 同步 grab + 同步 save)。
+SHOT_ASYNC = _env_flag("SHOT_ASYNC", True)
+
+
+def _shot_bg():
+    """取后台通道 (惰性 import, 避免 ui 包内循环依赖)。不可用时返回 None。"""
+    try:
+        import ui.bg_task as _bg
+        return _bg
+    except Exception:
+        return None
+
+
+def _shot_submit(fn, on_done, on_error, name):
+    """提交到后台池; 无事件循环/通道不可用时回退主线程同步执行。
+
+    返回 True = 已异步提交; False = 已同步执行完 (调用方不要重复执行)。
+    """
+    bg = _shot_bg()
+    if bg is not None and SHOT_ASYNC:
+        try:
+            return bool(bg.submit(fn, on_done, on_error, name=name, priority=0))
+        except Exception:
+            pass
+    try:
+        on_done(fn())
+    except Exception as e:
+        on_error(e)
+    return False
+
+
 def screenshot_tool():
-    """区域截图: 全屏半透明遮罩上拖拽选区后保存到截图目录。"""
+    """区域截图: 全屏半透明遮罩上拖拽选区后保存到截图目录。
+
+    v5 §4.3 时序 (开关 SHOT_ASYNC, 默认开) —— 主线程不再 sleep:
+      ① 主线程 `withdraw()` 后只排一个 `after(300)`, **不再 time.sleep(0.3)**
+         (语义等价: 等窗口动画完成, 但事件循环不阻塞, 期间界面可响应);
+      ② `after` 到期 → 全屏 grab 提交到 `ui_bg_task` 的 IO 池
+         (Windows 下 PIL ImageGrab / pyautogui 截图在子线程可用, 已实测确认);
+      ③ 回调 (主线程) → **先**上纯黑遮罩 Toplevel (0 ms 反馈, 用户看到的是「正在截屏」
+         而不是卡死), **再**挂 PhotoImage (30~60 ms);
+      ④ 框选确认 → 区域 grab + `save()` 写盘整段提交后台, 主线程只 toast/log。
+    SHOT_ASYNC=False → 完全回到旧实现 (sleep(0.3) + 同步 grab + 同步 save)。
+    """
     _call("load_pil")
     root = _CTX.get("root")
     try:
         root.withdraw()
     except Exception:
         pass
+    if not SHOT_ASYNC:
+        _screenshot_legacy(root)
+        return
+    try:
+        root.after(300, lambda: _shot_grab_then_overlay(root))
+    except Exception:
+        _shot_grab_then_overlay(root)
+
+
+def _shot_grab_then_overlay(root):
+    """① after(300) 到期 → 提交全屏 grab; 回调里先上遮罩再贴图。"""
+    def _grab():
+        return _call("get_pa").screenshot()
+
+    def _ok(ss):
+        _shot_show_overlay(root, ss)
+
+    def _fail(e):
+        # 子线程截图失败 (极端环境) → 回退主线程再试一次, 仍失败才放弃
+        try:
+            _shot_show_overlay(root, _call("get_pa").screenshot())
+            return
+        except Exception:
+            pass
+        _log1("截图失败: {}".format(e), "error")
+        _safe_deiconify(root)
+
+    _shot_submit(_grab, _ok, _fail, "shot-grab")
+
+
+def _shot_show_overlay(root, ss):
+    """主线程: 先上纯黑遮罩 (0 ms 反馈) → 再挂 PhotoImage → 进入框选循环。"""
+    overlay = tkinter.Toplevel()
+    overlay.attributes("-fullscreen", True)
+    overlay.attributes("-alpha", 0.4)
+    overlay.attributes("-topmost", True)
+    overlay.configure(bg="black")
+    overlay.config(cursor="cross")
+
+    canvas = tkinter.Canvas(overlay, bg="black", highlightthickness=0)
+    canvas.pack(fill="both", expand=True)
+    # 遮罩此刻已可见 (纯黑 + cross), 用户立即得到「正在截屏」的反馈
+    try:
+        overlay.update_idletasks()
+    except Exception:
+        pass
+    if ss is not None:
+        try:
+            ss_img = _call("get_image_tk").PhotoImage(ss)
+            canvas.create_image(0, 0, image=ss_img, anchor="nw")
+            canvas.ss_img = ss_img
+        except Exception:
+            pass
+    rect = None
+    start_x = [0]
+    start_y = [0]
+
+    def on_press(event):
+        start_x[0] = event.x
+        start_y[0] = event.y
+
+    def on_drag(event):
+        nonlocal rect
+        if rect:
+            canvas.delete(rect)
+        rect = canvas.create_rectangle(start_x[0], start_y[0], event.x, event.y,
+            outline="white", width=2)
+
+    def on_release(event):
+        nonlocal rect
+        overlay.destroy()
+        try:
+            root.deiconify()
+        except Exception:
+            pass
+        x1 = min(start_x[0], event.x)
+        y1 = min(start_y[0], event.y)
+        x2 = max(start_x[0], event.x)
+        y2 = max(start_y[0], event.y)
+        width = x2 - x1
+        height = y2 - y1
+        # 确保截图区域有效（至少 1x1 像素）
+        if width <= 0 or height <= 0:
+            _log1("截图区域无效，请重新选择")
+            return
+        import datetime
+        ts = datetime.datetime.now().strftime("%m%d_%H%M%S")
+        fp = os.path.join(_CTX.get("screenshot_dir", ""), "shot_{}.png".format(ts))
+
+        def _crop_save():
+            """后台: 区域 grab + 写盘 (磁盘 IO 10~50 ms, 不再占主线程)。"""
+            img = _call("get_pa").screenshot(region=(x1, y1, width, height))
+            img.save(fp)
+            return fp
+
+        def _done(saved):
+            _log1("截图已保存: {}".format(saved))
+            _toast("截图已保存", "success")
+
+        def _err(e):
+            _log1("截图保存失败: {}".format(e), "error")
+            _toast("截图保存失败: {}".format(e), "error")
+
+        _shot_submit(_crop_save, _done, _err, "shot-save")
+
+    overlay.bind("<Button-1>", on_press)
+    overlay.bind("<B1-Motion>", on_drag)
+    overlay.bind("<ButtonRelease-1>", on_release)
+    overlay.bind("<Escape>", lambda e: (overlay.destroy(), _safe_deiconify(root)))
+    overlay.mainloop()
+
+
+def _screenshot_legacy(root):
+    """旧实现 (SHOT_ASYNC=False 的回退路径): 主线程 sleep + 同步 grab/save。"""
     import time
     time.sleep(0.3)
     ss = _call("get_pa").screenshot()
@@ -712,15 +881,14 @@ def screenshot_tool():
         y2 = max(start_y[0], event.y)
         width = x2 - x1
         height = y2 - y1
-        # 确保截图区域有效（至少 1x1 像素）
         if width <= 0 or height <= 0:
             _log1("截图区域无效，请重新选择")
             return
-        ss = _call("get_pa").screenshot(region=(x1, y1, width, height))
+        ss2 = _call("get_pa").screenshot(region=(x1, y1, width, height))
         import datetime
         ts = datetime.datetime.now().strftime("%m%d_%H%M%S")
         fp = os.path.join(_CTX.get("screenshot_dir", ""), "shot_{}.png".format(ts))
-        ss.save(fp)
+        ss2.save(fp)
         _log1("截图已保存: {}".format(fp))
         _toast("截图已保存", "success")
 

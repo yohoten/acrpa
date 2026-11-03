@@ -1,0 +1,74 @@
+ M .gitignore
+ M src/ACRPA.py
+ M src/mini_bar.py
+ M src/netlink/control.py
+ M src/tray.py
+ M src/ui/bg_image.py
+ M src/ui/bg_task.py
+ M src/ui/exec_bar.py
+ M src/ui/netlink/shot.py
+ M src/ui/workflow_view.py
+ M tests/_test_ui_layout.py
+ M tools/static_checks.py
+?? docs/design/UI性能与线程优化-验收清单.md
+?? tests/_test_bg_task_cancel.py
+?? tests/_test_img_resample_pick.py
+?? tests/_test_log_cbar_batch.py
+?? tools/_out/_d_small.txt
+?? tools/_out/_final_status.txt
+?? tools/_out/_g2.txt
+?? tools/_out/_g3.txt
+?? tools/_out/_g4.txt
+?? tools/_out/_g5.txt
+?? tools/_out/_git_diffstat.txt
+?? tools/_out/_git_status.txt
+?? tools/_out/_grep1.txt
+?? tools/_out/_log8.txt
+?? tools/_out/_pc_a5.txt
+?? tools/_out/_pc_a6.txt
+?? tools/_out/_pc_acrpa.txt
+?? tools/_out/_pc_all.txt
+?? tools/_out/_pc_all2.txt
+?? tools/_out/_pc_ctl.txt
+?? tools/_out/_probe_grab_thread.py
+?? tools/_out/_probe_grab_thread.txt
+?? tools/_out/_probe_img2.txt
+?? tools/_out/_probe_img_resample.py
+?? tools/_out/_probe_img_resample.txt
+?? tools/_out/_probe_wakeup.py
+?? tools/_out/_probe_wakeup.txt
+?? tools/_out/_probe_wakeup2.txt
+?? tools/_out/_regress.txt
+?? tools/_out/_regress2.txt
+?? tools/_out/_regress3.txt
+?? tools/_out/_rowidx.txt
+?? tools/_out/_static.txt
+?? tools/_out/_static2.txt
+?? tools/_out/_sync_calls.txt
+?? tools/_out/_t_cancel.txt
+?? tools/_out/_t_cancel2.txt
+?? tools/_out/_t_cbar.txt
+?? tools/_out/_t_cbar2.txt
+?? tools/_out/_t_img.txt
+?? tools/_out/_t_img2.txt
+?? tools/_out/_t_layout.txt
+?? tools/_out/_t_mini.txt
+?? tools/_out/_t_shot.txt
+?? tools/_out/_v2_pc.txt
+?? tools/_out/_v2_reg.txt
+?? tools/_out/_verify_pc.txt
+?? tools/_out/_verify_reg.txt
+warning: in the working copy of 'src/ui/netlink/shot.py', LF will be replaced by CRLF the next time Git touches it
+ .gitignore               |   2 +
+ src/ACRPA.py             |   7 +-
+ src/mini_bar.py          |  66 +++++++++++++++++-
+ src/netlink/control.py   |  67 ++++++++++++++++--
+ src/tray.py              |  15 +++-
+ src/ui/bg_image.py       |  62 +++++++++++++++--
+ src/ui/bg_task.py        |  13 ++--
+ src/ui/exec_bar.py       | 176 ++++++++++++++++++++++++++++++++++++++++++++--
+ src/ui/netlink/shot.py   | 178 +++++++++++++++++++++++++++++++++++++++++++----
+ src/ui/workflow_view.py  |  68 ++++++++++++++++--
+ tests/_test_ui_layout.py |  17 +++--
+ tools/static_checks.py   | 113 +++++++++++++++++++++++++++++-
+ 12 files changed, 735 insertions(+), 49 deletions(-)

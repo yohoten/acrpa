@@ -1,0 +1,63 @@
+649:def _debounce_cb(widget, key, ms, fn):
+2930:#   · 复用既有 `_debounce_cb` 的 120ms 去抖 (不新增无去抖的 <Configure> 绑定);
+2982:def _dpi_on_configure(event=None):
+2994:            handler = _debounce_cb(root, "dpi_watch", 120, _check_dpi_change)
+6263:    _tb_sync_debounced = _debounce_cb(toolbar_canvas, "tb_layout", 120, _tb_sync_layout)
+6315:    # 跨屏 DPI 失效钩子 (v5 §5.2 P1-12): 复用同一条既有 120ms 去抖 (`_debounce_cb`),
+6319:            root.bind("<Configure>", _dpi_on_configure, add=True)
+67:# 回退开关: BG_RESAMPLE_AUTO=False → 全部回到 Image.LANCZOS (改造前行为)。
+79:BG_RESAMPLE_AUTO = _env_flag("BG_RESAMPLE_AUTO", True)
+86:def _pick_resample(src_size, dst_size):
+100:    if not BG_RESAMPLE_AUTO or Image is None:
+211:                else src.resize(tuple(tsize), _pick_resample(src.size, tsize)))
+324:        img = img.resize((nw, nh), _pick_resample(img.size, (nw, nh)))
+349:        return img.resize((nw, nh), _pick_resample(img.size, (nw, nh)))
+594:                img = img.resize((mw, nh), _pick_resample(img.size, (mw, nh)))
+143:_MB_ICON_MAX = 32           # 应用图标最大边长
+152:#   _MB_ICON_SRC: abs_path → 已 convert("RGBA") 的源图 (同一文件绝不二次解码)
+153:#   _MB_ICON_TK : (abs_path, size) → PhotoImage (LRU 4; 尺寸档位只有几个)
+167:_MB_ICON_SRC = {}
+168:_MB_ICON_TK = {}
+169:_MB_ICON_SRC_MAX = 8
+170:_MB_ICON_TK_MAX = 4
+176:    图标尺寸 ≤ `_MB_ICON_MAX`(32 px) 属 v5 §4.1 的「小图标」行 → **保持 LANCZOS**
+181:        hit = _MB_ICON_TK.get(key)
+184:                _MB_ICON_TK.pop(key, None)
+185:                _MB_ICON_TK[key] = hit
+189:    src = _MB_ICON_SRC.get(str(path)) if _MB_ICON_CACHE else None
+194:                if len(_MB_ICON_SRC) >= _MB_ICON_SRC_MAX:
+195:                    _MB_ICON_SRC.clear()
+196:                _MB_ICON_SRC[str(path)] = src
+203:            if len(_MB_ICON_TK) >= _MB_ICON_TK_MAX:
+204:                _MB_ICON_TK.pop(next(iter(_MB_ICON_TK)), None)
+205:            _MB_ICON_TK[key] = photo
+223:    # 图标边长随「内容区高度」自适应: 内容区高 - 2px 视觉边距, 夹取 [12, _MB_ICON_MAX]。
+227:    size = max(12, min(_mb_inner_h(h) - 2, _MB_ICON_MAX))
+src\ui\exec_bar.py:676:# SHOT_ASYNC : True → 截图全链路异步 (after 替代 sleep + grab/save 走 IO 池);
+src\ui\exec_bar.py:678:SHOT_ASYNC = _env_flag("SHOT_ASYNC", True)
+src\ui\exec_bar.py:696:    if bg is not None and SHOT_ASYNC:
+src\ui\exec_bar.py:711:    v5 §4.3 时序 (开关 SHOT_ASYNC, 默认开) —— 主线程不再 sleep:
+src\ui\exec_bar.py:715:         (Windows 下 PIL ImageGrab / pyautogui 截图在子线程可用, 已实测确认);
+src\ui\exec_bar.py:719:    SHOT_ASYNC=False → 完全回到旧实现 (sleep(0.3) + 同步 grab + 同步 save)。
+src\ui\exec_bar.py:727:    if not SHOT_ASYNC:
+src\ui\exec_bar.py:840:    """旧实现 (SHOT_ASYNC=False 的回退路径): 主线程 sleep + 同步 grab/save。"""
+src\ui\workflow_view.py:75:    get_image_grab    取当前 ImageGrab 类 (流程图截图)
+src\ui\workflow_view.py:2355:    v5 §4.3 要点 4: `ImageGrab.grab` 依赖**实时屏幕坐标与画布内容**, 故坐标系仍在
+src\ui\workflow_view.py:2379:                # ImageGrab 模块句柄在主线程解析一次, 后台不再触碰 _CTX/控件
+src\ui\workflow_view.py:2386:                        raise RuntimeError("ImageGrab 不可用")
+23:# 远端截图预览: 预缩放 / 上限 / PhotoImage 复用 (v5 §4.2)
+38:SHOT_MAX_EDGE = 1600        # 预览图长边上限 (超出先缩, 解码+PhotoImage 成本降 60%+)
+39:_SHOT_TK_CACHE = {}         # (w, h, 帧长度, ts) → PhotoImage (同尺寸同帧只建一次)
+89:def _shot_pick_resample(src_size, dst_size):
+258:        self._shot_render(data_b64, width, height, nbytes, ts)
+260:    # _shot_render
+261:    def _shot_render(self, data_b64, width, height, nbytes, ts):
+279:        # 1) PIL 内嵌预览 (解码/预缩放下放 IO 池; PhotoImage 必须主线程建)
+287:        """主线程: 把 PhotoImage 贴到预览 Label (含保活与降级按钮状态复位)。"""
+324:        PhotoImage 的创建**始终在主线程** (工作线程只做 decode + resize)。
+335:            self._shot_img_apply(hit)           # 同尺寸同帧: 0 次解码/0 次 PhotoImage
+347:                img.load()                      # 明确在此处完成解码 (不留给 PhotoImage)
+352:                                 _shot_pick_resample(img.size, target))
+356:            """主线程: 建 PhotoImage (Tk 对象只能主线程), 再贴图 + 入缓存。"""
+358:                photo = ImageTk.PhotoImage(img)
+476:        """关闭截图窗口：清空 PhotoImage 引用与临时文件。"""

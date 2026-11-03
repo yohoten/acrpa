@@ -1,0 +1,8 @@
+PIL.ImageGrab 子线程: ((2560, 1600), 72.73179999901913) 
+PIL.ImageGrab 主线程: ((2560, 1600), 67.60660000145435) 
+pyautogui.screenshot 子线程: None Traceback (most recent call last):
+  File "d:\CodingEmber\ACRPA\tools\_out\_probe_grab_thread.py", line 33, in _worker
+    import pyautogui as pa
+ModuleNotFoundError: No module named 'pyautogui'
+
+判定: 子线程截图 可 可 | 用 (任一成功即可)

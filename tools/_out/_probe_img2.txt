@@ -1,0 +1,21 @@
+资源: d:\CodingEmber\ACRPA\res\bg-ac.png
+源尺寸: 256×256  目标: 1920×1080
+
+── 1. 单次缩放耗时 (ms, 7 次取中位) ──
+  LANCZOS      52.31 ms
+  BICUBIC      35.81 ms
+  BILINEAR     25.90 ms
+  BOX          21.30 ms
+  BOX / LANCZOS = 41% (越小越快)
+
+── 2. _pick_resample 实际选择 ──
+  256×256 → 1920×1080 选中: BOX
+  256×256 → 32×32   选中: LANCZOS
+
+── 3. load_bg_photo 首次/二次耗时 (ms) —— 改造前 vs 改造后 ──
+  改造前(LANCZOS): 首次    36.00 ms / 二次命中     0.17 ms
+  改造后(自动分级): 首次    27.12 ms / 二次命中     0.20 ms  (同一对象=True)
+  首次合成加速: 25% (36.00 → 27.12 ms)
+  二次命中加速: 134×
+
+结论: 算法分级生效 = True ; 首次 27.12 ms (改造前 36.00 ms) / 二次命中 0.20 ms

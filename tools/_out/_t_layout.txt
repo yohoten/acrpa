@@ -1,0 +1,78 @@
+
+== 1. 列策略: 宽度 → 可见数据列 ==
+[OK]   1a. 各断点可见列数符合设计
+[OK]   1b. 窄屏隐藏尾部参数列
+[OK]   1c. 宽屏 9 个参数列全显
+[OK]   1d. 列策略单调不减
+[OK]   1e. 640px 下总宽不再溢出最小窗口
+[OK]   1f. 逻辑列 0..9 与列名一一对应
+
+== 2. 行 tags: 配色命中 + 斑马纹 ==
+[OK]   2a. 命中命令带配色 tag
+[OK]   2b. 偶数行追加 even
+[OK]   2c. 未登记命令不挂配色 tag
+[OK]   2d. 空命令仅斑马纹
+
+== 3. 日志批量渲染: 调用次数有上界 + 顺序不变 ==
+[OK]   3a. 单批 insert 次数远小于消息数
+[OK]   3b. update_idletasks 次数远小于消息数
+[OK]   3c. see 次数远小于消息数
+[OK]   3d. 首行格式为 [▌][时间] [级别] 消息
+[OK]   3e. 1000 条全部落地
+[OK]   3f. 顺序与写入顺序一致
+[OK]   3g. 内存缓冲同步累积 (导出不受影响)
+[OK]   3h. 控件销毁后 flush 不抛异常
+
+== 4. 图例按需显示判定 ==
+[OK]   4a. 收集脚本用到的命令类型
+[OK]   4b. 空脚本 → 无命中 (整条图例可隐藏)
+[OK]   4c. 分组名拆分正确
+[OK]   4d. 图例分组容器存在 (build 期填充)
+
+== 5. 静态断言: 关键实现不被回退 ==
+[OK]   5a. 表格重建不再循环内查询 tags
+[OK]   5b. 列策略使用 displaycolumns
+[OK]   5c. <Configure> 走去抖入口
+[OK]   5d. 标题栏文案引用常量
+[OK]   5e. 背景合成改为首帧后调度
+[OK]   5f. init_fonts 调用点为「构建时 1 次 + DPI 变化钩子 1 次」
+[OK]   5f2. 构建路径内 init_fonts 仍只有一次
+[OK]   5g. 命令配色 tag 一次性预配置入口存在
+[OK]   5h. 回退开关 _TREE_AUTO_COLS / _LEGEND_AUTO / _IDLE_BG_DEFER 齐备
+[OK]   5i. 背景合成确实受 _IDLE_BG_DEFER 控制
+
+== 6. 从窗口骨架 (ui/window_shell) ==
+[OK]   6a. size 语义取 TOKENS dlg_md_*
+[OK]   6b. size 返回设计 px (不预缩放)
+[OK]   6c. 未知 size 回退 md
+[OK]   6d. 缩放口径统一: 尺寸交给 place_dialog 缩放 (不在此处 sp)
+[OK]   6e. 骨架留白走 utils.sp/token
+[OK]   6f. 骨架统一居中/钳制走 place_dialog
+[OK]   6g. dialogs 试点已套骨架
+[OK]   6h. 版本历史窗口不再硬编码 minsize
+
+== 7. 待机背景中间尺寸缓存 (P1) ==
+[OK]   7a. PIL / ui.bg_image 可用
+[OK]   7b. 背景资源可解析
+[OK]   7c. 缓存路径与旧实现逐像素一致 (900, 520) contain
+[OK]   7c. 缓存路径与旧实现逐像素一致 (200, 150) tile
+[OK]   7d. 同宽高度微调复用图块缓存
+[OK]   7e. 源图只解析一次
+[OK]   7f. clear_cache 同时清空三级缓存
+
+== 8. D 清单口径 (滚动条 8px / tooltip 400ms) ==
+[OK]   8a. TOKENS 含 sb_w=8 / sb_w_thin=6
+[OK]   8b. window_shell.sb_width() 提供统一取厚入口
+[OK]   8c. 全仓滚动条无字面量宽度 (一律 token 派生)
+[OK]   8d. ttk 滚动条样式压到 sp(sb_w)
+[OK]   8e. tooltip 统一延迟 400ms
+[OK]   8f. attach_tooltip 允许逐处覆盖延迟
+[OK]   8g. 离开/重复进入会取消待弹定时器
+[OK]   8h. 全仓无内联字族字面量 (字体走命名字体角色)
+[OK]   8i. 大号等宽数字有了字体角色 FONT_PIN
+[OK]   8j. 高度断点阈值 _LOG_BREAK_H=560 且经 sp() 换算
+[OK]   8k. 断点走单一入口 + 150ms 去抖
+[OK]   8l. log_dock 提供幂等 set_visible/is_visible
+[OK]   8m. 回退开关 _LOG_AUTO_COLLAPSE 存在
+
+=== 60 checks, FAIL=0 ===

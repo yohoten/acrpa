@@ -73,23 +73,25 @@ ACRPA 是一个**桌面自动化工具**：把操作步骤写进一张 Excel 表
 
 ## 下载
 
-> **版本口径**：当前源码为 **`0.1.30-beta`（预发布）**，构建产物尚未上传；**最近可下载的是正式版 `v0.1.29`**。
-> 预发布建议先在测试机验证再投入使用。`python_full_enabled`（Python full 权限）与 `netlink_tls`（TLS 加密）**默认关闭**。
+> **版本口径**：当前源码为 **`0.1.30-beta`（预发布）**，已发布；提供**便携版**（免安装）与 **Inno Setup 安装包**两种形态。预发布建议先在测试机验证再投入使用。`python_full_enabled`（Python full 权限）与 `netlink_tls`（TLS 加密）**默认关闭**。
 
 | 渠道 | 链接 |
 | --- | --- |
-| **GitHub**（推荐） | [Release 页面](https://github.com/yohoten/acrpa/releases/tag/v0.1.29) · 直链 [`ACRPA-v0.1.29.exe`](https://github.com/yohoten/acrpa/releases/download/v0.1.29/ACRPA-v0.1.29.exe) |
+| **GitHub**（推荐） | [Release 页面](https://github.com/yohoten/acrpa/releases/tag/v0.1.30-beta) · 直链 [`ACRPA-v0.1.30-beta.exe`](https://github.com/yohoten/acrpa/releases/download/v0.1.30-beta/ACRPA-v0.1.30-beta.exe) |
 | **Gitee** | [发行版列表](https://gitee.com/yohoten/ACRPA/releases) —— 代码与 tag 已同步，Release 附件请优先用 GitHub |
 
-**文件信息**：`ACRPA-v0.1.29.exe` · 14,987,809 字节（约 14.29 MiB）· 便携版，双击即用。
-**SHA-256**：`e230d1950b8877ebbdd3025d83e705f9e007f829b34af22020e842c2fe3e2185`（已回填 [`VERSION`](VERSION) 第 3 行）
+**文件信息**：
+- 便携版 `ACRPA-v0.1.30-beta.exe` · 15,587,728 字节（约 14.87 MiB）· 免安装，双击即用。
+- 安装包 `ACRPA-v0.1.30-beta-setup.exe` · 42,214,568 字节（约 40.26 MiB）· Inno Setup 生成，含开始菜单 / 桌面快捷方式。
+
+**SHA-256**：`3f859af10bda57653d3c94381010fe5a41845d3b6a4145fb6e59056799a92b82`（便携版，已回填 [`VERSION`](VERSION) 第 3 行）
 
 ```bat
-certutil -hashfile "ACRPA-v0.1.29.exe" SHA256
+certutil -hashfile "ACRPA-v0.1.30-beta.exe" SHA256
 ```
 
 ```powershell
-Get-FileHash .\ACRPA-v0.1.29.exe -Algorithm SHA256
+Get-FileHash .\ACRPA-v0.1.30-beta.exe -Algorithm SHA256
 ```
 
 首次运行如遇 SmartScreen 提示：**更多信息 → 仍要运行**（构建未做代码签名）。
@@ -728,16 +730,17 @@ NetLink（UDP 发现 / TCP 控制 / 远程截图 / 脚本分发 / 只读面板�
 ## 更新日志
 
 <details open>
-<summary><b>v0.1.30-beta（2026-10-31 · 预发布）</b> —— <code>热键</code> 扩展到 2–4 键组合</summary>
+<summary><b>v0.1.30-beta（2026-11-06 · 预发布）</b> —— 工作流执行语义 + 可观测性 + AI 深化</summary>
 
-本版聚焦脚本编辑：`热键` 由「只支持 2 个按键」扩展为「支持 2–4 个按键」，并同步录制器、扩展 API、AI 生成提示词与脚本编辑模板，同时修掉几处历史遗留的静默失败与组合键解析丢键问题。**脚本列结构未变，旧脚本与旧 Excel 无需修改。**
+本版为工作流与 AI 能力的集中增强：工作流新增 `retry` 重试 / `rollback` 失败补偿 / `workflow` 子工作流引用 / `parallel` 真并行四类执行语义，补齐**版本历史 / 撤销重做**，失败现场从「只落盘」升级为「只读查看 + 两次运行对比」；AI 生成接入**流式输出 + token 记账 + 结果缓存**，支持**自然语言生成工作流图**，全链路统一 `run_id`。脚本列结构未变，旧脚本 / 旧工作流 / 旧 Excel 无需修改。
 
-1. **`热键` 支持 2–4 键**：`按键1, 按键2, 按键3(可选), 按键4(可选)`，例如 `热键,ctrl,shift,alt,a`。参数 3/4 不填时行为与旧版完全一致（按序按下、逆序释放）。
-2. **录制器支持多修饰键**：依次按 Ctrl → Shift → Alt → A 会录出 `热键,ctrl,shift,alt,A`，修饰键按首次按下顺序记录；键盘钩子与轮询两条路径均已同步。
-3. **扩展 API 与 AI 提示词**：`key_press()` 支持任意段数组合键（>4 段截断并告警，<2 段直接失败）；AI 生成提示词补充三键示例。
-4. **修复**：参数不足不再静默成功（执行前校验并报错）；旧录制格式 `热键,ctrl,s,1,0.1` 自动识别并告警；修复 `key_press("ctrl++")` 末尾 `+` 被丢弃。
+1. **工作流执行语义**：新增 `retry`（失败退避重试）、`rollback`（`on_error_rollback` 失败补偿）、`workflow`（子工作流引用，带循环引用检测与深度上限）；`parallel` 改为真并行（分支变量隔离 + `outputs` 按定义顺序确定性合并）。
+2. **工作流编辑体验**：版本历史（保存自动存档，可查看 / 恢复 / 对比）；撤销 / 重做（快照栈 + `Ctrl+Z` / `Ctrl+Shift+Z` / 工具栏按钮）。
+3. **可观测性**：统一 `run_id` 贯穿文件日志 / `history.jsonl` / 失败现场 / CLI JSON 报告四条通道；失败现场只读查看 + 两次运行变量 diff 与截图对比（不重跑）。
+4. **AI 深化**：SSE 流式输出；token 记账 / 结果缓存 / 失败退避；自然语言生成工作流图（经 `flow_graph` 静态检查兜底）；工作流「AI 生成」复用脚本侧对话式面板。
+5. **修复**：工作流「AI 生成」按钮点击即崩（`NameError`）；AI 面板关闭后残留滚轮绑定崩溃。
 
-**已知限制**：大写字母组合键在部分键盘布局下待实机验证；旧格式识别依赖「参数3=`1` 且参数4=`0.1`」特征。本版构建**未做代码签名**。
+**已知限制**：本轮不做 function-calling 工具闭环；失败现场只读、不做一键重跑；构建**未做代码签名**（SmartScreen 选「更多信息 → 仍要运行」）。
 
 </details>
 

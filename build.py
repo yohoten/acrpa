@@ -4,6 +4,8 @@ ACRPA 精简打包脚本 — 最小化 EXE 体积 (红线: <300 MB)
   python build.py              → 单文件 EXE（发布用）
   python build.py --clean      → 清理 + 打包
   python build.py --dir        → 文件夹模式（调试用）
+  python build.py --sfx        → 文件夹模式 + 7z 自解压
+  python build.py --inno       → 文件夹模式 + Inno Setup 安装包（发布用）
   python build.py --console    → 显示控制台（调试用）
 """
 import os, sys, shutil, subprocess
@@ -58,6 +60,14 @@ _7Z_PATHS = [
     r"C:\Program Files\7-Zip\7z.exe",
     r"C:\Program Files (x86)\7-Zip\7z.exe",
     os.path.join(BASE, "7z.exe"),
+]
+
+# Inno Setup 编译器检测
+_INNO_PATHS = [
+    r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+    r"C:\Program Files\Inno Setup 6\ISCC.exe",
+    r"C:\Program Files (x86)\Inno Setup 5\ISCC.exe",
+    r"C:\Program Files\Inno Setup 5\ISCC.exe",
 ]
 
 # ── 项目模块 (全部纳入) ──
@@ -312,6 +322,13 @@ def find_7z():
             return p
     return None
 
+def find_iscc():
+    """查找 Inno Setup 编译器 ISCC.exe 路径。"""
+    for p in _INNO_PATHS:
+        if os.path.isfile(p):
+            return p
+    return shutil.which("ISCC.exe") or shutil.which("ISCC")
+
 def check_pyinstaller():
     try:
         import PyInstaller
@@ -479,12 +496,111 @@ def build_sfx():
         total_raw, sfx_mb, (1 - sfx_mb / total_raw) * 100))
     return 0
 
+def build_inno():
+    """使用 Inno Setup 将 onedir 文件夹打包为安装程序 EXE。"""
+    iscc = find_iscc()
+    if not iscc:
+        print("[SKIP] 未找到 Inno Setup (ISCC.exe)，跳过安装包构建")
+        print("  下载: https://jrsoftware.org/isinfo.php")
+        return 1
+
+    onedir_path = os.path.join(DIST, APP)
+    if not os.path.isdir(onedir_path):
+        print("[FAIL] 未找到 {}，请先运行 --dir 构建".format(onedir_path))
+        return 1
+
+    exe_name = "{}.exe".format(APP)
+    # VersionInfoVersion 要求纯数字 X.Y.Z.W; AppVersion 允许带 -beta 后缀
+    ver_num = (_VER.split("-")[0].split("+")[0]) if _VER else "0.0.0"
+    ver_parts = [p for p in ver_num.split(".") if p != ""][:4]
+    while len(ver_parts) < 4:
+        ver_parts.append("0")
+    ver_info = ".".join(ver_parts[:4])
+
+    # 稳定 AppId: 同一应用升级/卸载共用同一 GUID (纯 GUID, 不含花括号)
+    app_id = "1B7C2D4E-9F3A-4C5B-8E6D-7A2B3C4D5E6F"
+    output_base = "ACRPA-v{}-setup".format(_VER)
+    iss_path = os.path.join(BASE, "build", "acrpa-setup.iss")
+    os.makedirs(os.path.dirname(iss_path), exist_ok=True)
+
+    iss = (
+        '#define MyAppName "ACRPA"\n'
+        '#define MyAppVersion "@@VER@@"\n'
+        '#define MyAppPublisher "ACRPA"\n'
+        '#define MyAppExeName "@@EXE@@"\n'
+        "\n"
+        "[Setup]\n"
+        "AppId=@@APP_ID@@\n"
+        "AppName={#MyAppName}\n"
+        "AppVersion={#MyAppVersion}\n"
+        "AppPublisher={#MyAppPublisher}\n"
+        "DefaultDirName={userpf}\\{#MyAppName}\n"
+        "DefaultGroupName={#MyAppName}\n"
+        "OutputDir=@@OUT_DIR@@\n"
+        "OutputBaseFilename=@@OUT_BASE@@\n"
+        "SetupIconFile=@@ICON@@\n"
+        "Compression=lzma2/max\n"
+        "SolidCompression=yes\n"
+        "WizardStyle=modern\n"
+        "PrivilegesRequired=lowest\n"
+        "VersionInfoVersion=@@VER_INFO@@\n"
+        "UninstallDisplayName={#MyAppName}\n"
+        "\n"
+        "[Tasks]\n"
+        'Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; '
+        'GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked\n'
+        "\n"
+        "[Files]\n"
+        'Source: "@@ONEDIR@@\\*"; DestDir: "{app}"; '
+        "Flags: ignoreversion recursesubdirs createallsubdirs\n"
+        "\n"
+        "[Icons]\n"
+        'Name: "{group}\\{#MyAppName}"; Filename: "{app}\\{#MyAppExeName}"\n'
+        'Name: "{autodesktop}\\{#MyAppName}"; Filename: "{app}\\{#MyAppExeName}"; '
+        "Tasks: desktopicon\n"
+        "\n"
+        "[Run]\n"
+        'Filename: "{app}\\{#MyAppExeName}"; '
+        "Description: \"{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}\"; "
+        "Flags: nowait postinstall skipifsilent\n"
+    )
+
+    for token, val in (
+        ("@@VER@@", _VER),
+        ("@@EXE@@", exe_name),
+        ("@@APP_ID@@", app_id),
+        ("@@OUT_DIR@@", DIST),
+        ("@@OUT_BASE@@", output_base),
+        ("@@ICON@@", ICON),
+        ("@@VER_INFO@@", ver_info),
+        ("@@ONEDIR@@", onedir_path),
+    ):
+        iss = iss.replace(token, str(val))
+
+    with open(iss_path, "w", encoding="utf-8") as f:
+        f.write(iss)
+
+    print("\n[Inno] 编译安装程序 (ISCC: {})".format(iscc))
+    r = subprocess.run([iscc, iss_path], cwd=BASE)
+    if r.returncode != 0:
+        print("\n[FAIL] Inno Setup 编译失败，返回码: {}".format(r.returncode))
+        return 1
+
+    setup_path = os.path.join(DIST, output_base + ".exe")
+    if os.path.isfile(setup_path):
+        size_mb = os.path.getsize(setup_path) / (1024.0 * 1024.0)
+        print("\n[OK] {} ({:.1f} MB)".format(setup_path, size_mb))
+        return 0
+    print("\n[WARN] 未找到安装程序产物: {}".format(setup_path))
+    return 1
+
 if __name__ == "__main__":
     import argparse
     p = argparse.ArgumentParser(description="ACRPA 精简打包")
     p.add_argument("--clean", action="store_true", help="清理缓存")
     p.add_argument("--dir", action="store_true", help="文件夹模式")
     p.add_argument("--sfx", action="store_true", help="文件夹模式 + 7z 自解压 (需安装 7-Zip)")
+    p.add_argument("--inno", action="store_true", help="文件夹模式 + Inno Setup 安装包 (需安装 Inno Setup 6)")
     p.add_argument("--console", action="store_true", help="显示控制台")
     args = p.parse_args()
 
@@ -492,6 +608,11 @@ if __name__ == "__main__":
         ret = build(onefile=False, console=args.console, clean_first=args.clean)
         if ret == 0:
             sys.exit(build_sfx())
+        sys.exit(ret)
+    elif args.inno:
+        ret = build(onefile=False, console=args.console, clean_first=args.clean)
+        if ret == 0:
+            sys.exit(build_inno())
         sys.exit(ret)
     else:
         sys.exit(build(onefile=not args.dir, console=args.console, clean_first=args.clean))

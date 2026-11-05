@@ -917,7 +917,7 @@
         <a class="btn btn-ghost" href="#screenshots">▶ See it in action</a>
         <a class="btn btn-ghost" href="#contact">💬 Join the community</a>
       </div>
-      <p style="font-size:12.5px;color:var(--dim);margin:-10px 0 22px">Latest: <span data-ver></span> (pre-release) · <span data-asset></span> · 13.4 MiB · SHA-256 473f1db3…06d54</p>
+      <p style="font-size:12.5px;color:var(--dim);margin:-10px 0 22px">Latest: <span data-ver></span> (pre-release) · <span data-asset></span> · 14.9 MiB · SHA-256 3f859af1…92b82</p>
       <div class="hero-trust">
         <span class="badge-free">✔ Completely free · MIT open source</span>
         <span class="badge-free">✔ Portable &amp; efficient · unzip and run, no installation</span>
@@ -982,7 +982,7 @@
         <a class="dl-card dl-card-primary" href="https://github.com/yohoten/acrpa/releases" data-download target="_blank" rel="noopener noreferrer">
           <span class="dl-badge">Recommended</span>
           <span class="dl-card-head"><span class="gi">⬇</span> Direct download <span class="dl-arrow">↓</span></span>
-          <small>GitHub Release direct link · <span data-asset></span> · 13.4 MiB · unzip &amp; run</small>
+          <small>GitHub Release direct link · <span data-asset></span> · 14.9 MiB · unzip &amp; run</small>
         </a>
         <a class="dl-card" href="https://github.com/yohoten/acrpa/releases" target="_blank" rel="noopener noreferrer">
           <span class="dl-card-head"><span class="gi">⌥</span> GitHub Releases <span class="dl-arrow">↓</span></span>
@@ -997,7 +997,7 @@
           <small>Alternative mirror · released in sync with the main repo</small>
         </a>
       </div>
-      <p class="dl-foot">SHA-256 473f1db3…06d54 · verify the checksum after download</p>
+      <p class="dl-foot">SHA-256 3f859af1…92b82 · verify the checksum after download</p>
     </div>
   </div>
 </div>
@@ -1532,7 +1532,9 @@
       <p class="sec-desc">Continuous iteration, recently focused on the update mechanism, workflow orchestration, AI enhancement and stability. See <a class="doc-link" href="https://github.com/yohoten/acrpa/releases" target="_blank" rel="noopener">GitHub Releases →</a> for the full history.</p>
     </div>
     <div class="timeline is-collapsed" id="timeline">
-      <div class="tl-item reveal"><div class="tl-ver" data-ver></div><div class="tl-date" data-date></div><p>Rebuilt on the v0.1.25 baseline to fix the unstable wiring introduced in v0.1.26: an undefined <code>_update_pending</code> made <code>_periodic</code> throw a <code>NameError</code> every 100 ms, which broke the status-bar and execution-progress refresh path and prevented the update flag from being set; and an unimported <code>show_update_dialog</code> made the status-bar update entry point dead on click. All v0.1.26 improvements are retained: the reworked update mechanism (multi-source fallback / semantic version comparison / sha256 verification / one-click restart self-update for the portable build / fixed version source for the packaged build), engine-level command failure semantics with workflow error propagation, and the release toolchain with build assets under management.</p></div>
+      <div class="tl-item reveal"><div class="tl-ver" data-ver></div><div class="tl-date" data-date></div><p>Focused enhancement of workflow and AI capabilities: four new execution semantics — <code>retry</code> retry / <code>rollback</code> failure compensation / <code>workflow</code> sub-flow references / true-parallel <code>parallel</code> execution; workflow version history and undo/redo; failure context upgraded to a read-only viewer with two-run comparison; AI generation now streams output with token accounting and result caching, and can generate workflow diagrams from natural language; a unified <code>run_id</code> across all channels. The script column structure is unchanged — old scripts, workflows and spreadsheets need no changes.</p></div>
+      <div class="tl-item reveal"><div class="tl-ver">v0.1.29</div><div class="tl-date">2026-10-07</div><p>UI polish (expanded palette / flat buttons with focus rings / log-level badges); a persistent bottom log panel with an execution control toolbar; settings window refinements and an OCR status line; optional PaddleOCR.dll native OCR backend; a single source of truth for AI key availability and normalized AI generation; version number shown in the window title.</p></div>
+      <div class="tl-item reveal"><div class="tl-ver">v0.1.27</div><div class="tl-date">2026-09-13</div><p>Rebuilt on the v0.1.25 baseline to fix the unstable wiring introduced in v0.1.26: an undefined <code>_update_pending</code> made <code>_periodic</code> throw a <code>NameError</code> every 100 ms, which broke the status-bar and execution-progress refresh path and prevented the update flag from being set; and an unimported <code>show_update_dialog</code> made the status-bar update entry point dead on click. All v0.1.26 improvements are retained: the reworked update mechanism (multi-source fallback / semantic version comparison / sha256 verification / one-click restart self-update for the portable build / fixed version source for the packaged build), engine-level command failure semantics with workflow error propagation, and the release toolchain with build assets under management.</p></div>
       <div class="tl-item reveal"><div class="tl-ver">v0.1.26</div><div class="tl-date">2026-09-13</div><p>Update mechanism reworked: fixed the distorted version number after packaging (the EXE always reported an old version, breaking update checks and the About page entirely). Update checks now use multi-source fallback (GitHub Releases → raw manifest → CDN mirror) and return as soon as one source works; if a source reports a version that is not new enough, the remaining sources are probed and the highest is taken, so a stale mirror cache or a network glitch no longer yields a false "already up to date". Version comparison handles the v prefix, uneven segment counts and pre-release suffixes. Network transport is dual-stack (requests → system certificate store), fixing silent failures behind corporate TLS interception. Downloads retry multiple candidate direct links one by one, stream progress, verify sha256 and size, and re-check the VERSION inside the package, switching source automatically when a mirror serves an old package. A new in-app update window and one-click restart self-update for the portable build replace only the main program and VERSION — config, scripts, templates and logs are never touched. Also fixed "command failure silently reported as success" together with the broken <code>stop_on_error</code> and retry behaviour.</p></div>
       <div class="tl-item reveal"><div class="tl-ver">v0.1.25</div><div class="tl-date">2026-08-10</div><p>Deep customization of the Workflow tab: categorized action tree with search and recent items; new command / variable / loop / log nodes sharing one configuration form, with right-click copy / paste / disable / comment; control over outer loop count and maximum execution time; execution highlighting and variable management; centrally managed version numbers.</p></div>
       <div class="tl-item reveal"><div class="tl-ver">v0.1.24</div><div class="tl-date">2026-08-09</div><p>New Advanced Settings page (maximum execution time / globally bound window / recording mode / OCR backend / headless browser and more); every settings card gets its own "Apply ✓"; the model dropdown now uses a unified registry (DeepSeek / Qwen / GPT / Claude); fixed the DD DLL path not taking effect and the wrong Claude endpoint mapping.</p></div>
@@ -1964,9 +1966,9 @@
      snapshot on the site side at release time.
      The two language pages each keep their own single source and do not share. */
   var ACRPA_RELEASE = {
-    version: "0.1.29",           // SINGLE source of truth: version for display (may include a pre-release suffix)
-    date: "2026-10-07",          // release date
-    tag: "",                     // explicit override: empty -> derived as "v"+version (this release: v0.1.29)
+    version: "0.1.30-beta",      // SINGLE source of truth: version for display (may include a pre-release suffix)
+    date: "2026-11-06",          // release date
+    tag: "",                     // explicit override: empty -> derived as "v"+version (this release: v0.1.30-beta)
     ghUser: "yohoten",
     ghRepo: "acrpa"
   };

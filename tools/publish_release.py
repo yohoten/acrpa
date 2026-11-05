@@ -261,7 +261,9 @@ def _report(repo, token, tag, name):
 def main():
     ap = argparse.ArgumentParser(description="ACRPA 发布助手")
     ap.add_argument("--repo", default=DEFAULT_REPO, help="owner/repo (缺省 {})".format(DEFAULT_REPO))
-    ap.add_argument("--asset", help="要上传的发布包 (缺省 dist/ACRPA.zip)")
+    ap.add_argument("--asset", action="append", dest="assets",
+                    help="要上传的发布包 (可多次指定; 缺省 dist/ACRPA.zip; "
+                         "首个须与 VERSION 直链末段一致)")
     ap.add_argument("--exe", action="store_true", help="同时上传独立 EXE")
     ap.add_argument("--dry-run", action="store_true", help="只打印动作")
     ap.add_argument("--recreate", action="store_true",
@@ -282,19 +284,31 @@ def main():
 
     version = read_version()
     tag = manifest_tag() or "v{}".format(version)
-    asset = args.asset or os.path.join(DIST, "ACRPA.zip")
+    assets = args.assets or [os.path.join(DIST, "ACRPA.zip")]
     body, body_path = read_body(tag, version)
 
-    if not os.path.exists(asset):
-        print("[FAIL] 找不到发布包 {}, 请先运行 tools/make_release.py".format(asset),
-              file=sys.stderr)
+    missing = [a for a in assets if not os.path.exists(a)]
+    if missing:
+        print("[FAIL] 找不到发布包 {}，请先运行 tools/make_release.py".format(
+            ", ".join(missing)), file=sys.stderr)
         return 1
 
-    size = os.path.getsize(asset)
-    name = os.path.basename(asset)
+    # 构建待上传清单: 首个为「主附件」(其文件名必须与 VERSION 直链末段一致)，
+    # 其余为附加附件 (安装包等)。--exe 追加历史命名的独立 EXE。
+    targets = [(a, os.path.basename(a)) for a in assets]
+    if args.exe:
+        exe = os.path.join(DIST, "ACRPA v{}.exe".format(version))
+        if os.path.exists(exe):
+            targets.append((exe, "ACRPA.v{}.exe".format(version)))
+        else:
+            print("[WARN] 未找到 {} , 跳过独立 EXE".format(exe))
+
+    name = os.path.basename(targets[0][0])
+    size = os.path.getsize(targets[0][0])
     print("仓库   : {}".format(args.repo))
     print("tag    : {}".format(tag))
-    print("发布包 : {} ({:.1f} MB)".format(name, size / (1024 * 1024)))
+    for p, n in targets:
+        print("发布包 : {:<30} {:.1f} MB".format(n, os.path.getsize(p) / (1024 * 1024)))
     print("预发布 : {}".format("是 (Pre-release)" if args.prerelease else "否 (正式版)"))
     print("正文   : {}".format(os.path.relpath(body_path, BASE) if body_path
                               else "(无本地正文, 用占位说明)"))
@@ -321,11 +335,10 @@ def main():
         print("  1. GET  /repos/{}/releases/tags/{}".format(args.repo, tag))
         print("  2. 不存在则 POST 建【草稿】Release; 已存在且已发布则{}".format(
             "删除重建 (--recreate)" if args.recreate else "报错提示需要 --recreate"))
-        print("  3. 上传 {} (同名附件先删除, 否则会被改名为 ACRPA-1.zip 而使直链 404)".format(name))
-        if args.exe:
-            print("  4. 上传独立 EXE")
-        print("  {}. PATCH 草稿 → 已发布{}".format(
-            5 if args.exe else 4, " (已指定 --keep-draft, 跳过)" if args.keep_draft else ""))
+        print("  3. 上传 {} (同名附件先删除, 否则会被改名为 ACRPA-1.zip 而使直链 404)".format(
+            ", ".join(n for _, n in targets)))
+        print("  4. PATCH 草稿 → 已发布{}".format(
+            " (已指定 --keep-draft, 跳过)" if args.keep_draft else ""))
         print("\n  注: 本仓库启用了 release 不可变, 附件必须在【草稿阶段】上传。")
         return 0
 
@@ -333,10 +346,7 @@ def main():
     ok, rel, why = api("GET", "/repos/{}/releases/tags/{}".format(args.repo, tag), token)
     exists = bool(ok and isinstance(rel, dict) and rel.get("id"))
 
-    need_names = {name}
-    want_exe = os.path.join(DIST, "ACRPA v{}.exe".format(version))
-    if args.exe and os.path.exists(want_exe):
-        need_names.add("ACRPA.v{}.exe".format(version))
+    need_names = {n for _, n in targets}
 
     if exists and not rel.get("draft"):
         have = {a.get("name") for a in (rel.get("assets") or [])}
@@ -387,14 +397,6 @@ def main():
     upload_url = upload_url.split("{")[0]
 
     # 2. 上传 (同名先删, 否则 GitHub 会改名成 ACRPA-1.zip, 直链随即 404)
-    targets = [(asset, name)]
-    if args.exe:
-        exe = os.path.join(DIST, "ACRPA v{}.exe".format(version))
-        if os.path.exists(exe):
-            targets.append((exe, "ACRPA.v{}.exe".format(version)))
-        else:
-            print("[WARN] 未找到 {} , 跳过独立 EXE".format(exe))
-
     existing = {a.get("name"): (a.get("id"), a.get("size"))
                 for a in (rel.get("assets") or [])}
     for path, aname in targets:

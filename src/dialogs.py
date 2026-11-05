@@ -875,6 +875,17 @@ def open_failure_viewer():
 # ======================================================================
 # AI 脚本生成器
 # ======================================================================
+# 工作流 AI 生成的建议提示词 (与脚本侧 AI_QUICK_PROMPTS 对齐的轻量版)
+_WF_AI_QUICK_PROMPTS = {
+    "自动归档文件": "把指定文件夹里的文件按扩展名归档到不同子文件夹，完成后输出日志",
+    "网页数据抓取": "打开网页抓取表格数据，写入变量并记录日志",
+    "定时签到": "每天打开指定网页，点击签到按钮，截图保存结果",
+    "并行批量处理": "并行处理多个文件，各自独立，最后汇总结果",
+    "失败重试": "执行一个可能失败的操作，失败时等待后重试最多 3 次",
+    "条件分支": "判断某个变量，满足条件执行 A，否则执行 B",
+}
+
+
 def _wf_step_summary(s):
     """单行工作流步骤摘要 (AI 工作流生成结果卡片用)。"""
     if not isinstance(s, dict):
@@ -1010,7 +1021,12 @@ def open_ai_panel(mode="script", on_workflow_import=None):
 
     # 鼠标滚轮滚动对话流
     def _on_chat_wheel(event):
-        chat_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        # 对话框关闭后, 全局 <MouseWheel> 绑定可能残留触发; 画布已销毁时静默忽略
+        try:
+            if chat_canvas.winfo_exists():
+                chat_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        except tkinter.TclError:
+            pass
     chat_canvas.bind("<MouseWheel>", _on_chat_wheel)
     # 鼠标进入对话区时绑定滚轮 (防止被其他控件抢走)
     def _on_chat_enter(event):
@@ -1251,10 +1267,20 @@ def open_ai_panel(mode="script", on_workflow_import=None):
 
     # ── 欢迎消息 + 建议提示词 ──
     def _add_welcome():
-        _add_message("ai",
-            "你好！我是 ACRPA AI 脚本助手。\n\n"
-            "用自然语言描述你想要实现的自动化操作，我会生成对应的 RPA 脚本。\n\n"
-            "你可以试试下方的建议示例，或者直接输入你的需求。")
+        if _is_workflow:
+            _add_message("ai",
+                "你好！我是 ACRPA AI 工作流助手。\n\n"
+                "用自然语言描述你要自动化的流程，我会生成对应的工作流图"
+                "（脚本 / 命令 / 变量 / 并行 / 重试 / 子工作流等步骤）。\n\n"
+                "你可以试试下方的建议示例，或者直接输入你的需求。")
+            _quick_prompts = _WF_AI_QUICK_PROMPTS
+        else:
+            _add_message("ai",
+                "你好！我是 ACRPA AI 脚本助手。\n\n"
+                "用自然语言描述你想要实现的自动化操作，我会生成对应的 RPA 脚本。\n\n"
+                "你可以试试下方的建议示例，或者直接输入你的需求。")
+            from templates import AI_QUICK_PROMPTS
+            _quick_prompts = AI_QUICK_PROMPTS
 
         # 建议提示词卡片
         suggest_frame = tkinter.Frame(chat_inner, bg=C["bg"])
@@ -1264,12 +1290,11 @@ def open_ai_panel(mode="script", on_workflow_import=None):
         tkinter.Label(suggest_frame, text="💡 建议试试:", font=FONT_SMALL,
             bg=C["bg"], fg=C["fgm"]).pack(anchor="w", padx=sp("gap_tight"), pady=(0, sp("gap_tight")))
 
-        from templates import AI_QUICK_PROMPTS
         suggestions_frame = tkinter.Frame(suggest_frame, bg=C["bg"])
         suggestions_frame.pack(fill="x", padx=sp("gap_tight"))
 
         # 两列布局展示建议
-        names = list(AI_QUICK_PROMPTS.keys())[:8]
+        names = list(_quick_prompts.keys())[:8]
         for i, name in enumerate(names):
             row = i // 2
             col = i % 2
@@ -1278,7 +1303,7 @@ def open_ai_panel(mode="script", on_workflow_import=None):
                 activebackground=C["acl"], activeforeground=C["ach"],
                 highlightbackground=C["bd"], highlightthickness=1,
                 padx=sp("gap"), pady=sp("gap_tight"), anchor="w",
-                command=lambda n=name: _use_suggestion(AI_QUICK_PROMPTS[n]))
+                command=lambda n=name: _use_suggestion(_quick_prompts[n]))
             chip.grid(row=row, column=col, sticky="ew", padx=(0, sp("gap_tight")) if col == 0 else (sp("gap_tight"), 0),
                       pady=sp("gap_tight"))
             _ui_theme.set_role(chip, "ac")
@@ -1331,13 +1356,16 @@ def open_ai_panel(mode="script", on_workflow_import=None):
     hint_frame = tkinter.Frame(input_bar, bg=C["surface_alt"])
     _ui_theme.set_role(hint_frame, "surface_alt")
     hint_frame.grid(row=1, column=0, sticky="ew")
-    hint_var = tkinter.StringVar(value=" Enter 发送 · Ctrl+Enter 强制发送 · 输入操作描述生成 RPA 脚本")
+    hint_var = tkinter.StringVar(value=(
+        " Enter 发送 · Ctrl+Enter 强制发送 · 输入流程描述生成工作流图" if _is_workflow
+        else " Enter 发送 · Ctrl+Enter 强制发送 · 输入操作描述生成 RPA 脚本"))
     tkinter.Label(hint_frame, textvariable=hint_var,
         font=FONT_TINY, bg=C["surface_alt"], fg=C["fgm"]).pack(anchor="w", padx=sp("gap"), pady=sp("gap_tight"))
 
     # ── 输入框交互 ──
     _placeholder_active = [True]
-    _PH_TEXT = "描述你要实现的自动化操作..."
+    _PH_TEXT = ("描述你要自动化的流程..." if _is_workflow
+                else "描述你要实现的自动化操作...")
 
     def _show_placeholder():
         prompt_entry.delete("1.0", "end")
@@ -1419,7 +1447,8 @@ def open_ai_panel(mode="script", on_workflow_import=None):
         # AI "正在思考" 占位消息
         _is_generating[0] = True
         send_btn.config(state="disabled", text="思考中...")
-        hint_var.set(" AI 正在生成脚本, 请稍候... (模型: {})".format(_model_name))
+        hint_var.set((" AI 正在生成工作流, 请稍候... (模型: {})" if _is_workflow
+                      else " AI 正在生成脚本, 请稍候... (模型: {})").format(_model_name))
 
         # 思考动画消息
         thinking_frame = tkinter.Frame(chat_inner, bg=C["bg"])
@@ -1456,6 +1485,40 @@ def open_ai_panel(mode="script", on_workflow_import=None):
 
         def _generate_thread():
             try:
+                if _is_workflow:
+                    from ai_client import (create_client_active,
+                                           generate_workflow_from_text,
+                                           APIError, APIAuthError, APIRateLimitError,
+                                           APITimeoutError)
+                    client = create_client_active()
+
+                    # 流式展示: 逐段更新思考占位标签 (尾部预览)
+                    _streamed = []
+                    def _on_delta(chunk):
+                        _streamed.append(chunk)
+                        tail = "".join(_streamed)[-64:].replace("\n", " ")
+                        try:
+                            dlg.after(0, lambda t=tail: thinking_lbl.configure(
+                                text="⧗ 生成中… " + t))
+                        except Exception:
+                            pass
+
+                    wf_data, wf_issues = generate_workflow_from_text(
+                        client, user_input, resolve_model(), on_delta=_on_delta)
+
+                    def _on_success():
+                        _remove_thinking()
+                        _is_generating[0] = False
+                        send_btn.config(state="normal", text="发送")
+                        hint_var.set(" ✔ 生成成功 · Enter 发送 · Ctrl+Enter 强制发送")
+                        _add_message("ai",
+                            "已为你生成工作流图 ({} 步骤)。\n"
+                            "请查看下方卡片, 点击「导入工作流」载入编辑器。".format(
+                                len(wf_data.get("steps", []))),
+                            workflow_data=(wf_data, wf_issues))
+                    dlg.after(0, _on_success)
+                    return
+
                 from ai_client import (create_client_active,
                                        generate_script_content,
                                        APIError, APIAuthError, APIRateLimitError,
@@ -1615,6 +1678,22 @@ def open_ai_panel(mode="script", on_workflow_import=None):
 
         except Exception as e:
             messagebox.showerror("导入失败", "解析脚本时出错:\n{}".format(e))
+            show_toast(root, "导入失败: {}".format(e), "error")
+
+    # ── 工作流导入逻辑 (回调注入, 与脚本「插入表格」保持一致的地位) ──
+    def _import_workflow(wf_data, issues):
+        if on_workflow_import is None:
+            show_toast(root, "当前编辑器不支持导入工作流", "warning")
+            return
+        try:
+            on_workflow_import(wf_data, issues)
+            n = len(wf_data.get("steps", []))
+            msg = "✔ 已导入工作流「{}」({} 步骤)".format(
+                wf_data.get("name", ""), n)
+            show_toast(root, msg, "success")
+            _add_message("system", msg)
+        except Exception as e:
+            messagebox.showerror("导入失败", "导入工作流时出错:\n{}".format(e))
             show_toast(root, "导入失败: {}".format(e), "error")
 
     # ── 初始化: 显示欢迎消息 + 建议提示词 ──

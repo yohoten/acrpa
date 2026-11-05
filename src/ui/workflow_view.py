@@ -2193,136 +2193,35 @@ def _wf_step_label(s):
 
 
 def _wf_ai_generate():
-    """自然语言 → 工作流图 (流式展示 + flow_graph 静态校验兜底)。"""
-    import tkinter as _tk
-    top = _tk.Toplevel()
-    top.title("AI 生成工作流")
-    top.configure(bg=C["bgc"])
-    top.transient(_window if "_window" in globals() else None)
-    sp = _CTX.get("sp") or (lambda v: v)
+    """自然语言 → 工作流图。
 
-    _tk.Label(top, text="用一句话描述你想自动化的流程:", bg=C["bgc"], fg=C["fgt"],
-        font=FONT_BODY).pack(padx=sp(8), pady=(sp(8), 2))
-    desc = _tk.Text(top, width=60, height=4, font=FONT_BODY, bg=C["ebg"],
-        fg=C["fgb"], insertbackground=C["fgt"])
-    desc.pack(padx=sp(8), pady=sp(2))
+    直接复用脚本编辑器同款对话式 AI 面板 (dialogs.open_ai_panel), 仅把
+    mode 切到 "workflow"、并注入导入回调, 保证两处「AI 生成」按钮体验一致:
+    同一套流式展示 / API Key 检查 / 模型选择 / 错误处理 / 建议提示词。
+    """
+    try:
+        from dialogs import open_ai_panel
+    except Exception as e:
+        _toast("打开 AI 生成面板失败: {}".format(e), "error")
+        return
+    open_ai_panel(mode="workflow", on_workflow_import=_wf_ai_import_result)
 
-    status = _tk.StringVar(value="准备就绪")
-    _tk.Label(top, textvariable=status, bg=C["bgc"], fg=C["fgm"],
-        font=FONT_SMALL).pack(padx=sp(8), pady=sp(2))
 
-    preview = _tk.Text(top, width=60, height=8, font=FONT_BODY, bg=C["ebg"],
-        fg=C["fgb"], insertbackground=C["fgt"])
-    preview.pack(padx=sp(8), pady=sp(2), fill="both", expand=True)
-    preview.insert("1.0", "生成的工作流步骤将在这里预览...")
-    preview.configure(state="disabled")
-
-    btn_frame = _tk.Frame(top, bg=C["bgc"])
-    btn_frame.pack(pady=sp(4))
-    gen_btn = _wf_btn(btn_frame, "生成", "ac", command=None, font=FONT_BODY)
-    gen_btn.pack(side="left", padx=2)
-    import_btn = _wf_btn(btn_frame, "导入工作流", "ac", command=None, font=FONT_BODY)
-    import_btn.pack(side="left", padx=2)
-    import_btn.config(state="disabled")
-    _wf_btn(btn_frame, "关闭", "ac", command=top.destroy, font=FONT_BODY).pack(side="left", padx=2)
-
-    _buf = []
-    result_holder = [None]
-
-    def _show_preview(text):
-        try:
-            preview.configure(state="normal")
-            preview.delete("1.0", "end")
-            preview.insert("1.0", "生成中…\n" + text)
-            preview.configure(state="disabled")
-        except Exception:
-            pass
-
-    def _on_delta(chunk):
-        _buf.append(chunk)
-        tail = "".join(_buf)[-240:]
-        try:
-            top.after(0, lambda t=tail: _show_preview(t))
-        except Exception:
-            pass
-
-    def _generate():
-        text = desc.get("1.0", "end").strip()
-        if not text:
-            _toast("请先输入流程描述", "info")
-            return
-        gen_btn.config(state="disabled")
-        status.set("生成中, 请稍候…")
-
-        def _work():
-            try:
-                from ai_client import (create_client_active, resolve_model,
-                                       generate_workflow_from_text, APIError,
-                                       APIAuthError, APIRateLimitError, APITimeoutError)
-                client = create_client_active()
-                data, issues = generate_workflow_from_text(
-                    client, text, resolve_model(), on_delta=_on_delta)
-                result_holder[0] = (data, issues)
-                top.after(0, _on_done)
-            except (APIAuthError, APIRateLimitError, APITimeoutError, APIError) as e:
-                top.after(0, lambda: _on_error(str(e)))
-            except Exception as e:
-                top.after(0, lambda: _on_error(str(e)))
-
-        import threading
-        threading.Thread(target=_work, daemon=True).start()
-
-    def _on_done():
-        gen_btn.config(state="normal")
-        data, issues = result_holder[0]
-        steps = data.get("steps", [])
-        lines = ["工作流: {}".format(data.get("name", "")), ""]
-        for i, s in enumerate(steps):
-            lines.append("[{}] {}".format(i + 1, _wf_step_label(s)))
-        if issues:
-            lines.append("")
-            lines.append("静态检查提示:")
-            for it in issues:
-                lines.append("  - [{}] {}".format(it.get("level", ""), it.get("message", "")))
-        try:
-            preview.configure(state="normal")
-            preview.delete("1.0", "end")
-            preview.insert("1.0", "\n".join(lines))
-            preview.configure(state="disabled")
-        except Exception:
-            pass
-        import_btn.config(state="normal")
-        status.set("生成完成, 共 {} 步骤".format(len(steps)))
-
-    def _on_error(msg):
-        gen_btn.config(state="normal")
-        status.set("生成失败")
-        try:
-            preview.configure(state="normal")
-            preview.delete("1.0", "end")
-            preview.insert("1.0", "生成失败: {}".format(msg))
-            preview.configure(state="disabled")
-        except Exception:
-            pass
-
-    def _import():
-        if not result_holder[0]:
-            return
-        import copy as _copy
-        data, _issues = result_holder[0]
-        _wf_snapshot_undo()
-        _wf_data["name"] = data.get("name") or _wf_data.get("name") or "未命名工作流"
-        _wf_data["steps"] = _copy.deepcopy(data.get("steps", []))
-        try:
-            wf_name_var.set(_wf_data["name"])
-        except Exception:
-            pass
-        _wf_refresh_tree()
-        top.destroy()
-        _toast("已导入 AI 生成的工作流", "success")
-
-    gen_btn.config(command=_generate)
-    import_btn.config(command=_import)
+def _wf_ai_import_result(data, issues):
+    """AI 生成的工作流导入当前编辑器 (撤销栈可回退)。"""
+    import copy as _copy
+    if not isinstance(data, dict) or not data.get("steps"):
+        _toast("生成结果缺少步骤, 未导入", "error")
+        return
+    _wf_snapshot_undo()
+    _wf_data["name"] = data.get("name") or _wf_data.get("name") or "未命名工作流"
+    _wf_data["steps"] = _copy.deepcopy(data.get("steps", []))
+    try:
+        wf_name_var.set(_wf_data["name"])
+    except Exception:
+        pass
+    _wf_refresh_tree()
+    _toast("已导入 AI 生成的工作流", "success")
 
 
 def _wf_emit_context():

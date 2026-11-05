@@ -19,7 +19,7 @@ import state
 import utils
 from utils import FONT_TINY
 
-from ui.settings.cards._layout import section, row, help_line
+from ui.settings.cards._layout import section, row, switch_row, help_line
 
 CARD_KEY = "system"
 ROW = 5
@@ -42,7 +42,7 @@ def build(parent, ctx):
     _register_nav_card = ctx.register_nav_card
     _track_card_vars = ctx.track_card_vars
 
-    card, content, title, _arrow = _make_collapsible_card(parent, "系统", "▢")
+    card, content, title, _arrow = _make_collapsible_card(parent, "常规设置", "▢")
     card.grid(row=ROW, column=0, sticky="ew", **ctx.PAD)
     _make_badge(CARD_KEY, title)
     _register_nav_card(CARD_KEY, card)
@@ -53,7 +53,7 @@ def build(parent, ctx):
     def _add(w, pady=None):
         nonlocal _r
         w.grid(row=_r, column=0, sticky="ew",
-               pady=(sp("row_gap") if pady is None else pady))
+               pady=((0, sp("row_gap")) if pady is None else pady))
         _r += 1
         return w
 
@@ -99,9 +99,9 @@ def build(parent, ctx):
         except Exception as e:
             _log1("开机自启动设置失败: {}".format(e), "error")
 
-    _add(row(content, ctx, "", lambda p: ttk.Checkbutton(
-        p, text="开机自启动", variable=auto_start_var, command=_toggle_auto_start),
-        help="在 Windows 启动文件夹创建 / 移除快捷方式（需 pywin32）"))
+    _add(switch_row(content, ctx, "开机自启动", auto_start_var,
+                    help="在 Windows 启动文件夹创建或移除快捷方式（需 pywin32）",
+                    command=_toggle_auto_start))
 
     tray_var = tkinter.BooleanVar(value=state.MINIMIZE_TO_TRAY)
 
@@ -123,17 +123,16 @@ def build(parent, ctx):
         except Exception as e:
             _log1("托盘切换异常: {}".format(e), "error")
 
-    _add(row(content, ctx, "", lambda p: ttk.Checkbutton(
-        p, text="关闭时最小化到系统托盘", variable=tray_var, command=_toggle_tray),
-        help="关闭主窗口时隐藏到系统托盘而非退出程序"))
+    _add(switch_row(content, ctx, "关闭时最小化到系统托盘", tray_var,
+                    help="关闭主窗口时隐藏到系统托盘，而不是退出程序",
+                    command=_toggle_tray))
 
     # ── 分节: 界面与布局 ──
     _sec("界面与布局")
 
     compact_var = tkinter.BooleanVar(value=getattr(state, "COMPACT_MODE", False))
-    _add(row(content, ctx, "", lambda p: ttk.Checkbutton(
-        p, text="紧凑模式（小屏/便携）", variable=compact_var),
-        help="回到 500×625 旧布局", restart=True))
+    _add(switch_row(content, ctx, "紧凑模式", compact_var,
+                    help="回到 500×625 旧布局", restart=True))
 
     help_modal_var = tkinter.BooleanVar(value=getattr(state, "HELP_MODAL", False))
 
@@ -142,9 +141,21 @@ def build(parent, ctx):
         state.save_config()
         _flash_saved("system")
 
-    _add(row(content, ctx, "", lambda p: ttk.Checkbutton(
-        p, text="帮助窗口使用模态", variable=help_modal_var, command=_toggle_help_modal),
-        help="默认非模态"))
+    _add(switch_row(content, ctx, "模态帮助窗口", help_modal_var,
+                    help="开启后关闭帮助窗口才能继续操作；默认非模态",
+                    command=_toggle_help_modal))
+
+    reduce_motion_var = tkinter.BooleanVar(value=bool(getattr(state, "REDUCE_MOTION", False)))
+
+    def _toggle_reduce_motion():
+        state.REDUCE_MOTION = bool(reduce_motion_var.get())
+        state.save_config()
+        _flash_saved("system")
+
+    # 统一使用 switch_row: 与同卡片其他开关一样左文右开关, 避免同类控件两种对齐
+    _add(switch_row(content, ctx, "减少动效（无障碍）", reduce_motion_var,
+                    help="关闭节点光晕 / 提示淡入等过渡动画，降低 GPU 负担",
+                    command=_toggle_reduce_motion))
 
     _UI_SCALE_STEPS = ("0.8", "0.9", "1.0", "1.1", "1.2", "1.3", "1.5")
     ui_scale_var = tkinter.StringVar(value=str(float(getattr(state, "UI_SCALE", 1.0))))
@@ -186,9 +197,9 @@ def build(parent, ctx):
                 _toggle_fold()
         _flash_saved("system")
 
-    _add(row(content, ctx, "", lambda p: ttk.Checkbutton(
-        p, text="启用 Mini Bar 折叠（标题栏 ⊟ 按钮）",
-        variable=mini_bar_var, command=_toggle_mini_bar)))
+    _add(switch_row(content, ctx, "启用 Mini Bar 折叠", mini_bar_var,
+                    help="标题栏显示 ⊟ 按钮，可把主窗口折叠为 Mini Bar",
+                    command=_toggle_mini_bar))
 
     mb_width_var = tkinter.StringVar(value=str(state.MINI_BAR_WIDTH))
     _add(row(content, ctx, "面板宽度", lambda p: _validate_number(
@@ -348,10 +359,9 @@ def build(parent, ctx):
         state.save_config()
         _flash_saved("system")
 
-    _add(row(content, ctx, "", lambda p: ttk.Checkbutton(
-        p, text="危险动作执行前二次确认",
-        variable=danger_var, command=_toggle_danger),
-        help="电源操作 / 永久删除 / 结束进程；无界面时一律拒绝"))
+    _add(switch_row(content, ctx, "危险动作执行前二次确认", danger_var,
+                    help="电源操作 / 永久删除 / 结束进程；无界面时一律拒绝",
+                    command=_toggle_danger))
 
     danger_timeout_var = tkinter.StringVar(
         value=str(int(getattr(state, "CONFIRM_DANGEROUS_TIMEOUT_SEC", 15) or 15)))

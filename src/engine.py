@@ -32,6 +32,46 @@ from safe_eval import safe_eval_condition, safe_eval_math, EvalError
 FAILURE_CONTEXT_ENABLED = True
 FAILURE_CONTEXT_DIR = None
 
+
+def failure_context_dir():
+    """→ 失败现场落盘目录 (优先 FAILURE_CONTEXT_DIR, 否则 CONFIG_PATH 同级 screenshots)。
+
+    供 :meth:`Engine._save_failure_context` 与失败现场查看 UI 共用, 避免两处重复计算。
+    """
+    d = FAILURE_CONTEXT_DIR
+    if not d:
+        try:
+            d = os.path.join(os.path.dirname(state.CONFIG_PATH), "screenshots")
+        except Exception:
+            d = ""
+    return d
+
+
+def scan_failure_contexts(d=None):
+    """扫描失败现场目录 → 按时间倒序的 payload 列表 (best-effort)。
+
+    供失败现场查看 UI 使用; 每个 dict 额外注入 ``_file`` 指向源 JSON 路径。
+    目录不存在 / 文件损坏 / 非 fail_context 前缀均静默跳过。
+    """
+    import json as _json
+    d = d or failure_context_dir()
+    if not d or not os.path.isdir(d):
+        return []
+    items = []
+    for fn in os.listdir(d):
+        if not fn.startswith("fail_context_") or not fn.endswith(".json"):
+            continue
+        fp = os.path.join(d, fn)
+        try:
+            with open(fp, "r", encoding="utf-8") as f:
+                data = _json.load(f)
+        except Exception:
+            continue
+        data["_file"] = fp
+        items.append(data)
+    items.sort(key=lambda it: str(it.get("time", "")), reverse=True)
+    return items
+
 # ── 可选能力门禁 (路线图 阶段二新增项①) ──
 # 执行前按 commands.requires(cmd) 检查对应能力 (见 src/capabilities.py):
 #   · ("core",) 永不拦截; hard/none 能力非 READY → 返回 missing_capability 失败;
@@ -554,7 +594,10 @@ class ExecutionEngine:
         self.retry = state.RETRY_MAX
         self.retry_interval = state.RETRY_INTERVAL
         # Variable storage for condition/loop support
-        self.variables = {}
+        # 线程本地变量容器: 工作流并行分支隔离 (每线程独立 dict), 主线程/单线程
+        # 回退到 _variables_main; 旧代码 self.variables[...] 零改动。
+        self._variables_tls = threading.local()
+        self._variables_main = {}
         # L3 变量插值: {arg:名称} 的命名空间 (CLI -p0:xxx / ex:xxx 注入),
         # 与 self.variables 完全隔离 —— --var 影响脚本逻辑, --arg/-pN 只影响文本替换。
         self.script_args = {}
@@ -569,6 +612,22 @@ class ExecutionEngine:
         self._script_failed = False
         # P2 步骤级失败策略: 跳转目标命中计数 {0基目标下标: 次数}, 用于环检测
         self._jump_counts = {}
+
+    @property
+    def variables(self):
+        """当前线程的变量容器; 未设置线程本地 dict 时回退到主线程 dict。
+
+        设计目标: 工作流并行分支隔离 —— 每个分支线程通过 setter 注入自己的
+        局部 dict, 互不可见; 主线程/单线程旧路径行为与改动前完全一致。
+        """
+        d = getattr(self._variables_tls, "d", None)
+        return d if d is not None else self._variables_main
+
+    @variables.setter
+    def variables(self, value):
+        self._variables_tls.d = value
+        if threading.current_thread() is threading.main_thread():
+            self._variables_main = value
 
     def execute_script(self, rows, script_dir, _nested=False):
         """
@@ -1083,12 +1142,7 @@ class ExecutionEngine:
         import json as _json
 
         # 落盘目录: 优先 FAILURE_CONTEXT_DIR, 否则 CONFIG_PATH 同级 screenshots
-        d = FAILURE_CONTEXT_DIR
-        if not d:
-            try:
-                d = os.path.join(os.path.dirname(state.CONFIG_PATH), "screenshots")
-            except Exception:
-                d = ""
+        d = failure_context_dir()
         try:
             if d:
                 os.makedirs(d, exist_ok=True)
@@ -1096,8 +1150,15 @@ class ExecutionEngine:
             pass
         base_dir = d or "."
 
+        try:
+            from core import run_id as _run_id
+            rid = _run_id.current()
+        except Exception:
+            rid = ""
+
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        fp = os.path.join(base_dir, "fail_context_{}.json".format(ts))
+        rid_prefix = "{}_".format(rid) if rid else ""
+        fp = os.path.join(base_dir, "fail_context_{}{}.json".format(rid_prefix, ts))
 
         def _row_repr(r):
             if r is None:
@@ -1133,7 +1194,11 @@ class ExecutionEngine:
         try:
             ts2 = datetime.datetime.now().strftime("%m%d_%H%M%S")
             cmd_name = (cur or {}).get("cmd", "") or "cmd"
-            shot_path = os.path.join(base_dir, "fail_{}_{}.png".format(cmd_name, ts2))
+            if rid:
+                shot_path = os.path.join(base_dir,
+                                         "fail_{}_{}_{}.png".format(rid, cmd_name, ts2))
+            else:
+                shot_path = os.path.join(base_dir, "fail_{}_{}.png".format(cmd_name, ts2))
             get_pyautogui().screenshot(shot_path)
         except Exception:
             shot_path = ""
@@ -1152,6 +1217,7 @@ class ExecutionEngine:
         #   attempts / vars / context(前后各 1 行) / screenshot(路径|null)
         payload = {
             "time": datetime.datetime.now().isoformat(timespec="seconds"),
+            "run_id": rid,
             "script": script_name,
             "loop": loop_idx,
             "row": idx + 1,

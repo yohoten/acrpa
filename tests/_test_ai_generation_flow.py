@@ -31,6 +31,7 @@ max_tokens 预算烧在 reasoning_content 上，此时 HTTP 仍是 200 但正文
 """
 import os
 import sys
+import tempfile
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -41,6 +42,14 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(BASE, "src"))
 
 import ai_client as ac                              # noqa: E402
+
+
+def _isolate_cache():
+    """把 ai_cost 的落盘重定向到临时目录, 避免真实 userdata 缓存污染断言。"""
+    tmp = tempfile.mkdtemp(prefix="acrpa_ai_cache_")
+    ac.ai_cost._cache_file = lambda: os.path.join(tmp, "cache.json")
+    ac.ai_cost._cost_file = lambda: os.path.join(tmp, "cost.json")
+    ac.ai_cost.cache_clear()
 
 _PASS, _FAIL = [], []
 
@@ -117,6 +126,7 @@ def t_budget_guard():
 
 def t_normal():
     print("\n── G2 正常路径 ──")
+    ac.ai_cost.cache_clear()
     c = FakeClient([FakeResponse("操作,参数1\n按键,down")])
     content, resp = ac.generate_script_content(c, [{"role": "user", "content": "x"}], "m")
     check(content.startswith("操作"), "返回正文: {!r}".format(content[:16]))
@@ -126,6 +136,7 @@ def t_normal():
 
 def t_retry_on_truncation():
     print("\n── G3 空正文 → 放大预算重试 ──")
+    ac.ai_cost.cache_clear()
     c = FakeClient([
         FakeResponse("", finish_reason="length", reasoning="R" * 500),
         FakeResponse("操作,参数1\n按键,down", finish_reason="stop"),
@@ -141,6 +152,7 @@ def t_retry_on_truncation():
           "on_retry 收到成因: {}".format(notes[0][0] if notes else "无"))
 
     # finish_reason=stop 但有 reasoning_content 也算"思考占用了预算"
+    ac.ai_cost.cache_clear()
     c2 = FakeClient([FakeResponse("", finish_reason="stop", reasoning="R" * 10),
                      FakeResponse("操作,参数1\n按键,down")])
     content2, _ = ac.generate_script_content(c2, [{"role": "user", "content": "x"}], "m")
@@ -149,6 +161,7 @@ def t_retry_on_truncation():
 
 def t_retry_exhausted():
     print("\n── G4 重试后仍为空 → 明确报错 ──")
+    ac.ai_cost.cache_clear()
     c = FakeClient([
         FakeResponse("", finish_reason="length", reasoning="R" * 800,
                      usage={"completion_tokens": 2000,
@@ -169,6 +182,7 @@ def t_retry_exhausted():
 
 def t_no_retry_when_not_truncated():
     print("\n── G5 非截断空正文不重试 ──")
+    ac.ai_cost.cache_clear()
     c = FakeClient([FakeResponse("", finish_reason="stop", reasoning="")])
     try:
         ac.generate_script_content(c, [{"role": "user", "content": "x"}], "m")
@@ -228,6 +242,7 @@ def main():
     print("=" * 68)
     print("AI 脚本生成链路回归 (离线)")
     print("=" * 68)
+    _isolate_cache()
     t_budget_guard()
     t_normal()
     t_retry_on_truncation()

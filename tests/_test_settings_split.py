@@ -146,8 +146,11 @@ def t_shell_thin():
     # 卡片控件树统一经 cards.build(parent, ctx) 构建; window.py 自身不内联建卡
     check("_make_collapsible_card(_inner" not in wsrc,
           "window.py 不内联卡片控件树 (统一经 cards.build)")
-    check("importlib.import_module(\"ui.settings.cards.\"" in wsrc,
-          "window.py 逐卡 importlib 加载 cards/*.py")
+    check("importlib" not in wsrc,
+          "window.py 不使用动态导入（PyInstaller 可静态分析）")
+    for key in CARD_KEYS:
+        check("as c_{}".format(key) in wsrc,
+              "window.py 静态导入卡片 {}".format(key))
 
 
 # ── C. 无 ACRPA 依赖 (AST) ───────────────────────────────────────────
@@ -188,6 +191,57 @@ def t_theme_literals():
           "薄壳保留 _ui_theme.subscribe(_on_theme_publish)")
     check("def refresh_theme(prev=None):" in src,
           "薄壳保留 def refresh_theme(prev=None):")
+
+
+# ── E1. 字体契约: init_ctx 必须兼容命名字体字符串 (2026-11-04 回归) ──
+# 历史 bug: init_ctx 用 (FONT_SMALL[0], FONT_SMALL[1], "bold") 构造粗体,
+# 对命名字体字符串 'ACRPA_SMALL' 下标得 ('A','C','bold') → TclError
+# "expected integer but got C" → 12 卡构建中断, 设置页整页空白。
+
+def t_font_contract():
+    print("\n── E1. init_ctx 字体契约 (命名字体字符串兼容) ──")
+    wsrc = _read("src/ui/settings/window.py")
+    check("_bold_font" in wsrc,
+          "window.py 提供 _bold_font 安全加粗 (不再对字符串下标)")
+    check("FONT_SMALL[0]" not in wsrc,
+          "window.py 不再出现 FONT_SMALL[0] 字符串下标反模式")
+    check("_ui_theme.claim_window(" in wsrc,
+          "window.py 声明 claim_window 自管换肤")
+    # 实机: 按 ACRPA.py 真实调用方式传命名字体, init_ctx 后粗体必须合法
+    try:
+        import tkinter
+        import utils
+        import settings_window as sw
+        from ui import theme as ui_theme
+    except Exception as e:
+        check(False, "import 失败: {}".format(e))
+        return
+    try:
+        root = tkinter.Tk()
+        root.withdraw()
+    except Exception as e:
+        warn("无法创建 Tk root, 字体契约实机断言跳过: {}".format(e))
+        return
+    try:
+        sw.init_ctx(root_win=root, colors=ui_theme.colors(False),
+                    fonts=(utils.FONT_TITLE, utils.FONT_BODY,
+                           utils.FONT_SMALL, utils.FONT_BUTTON))
+        from ui.settings import window as w
+        check(w.FONT_SMALL_BOLD != ("A", "C", "bold"),
+              "FONT_SMALL_BOLD 不为 ('A','C','bold') 退化元组")
+        check(w.FONT_SMALL_BOLD == utils.FONT_SMALL_BOLD,
+              "命名字体传入时 FONT_SMALL_BOLD 复用 utils 命名字体")
+        check(w.FONT_TITLE == utils.FONT_TITLE and w.FONT_BODY == utils.FONT_BODY
+              and w.FONT_SMALL == utils.FONT_SMALL,
+              "init_ctx 字体解包顺序与调用方 (TITLE,BODY,SMALL) 一致")
+        # 用解析结果真实建一次 Label (Tk 层验证)
+        tkinter.Label(root, text="x", font=w.FONT_SMALL_BOLD,
+                      fg=ui_theme.colors(False)["fgt"])
+        check(True, "FONT_SMALL_BOLD 可直接创建 Tk Label")
+    except Exception as e:
+        check(False, "字体契约实机断言失败: {}".format(e))
+    finally:
+        root.destroy()
 
 
 # ── E. 实机: 12 卡句柄可取 ───────────────────────────────────────────
@@ -273,6 +327,7 @@ def main():
     t_shell_thin()
     t_no_acrpa_import()
     t_theme_literals()
+    t_font_contract()
     t_live_handles()
     print("\n=== 结果: {} (通过 {}, 失败 {}, 警告 {}) ===".format(
         "FAIL" if _FAIL else "OK", len(_PASS), len(_FAIL), len(_WARN)))

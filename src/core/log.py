@@ -71,6 +71,62 @@ def _log_badge(tag, level):
 # === Logging bridge ===
 _tlog = None
 
+# ── 启动早期日志缓冲 (G2): log1 早于 set_tlog 调用时暂存, 日志系统就绪后回放 ──
+# 现状缺口: `run.py` 在 `crashlog.install()`/`startup_mark()` 阶段就会经 crashlog._log1
+# 调 `utils.log1`, 而此时 `_tlog` 还是 None → 这些「启动前日志」被 `if _tlog:` 静默丢弃。
+# 这里改为暂存进有界缓冲, `set_tlog` 就绪时一次性回放, 保证启动早期异常/阶段日志不丢。
+_EARLY_LOG = []                # [(msg, tag, level), ...]
+_EARLY_LOG_MAX = 200           # 环形上限: 最多留 200 条 (防御: 无界会随长时间无 GUI 而膨胀)
+
+
+def _normalize_level(level, tag):
+    """level → int (LOG_DEBUG..LOG_ERROR); None 时按 tag 推断。与 log1 既有口径一致。"""
+    if level is None:
+        tag_lower = str(tag).lower() if tag else ""
+        if tag_lower == "error":
+            return LOG_ERROR
+        if tag_lower == "warning":
+            return LOG_WARNING
+        if tag_lower == "debug":
+            return LOG_DEBUG
+        return LOG_INFO
+    if isinstance(level, str):
+        return {"DEBUG": LOG_DEBUG, "INFO": LOG_INFO,
+                "WARNING": LOG_WARNING, "ERROR": LOG_ERROR}.get(level.upper(), LOG_INFO)
+    try:
+        return int(level)
+    except (TypeError, ValueError):
+        return LOG_INFO
+
+
+def _early_log_append(msg, tag, level):
+    try:
+        if len(_EARLY_LOG) >= _EARLY_LOG_MAX:
+            _EARLY_LOG.pop(0)
+        _EARLY_LOG.append((msg, tag, level))
+    except Exception:
+        pass
+
+
+def _early_log_replay():
+    """把启动早期缓冲回放到已就绪的 `_tlog`; 返回回放条数 (失败静默)。"""
+    global _EARLY_LOG
+    if not _EARLY_LOG or _tlog is None:
+        return 0
+    try:
+        pending = _EARLY_LOG
+        _EARLY_LOG = []
+        n = 0
+        for msg, tag, level in pending:
+            try:
+                _tlog.put(msg, tag, "", "", _normalize_level(level, tag))
+                n += 1
+            except Exception:
+                pass
+        return n
+    except Exception:
+        return 0
+
 # === Log sink mirror (NetLink) ===
 _log_sinks = []   # [(sink_fn,), ...] 由 netlink 注册
 
@@ -98,7 +154,11 @@ def _broadcast_log(msg, tag, level, caller_file="", caller_func=""):
 
 
 def set_tlog(instance):
-    global _tlog; _tlog = instance
+    global _tlog
+    _tlog = instance
+    # G2: 日志总线就绪 → 回放启动早期缓冲 (不丢 run.py 阶段已产生的日志)
+    if instance is not None:
+        _early_log_replay()
 
 
 def get_tlog():
@@ -116,39 +176,34 @@ def log1(msg, tag=None, level=None):
         level: Log level override — "DEBUG"/"INFO"/"WARNING"/"ERROR" or int 0-3.
                If None, auto-detected from tag. Defaults to INFO.
     """
-    if _tlog:
-        # ── Auto-detect level from tag if not explicitly provided ──
-        if level is None:
-            tag_lower = str(tag).lower() if tag else ""
-            if tag_lower == "error":
-                level = LOG_ERROR
-            elif tag_lower == "warning":
-                level = LOG_WARNING
-            elif tag_lower == "info":
-                level = LOG_INFO
-            elif tag_lower == "debug":
-                level = LOG_DEBUG
-            else:
-                level = LOG_INFO
-        elif isinstance(level, str):
-            level_map = {"DEBUG": LOG_DEBUG, "INFO": LOG_INFO,
-                         "WARNING": LOG_WARNING, "ERROR": LOG_ERROR}
-            level = level_map.get(level.upper(), LOG_INFO)
+    if _tlog is None:
+        # G2: 日志总线尚未就绪 (run.py 早期) → 暂存, set_tlog 时回放
+        _early_log_append(msg, tag, level)
+        return
 
-        # ── Capture caller's filename and function name ──
-        import inspect
-        caller_file = ""
-        caller_func = ""
-        try:
-            frame = inspect.currentframe()
-            # Go up 1 frame to get the actual caller of log1
-            caller = frame.f_back
-            if caller is not None:
-                caller_file = os.path.basename(caller.f_code.co_filename)
-                caller_func = caller.f_code.co_name
-        except Exception:
-            pass
-        _tlog.put(msg, tag, caller_file, caller_func, level)
+    # ── Auto-detect level from tag if not explicitly provided ──
+    level = _normalize_level(level, tag)
+
+    # ── Capture caller's filename and function name ──
+    import inspect
+    caller_file = ""
+    caller_func = ""
+    try:
+        frame = inspect.currentframe()
+        # Go up 1 frame to get the actual caller of log1
+        caller = frame.f_back
+        if caller is not None:
+            caller_file = os.path.basename(caller.f_code.co_filename)
+            caller_func = caller.f_code.co_name
+    except Exception:
+        pass
+    # run_id: 统一运行标识随日志一起入队, 落盘时写入文件行 (GUI 行不显示, 保持简洁)。
+    try:
+        from core import run_id as _run_id
+        _rid = _run_id.current()
+    except Exception:
+        _rid = ""
+    _tlog.put(msg, tag, caller_file, caller_func, level, _rid)
 
 
 class ThreadSafeLog:
@@ -186,7 +241,8 @@ class ThreadSafeLog:
             self._rotate_log_file()
             self._cleanup_old_logs()
 
-    def put(self, msg, tag=None, caller_file="", caller_func="", level=LOG_INFO):
+    def put(self, msg, tag=None, caller_file="", caller_func="", level=LOG_INFO,
+            run_id=""):
         """Add message to queue (thread-safe).
 
         Args:
@@ -195,9 +251,10 @@ class ThreadSafeLog:
             caller_file: Source filename (auto-captured by log1)
             caller_func: Source function name (auto-captured by log1)
             level: Log level int (LOG_DEBUG=0, LOG_INFO=1, LOG_WARNING=2, LOG_ERROR=3)
+            run_id: 本次运行的统一标识 (仅写入文件行, 不进入 GUI 行)
         """
         _broadcast_log(msg, tag, level, caller_file, caller_func)
-        self._q.put((msg, tag, caller_file, caller_func, level))
+        self._q.put((msg, tag, caller_file, caller_func, level, run_id))
 
     def has_pending(self):
         """GUI 队列里是否还有待渲染的日志行 (v5 §3.5 G3 的事件驱动判据)。
@@ -235,7 +292,7 @@ class ThreadSafeLog:
 
         while drain < self.GUI_BATCH_MAX:
             try:
-                msg, tag, caller_file, caller_func, level = self._q.get_nowait()
+                msg, tag, caller_file, caller_func, level, run_id = self._q.get_nowait()
             except queue.Empty:
                 break
             drain += 1
@@ -280,8 +337,10 @@ class ThreadSafeLog:
                     caller_info = " [{}:{}]".format(caller_file, caller_func)
                 elif caller_file:
                     caller_info = " [{}]".format(caller_file)
+                run_info = " [run:{}]".format(run_id) if run_id else ""
                 self._file_buffer.append(
-                    "[{}] {}: {}{}\n".format(timestamp, level_name, msg, caller_info))
+                    "[{}] {}: {}{}{}\n".format(timestamp, level_name, msg,
+                                                run_info, caller_info))
 
                 # Check if we should flush to disk
                 now = time.time()
@@ -360,13 +419,15 @@ class ThreadSafeLog:
                 return  # 0 or negative means keep forever
 
             cutoff = time.time() - (retention_days * 86400)
-            pattern = os.path.join(self._log_dir, "acrpa_*.log")
-            for log_path in glob.glob(pattern):
-                try:
-                    if os.path.getmtime(log_path) < cutoff:
-                        os.remove(log_path)
-                except Exception:
-                    pass
+            # 两类都清理: 主日志 acrpa_*.log + 崩溃日志 crash_*.log (history.jsonl 不动)
+            patterns = ("acrpa_*.log", "crash_*.log")
+            for pattern in patterns:
+                for log_path in glob.glob(os.path.join(self._log_dir, pattern)):
+                    try:
+                        if os.path.getmtime(log_path) < cutoff:
+                            os.remove(log_path)
+                    except Exception:
+                        pass
         except Exception:
             pass  # Cleanup failure is non-critical
 

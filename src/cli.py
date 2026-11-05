@@ -362,6 +362,11 @@ def _run_workflow_headless(opts, out):
         _say(out, "[ACRPA CLI] 用法错误: 工作流不存在: {}".format(path))
         return 2
     path_abs = os.path.abspath(path)
+    try:
+        from core import run_id as _run_id
+        rid = _run_id.new_run()
+    except Exception:
+        rid = ""
     started = datetime.now()
     fatal = None
     try:
@@ -378,6 +383,7 @@ def _run_workflow_headless(opts, out):
     report = {
         "script": path_abs,                     # 与 --script 结构一致: 执行目标放这里
         "kind": "workflow",
+        "run_id": rid,
         "started": started.isoformat(timespec="seconds"),
         "finished": finished.isoformat(timespec="seconds"),
         "duration_ms": int((finished - started).total_seconds() * 1000),
@@ -402,6 +408,11 @@ def _run_workflow_headless(opts, out):
                 opts["json_report"], type(e).__name__, e))
             _record_history("workflow", path_abs, report["duration_ms"], True,
                             None, 0, fatal or "报告写入失败")
+            try:
+                from core import run_id as _run_id
+                _run_id.reset()
+            except Exception:
+                pass
             return 2
         if not quiet:
             _say(out, "[ACRPA CLI] JSON 报告: {}".format(os.path.abspath(opts["json_report"])))
@@ -409,6 +420,11 @@ def _run_workflow_headless(opts, out):
         _say(out, text)
     _record_history("workflow", path_abs, report["duration_ms"], failed,
                     None, 0, fatal or "")
+    try:
+        from core import run_id as _run_id
+        _run_id.reset()
+    except Exception:
+        pass
     if failed and opts.get("exit_code"):
         return 1
     return 0
@@ -458,6 +474,11 @@ def main(argv, *, stdout=None):
         return 2
 
     quiet = opts["quiet"]
+    try:
+        from core import run_id as _run_id
+        rid = _run_id.new_run()
+    except Exception:
+        rid = ""
     started = datetime.now()
 
     # ── 惰性导入: 保证 `import cli` 零副作用 (不加载 tkinter / engine) ──
@@ -539,6 +560,7 @@ def main(argv, *, stdout=None):
 
     report = {
         "script": script_abs,
+        "run_id": rid,
         "started": started.isoformat(timespec="seconds"),
         "finished": finished.isoformat(timespec="seconds"),
         "duration_ms": int((finished - started).total_seconds() * 1000),
@@ -567,6 +589,11 @@ def main(argv, *, stdout=None):
                 opts["json_report"], type(e).__name__, e))
             _record_history("script", script_abs, report["duration_ms"], True,
                             failed_row, report["total_rows"], "报告写入失败")
+            try:
+                from core import run_id as _run_id
+                _run_id.reset()
+            except Exception:
+                pass
             return 2
         if not quiet:
             _say(out, "[ACRPA CLI] JSON 报告: {}".format(os.path.abspath(opts["json_report"])))
@@ -576,6 +603,12 @@ def main(argv, *, stdout=None):
     # L5 #9: 运行历史（脱敏后追加一行；写盘失败不影响退出码）
     _record_history("script", script_abs, report["duration_ms"], failed,
                     failed_row, report["total_rows"], error or "")
+
+    try:
+        from core import run_id as _run_id
+        _run_id.reset()
+    except Exception:
+        pass
 
     if failed and opts["exit_code"]:
         return 1

@@ -12,6 +12,7 @@ from tkinter import ttk, messagebox
 
 import state
 from utils import FONT_TINY, place_dialog
+from ui.widgets.rounded_button import RoundedSwitch
 
 CARD_KEY = "market"
 ROW = 10
@@ -121,7 +122,7 @@ def build(parent, ctx):
                         pass
                     _mk_refresh()
                 try:
-                    _win.after(0, _err)
+                    ctx.later(0, _err)
                 except Exception:
                     pass
                 return
@@ -140,7 +141,7 @@ def build(parent, ctx):
                     pass
                 _mk_refresh()
             try:
-                _win.after(0, _ok)
+                ctx.later(0, _ok)
             except Exception:
                 pass
 
@@ -182,8 +183,10 @@ def build(parent, ctx):
     mk_opt.grid(row=2, column=0, sticky="ew", padx=8, pady=(1, 1))
     market_auto_check_var = tkinter.BooleanVar(
         value=bool(getattr(state, "MARKET_AUTO_CHECK_UPDATE", True)))
-    ttk.Checkbutton(mk_opt, text="打开市场时后台查更新",
-        variable=market_auto_check_var).pack(side="left", padx=(0, 12))
+    tkinter.Label(mk_opt, text="打开市场时后台检查更新", font=ctx.FONT_SMALL,
+        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0, 8))
+    RoundedSwitch(mk_opt, variable=market_auto_check_var, colors=C,
+                  ).pack(side="left", padx=(0, 12))
     tkinter.Label(mk_opt, text="索引缓存(秒)", font=ctx.FONT_SMALL,
         fg=C["fgm"], bg=C["bgc"]).pack(side="left", padx=(0, 4))
     market_ttl_var = tkinter.StringVar(

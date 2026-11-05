@@ -18,8 +18,9 @@
 import tkinter
 
 from utils import FONT_TINY, FONT_SMALL_BOLD
+from ui.widgets.rounded_button import RoundedSwitch
 
-__all__ = ["section", "row", "help_line"]
+__all__ = ["section", "row", "switch_row", "help_line"]
 
 
 def _C(ctx):
@@ -69,29 +70,53 @@ def row(parent, ctx, label, builder, help=None, unit=None, restart=False, indent
     if indent:
         fr.grid(row=0, column=0, sticky="ew", padx=(_sp(ctx, "sp_xl"), 0))
 
-    widget = builder(fr)
+    # builder 的父容器必须是「控件格」: Tk 的 grid 只能把控件放进它自己的 parent,
+    # 事后再 grid 到别的 Frame 是无效的 (会静默留在 fr 里)。
+    field = tkinter.Frame(fr, bg=C["bgc"])
+    widget = builder(field)
+
+    # 控件与「单位 / 重启徽标」必须同处一格: 若把单位放到独立的 weight=1 列,
+    # 输入框会被拉伸到整行宽、单位被推到最右, 数字框尤其失真。
+    expandable = True
+    try:
+        expandable = widget.winfo_class() in ("Entry", "TEntry", "Text", "Frame")
+    except Exception:
+        pass
+    # 带单位的行都是短数值输入, 不能拉满整行, 否则单位和输入框会被拉开一大截
+    if unit:
+        expandable = False
 
     if label:
         tkinter.Label(fr, text=label, font=ctx.FONT_SMALL,
             bg=C["bgc"], fg=C["fgm"], anchor="w").grid(
             row=0, column=0, sticky="w", padx=(0, _sp(ctx, "sp_sm")))
-        widget.grid(row=0, column=1, sticky="w")
+        field.grid(row=0, column=1, sticky="ew")
+        if expandable:
+            field.columnconfigure(0, weight=1)
+        widget.grid(row=0, column=0, sticky="ew" if expandable else "w")
+        tail_col = 1
     else:
         # 开关/复选框行: 控件自带文案, 直接占据标签列 + 控件列
-        widget.grid(row=0, column=0, columnspan=2, sticky="w")
+        field.grid(row=0, column=0, columnspan=2, sticky="ew")
+        if expandable:
+            field.columnconfigure(0, weight=1)
+        # 单选项不拉满整行, 否则空白区也成了可点击区域
+        widget.grid(row=0, column=0, sticky="ew" if expandable else "w")
+        tail_col = 1
+    tail = field
+    help_span = 2
 
-    tail_col = 2
     if unit:
-        tkinter.Label(fr, text=unit, font=FONT_TINY,
+        tkinter.Label(tail, text=unit, font=FONT_TINY,
             bg=C["bgc"], fg=C["fgm"]).grid(row=0, column=tail_col, sticky="w",
             padx=(_sp(ctx, "sp_sm"), 0))
         tail_col += 1
     if restart:
-        tkinter.Label(fr, text="⏱", font=ctx.FONT_SMALL,
-            bg=C["bgc"], fg=C["fgm"]).grid(row=0, column=tail_col, sticky="w",
+        tkinter.Label(tail, text="⏱ 需重启", font=FONT_TINY,
+            bg=C["bgc"], fg=C["wn"]).grid(row=0, column=tail_col, sticky="w",
             padx=(_sp(ctx, "sp_sm"), 0))
         tail_col += 1
-        # 汇总到窗口顶部状态条「需重启项数」徽标
+        # 汇总到窗口底部状态栏「需重启项数」
         _note = getattr(ctx, "note_restart", None)
         if _note:
             try:
@@ -100,13 +125,36 @@ def row(parent, ctx, label, builder, help=None, unit=None, restart=False, indent
                 pass
 
     if help:
-        tkinter.Label(fr, text=help, font=FONT_TINY,
+        help_label = tkinter.Label(fr, text=help, font=FONT_TINY,
             bg=C["bgc"], fg=C["fgm"], anchor="w", justify="left",
-            wraplength=_sp(ctx, "help_wrap")).grid(
-            row=1, column=0, columnspan=max(tail_col, 2), sticky="w",
+            wraplength=_sp(ctx, "help_wrap"))
+        help_label.grid(row=1, column=0, columnspan=help_span, sticky="w",
             pady=(_sp(ctx, "gap_tight"), 0))
 
+        def fit_help(event, label=help_label):
+            available = max(180, int(event.width) - _sp(ctx, "sp_sm"))
+            if int(label.cget("wraplength")) != available:
+                label.configure(wraplength=available)
+        fr.bind("<Configure>", fit_help)
+
     return container if indent else fr
+
+
+def switch_row(parent, ctx, text, variable, help="", command=None, restart=False):
+    """即时启停设置行：左侧名称与说明，右侧自绘 Switch。"""
+    C = _C(ctx)
+
+    def build_switch(row_parent):
+        frame = tkinter.Frame(row_parent, bg=C["bgc"])
+        frame.columnconfigure(0, weight=1)
+        tkinter.Label(frame, text=text, font=ctx.FONT_SMALL,
+                      bg=C["bgc"], fg=C["fgb"], anchor="w").grid(
+            row=0, column=0, sticky="w", padx=(0, _sp(ctx, "sp_lg")))
+        RoundedSwitch(frame, variable=variable, command=command, colors=C).grid(
+            row=0, column=1, sticky="e")
+        return frame
+
+    return row(parent, ctx, "", build_switch, help=help, restart=restart)
 
 
 def help_line(parent, ctx, text, level="info"):
@@ -115,7 +163,13 @@ def help_line(parent, ctx, text, level="info"):
     fg = {"info": C["fgm"], "warn": C["wn"], "err": C["dg"]}.get(level, C["fgm"])
     fr = tkinter.Frame(parent, bg=C["bgc"])
     fr.columnconfigure(0, weight=1)
-    tkinter.Label(fr, text=text, font=FONT_TINY, bg=C["bgc"], fg=fg,
-        anchor="w", justify="left", wraplength=_sp(ctx, "help_wrap")).grid(
-        row=0, column=0, sticky="w")
+    label = tkinter.Label(fr, text=text, font=FONT_TINY, bg=C["bgc"], fg=fg,
+        anchor="w", justify="left", wraplength=_sp(ctx, "help_wrap"))
+    label.grid(row=0, column=0, sticky="w")
+
+    def fit_text(event):
+        available = max(180, int(event.width) - _sp(ctx, "sp_sm"))
+        if int(label.cget("wraplength")) != available:
+            label.configure(wraplength=available)
+    fr.bind("<Configure>", fit_text)
     return fr

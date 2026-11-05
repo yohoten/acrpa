@@ -63,7 +63,7 @@ from tray import SystemTray
 import dialogs
 from dialogs import (init_ctx, show_help_dialog, show_update_dialog,
                      open_version_history, open_ai_panel, open_ai_debug_dialog,
-                     open_sched_manager)
+                     open_failure_viewer, open_sched_manager)
 # 独立设置窗口模块 (设置 Tab 已分离，主题切换时由 _refresh_theme 同步)
 import settings_window
 # UI 基础层 (阶段二第 2 项): 主题色板 / 样式应用 / 换肤事件总线。
@@ -88,6 +88,17 @@ from ui import workflow_view as ui_workflow_view
 # Tk 非线程安全: 耗时 IO/解析一律丢给 bg_task, 控件操作只在主线程回调里做。
 # 未 start 时 submit() 退化为同步执行 → 无 GUI 环境/测试脚本的既有断言不变。
 from ui import bg_task as ui_bg_task
+# 脚本编辑「参数列表头 / 列宽 / 悬停提示」纯展示辅助 (S1-A 切片): 只读 schema,
+# 不写存储; sync_param_headings(tree) / bind_param_header_tip(tree) 在构建段调用。
+from ui import editor_columns as ui_editor_columns
+from ui import editor_view as ui_editor_view
+# AppContext 依赖/服务容器 (方案文档 S2): import 零副作用 (仅创建空 dict)。
+# 本文件下方把转发别名「收拢」为容器条目, 但保留 ACRPA.<name> 模块级旧键 (向后兼容)。
+from core.app_context import ctx as _app_ctx
+# 事件总线 (方案文档 S3): import 零副作用 (仅空总线); 宿主 publish, 视图模块 build 时 subscribe。
+from core.event_bus import bus as _app_bus
+# 等比缩放语义统一 (P3-2): 编辑器字号偏移 → 实际字号走 core.scale, 与流程图共用换算。
+from core.scale import editor_zoom_size
 
 # 托盘图标全局引用
 _tray = None  # type: SystemTray | None
@@ -204,7 +215,8 @@ def _quit_from_tray():
         root.deiconify()
     except Exception:
         pass
-    _do_close()
+    # 与 × 关闭同一条闸门: 未保存的脚本/工作流先确认 (托盘退出同样不该静默丢数据)
+    _close_after_confirm()
 
 
 def _destroy_tray():
@@ -781,6 +793,12 @@ def main_run():
     t=threading.Thread(target=autorun, args=(tn,)); t.daemon=True; t.start()
 
 def autorun(tn):
+    # run_id: 一次 GUI 运行 (含外层多循环) = 一个统一标识, 贯穿日志/失败现场/历史
+    try:
+        from core import run_id as _run_id
+        _run_id.new_run()
+    except Exception:
+        pass
     state.exec_state["total_loops"]=tn; state.exec_state["start_time"]=time.time()
     state.exec_state["loop"]=0; state.exec_state["row"]=0
     state.exec_state["ok_cmds"]=0; state.exec_state["fail_cmds"]=0
@@ -824,6 +842,11 @@ def autorun(tn):
 
         state.exec_state["elapsed"]=time.time()-state.exec_state["start_time"]
     state.running=False; state.exec_state["row"]=0; log1("任务终止")
+    try:
+        from core import run_id as _run_id
+        _run_id.reset()
+    except Exception:
+        pass
 
 # ══════════════════════════════════════════════════════════════════════
 # 运行前校验 (路线图 阶段二第 7 项): 「✔ 校验」按钮 → 非模态问题列表窗口
@@ -1047,6 +1070,72 @@ def _block_input_wheel(event):
     """拦截滚轮事件，防止误触修改 Combobox/Spinbox 数值"""
     return "break"
 
+
+# ══════════════════════════════════════════════════════════════════════
+# 退出前「保存确认」: 脚本编辑与工作流共用同一道闸
+#   · 脚本: state._editor_modified 且有内容 (与「新建/打开」的放弃确认同口径);
+#   · 工作流: ui_workflow_view.wf_is_modified() (内容签名比对, 覆盖任意编辑路径);
+#   · 三选: 是=保存 / 否=丢弃 / 取消=不退出; 保存失败或取消都中止退出。
+# 托盘退出、× 关闭、无保护模式退出都经过这里, 避免「点了退出才发现没保存」。
+# ══════════════════════════════════════════════════════════════════════
+
+def _unsaved_editors():
+    """返回 [(kind, 名称)] —— 退出前需要确认保存的编辑内容。"""
+    items = []
+    try:
+        if state._editor_modified and state._editor_rows:
+            items.append(("script",
+                          os.path.basename(str(getattr(state, "filename", "") or ""))
+                          or "未命名脚本"))
+    except Exception:
+        pass
+    try:
+        if ui_workflow_view.wf_is_modified():
+            items.append(("workflow", ui_workflow_view.get_workflow_name() or "未命名工作流"))
+    except Exception:
+        pass
+    return items
+
+
+def _save_workflow_from_host():
+    """退出确认中保存工作流 (复用视图实现, 与工具栏「保存」同一条路径)。"""
+    try:
+        return bool(ui_workflow_view.wf_save())
+    except Exception as e:
+        log1("工作流保存失败: {}".format(e), "error")
+        return False
+
+
+def _confirm_unsaved_on_exit():
+    """退出前逐个确认未保存内容; 返回 True 表示可以继续退出。"""
+    for kind, name in _unsaved_editors():
+        label = "脚本" if kind == "script" else "工作流"
+        ans = messagebox.askyesnocancel(
+            "保存修改",
+            "{}「{}」有未保存的修改。\n\n"
+            "是：保存后退出\n否：不保存直接退出\n取消：返回继续编辑".format(label, name),
+            icon="warning")
+        if ans is None:
+            return False
+        if ans:
+            ok = _cmd_save() if kind == "script" else _save_workflow_from_host()
+            if not ok:
+                return False
+    return True
+
+
+def _close_after_confirm():
+    """退出闸门: 未保存内容确认 → 真正销毁窗口; 返回是否已退出。"""
+    try:
+        if not _confirm_unsaved_on_exit():
+            return False
+    except Exception as e:
+        # 确认逻辑本身出错不应把用户困在无法关闭的窗口里
+        log1("退出前保存确认失败 (已跳过): {}".format(e), "warning")
+    _do_close()
+    return True
+
+
 def window_close():
     """Handle window close event with app protection.
 
@@ -1084,7 +1173,7 @@ def window_close():
 
     # === Check if app protection is disabled
     if not state.APP_PROTECT:
-        return _do_close()
+        return _close_after_confirm()
     
     # === Level 1: Script actively running (BLOCK) ──
     if state.running:
@@ -1119,7 +1208,7 @@ def window_close():
             return  # User cancelled, don't close
     
     # === No protection needed or user confirmed ──
-    _do_close()
+    _close_after_confirm()
 
 def _do_close():
     """Perform the actual close sequence."""
@@ -1436,20 +1525,8 @@ def _refresh_theme():
     # 日志区 rz/scroll 重着色 + 日志 tag 随主题重配 (D3) 已迁至 src/ui/log_dock.py 的
     # ThemeBus 订阅回调 refresh_theme —— 本函数末尾的一次 ui_theme.publish(...) 会驱动
     # 它; 此处不再保留任何具名回填 (阶段二验收: 新增模块自注册即自动换肤)。
-    # D3: 脚本树 tag 随主题刷新 (写死的 #FEF3C7 → 主题色 C["hlbg"])
-    # §4.5: zebra 用 C["zebra"] (acl 专属于选中态, 不得再用于斑马纹)
-    try:
-        tree.tag_configure("even", background=C["zebra"])
-        tree.tag_configure("running", background=C["hlbg"])
-        tree.tag_configure("breakpoint", foreground=C["dg"])
-    except Exception:
-        pass
-    # §4.5 主题/DPI 变更后重建选中左缘 2px 色条并重刷
-    try:
-        _build_sel_bar()
-        _sync_sel_bars(tree)
-    except Exception:
-        pass
+    # 脚本树 tag / 选中左缘色条随主题刷新已迁至 src/ui/editor_view.py 的
+    # refresh_theme (本函数末尾 ui_theme.publish 驱动其订阅回调)。
     # 变量监视器 Treeview tag (state 用语义键 ai, changed 用 hlbg) —— 窗口存在时才刷
     try:
         _vt = getattr(_show_variables_window, "_tree", None)
@@ -1502,11 +1579,7 @@ def _refresh_theme():
         style.configure("Exec.Horizontal.TProgressbar", thickness=8)
     except Exception:
         pass
-    # 待机背景图: 底色基线随主题变化 → 清合成缓存并按新 C["bgc"] 重绘 (仅待机态重绘)
-    try:
-        _idle_bg_retheme()
-    except Exception:
-        pass
+    # 待机背景图随主题重绘已迁至 src/ui/editor_view.py 的 refresh_theme。
     # 旧实现此处向 C 注入 old_sc/old_dg/old_wn/old_ac 供下次切换比对;
     # 现改用局部旧快照 _prev, 不再污染主题色表 C。
 
@@ -1590,7 +1663,8 @@ def _apply_editor_zoom(event=None):
     try:
         delta = int(getattr(state, "EDITOR_ZOOM", 0) or 0)
         base_size = int(base.cget("size")) if base is not None else 10
-        size = max(6, min(40, base_size + delta))
+        # P3-2: 实际字号统一走 core.scale.editor_zoom_size (等价于 max(6, min(40, base+delta)))。
+        size = editor_zoom_size(base_size, delta)
         family = base.cget("family") if base is not None else "Microsoft YaHei UI"
         _editor_font.configure(family=family, size=size)
         ttk.Style().configure(_EDITOR_STYLE, font=_editor_font,
@@ -2690,6 +2764,8 @@ _TREE_COLS_DEBOUNCE = 150   # ms
 
 _CMD_TAGS_READY = False     # 命令配色 tag 是否已全量预配置
 
+# 参数列标题联动 / 列宽自适应 / 表头悬停提示已迁至 ui/editor_columns.py (S1-A)。
+# 构建段经 ui_editor_columns.sync_param_headings(tree) / bind_param_header_tip(tree) 调用。
 
 def _configure_cmd_tags(dark=None):
     """B2 (§4.2): 命令名/参数统一中性, 分类色只落行首色条 + 图例色块。
@@ -3427,7 +3503,10 @@ def _commit_inline_edit():
 
 
 def _cmd_save():
-    """保存 (Ctrl+S): 已有目标文件 → 原地覆盖不弹框; 尚未落盘 → 转为「另存为」。"""
+    """保存 (Ctrl+S): 已有目标文件 → 原地覆盖不弹框; 尚未落盘 → 转为「另存为」。
+
+    返回是否已成功落盘 (退出前的「保存并退出」据此判断能否继续)。
+    """
     _commit_inline_edit()
     if not state._editor_rows and not _is_new_empty_script():
         # D3: 区分「正在加载」(rows 还没灌进来) 与「真的空」, 避免用户按提示反复重试
@@ -3435,12 +3514,11 @@ def _cmd_save():
             messagebox.showwarning("提示", "脚本正在加载，请稍候再保存")
         else:
             messagebox.showwarning("提示", "脚本为空，无法保存")
-        return
+        return False
     cur = str(getattr(state, "filename", "") or "").strip()
     if cur and os.path.splitext(cur)[1].lower() in _SAVE_INPLACE_EXTS:
-        _persist_script(cur, "保存")
-        return
-    _cmd_save_as()
+        return _persist_script(cur, "保存")
+    return _cmd_save_as()
 
 
 def _cmd_save_as():
@@ -3453,7 +3531,7 @@ def _cmd_save_as():
             messagebox.showwarning("提示", "脚本正在加载，请稍候再保存")
         else:
             messagebox.showwarning("提示", "脚本为空，无法保存")
-        return
+        return False
     cur = str(getattr(state, "filename", "") or "").strip()
     if cur and os.path.splitext(cur)[1].lower() in _SAVE_INPLACE_EXTS:
         initial = os.path.basename(cur)          # 默认沿用当前文件名 (改个名即可另存)
@@ -3465,11 +3543,11 @@ def _cmd_save_as():
         title="另存为", defaultextension=".xls", filetypes=_SAVE_FILETYPES,
         initialdir=_script_save_dir(), initialfile=initial)
     if not fp:
-        return
+        return False
     # 扩展名容错: 用户手输 "abc" → 补 .xls; 大小写归一
     if not os.path.splitext(fp)[1]:
         fp += ".xls"
-    _persist_script(fp, "另存为", allow_empty=empty_ok)
+    return _persist_script(fp, "另存为", allow_empty=empty_ok)
 
 
 # ── 版本历史管理 ──
@@ -4707,6 +4785,8 @@ def _init_toolbar_buttons():
           tip="区域截图 (由「执行控制」迁入)").pack(side="left",padx=_P)
     _tbtn(toolbar_inner,"版本",open_version_history,
           tip="版本历史").pack(side="left",padx=_P)
+    _tbtn(toolbar_inner,"失败现场",open_failure_viewer,
+          tip="查看历史失败现场 (变量/截图/行号) 与两次运行对比").pack(side="left",padx=_P)
 
     # Group 4: 录制 (全局引用 btn_record, 供主题刷新/停止/录制完成回调更新状态)
     # 注意: _start_recording 定义于本函数之后, 须用 lambda 延迟绑定
@@ -4960,11 +5040,82 @@ _wf_export_template = ui_workflow_view._wf_export_template
 _wf_export_screenshot = ui_workflow_view._wf_export_screenshot
 _wf_context_menu = ui_workflow_view._wf_context_menu
 _wf_open_variable_manager = ui_workflow_view._wf_open_variable_manager
+# 工作流上下文条: 工作流名/步数变化 → 推给运行栏上下文条 (P1-5 后续 / §7-4)
+def _exec_bar_wf_context(name, step_count):
+    try:
+        ui_exec_bar.set_workflow_context(name, step_count)
+    except Exception:
+        pass
+
+
+try:
+    ui_workflow_view.set_context_hook(_exec_bar_wf_context)
+except Exception:
+    pass
+
 _wf_library_context_menu = ui_workflow_view._wf_library_context_menu
 _wf_add_from_library = ui_workflow_view._wf_add_from_library
 _wf_add_recent_clicked = ui_workflow_view._wf_add_recent_clicked
 _wf_filter_library = ui_workflow_view._wf_filter_library
 _wf_render_flowchart = ui_workflow_view._wf_render_flowchart
+
+# ── AppContext 容器登记 (方案文档 S2-b 第 1 步): 把「转发别名」收拢为容器条目 ──
+# 只登记稳定的函数/回调引用 (构建期不会变化); 控件句柄 (tab_workflow/wf_* 等在 build_app
+# 前为 None) 由 app.py::_register_app_context 在构建后登记, 不在 import 期写入。
+# 关键: 保留 ACRPA.<name> 模块级旧键不变 (向后兼容), 视图模块后续经 deps 注入 ctx 再切换读取。
+_app_ctx.register_many({
+    # 执行控制栏 (exec_bar)
+    "select_script": select_script,
+    "_screenshot_tool": _screenshot_tool,
+    "_run_update_overflow": _run_update_overflow,
+    "_run_on_bar_configure": _run_on_bar_configure,
+    "_run_on_wheel": _run_on_wheel,
+    "_shared_run": _shared_run,
+    "_shared_stop": _shared_stop,
+    "_tip_with_hotkey": _tip_with_hotkey,
+    "_update_recent_scripts": _update_recent_scripts,
+    "_on_script_switched": _on_script_switched,
+    "_add_recent_script": _add_recent_script,
+    "_on_loop_sel": _on_loop_sel,
+    "_exec_params_commit": _exec_params_commit,
+    "_update_exec_buttons": _update_exec_buttons,
+    # 日志面板 (log_dock)
+    "_toggle_log_dock": _toggle_log_dock,
+    "_on_log_sash_release": _on_log_sash_release,
+    "_log_autoscroll_changed": _log_autoscroll_changed,
+    "_log_apply_cbar": _log_apply_cbar,
+    "_log_apply_filter": _log_apply_filter,
+    "_log_search_next": _log_search_next,
+    "_log_clear_view": _log_clear_view,
+    "_log_export_view": _log_export_view,
+    # 工作流 Tab (workflow_view)
+    "_wf_update_overflow": _wf_update_overflow,
+    "_wf_on_wheel": _wf_on_wheel,
+    "_wf_flow_on_wheel": _wf_flow_on_wheel,
+    "_wf_update_workflow_highlight": _wf_update_workflow_highlight,
+    "_wf_ensure": _wf_ensure,
+    "_wf_run": _wf_run,
+    "_wf_stop": _wf_stop,
+    "_wf_toggle_view": _wf_toggle_view,
+    "_wf_refresh_tree": _wf_refresh_tree,
+    "_wf_new": _wf_new,
+    "_wf_open": _wf_open,
+    "_wf_save": _wf_save,
+    "_wf_add_step": _wf_add_step,
+    "_wf_edit_step": _wf_edit_step,
+    "_wf_delete_step": _wf_delete_step,
+    "_wf_move_up": _wf_move_up,
+    "_wf_move_down": _wf_move_down,
+    "_wf_export_template": _wf_export_template,
+    "_wf_export_screenshot": _wf_export_screenshot,
+    "_wf_context_menu": _wf_context_menu,
+    "_wf_open_variable_manager": _wf_open_variable_manager,
+    "_wf_library_context_menu": _wf_library_context_menu,
+    "_wf_add_from_library": _wf_add_from_library,
+    "_wf_add_recent_clicked": _wf_add_recent_clicked,
+    "_wf_filter_library": _wf_filter_library,
+    "_wf_render_flowchart": _wf_render_flowchart,
+})
 
 # === Recording done callback: inject recorded actions into editor ──
 def _on_recording_done():
@@ -5037,7 +5188,7 @@ def _periodic():
     if _pc.get("status") != new_status:
         _pc["status"] = new_status
         # ① 四态按钮状态机 (就绪/运行中/已暂停/已停止)
-        try: _update_exec_buttons(new_status)
+        try: _app_bus.publish("exec_state", code=new_status)
         except Exception: pass
         if is_paused:
             status_text.config(text=i18n.t("status.paused"),fg=C["wn"])
@@ -5185,10 +5336,9 @@ def _periodic_g2(inline=False):
             _sync_mini_bar_status()
     except Exception:
         pass
-    # ⑨ 工作流执行高亮 (工作流 Tab 为延迟构建: 未构建时控件句柄均为 None, 直接跳过)
+    # ⑨ 工作流执行高亮 (事件总线 S3: 未构建工作流 Tab 时无订阅者, publish 即 no-op)
     try:
-        if _WF_LAZY["ok"]:
-            _wf_update_workflow_highlight()
+        _app_bus.publish("wf_highlight")
     except Exception:
         pass
     if not inline:
@@ -6230,93 +6380,82 @@ def build_app():
     # ======================================================================
     # TAB 1: 编辑
     # ======================================================================
-    tab_edit = tkinter.Frame(notebook,bg=C["bg"])
-    notebook.add(tab_edit,text="  脚本编辑  ")
-    tab_edit.columnconfigure(0,weight=1)
-    tab_edit.rowconfigure(0,weight=0); tab_edit.rowconfigure(1,weight=1)
+    # 构建段 + 换肤回调抽到 src/ui/editor_view.py (阶段二第 3 项第 3 步 S1-B):
+    # 宿主经 deps 注入行为回调, 再 get_widgets() 取回句柄同步 globals;
+    # 构建期立即读取编辑器控件全局的行为函数在同步后按原顺序补调。
+    ui_editor_view.build(
+        root, notebook=notebook, colors=C,
+        fonts={"small": FONT_SMALL, "icon": FONT_ICON, "tiny": FONT_TINY},
+        deps={
+            "ui_theme": ui_theme, "sp": utils.sp, "ctrl_h": utils.ctrl_h,
+            "themed": themed, "state": state, "root": root,
+            "attach_tooltip": utils.attach_tooltip, "log1": log1,
+            "idle_bg": _IDLE_BG, "empty_hint": _EMPTY_HINT,
+            "empty_hint_text": _EMPTY_HINT_TEXT,
+            "legend_items": _LEGEND_ITEMS, "legend_groups": _LEGEND_GROUPS,
+            "legend_dots": _LEGEND_DOTS,
+            "debounce_cb": _debounce_cb, "tb_sync_layout": _tb_sync_layout,
+            "tree_columns_on_configure": _tree_columns_on_configure,
+            "editor_zoom_wheel": _editor_zoom_wheel,
+            "editor_zoom_step": _editor_zoom_step,
+            "editor_zoom_reset": _editor_zoom_reset,
+            "toggle_breakpoint": _toggle_breakpoint,
+            "show_conditional_breakpoint_menu": _show_conditional_breakpoint_menu,
+            "kb_copy": _kb_copy, "kb_paste": _kb_paste,
+            "cmd_del_row": _cmd_del_row, "cmd_undo": _cmd_undo, "cmd_redo": _cmd_redo,
+            "kb_duplicate_row": _kb_duplicate_row,
+            "kb_toggle_comment": _kb_toggle_comment,
+            "kb_command_palette": _kb_command_palette,
+            "kb_move_up": _kb_move_up, "kb_move_down": _kb_move_down,
+            "kb_toggle_breakpoint": _kb_toggle_breakpoint,
+            "kb_run_script": _kb_run_script,
+            "cmd_edit_row_dialog": _cmd_edit_row_dialog, "edit_cell": _edit_cell,
+            "sync_idle_bg": _sync_idle_bg,
+            "idle_bg_on_configure": _idle_bg_on_configure,
+            "bind_paste_new_task": dialogs.bind_paste_new_task,
+            "interp_hint_for_values": dialogs.interp_hint_for_values,
+            "build_sel_bar": _build_sel_bar, "sync_sel_bars": _sync_sel_bars,
+            "idle_bg_retheme": _idle_bg_retheme,
+            "ctx": _app_ctx,
+        },
+    )
+    _ew = ui_editor_view.get_widgets()
+    tab_edit = _ew["tab_edit"]
+    toolbar = _ew["toolbar"]
+    edit_file_label = _ew["edit_file_label"]
+    tb_scroll = _ew["tb_scroll"]
+    toolbar_canvas = _ew["toolbar_canvas"]
+    toolbar_scrollbar = _ew["toolbar_scrollbar"]
+    toolbar_inner = _ew["toolbar_inner"]
+    toolbar_overflow_hint = _ew["toolbar_overflow_hint"]
+    tree_frame = _ew["tree_frame"]
+    tree = _ew["tree"]
+    tsy = _ew["tsy"]
+    tsx = _ew["tsx"]
+    legend_frame = _ew["legend_frame"]
+    legend_inner = _ew["legend_inner"]
+    _editor_font = _ew["editor_font"]
 
-
-    # === Toolbar (① 可横向滚动按钮区 + ② 右对齐文件名), 与「执行控制」同规格 ===
-    toolbar = tkinter.Frame(tab_edit,bg=C["bg"])
-    toolbar.grid(row=0,column=0,sticky="ew",padx=utils.sp(6),pady=(utils.sp(4),utils.sp(2)))
-    toolbar.columnconfigure(0,weight=1)
-
-    # 文件名标签 (右对齐, 不参与横向滚动)
-    edit_file_label = tkinter.Label(toolbar,text="",font=FONT_SMALL,
-        fg=C["fgm"],bg=C["bg"],anchor="e")
-    edit_file_label.grid(row=0,column=1,sticky="ne",padx=(utils.sp(4),utils.sp(2)))
-
-    # 可横向滚动按钮区 (canvas + 横向滚动条下置 + 溢出提示「⇄」)
-    tb_scroll = tkinter.Frame(toolbar,bg=C["bg"])
-    tb_scroll.grid(row=0,column=0,sticky="ew")
-    tb_scroll.columnconfigure(0,weight=1)
-
-    toolbar_canvas = tkinter.Canvas(tb_scroll, bg=C["bg"],
-        height=utils.ctrl_h("ctrl_h_lg"), highlightthickness=0, bd=0)
-    toolbar_scrollbar = tkinter.Scrollbar(tb_scroll, orient="horizontal",
-        command=toolbar_canvas.xview, width=utils.sp("sb_w_thin"))
-    toolbar_inner = tkinter.Frame(toolbar_canvas, bg=C["bg"])
-
-    # 溢出提示「⇄」: 内容宽度超过可视宽度时显示 (与执行控制一致)
-    toolbar_overflow_hint = tkinter.Label(tb_scroll,text="⇄",font=FONT_SMALL,
-        fg=C["fgm"],bg=C["bg"])
-
-    # 布局同步 (scrollregion + 溢出提示) 合并成一个去抖回调: 拖动窗口时 <Configure>
-    # 成串触发, 每次都 bbox+grid 重排会让主线程排队 (改造前在这里做 2 次 bbox)。
-    _tb_sync_debounced = _debounce_cb(toolbar_canvas, "tb_layout", 120, _tb_sync_layout)
-    toolbar_inner.bind("<Configure>", _tb_sync_debounced)
-
-    toolbar_canvas.create_window((0, 0), window=toolbar_inner, anchor="w")
-
-    toolbar_canvas.configure(xscrollcommand=toolbar_scrollbar.set)
-
-    toolbar_canvas.bind("<Configure>", _tb_sync_debounced)
-    toolbar_canvas.grid(row=0,column=0,sticky="ew")
-    toolbar_scrollbar.grid(row=1,column=0,sticky="ew")
-
-    # TreeView - compact layout
-    tree_frame = tkinter.Frame(tab_edit,bg=C["bgc"],
-        highlightbackground=C["bd"],highlightthickness=1)
-    tree_frame.grid(row=1,column=0,sticky="nsew",padx=utils.sp(3),pady=(0,utils.sp(4)))
-    tree_frame.columnconfigure(0,weight=1); tree_frame.rowconfigure(0,weight=1)
-
-    # ── 待机背景层: 与 tree_frame 同格 (row=1) 叠放, 默认隐藏 ──
-    #   1px 描边与 tree_frame 视觉对齐 (同为 C["bd"]), 显隐由 _sync_idle_bg 统一调度:
-    #   待机 → 本层 grid() + tree_frame.grid_remove(); 非待机 → 反之 (布局完全复原)。
-    _idle_bg_label = tkinter.Label(tab_edit, bd=0, highlightthickness=1,
-        highlightbackground=C["bd"], bg=C["bgc"])
-    _idle_bg_label.grid(row=1,column=0,sticky="nsew",
-        padx=utils.sp(3),pady=(0,utils.sp(4)))
-    _idle_bg_label.grid_remove()
-    _IDLE_BG["label"] = _idle_bg_label
-    # tab_edit 始终是 mapped 的, 绑它的 <Configure> 才能在「背景层显示中 (tree_frame
-    # 已 grid_remove, 自身不再产生 Configure)」时也跟随窗口缩放重绘;
-    # 背景层自己也要绑 (它的 Configure 才携带新尺寸, 见 _idle_bg_on_configure)。
+    # ── 构建期行为补调 (读取上面已同步的编辑器控件全局) ──
+    _EDITOR_ZOOM_MIN, _EDITOR_ZOOM_MAX = -4, 12
+    _preconfig_cmd_tags()
+    _apply_editor_zoom()
+    _build_sel_bar()
+    _bind_sel_bar(tree)
+    _bind_row_hover(tree)
     try:
-        tab_edit.bind("<Configure>", _idle_bg_on_configure, add=True)
-        _idle_bg_label.bind("<Configure>", _idle_bg_on_configure, add=True)
+        utils.register_ui_scale_hook(lambda: (_build_sel_bar(), _sync_sel_bars(tree),
+                                              _bind_minibar(), _apply_editor_zoom()))
+    except Exception:
+        pass
+    _init_toolbar_buttons()
+    try:
+        root.after_idle(_sync_empty_hint)
     except Exception:
         pass
 
-    state._editor_rows = []
-    tree = ttk.Treeview(tree_frame,
-        columns=("cmd",)+tuple("p{}".format(i) for i in range(1,10)),
-        show="tree headings",selectmode="browse")
-    tree.grid(row=0,column=0,sticky="nsew")
-    tree.heading("#0",text="#"); tree.column("#0",width=40,minwidth=40,stretch=False)
-    # 列策略 (v3 §2.1a): 显式 stretch 让可见列均分剩余宽度;
-    # 尾部参数列的显隐由 _apply_tree_columns() 按窗口宽度决定 (默认全显)。
-    tree.heading("cmd",text="命令类型")
-    tree.column("cmd",width=100,minwidth=80,stretch=True)
-    for i in range(1,10):
-        c="p{}".format(i); tree.heading(c,text="参数{}".format(i))
-        tree.column(c,width=65,minwidth=50,stretch=True)
-    _preconfig_cmd_tags()      # 命令配色 tag 一次性预配置 (v3 §4.2)
-    tree.bind("<Configure>", _tree_columns_on_configure, add=True)
-    # 高度断点 (v3 §2.1): 窗口变矮自动收起日志面板, 变高再展开; 与列策略同一条 150ms 去抖
+    # ── 窗口级绑定 (日志面板高度断点 / 跨屏 DPI / 日志自动折叠): 与编辑器无关 ──
     root.bind("<Configure>", _log_breakpoint_on_configure, add=True)
-    # 跨屏 DPI 失效钩子 (v5 §5.2 P1-12): 复用同一条既有 120ms 去抖 (`_debounce_cb`),
-    # 只在「当前所在显示器倍率真变化」时才重算字体/间距; 值相同立即返回 → 不自激。
     try:
         if _DPICHECK_ON:
             root.bind("<Configure>", _dpi_on_configure, add=True)
@@ -6327,151 +6466,6 @@ def build_app():
         root.after(300, _apply_log_auto_collapse)
     except Exception:
         pass
-
-    tsy=tkinter.Scrollbar(tree_frame,orient="vertical",command=tree.yview,
-        width=utils.sp("sb_w"),relief="flat",elementborderwidth=0,bg=C["bd"],troughcolor=C["bgc"])
-    tsx=tkinter.Scrollbar(tree_frame,orient="horizontal",command=tree.xview,
-        width=utils.sp("sb_w"),relief="flat",elementborderwidth=0,bg=C["bd"],troughcolor=C["bgc"])
-    tree.configure(yscrollcommand=tsy.set,xscrollcommand=tsx.set)
-    tsy.grid(row=0,column=1,sticky="ns"); tsx.grid(row=1,column=0,sticky="ew")
-
-    # ── 空态提示层 (v3 §3 D8): 零行时浮在空表格 / 待机背景图上方 ──
-    #   挂在 tab_edit 上 (不用 grid, 只 place 居中) 且晚于待机背景层创建 →
-    #   背景图显示时提示仍可见; tree_frame 被 grid_remove 也不影响本层。
-    _empty_hint = tkinter.Label(tab_edit, text=_EMPTY_HINT_TEXT,
-        font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"], justify="center",
-        bd=0, padx=utils.sp(14), pady=utils.sp(10),
-        highlightthickness=1, highlightbackground=C["bd"])
-    _EMPTY_HINT["label"] = _empty_hint
-    _EMPTY_HINT["shown"] = False      # 重建 (build_app 可被多次调用) 后按当前行数重新判定
-    try:
-        root.after_idle(_sync_empty_hint)
-    except Exception:
-        pass
-
-    _EDITOR_ZOOM_MIN, _EDITOR_ZOOM_MAX = -4, 12
-    _editor_font = tkinter.font.Font(root=root, name="ACRPA_EDITOR_TABLE", exists=False,
-                                     family="Microsoft YaHei UI", size=10)
-
-
-    _apply_editor_zoom()
-    tree.bind("<Control-MouseWheel>", _editor_zoom_wheel)
-    tree.bind("<Control-plus>", lambda e: _editor_zoom_step(1))
-    tree.bind("<Control-equal>", lambda e: _editor_zoom_step(1))   # =/+ 同键
-    tree.bind("<Control-minus>", lambda e: _editor_zoom_step(-1))
-    tree.bind("<Control-Key-0>", _editor_zoom_reset)
-
-    # ── 颜色图例条 ──
-    legend_frame = tkinter.Frame(tab_edit, bg=C["bg"])
-
-    # ── 工作流名称 ──
-    legend_frame.grid(row=2, column=0, sticky="ew", padx=utils.sp(3), pady=(0, utils.sp(2)))
-    legend_inner = tkinter.Frame(legend_frame, bg=C["bg"])
-    legend_inner.pack(anchor="w")
-    _LEGEND_GROUPS.clear()
-    _LEGEND_DOTS.clear()
-    for label, group in _LEGEND_ITEMS:
-        f = tkinter.Frame(legend_inner, bg=C["bg"])
-        f.pack(side="left", padx=(2, 0))
-        # 图例圆点的前景 = 分类色 (v4 §4.2 B2: 与行首色条同源, 随主题切换重取色)。
-        _dot = tkinter.Label(f, text="●", font=FONT_ICON,
-                             fg=ui_theme.cat_color(group), bg=C["bg"])
-        _dot._acrpa_keep_fg = True
-        _dot.pack(side="left")
-        _LEGEND_DOTS.append((_dot, group))
-        _lbl = tkinter.Label(f, text=label, font=FONT_TINY, fg=C["fgm"], bg=C["bg"])
-        ui_theme.set_fg_token(_lbl, "fgm")
-        _lbl.pack(side="left")
-        # 分组名: "找图/区域找图" → ("找图","区域找图"), 供按需显隐判定 (v3 §2.1b)
-        _LEGEND_GROUPS.append((tuple(n for n in label.split("/") if n), f))
-
-    # tree double-click binding is set after _edit_cell is defined below
-    tree.tag_configure("even", background=C["zebra"])   # §4.5 斑马纹 (不再用 acl)
-    tree.tag_configure("running", background=C["hlbg"])   # 主题色 (旧为写死 #FEF3C7)
-    tree.tag_configure("breakpoint", foreground=themed("dg"))
-
-
-    _build_sel_bar()
-    _bind_sel_bar(tree)
-    _bind_row_hover(tree)
-    # C5: 缩放档位切换后重建选中左缘条 PhotoImage (高度按 row_h) 并重刷, 与 _refresh_theme 同做法。
-    # 走 utils 注册回调 (set_ui_scale 在重配字体后触发), 避免把私有名暴露给 settings_window。
-    try:
-        utils.register_ui_scale_hook(lambda: (_build_sel_bar(), _sync_sel_bars(tree),
-                                              _bind_minibar(), _apply_editor_zoom()))
-    except Exception:
-        pass
-    tree.bind("<Button-1>", _toggle_breakpoint, add=True)
-
-    tree.bind("<Button-3>", _show_conditional_breakpoint_menu)
-    tree.bind("<Control-c>", _kb_copy)
-    tree.bind("<Control-v>", _kb_paste)
-    tree.bind("<Delete>", lambda e: _cmd_del_row())
-
-    tree.bind("<Control-z>", _cmd_undo)
-    tree.bind("<Control-y>", _cmd_redo)
-    tree.bind("<Control-Z>", _cmd_undo)
-    tree.bind("<Control-Y>", _cmd_redo)
-
-
-    tree.bind("<Control-d>", _kb_duplicate_row)
-    tree.bind("<Control-D>", _kb_duplicate_row)
-    tree.bind("<Control-slash>", _kb_toggle_comment)
-
-    # Ctrl+K — 命令库 (命令分组 + 模糊搜索); 写入当前行 (无选中则新增行)。
-    # 同时绑到 root 以便焦点不在树时也能唤起; 处理器返回 "break" 避免重复触发。
-    tree.bind("<Control-k>", _kb_command_palette)
-    tree.bind("<Control-K>", _kb_command_palette)
-    try:
-        root.bind("<Control-k>", _kb_command_palette)
-        root.bind("<Control-K>", _kb_command_palette)
-    except Exception:
-        pass
-
-    # L4 #6 降级: 拖放新建任务需 tkinterdnd2（第三方 GUI 依赖，未引入）→
-    # 主窗 Ctrl+V 粘贴路径等效（.acrpas/.xls/.xlsx/.json → 脚本/工作流；
-    # .exe/.lnk → 单命令「启动程序」）。焦点在文本控件时不拦截原生粘贴。
-    try:
-        dialogs.bind_paste_new_task(root, root, None)
-    except Exception as _e:                   # noqa: BLE001
-        log1("粘贴路径新建任务绑定失败: {}".format(_e), "warning")
-
-    # L4 #7: 参数输入占位符提示 —— 悬停脚本表格给出当前命令的插值说明
-    # （判定依据 commands.get_no_interp，日期标记文案取 interp.DATE_MAP_TEXT）
-    try:
-        utils.attach_tooltip(tree, lambda: dialogs.interp_hint_for_values(
-            [tree.set(_iid, "cmd") for _iid in tree.selection()]))
-    except Exception:                         # noqa: BLE001
-        pass
-
-    tree.bind("<Alt-Up>", _kb_move_up)
-    tree.bind("<Alt-Down>", _kb_move_down)
-    tree.bind("<F9>", _kb_toggle_breakpoint)
-    tree.bind("<F5>", _kb_run_script)
-    # F2 — 「编辑行」结构化对话框 (与双击内联编辑 _edit_cell 并存, 不改其绑定)
-    tree.bind("<F2>", lambda e: _cmd_edit_row_dialog())
-
-    # 将双击绑定放在 _edit_cell 定义之后
-    tree.bind("<Double-1>", lambda e: _edit_cell(e))
-
-    # ── 待机背景: 编辑区的任何"操作"立即退出待机态 ──
-    #   全部用 add=True 追加绑定 (不覆盖上面既有的 click/double-click/快捷键回调);
-    #   _sync_idle_bg 幂等且状态未变时不重绘, 高频事件下无额外开销。
-    for _bg_seq in ("<<TreeviewSelect>>", "<Button-1>", "<Double-1>",
-                    "<Key>", "<ButtonRelease-1>"):
-        try:
-            tree.bind(_bg_seq, lambda e: _sync_idle_bg(), add=True)
-        except Exception:
-            pass
-    # 尺寸变化 (窗口缩放 / 日志面板拖拽 / Tab 切换) → 节流重绘
-    try:
-        tree_frame.bind("<Configure>", _idle_bg_on_configure, add=True)
-    except Exception:
-        pass
-
-
-    # Initialize toolbar buttons now that all command functions are defined
-    _init_toolbar_buttons()
 
 
     # ======================================================================
@@ -6503,8 +6497,10 @@ def build_app():
               "toggle_debug_mode": _toggle_debug_mode,
               "show_variables_window": _show_variables_window,
               "toggle_step_mode": _toggle_step_mode,
+              "open_wf_variables": _wf_open_variable_manager,
               "load_pil": _load_pil, "get_pa": _get_pa,
-              "get_image_tk": lambda: ImageTk})
+              "get_image_tk": lambda: ImageTk,
+              "ctx": _app_ctx})
     # ── 转发别名: 既有直读 ACRPA.<name> 的引用 (mini_bar/热键/NetLink/_periodic/
     #    _setup_scroll_bindings/tools) 契约不变; 真源在 ui_exec_bar ──
     _ew = ui_exec_bar.get_widgets()
@@ -6548,7 +6544,8 @@ def build_app():
               "log1": log1, "show_toast": utils.show_toast,
               "main_paned": main_paned, "root": root,
               "app_root": APP_ROOT, "screenshot_dir": SCREENSHOT_DIR,
-              "state": state, "toggle_button": None})
+              "state": state, "toggle_button": None,
+              "ctx": _app_ctx})
     # ── 转发别名: 既有直读 ACRPA.<name> 的引用 (_periodic / tools) 契约不变 ──
     #    (set_tlog 契约已在 log_dock.build 内调用一次, utils.log1 全库可用)
     rz = ui_log_dock.get_rz()
@@ -6621,9 +6618,11 @@ def build_app():
                       "show_toast": utils.show_toast, "messagebox": messagebox,
                       "filedialog": filedialog, "app_root": APP_ROOT, "root": root,
                       "exec_maxmin_var": exec_maxmin_var,
+                      "exec_loop_var": loop_count_var,
                       "set_window_icon": _set_window_icon,
                       "bind_sel_bold": _bind_sel_bold, "bind_row_hover": _bind_row_hover,
-                      "load_pil": _load_pil, "get_image_grab": lambda: ImageGrab})
+                      "load_pil": _load_pil, "get_image_grab": lambda: ImageGrab,
+                      "ctx": _app_ctx})
         except Exception as exc:      # 构建失败 → 保留空 Tab, 不影响其余功能
             try:
                 log1("工作流 Tab 构建失败: %s" % (exc,), "error")
@@ -6671,6 +6670,9 @@ def build_app():
         try:
             if notebook.select() == str(tab_workflow):
                 _build_workflow_tab()
+                ui_exec_bar.set_active_tab(1)
+            else:
+                ui_exec_bar.set_active_tab(0)
         except Exception:
             pass
 
@@ -6721,11 +6723,31 @@ def build_app():
     _subscribe_theme_bus()
 
 
+    # 快捷键按当前 Tab 分派: 工作流 Tab 上 Ctrl+S 存工作流, 其余存脚本。
+    # 否则在工作流里按 Ctrl+S 会悄悄把脚本存了, 与工具栏「保存」口径分裂。
+    def _wf_tab_active():
+        try:
+            return notebook.select() == str(tab_workflow)
+        except Exception:
+            return False
+
+    def _save_ctx():
+        return ui_workflow_view.wf_save() if _wf_tab_active() else _cmd_save()
+
+    def _save_as_ctx():
+        return ui_workflow_view.wf_save_as() if _wf_tab_active() else _cmd_save_as()
+
+    def _new_ctx():
+        return ui_workflow_view.wf_new() if _wf_tab_active() else _cmd_new()
+
+    def _open_ctx():
+        return ui_workflow_view.wf_open() if _wf_tab_active() else _cmd_open()
+
     for _seq, _fn in (
-        ("<Control-s>", _cmd_save),      # 保存
-        ("<Control-S>", _cmd_save_as),   # 另存为 (Tk: 大写 keysym 即 Shift 组合)
-        ("<Control-n>", _cmd_new),       # 新建
-        ("<Control-o>", _cmd_open),      # 打开
+        ("<Control-s>", _save_ctx),      # 保存 (按 Tab 分派)
+        ("<Control-S>", _save_as_ctx),   # 另存为 (Tk: 大写 keysym 即 Shift 组合)
+        ("<Control-n>", _new_ctx),       # 新建 (按 Tab 分派)
+        ("<Control-o>", _open_ctx),      # 打开 (按 Tab 分派)
     ):
         try:
             root.bind_all(_seq, _hotkey(_fn))

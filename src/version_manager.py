@@ -69,6 +69,21 @@ class VersionManager:
                     CREATE INDEX IF NOT EXISTS idx_script_path
                     ON script_versions(script_path, version_num)
                 """)
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS workflow_versions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        workflow_path TEXT NOT NULL,
+                        version_num INTEGER NOT NULL,
+                        timestamp TEXT DEFAULT (datetime('now','localtime')),
+                        content_json TEXT NOT NULL,
+                        step_count INTEGER DEFAULT 0,
+                        comment TEXT DEFAULT ''
+                    )
+                """)
+                conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_workflow_path
+                    ON workflow_versions(workflow_path, version_num)
+                """)
                 conn.commit()
             finally:
                 conn.close()
@@ -271,6 +286,170 @@ class VersionManager:
             return 0
         finally:
             conn.close()
+
+    # ── 工作流版本历史 ────────────────────────────────────────────────
+    def save_workflow_version(self, workflow_path, wf_data, comment=""):
+        """保存工作流 JSON dict 快照为新版本。
+
+        Args:
+            workflow_path: 工作流文件绝对路径
+            wf_data: 工作流 dict ({"steps": [...], ...})
+            comment: 版本备注
+
+        Returns:
+            version_num 或 0 (失败)
+        """
+        if not workflow_path:
+            return 0
+        try:
+            content_json = json.dumps(wf_data, ensure_ascii=False)
+        except Exception as e:
+            log1("工作流版本序列化失败: {}".format(e), "error")
+            return 0
+
+        steps = wf_data.get("steps", []) if isinstance(wf_data, dict) else []
+        step_count = len(steps)
+
+        with _lock:
+            conn = self._connect()
+            try:
+                cur = conn.execute(
+                    """SELECT COALESCE(MAX(version_num), 0) + 1
+                       FROM workflow_versions WHERE workflow_path = ?""",
+                    (workflow_path,)
+                )
+                version_num = cur.fetchone()[0]
+                conn.execute(
+                    """INSERT INTO workflow_versions
+                       (workflow_path, version_num, content_json, step_count, comment)
+                       VALUES (?, ?, ?, ?, ?)""",
+                    (workflow_path, version_num, content_json, step_count, comment)
+                )
+                conn.commit()
+                # 每个工作流最多保留 50 个版本
+                conn.execute("""
+                    DELETE FROM workflow_versions WHERE workflow_path = ? AND id NOT IN (
+                        SELECT id FROM workflow_versions WHERE workflow_path = ?
+                        ORDER BY version_num DESC LIMIT 50
+                    )
+                """, (workflow_path, workflow_path))
+                conn.commit()
+                log1("工作流版本已保存: {} v{} ({} 步骤)".format(
+                    os.path.basename(workflow_path), version_num, step_count))
+                return version_num
+            except Exception as e:
+                log1("工作流版本保存失败: {}".format(e), "error")
+                return 0
+            finally:
+                conn.close()
+
+    def get_workflow_history(self, workflow_path):
+        """返回 [(version_num, timestamp, step_count, comment), ...] 按版本号降序。"""
+        if not workflow_path:
+            return []
+        conn = self._connect()
+        try:
+            cur = conn.execute(
+                """SELECT version_num, timestamp, step_count, comment
+                   FROM workflow_versions WHERE workflow_path = ?
+                   ORDER BY version_num DESC""",
+                (workflow_path,)
+            )
+            return cur.fetchall()
+        except Exception:
+            return []
+        finally:
+            conn.close()
+
+    def restore_workflow_version(self, workflow_path, version_num):
+        """恢复指定版本的工作流 dict; 不存在返回 None。"""
+        conn = self._connect()
+        try:
+            cur = conn.execute(
+                "SELECT content_json FROM workflow_versions WHERE workflow_path = ? AND version_num = ?",
+                (workflow_path, version_num)
+            )
+            row = cur.fetchone()
+            if not row:
+                log1("工作流版本 v{} 不存在".format(version_num), "warning")
+                return None
+            return json.loads(row[0])
+        except Exception as e:
+            log1("工作流版本恢复失败: {}".format(e), "error")
+            return None
+        finally:
+            conn.close()
+
+    def diff_workflow_versions(self, workflow_path, v1, v2=None):
+        """对比两个工作流版本 (v2=None 时对比 v1 与给定 current)。
+
+        Returns:
+            str 人类可读差异摘要。
+        """
+        old_def = self.restore_workflow_version(workflow_path, v1)
+        if old_def is None:
+            return "无法加载工作流版本 v{}".format(v1)
+        old_steps = old_def.get("steps", []) if isinstance(old_def, dict) else []
+
+        if v2 is not None:
+            new_def = self.restore_workflow_version(workflow_path, v2)
+            if new_def is None:
+                return "无法加载工作流版本 v{}".format(v2)
+            new_steps = new_def.get("steps", []) if isinstance(new_def, dict) else []
+            other = "v{}".format(v2)
+        else:
+            new_steps = getattr(self, "_wf_current_steps", None) or []
+            other = "当前"
+
+        lines = ["工作流版本对比: v{} → {}".format(v1, other), "=" * 50]
+        old_count, new_count = len(old_steps), len(new_steps)
+        max_rows = max(old_count, new_count)
+        changes = added = removed = 0
+
+        def _desc(s):
+            if not isinstance(s, dict):
+                return str(s)
+            t = s.get("type", "?")
+            if t == "script":
+                return "script {}".format(s.get("path", ""))
+            if t == "command":
+                return "command {}".format(s.get("cmd", ""))
+            if t == "variable":
+                return "variable {}={}".format(s.get("var_name", ""), s.get("var_value", ""))
+            if t in ("parallel", "loop", "retry"):
+                return "{} ({} 子步骤)".format(t, len(s.get("steps", [])))
+            if t == "workflow":
+                return "workflow {}".format(s.get("path", ""))
+            if t == "condition":
+                return "condition {}".format(s.get("if", ""))
+            if t == "wait":
+                return "wait {}s".format(s.get("seconds", ""))
+            if t == "log":
+                return "log {}".format(s.get("text", ""))
+            return t
+
+        for i in range(max_rows):
+            old_desc = _desc(old_steps[i]) if i < old_count else None
+            new_desc = _desc(new_steps[i]) if i < new_count else None
+            if old_desc is None and new_desc is not None:
+                lines.append("  + [步骤{}] {}".format(i + 1, new_desc))
+                added += 1
+                changes += 1
+            elif old_desc is not None and new_desc is None:
+                lines.append("  - [步骤{}] {}".format(i + 1, old_desc))
+                removed += 1
+                changes += 1
+            elif old_desc != new_desc:
+                lines.append("  ~ [步骤{}] {} → {}".format(i + 1, old_desc, new_desc))
+                changes += 1
+
+        lines.append("-" * 50)
+        if changes == 0:
+            lines.append("无差异")
+        else:
+            lines.append("变更: {} 处 (新增 {} 步, 删除 {} 步)".format(changes, added, removed))
+        lines.append("总步骤数: {} → {}".format(old_count, new_count))
+        return "\n".join(lines)
 
 
 # 全局单例

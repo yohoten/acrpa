@@ -611,6 +611,11 @@ def _run_workflow(task, target, name, label):
 
     def _work():
         try:
+            from core import run_id as _run_id
+            _run_id.new_run()
+        except Exception:
+            pass
+        try:
             import workflow as wf_mod
             wf_def = wf_mod.parse_workflow(target)
             state.quit2 = False
@@ -620,6 +625,12 @@ def _run_workflow(task, target, name, label):
         except Exception as e:
             log1("计划任务工作流执行失败: {} — {}".format(name, e), "error")
             _add_task_log(name, os.path.basename(target), "失败", label, "error", reason=str(e))
+        finally:
+            try:
+                from core import run_id as _run_id
+                _run_id.reset()
+            except Exception:
+                pass
 
     threading.Thread(target=_work, daemon=True).start()
     return True
@@ -652,6 +663,11 @@ def _run_command(task, name, label):
 
     def _work():
         try:
+            from core import run_id as _run_id
+            _run_id.new_run()
+        except Exception:
+            pass
+        try:
             import engine as engine_mod
             import scriptdata
             row = scriptdata.ScriptData(cmd, args)
@@ -670,6 +686,12 @@ def _run_command(task, name, label):
                 pass
             log1("计划任务命令执行失败: {} — {}".format(name, e), "error")
             _add_task_log(name, cmd, "失败", label, "error", reason=str(e))
+        finally:
+            try:
+                from core import run_id as _run_id
+                _run_id.reset()
+            except Exception:
+                pass
 
     threading.Thread(target=_work, daemon=True).start()
     return True

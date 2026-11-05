@@ -65,15 +65,24 @@ def _mark(stage, **detail):
 
 
 def _wrap_once(mod, attr, stage, detail_fn=None):
-    """把 ``mod.attr`` 包一层「调用后记一条启动阶段」。幂等, 失败静默。"""
+    """把 ``mod.attr`` 包一层「首次调用后记一条启动阶段」。幂等, 失败静默。
+
+    只在**首次**调用时打点: 探针是永久 monkey-patch, 而 apply_theme /
+    load_config 等在运行期会被再次调用 (换肤/重载配置), 若每次都打点,
+    cost 会变成「距上一次打点的间隔」(分钟~小时级), 产生
+    `stage=theme cost=939771ms` 这类误导性启动日志。
+    """
     try:
         original = getattr(mod, attr, None)
         if original is None or getattr(original, "_acrpa_boot_probe", False):
             return False
+        marked = [False]
 
         def _probe(*a, **kw):
             result = original(*a, **kw)
-            _mark(stage, **(detail_fn(result) if detail_fn else {}))
+            if not marked[0]:
+                marked[0] = True
+                _mark(stage, **(detail_fn(result) if detail_fn else {}))
             return result
 
         _probe._acrpa_boot_probe = True
@@ -277,10 +286,41 @@ def build():
     return ACRPA
 
 
+def _register_app_context(rt):
+    """把构建产物的核心服务登记到 AppContext 单例 (方案文档 S2)。
+
+    纯增量: 只写容器, 不改任何既有读取路径; 各视图后续经 deps 注入 ctx
+    后再逐步切换。失败一律静默降级 (不影响已建好的窗口)。
+    """
+    try:
+        from core.app_context import ctx
+        root = getattr(rt, "root", None)
+        ctx.register("root", root)
+        ctx.register("acrpa", rt)
+        try:
+            import state as _st
+            ctx.register("state", _st)
+        except Exception:
+            pass
+        colors = getattr(rt, "C", None)
+        if colors is not None:
+            ctx.register("colors", colors)
+    except Exception:
+        pass
+
+
 def _finish_build(rt):
     """构建完成后的 L5 接线（全部失败可降级，不影响已建好的窗口）。"""
     _mark_post_build()
     root = getattr(rt, "root", None)
+    # ④ AppContext 初始化快照: 登记 root/state/acrpa/colors (S2 增量, 无读取方)
+    _register_app_context(rt)
+    # ① Tk 回调异常留痕: 按钮/事件处理中的异常不再只打 stderr (打包版无控制台)
+    try:
+        import crashlog
+        crashlog.install_tk_hook(root)
+    except Exception:
+        pass
     # ① 单实例 IPC 接收窗口 + 启动前登记的动作
     hwnd = 0
     try:

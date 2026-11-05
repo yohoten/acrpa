@@ -129,6 +129,27 @@ def handle_exception(exc_type, exc_value, exc_tb, source="main"):
     return True
 
 
+def log_startup_error(text, source="startup"):
+    """把启动阶段捕获到的异常写 ``logs/startup_error.log`` (与 crash_*.log 分开)。
+
+    用途: run.py 在 ``app.main()`` 处捕获的启动/构建异常不会走到 excepthook
+    (被 try/except 吞掉只 print), 这里补一条独立文件, 便于「程序没起来」时定位。
+    返回写入路径; 任何失败静默。
+    """
+    path = os.path.join(crash_dir(_CRASH_DIR or None), "startup_error.log")
+    try:
+        parent = os.path.dirname(path)
+        if parent and not os.path.isdir(parent):
+            os.makedirs(parent, exist_ok=True)
+        with open(path, "a", encoding="utf-8", errors="replace") as f:
+            f.write("\n===== {} | pid={} | {}\n".format(
+                time.strftime("%Y-%m-%d %H:%M:%S"), os.getpid(), source))
+            f.write(str(text).rstrip() + "\n")
+    except Exception:
+        pass
+    return path
+
+
 def _excepthook(exc_type, exc_value, exc_tb):
     """替换 sys.excepthook：先落崩溃文件，**再**交回原钩子。
 
@@ -163,6 +184,42 @@ def _thread_excepthook(args):
             _ORIG_THREAD_HOOK(args)
     except Exception:
         pass
+
+
+def install_tk_hook(root):
+    """把 Tk 回调异常 (按钮/事件里的未捕获异常) 落崩溃文件 + log1 (幂等)。
+
+    Tk 默认走 ``root.report_callback_exception`` 只往 stderr 打一段 traceback:
+    打包版没有控制台 → GUI 里点一下按钮报错, 用户只看到「没反应」, 日志里也查不到。
+    本钩子补上这一环, 同时保留原钩子 (终端/开发者仍能看到完整栈)。
+
+    返回 True 表示钩子已就位。
+    """
+    if root is None:
+        return False
+    try:
+        prev = root.report_callback_exception
+    except Exception:
+        return False
+    if getattr(prev, "_acrpa_tk_hook", False):
+        return True
+
+    def _tk_report(exc_type, exc_value, exc_tb):
+        try:
+            handle_exception(exc_type, exc_value, exc_tb, "tk-callback")
+        except Exception:
+            pass
+        try:
+            prev(exc_type, exc_value, exc_tb)
+        except Exception:
+            pass
+
+    _tk_report._acrpa_tk_hook = True
+    try:
+        root.report_callback_exception = _tk_report
+        return True
+    except Exception:
+        return False
 
 
 def install(log_dir=None):

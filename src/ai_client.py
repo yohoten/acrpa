@@ -8,6 +8,7 @@ import socket
 import requests
 
 import state
+import ai_cost
 
 
 # Custom exception classes for better error handling
@@ -94,6 +95,9 @@ class AIClient:
 
             data = response.json()
 
+            # token 记账 (脱敏落盘)
+            ai_cost.record_usage(model, data.get("usage") or {})
+
             # Create a simple response object compatible with openai SDK
             class ChatCompletion:
                 def __init__(self, data):
@@ -124,6 +128,91 @@ class AIClient:
         except (KeyError, IndexError) as e:
             raise APIError(f"API 响应格式错误: {str(e)}")
 
+    def chat_completions_stream(self, model, messages, temperature=0.2,
+                                max_tokens=1500, timeout=60, on_delta=None):
+        """流式调用 chat completions (SSE)。
+
+        Args:
+            model / messages / temperature / max_tokens / timeout: 同 chat_completions
+            on_delta: callable(chunk_text), 每收到一段增量正文回调一次 (用于 UI 流式展示)
+
+        Returns:
+            完整正文 str。异常时抛与 chat_completions 相同的 APIError 子类,
+            调用方可降级回非流式路径。
+        """
+        url = f"{self.base_url}/chat/completions"
+
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": True,
+        }
+
+        try:
+            response = self.session.post(url, json=payload, timeout=timeout,
+                                         stream=True)
+        except requests.exceptions.Timeout:
+            raise APITimeoutError("请求超时，请检查网络连接")
+        except requests.exceptions.ConnectionError:
+            raise APIError("网络连接失败，请检查网络设置")
+        except requests.exceptions.RequestException as e:
+            raise APIError(f"API 请求失败: {str(e)}")
+
+        # 失败时把服务端错误正文带出 (与 chat_completions 同口径)
+        if response.status_code >= 400:
+            detail = ""
+            try:
+                detail = (response.text or "")[:300]
+            except Exception:
+                pass
+            suffix = "（{}）".format(detail) if detail else ""
+            if response.status_code == 401:
+                raise APIAuthError("API Key 无效或已过期" + suffix)
+            if response.status_code == 429:
+                raise APIRateLimitError("请求频率超限，请稍后重试" + suffix)
+            if response.status_code >= 500:
+                raise APIError("服务器错误: {} {}".format(response.status_code, suffix))
+            raise APIError("请求被拒绝: HTTP {}{}".format(response.status_code, suffix))
+
+        chunks = []
+        try:
+            for raw in response.iter_lines(decode_unicode=True):
+                if not raw:
+                    continue
+                line = raw.strip()
+                if not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    obj = json.loads(data)
+                except Exception:
+                    continue
+                choice = (obj.get("choices") or [{}])[0]
+                delta = choice.get("delta") or {}
+                text = delta.get("content")
+                if text:
+                    chunks.append(text)
+                    if on_delta:
+                        try:
+                            on_delta(text)
+                        except Exception:
+                            pass
+                # 流式结束帧也可能携带 usage
+                usage = obj.get("usage")
+                if usage:
+                    ai_cost.record_usage(model, usage)
+        finally:
+            try:
+                response.close()
+            except Exception:
+                pass
+
+        return "".join(chunks)
+
 
 # ══════════════════════════════════════════════════════════════════════
 # 脚本生成：调用 + 空正文重试 + 成因诊断
@@ -141,6 +230,24 @@ class AIClient:
 # 所以修法有两半：给足预算 + 空正文时自动放大预算重试一次，并把成因写进错误消息。
 SCRIPT_MAX_TOKENS = 8000            # 推理模型需要余量；实测 2000 会被吃光
 SCRIPT_RETRY_MULTIPLIER = 2
+
+
+def _chat_with_backoff(client, model, messages, temperature, max_tokens, timeout,
+                       max_attempts=3):
+    """429/超时 指数退避重试; 其他异常直接抛出。"""
+    import time as _time
+    last = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return client.chat_completions(model=model, messages=messages,
+                                           temperature=temperature,
+                                           max_tokens=max_tokens, timeout=timeout)
+        except (APIRateLimitError, APITimeoutError) as e:
+            last = e
+            if attempt >= max_attempts:
+                break
+            _time.sleep(ai_cost.backoff_delay(attempt))
+    raise last
 
 
 def empty_output_reason(response):
@@ -162,18 +269,45 @@ def empty_output_reason(response):
 
 
 def generate_script_content(client, messages, model, temperature=0.3,
-                            max_tokens=None, timeout=120, on_retry=None):
+                            max_tokens=None, timeout=120, on_retry=None,
+                            on_delta=None):
     """请求脚本正文 → (content, response)。
 
-    正文为空且判定为"预算被推理吃光"时，自动放大预算重试一次；仍为空则抛
-    ValueError，消息里带上成因（而不是让用户看到"发生未知错误"）。
+    on_delta 提供时首轮走流式 (SSE) 逐段回调; 流式异常/空正文自动降级到
+    非流式退避重试路径。正文为空且判定为"预算被推理吃光"时，自动放大预算
+    重试一次；仍为空则抛 ValueError。
     """
     budget = int(max_tokens or SCRIPT_MAX_TOKENS)
-    response = client.chat_completions(model=model, messages=messages,
-                                       temperature=temperature,
-                                       max_tokens=budget, timeout=timeout)
+
+    # 提示词/结果缓存: 相同请求命中直接返回 (节省 token 成本)
+    key = ai_cost.cache_key(model, messages, temperature, budget)
+    cached = ai_cost.cache_get(key)
+    if cached:
+        if on_delta:
+            try:
+                on_delta(cached)
+            except Exception:
+                pass
+        return cached, None
+
+    response = None
+    if on_delta:
+        # 首轮流式; 异常/空降级到非流式
+        try:
+            streamed = client.chat_completions_stream(
+                model=model, messages=messages, temperature=temperature,
+                max_tokens=budget, timeout=timeout, on_delta=on_delta)
+            content = (streamed or "").strip()
+            if content:
+                ai_cost.cache_put(key, content)
+                return content, None
+        except Exception:
+            pass
+    if response is None:
+        response = _chat_with_backoff(client, model, messages, temperature, budget, timeout)
     content = ((response.choices[0].message.content) or "").strip()
     if content:
+        ai_cost.cache_put(key, content)
         return content, response
 
     reason = empty_output_reason(response)
@@ -186,12 +320,11 @@ def generate_script_content(client, messages, model, temperature=0.3,
                 on_retry(reason, bigger)
             except Exception:
                 pass
-        response = client.chat_completions(model=model, messages=messages,
-                                           temperature=temperature,
-                                           max_tokens=bigger,
-                                           timeout=timeout + 60)
+        response = _chat_with_backoff(client, model, messages, temperature, bigger,
+                                      timeout + 60)
         content = ((response.choices[0].message.content) or "").strip()
         if content:
+            ai_cost.cache_put(key, content)
             return content, response
         reason = "{}；放大到 {} tokens 重试后仍为空".format(reason, bigger) if reason \
             else "放大到 {} tokens 重试后仍为空".format(bigger)
@@ -200,6 +333,114 @@ def generate_script_content(client, messages, model, temperature=0.3,
         "AI 没有返回正文{}。常见原因：推理模型把输出预算耗在了思考上，或提示词过长。"
         "请重试，或在「设置 → AI」里改用非推理模型 / 缩短输入。".format(
             "（{}）".format(reason) if reason else ""))
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 自然语言 → 工作流 JSON (非 function-calling: 严格提示词 + 流式 + 静态检查兜底)
+# ══════════════════════════════════════════════════════════════════════
+WF_MAX_FIX_ROUNDS = 3
+
+_WF_SYSTEM_PROMPT = (
+    "你是 RPA 工作流设计器。只输出一个 JSON 对象，不要任何解释、前后缀或代码块标记。"
+    "JSON 结构：{\"name\": \"...\", \"steps\": [...]}。"
+    "step 支持 type: script/command/variable/log/wait/parallel/loop/retry/workflow/condition。"
+    "字段约定："
+    " script: {\"type\":\"script\",\"path\":\"...\"};"
+    " command: {\"type\":\"command\",\"cmd\":\"...\",\"params\":[...]};"
+    " variable: {\"type\":\"variable\",\"var_name\":\"...\",\"var_value\":\"...\"};"
+    " log: {\"type\":\"log\",\"text\":\"...\"};"
+    " wait: {\"type\":\"wait\",\"seconds\":N};"
+    " parallel: {\"type\":\"parallel\",\"steps\":[...],\"outputs\":[...]};"
+    " loop: {\"type\":\"loop\",\"times\":\"3\",\"steps\":[...]};"
+    " retry: {\"type\":\"retry\",\"max_attempts\":3,\"delay\":1.0,\"steps\":[...]};"
+    " workflow: {\"type\":\"workflow\",\"path\":\"sub.json\",\"inputs\":{},\"outputs\":[]};"
+    " condition: {\"type\":\"condition\",\"if\":\"...\",\"then\":{...},\"else\":{...}}。"
+)
+
+
+def _parse_workflow_json(content):
+    """从 AI 输出中提取并解析工作流 JSON dict (容错代码块标记)。"""
+    import json as _json
+    s = (content or "").strip()
+    if not s:
+        raise ValueError("内容为空")
+    if s.startswith("```"):
+        s = s.strip("`")
+        if s.lower().startswith("json"):
+            s = s[4:]
+        s = s.strip()
+    start = s.find("{")
+    end = s.rfind("}")
+    if start < 0 or end <= start:
+        raise ValueError("输出不含 JSON 对象")
+    data = _json.loads(s[start:end + 1])
+    if not isinstance(data, dict) or "steps" not in data:
+        raise ValueError("JSON 缺少 steps 字段")
+    data["steps"] = list(data.get("steps") or [])
+    return data
+
+
+def generate_workflow_from_text(client, text, model, temperature=0.3,
+                                max_tokens=4000, timeout=120, on_delta=None):
+    """自然语言 → 工作流 JSON, 用 flow_graph.analyze 静态检查兜底修正。
+
+    Returns:
+        (wf_data dict, issues list)。解析/校验失败抛 ValueError。
+    """
+    import flow_graph
+
+    messages = [
+        {"role": "system", "content": _WF_SYSTEM_PROMPT},
+        {"role": "user", "content": "请生成工作流：" + (text or "")},
+    ]
+
+    def _non_stream():
+        resp = _chat_with_backoff(client, model, messages, temperature,
+                                  max_tokens, timeout)
+        return ((resp.choices[0].message.content) or "").strip()
+
+    data = None
+    issues = []
+    for round_no in range(WF_MAX_FIX_ROUNDS + 1):
+        content = ""
+        if round_no == 0:
+            # 首轮优先流式展示; 流式异常降级非流式 (带退避重试)
+            try:
+                content = client.chat_completions_stream(
+                    model=model, messages=messages, temperature=temperature,
+                    max_tokens=max_tokens, timeout=timeout, on_delta=on_delta)
+            except Exception:
+                content = _non_stream()
+        else:
+            content = _non_stream()
+        content = (content or "").strip()
+        if not content:
+            raise ValueError("AI 没有返回工作流内容")
+
+        try:
+            data = _parse_workflow_json(content)
+        except Exception as e:
+            if round_no >= WF_MAX_FIX_ROUNDS:
+                raise ValueError("AI 输出解析失败: {}".format(e))
+            messages.append({"role": "assistant", "content": content})
+            messages.append({"role": "user", "content":
+                "输出不是合法工作流 JSON: {}. 请只输出一个合法 JSON 对象。".format(e)})
+            continue
+
+        # 静态检查兜底: 9 项检查, 有 error 则回填修正 (有限轮)
+        g = flow_graph.promote(data)
+        issues = flow_graph.analyze(g)
+        errors = [i for i in issues if i.get("level") == "error"]
+        if not errors:
+            return data, issues
+        if round_no >= WF_MAX_FIX_ROUNDS:
+            return data, issues
+        err_text = "\n".join(i.get("message", "") for i in errors)
+        messages.append({"role": "assistant", "content": content})
+        messages.append({"role": "user", "content":
+            "工作流存在以下静态问题，请修正后重新输出完整 JSON：\n" + err_text})
+
+    return data, issues
 
 
 # ── 统一模型注册表 ──

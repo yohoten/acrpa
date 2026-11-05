@@ -244,8 +244,8 @@ def t_lazy_build():
           "首帧只建空 Tab, 切到工作流 Tab 才触发构建")
     check('_WF_LAZY["ensure"] = _build_workflow_tab' in a,
           "把构建入口注入 _WF_LAZY 供 _wf_ensure() 调用")
-    check('if _WF_LAZY["ok"]:' in a,
-          "_periodic 的工作流高亮按「已构建」守卫 (未构建时跳过)")
+    check('_app_bus.publish("wf_highlight")' in a,
+          "_periodic_g2 工作流高亮经事件总线发布 (未构建无订阅者即 no-op)")
     check("def _wf_ensure(" in a and "_wf_ensure()" in a,
           "绕过 Tab 切换的入口 (run/stop/toggle/refresh) 先 ensure")
     check("tab=None" in wv and "if tab is not None:" in wv,

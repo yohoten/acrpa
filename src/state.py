@@ -183,6 +183,9 @@ _config_schema = [
     # 脚本编辑区「Excel 表格」独立字号增量 (Ctrl+滚轮 / Ctrl+± / Ctrl+0 复位)。
     # 与 ui_scale 分开: 用户常想让表格比其它界面更密或更大, 且它是唯一的高频阅读区。
     ("editor_zoom", 0, int),
+    # 无障碍「减少动效」(P1-3): 消费方 utils.reduce_motion() 读本键, 决定插值动画
+    # (节点光晕/Toast 淡入等) 是否退化为一步到位; 默认 False 保留全动效。
+    ("reduce_motion", False, bool),
     # ── 脚本市场 v2 (全部非敏感) ──
     # ⚠ token 不在此列：只进 Windows 凭据库 (复用 cred_write/cred_read/cred_delete)，
     #   与 api_key 同款安全策略，绝不写入 config.json、绝不写日志。

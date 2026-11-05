@@ -136,8 +136,14 @@ def _redact(text):
 def make_record(kind, target, trigger="", duration_ms=None, status="success",
                 failed_row=None, rows_total=None, mode="", detail=""):
     """→ 已脱敏的记录 dict（不写盘）。"""
+    try:
+        from core import run_id as _run_id
+        _rid = _run_id.current()
+    except Exception:
+        _rid = ""
     rec = {
         "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "run_id": _rid,
         "kind": _redact(kind)[:32],
         "target": _redact(target),
         "trigger": _redact(trigger)[:32],

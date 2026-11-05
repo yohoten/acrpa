@@ -104,6 +104,7 @@ _CTX = {
     "set_tlog": None, "log1": None, "show_toast": None,
     "main_paned": None, "root": None, "app_root": "", "screenshot_dir": "",
     "state": None, "colors": None, "log_dir": "",
+    "ctx": None,
 }
 
 # ── 面板状态 / 级别 tag 表 / 过滤与色条游标 (原 ACRPA 模块级常量, 原位迁入) ──

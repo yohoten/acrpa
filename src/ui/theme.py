@@ -342,6 +342,7 @@ def is_claimed(win):
 # 语义色跨主题会翻转明度: 亮色 ac=#0078D4(深) 需白字, 暗色 ac=#4CC2FF(浅) 需黑字。
 from utils import rel_luminance, text_on  # noqa: E402  (置于工具函数区, 无循环依赖)
 from utils import restyle_combobox_popdown  # noqa: E402  (下拉弹窗重刷, utils 内实现)
+from core.color import state_color  # noqa: E402  (P1-2: 状态色统一派生, 替代逐处 _darken)
 
 
 # ── 仅前景色 token (文字类控件) ──
@@ -382,7 +383,6 @@ def apply_theme(root_widget, style):
     import utils
     C = colors()
     utils.C = C
-    _darken = utils._darken
     root_widget.configure(bg=C["bg"])
 
     # === Notebook / Tabs (经典矩形页签; 去选中蓝字 → 加粗 + 强调条) ===
@@ -478,27 +478,30 @@ def apply_theme(root_widget, style):
                     borderwidth=1, relief="flat", bordercolor=C["sc"],
                     focuscolor=C["focus"], font=utils.FONT_BUTTON, padding=(10, 4))
     style.map("Success.TButton",
-              background=[("active", _darken(C["sc"])), ("pressed", _darken(C["sc"], 0.3))],
+              background=[("active", state_color(C["sc"], "hover")),
+                          ("pressed", state_color(C["sc"], "active"))],
               foreground=[("disabled", C["bgc"])],
-              bordercolor=[("focus", C["focus"]), ("active", _darken(C["sc"]))],
+              bordercolor=[("focus", C["focus"]), ("active", state_color(C["sc"], "hover"))],
               lightcolor=[("focus", C["focus"])],
               darkcolor=[("focus", C["focus"])])
     style.configure("Danger.TButton", background=C["dg"], foreground=text_on(C["dg"]),
                     borderwidth=1, relief="flat", bordercolor=C["dg"],
                     focuscolor=C["focus"], font=utils.FONT_BUTTON, padding=(10, 4))
     style.map("Danger.TButton",
-              background=[("active", _darken(C["dg"])), ("pressed", _darken(C["dg"], 0.3))],
+              background=[("active", state_color(C["dg"], "hover")),
+                          ("pressed", state_color(C["dg"], "active"))],
               foreground=[("disabled", C["bgc"])],
-              bordercolor=[("focus", C["focus"]), ("active", _darken(C["dg"]))],
+              bordercolor=[("focus", C["focus"]), ("active", state_color(C["dg"], "hover"))],
               lightcolor=[("focus", C["focus"])],
               darkcolor=[("focus", C["focus"])])
     style.configure("Warning.TButton", background=C["wn"], foreground=text_on(C["wn"]),
                     borderwidth=1, relief="flat", bordercolor=C["wn"],
                     focuscolor=C["focus"], font=utils.FONT_BUTTON, padding=(10, 4))
     style.map("Warning.TButton",
-              background=[("active", _darken(C["wn"])), ("pressed", _darken(C["wn"], 0.3))],
+              background=[("active", state_color(C["wn"], "hover")),
+                          ("pressed", state_color(C["wn"], "active"))],
               foreground=[("disabled", C["bgc"])],
-              bordercolor=[("focus", C["focus"]), ("active", _darken(C["wn"]))],
+              bordercolor=[("focus", C["focus"]), ("active", state_color(C["wn"], "hover"))],
               lightcolor=[("focus", C["focus"])],
               darkcolor=[("focus", C["focus"])])
 
@@ -520,6 +523,30 @@ def apply_theme(root_widget, style):
     style.map("TScrollbar",
               background=[("active", C["fgm"])],
               arrowcolor=[("active", C["fgt"])])
+
+    # === Checkbutton / Radiobutton (ttk) ===
+    # 这两类控件不配置就沿用系统浅色底: 暗色主题下会在卡片里留下整条白底,
+    # 勾选框/圆点也仍是浅色。统一到 bgc 面 + fgb 字 + 强调色选中态。
+    # clam 的指示器用的是 indicatorbackground/indicatorforeground, 不是 indicatorcolor;
+    # 选中态做成「强调色底 + 反色勾/点」, 未选中态与卡片同底, 只留发丝描边。
+    # 未选中态的圆圈/方框靠 upper/lower 描边成形: 用 bd 在暗色下几乎看不见,
+    # 改用更强的 border_strong, 浅色也不至于像黑框。
+    _ind_bd = C.get("border_strong") or C["bd"]
+    for _name in ("TCheckbutton", "TRadiobutton"):
+        style.configure(_name, background=C["bgc"], foreground=C["fgb"],
+                        focuscolor=C["focus"],
+                        indicatorbackground=C["bgc"], indicatorforeground=C["bgc"],
+                        upperbordercolor=_ind_bd, lowerbordercolor=_ind_bd,
+                        lightcolor=C["bgc"], darkcolor=C["bgc"])
+        style.map(_name,
+                  background=[("active", C["bgc"])],
+                  foreground=[("active", C["fgb"]), ("disabled", C["fgm"])],
+                  indicatorbackground=[("selected", C["ac"]), ("disabled", C["bgc"])],
+                  indicatorforeground=[("selected", C["bgc"]), ("disabled", C["bd"])],
+                  upperbordercolor=[("focus", C["focus"])],
+                  lowerbordercolor=[("focus", C["focus"])],
+                  lightcolor=[("focus", C["focus"])],
+                  darkcolor=[("focus", C["focus"])])
 
     # === Combobox 下拉弹窗 (原生 Listbox, 不参与 ttk 样式) ===
     # 只对「之后新建」的弹窗生效; 已存在的弹窗由 walker 调 restyle_combobox_popdown 重刷。

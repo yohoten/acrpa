@@ -10,7 +10,7 @@ from tkinter import ttk, filedialog
 
 import state
 
-from ui.settings.cards._layout import section, row, help_line
+from ui.settings.cards._layout import section, row, switch_row, help_line
 
 CARD_KEY = "netlink"
 ROW = 8
@@ -40,7 +40,7 @@ def build(parent, ctx):
     def _add(w, pady=None):
         nonlocal _r
         w.grid(row=_r, column=0, sticky="ew",
-               pady=(sp("row_gap") if pady is None else pady))
+               pady=((0, sp("row_gap")) if pady is None else pady))
         _r += 1
         return w
 
@@ -66,11 +66,11 @@ def build(parent, ctx):
     # ── 基础连接 ──
     _sec("基础连接", first=True)
     nl_enabled_var = tkinter.BooleanVar(value=getattr(state, "NETLINK_ENABLED", False))
-    _add(row(nl_content, ctx, "", lambda p: ttk.Checkbutton(
-        p, text="启用设备互联", variable=nl_enabled_var)))
+    _add(switch_row(nl_content, ctx, "启用设备互联", nl_enabled_var,
+                    help="允许受信任设备发现并连接本机"))
     nl_auto_var = tkinter.BooleanVar(value=getattr(state, "NETLINK_AUTODISCOVER", True))
-    _add(row(nl_content, ctx, "", lambda p: ttk.Checkbutton(
-        p, text="UDP 自动发现", variable=nl_auto_var)))
+    _add(switch_row(nl_content, ctx, "UDP 自动发现", nl_auto_var,
+                    help="在可信局域网内自动发现其他 ACRPA 设备"))
     nl_port_var = tkinter.StringVar(value=str(getattr(state, "NETLINK_PORT", 19710)))
     _add(row(nl_content, ctx, "TCP 端口", lambda p: _num(
         p, nl_port_var, "互联 TCP 端口", 19710, 1, 65535), unit="1-65535"))
@@ -113,9 +113,8 @@ def build(parent, ctx):
     _sec("配对认证")
     nl_require_auth_var = tkinter.BooleanVar(
         value=bool(getattr(state, "NETLINK_REQUIRE_AUTH", True)))
-    _add(row(nl_content, ctx, "", lambda p: ttk.Checkbutton(
-        p, text="启用配对认证", variable=nl_require_auth_var),
-        help="关闭后同网段任意设备可只读查看运行状态与日志"))
+    _add(switch_row(nl_content, ctx, "启用配对认证", nl_require_auth_var,
+                    help="关闭后同网段任意设备可只读查看运行状态与日志"))
     nl_auth_warn = _add(help_line(nl_content, ctx,
         "⚠ 关闭认证后，同网段任何设备都可读取本机运行状态与日志", level="err"))
 

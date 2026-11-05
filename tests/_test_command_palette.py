@@ -126,8 +126,10 @@ def t_filter():
 def t_wiring():
     print("\n── D. 静态接线 ──")
     src = _read("src/ACRPA.py")
+    ev = _read("src/ui/editor_view.py")
     check("def _kb_command_palette(" in src, "ACRPA.py 定义 _kb_command_palette")
-    check('"<Control-k>"' in src, "ACRPA.py 绑定 <Control-k>")
+    # Ctrl+K 绑定随「脚本编辑」构建段迁至 ui/editor_view.py (阶段二第 3 项第 3 步 S1-B)
+    check('"<Control-k>"' in ev, "绑定 <Control-k> (editor_view)")
     check("from ui import command_palette" in src, "ACRPA.py 惰性导入 ui.command_palette")
     # 惰性: 顶层不得 import ui.command_palette（应位于函数体内）
     lines = src.splitlines()

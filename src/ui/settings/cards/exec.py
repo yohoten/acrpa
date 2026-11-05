@@ -15,7 +15,7 @@ from tkinter import ttk, messagebox
 import state
 from utils import FONT_TINY, FONT_ICON
 
-from ui.settings.cards._layout import section, row
+from ui.settings.cards._layout import section, row, switch_row
 
 CARD_KEY = "exec"
 ROW = 0
@@ -41,7 +41,7 @@ def build(parent, ctx):
     def _add(w, pady=None):
         nonlocal _r
         w.grid(row=_r, column=0, sticky="ew",
-               pady=(sp("row_gap") if pady is None else pady))
+               pady=((0, sp("row_gap")) if pady is None else pady))
         _r += 1
         return w
 
@@ -108,14 +108,12 @@ def build(parent, ctx):
     _sec("安全与更新")
 
     app_protect_var = tkinter.BooleanVar(value=state.APP_PROTECT)
-    _add(row(content, ctx, "", lambda p: ttk.Checkbutton(
-        p, text="关闭时确认", variable=app_protect_var),
-        help="关闭主窗口前弹出确认对话框"))
+    _add(switch_row(content, ctx, "关闭前确认", app_protect_var,
+                    help="关闭主窗口前弹出确认对话框"))
 
     check_update_var = tkinter.BooleanVar(value=state.CHECK_UPDATE)
-    _add(row(content, ctx, "", lambda p: ttk.Checkbutton(
-        p, text="检查更新", variable=check_update_var),
-        help="启动时检查新版本"))
+    _add(switch_row(content, ctx, "启动时检查更新", check_update_var,
+                    help="启动 ACRPA 时检查新版本"))
 
     failsafe_var = tkinter.BooleanVar(value=getattr(state, 'FAILSAFE', True))
 
@@ -132,18 +130,12 @@ def build(parent, ctx):
         )
         messagebox.showinfo("故障保护说明", info)
 
-    def _mk_failsafe(p):
-        f = tkinter.Frame(p, bg=C["bgc"])
-        ttk.Checkbutton(f, text="启用 PyAutoGUI 故障保护（鼠标移角落停止）",
-                        variable=failsafe_var).pack(side="left")
-        ib = tkinter.Label(f, text="ⓘ", font=FONT_ICON,
-            fg=C["ac"], bg=C["bgc"], cursor="hand2")
-        ib.pack(side="left", padx=(6, 0))
-        ib.bind("<Button-1>", _show_failsafe_info)
-        return f
-
-    _add(row(content, ctx, "", _mk_failsafe,
-        help="调试时建议启用；长时间 RPA 任务可禁用"))
+    _add(switch_row(content, ctx, "PyAutoGUI 故障保护", failsafe_var,
+                    help="鼠标移到屏幕角落时紧急停止；调试时建议启用"))
+    failsafe_info = tkinter.Label(content, text="查看故障保护说明", font=FONT_TINY,
+        fg=C["ac"], bg=C["bgc"], cursor="hand2", anchor="w")
+    failsafe_info.bind("<Button-1>", _show_failsafe_info)
+    _add(failsafe_info)
 
     # 绑定防抖保存 (基础执行卡)
     _track_card_vars("exec", (retry_var, interval_var, timeout_var,

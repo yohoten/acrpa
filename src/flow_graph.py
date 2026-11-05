@@ -29,8 +29,11 @@
     wait      {"type":"wait","seconds":N}
     parallel  {"type":"parallel","steps":[...]}                 (list)
     loop      {"type":"loop","times":"3 或 ${x} < 5","steps":[...]} (list)
+    retry     {"type":"retry","max_attempts":N,"delay":S,"steps":[...]} (list, 容器)
+    workflow  {"type":"workflow","path":"sub.json","inputs":{...},"outputs":[...]} (边界叶节点)
     condition {"type":"condition","if":...,"then":...,"else":...}  (then/else 单节点)
     通用字段  enabled (默认 True) / comment (默认 "")
+    失败补偿  on_error_rollback (任意步骤可声明, 子步骤列表 —— 图构建时原样保留于 data)
 
 嵌套承载 (Node.data 的三个保留键, demote 时自动剥离)
 --------------------------------------------------
@@ -52,7 +55,7 @@ K_ELSE = "__fg_else__"
 REF_KEY = "__ref__"
 _RESERVED = (K_CHILDREN, K_THEN, K_ELSE)
 
-CONTAINER_TYPES = ("parallel", "loop")
+CONTAINER_TYPES = ("parallel", "loop", "retry")
 # (step 键, data 保留键, condition 出边端口名)
 _COND_BRANCHES = (("then", K_THEN, "true"), ("else", K_ELSE, "false"))
 
@@ -90,7 +93,7 @@ class Node(object):
         return {k: copy.deepcopy(v) for k, v in self.data.items() if k not in _RESERVED}
 
     def body_ids(self):
-        """容器子节点 id 列表 (parallel / loop)。"""
+        """容器子节点 id 列表 (parallel / loop / retry)。"""
         return list(self.data.get(K_CHILDREN) or [])
 
     def branch_ids(self):

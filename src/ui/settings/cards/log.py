@@ -11,6 +11,7 @@ from tkinter import ttk, messagebox
 
 import state
 from utils import FONT_TINY
+from ui.widgets.rounded_button import RoundedSwitch
 
 CARD_KEY = "log"
 ROW = 4
@@ -41,9 +42,11 @@ def build(parent, ctx):
         messagebox.showinfo("导出成功", "日志已保存到:\n{}".format(fp))
 
     log_save_var = tkinter.BooleanVar(value=state.ENABLE_LOG_SAVING)
-    log_save_cb = ttk.Checkbutton(content, text="自动保存日志到文件",
-        variable=log_save_var)
-    log_save_cb.grid(row=0, column=0, sticky="w", padx=8, pady=(2,1))
+    log_save_frame = tkinter.Frame(content, bg=C["bgc"])
+    log_save_frame.grid(row=0, column=0, sticky="w", padx=8, pady=(2, 1))
+    tkinter.Label(log_save_frame, text="自动保存日志到文件", font=ctx.FONT_SMALL,
+        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0, 8))
+    RoundedSwitch(log_save_frame, variable=log_save_var, colors=C).pack(side="left")
 
     log_level_frame = tkinter.Frame(content, bg=C["bgc"])
     log_level_frame.grid(row=1, column=0, sticky="ew", padx=8, pady=1)

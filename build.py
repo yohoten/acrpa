@@ -75,7 +75,7 @@ _PROJECT_MODULES = [
     # 阶段二/三 新增：入口拆分 / 数据与校验 / 能力与扩展 / i18n / CLI / UI 层
     "settings_window", "dialogs", "help_content", "help_window",
     "version_info", "snippets", "mini_bar", "tray",
-    "ai_client", "ai_enhance", "browser_backend",
+    "ai_client", "ai_cost", "ai_enhance", "browser_backend",
     "market_window", "market_upload", "accounts",
     "flow_graph", "script_io", "script_model", "script_validate",
     "capabilities", "i18n", "cli",
@@ -106,6 +106,10 @@ _PROJECT_MODULES = [
     # L5 工程化：单实例 IPC / 崩溃留痕 / 运行历史（纯 ctypes + 标准库，约 1200 行）。
     # 均由 run.py / app.py / cli.py 在**函数内**惰性 import，静态分析不可见 → 显式纳入。
     "single_instance", "crashlog", "history",
+    # L5 可观测性: 统一 run_id (core/run_id.py)。四条运行入口均为**函数内惰性**
+    # import (from core import run_id), 静态分析不可见 → 必须显式纳入, 否则
+    # 冻结版一到运行期 ImportError (源码模式永远测不出来)。
+    "core.run_id",
     "extensions", "extensions.manifest", "extensions.package",
     "extensions.manager", "extensions.index", "extensions.loader",
     # UI 层（含设置卡片）—— 单文件打包必须显式纳入：

@@ -9,7 +9,7 @@ Workflow Engine — 多脚本串联工作流编排
 
 依赖: engine.py, scriptdata.py, safe_eval.py, state.py, utils.py
 """
-import os, sys, time, json, threading, datetime
+import os, sys, time, json, threading, datetime, itertools
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import state
 from core.log import log1
@@ -20,6 +20,11 @@ STEP_SCRIPT = "script"
 STEP_PARALLEL = "parallel"
 STEP_CONDITION = "condition"
 STEP_WAIT = "wait"
+STEP_RETRY = "retry"
+STEP_WORKFLOW = "workflow"          # 子工作流引用
+
+# 子工作流引用最大嵌套深度 (防 A→B→A 循环引用之外的深度失控)
+_WF_MAX_DEPTH = 16
 
 
 class WorkflowError(Exception):
@@ -125,8 +130,15 @@ def _normalize_step(step):
     step.setdefault("enabled", True)
     step.setdefault("comment", "")
 
+    # 失败补偿 (rollback): 任一步骤可声明 on_error_rollback 子步骤列表
+    if isinstance(step.get("on_error_rollback"), list):
+        step["on_error_rollback"] = [_normalize_step(s) for s in step["on_error_rollback"]]
+
     if step.get("type") == "parallel" and "steps" in step:
         step["steps"] = [_normalize_step(s) for s in step["steps"]]
+        # 显式输出: 仅声明 outputs 的变量按分支定义顺序合并回主作用域;
+        # 缺省 None → 运行时向后兼容为「合并全部」。
+        step.setdefault("outputs", None)
 
     if step.get("type") == "loop" and "steps" in step:
         # 循环节点: 规范化子步骤
@@ -151,6 +163,18 @@ def _normalize_step(step):
 
     if step.get("type") == "log":
         step.setdefault("text", "")
+
+    if step.get("type") == "retry" and "steps" in step:
+        # 重试节点: 规范化子步骤 + 默认参数
+        step["steps"] = [_normalize_step(s) for s in step["steps"]]
+        step.setdefault("max_attempts", 3)
+        step.setdefault("delay", 1.0)
+
+    if step.get("type") == "workflow":
+        # 子工作流引用: 默认字段
+        step.setdefault("path", "")
+        step.setdefault("inputs", {})
+        step.setdefault("outputs", [])
 
     return step
 
@@ -224,13 +248,29 @@ class WorkflowEngine:
     """工作流执行引擎"""
 
     def __init__(self):
-        self._variables = {}  # 工作流共享变量
+        # 工作流共享变量 —— 线程本地容器, 支持并行分支隔离
+        self._variables_tls = threading.local()
+        self._variables_main = {}
         self._stopped = False
         self._pause_event = threading.Event()
         self._pause_event.set()
         # 执行可视化: 当前执行的步骤索引 (-1=未执行) 与结果标记
         self._current_step = -1
         self._step_results = {}   # {step_index: "running"/"ok"/"error"}
+        self._step_lock = threading.Lock()  # 保护并行期间 _current_step/_step_results 的写
+        self._wf_stack = []       # 子工作流引用栈 (循环引用检测 + 深度上限)
+
+    @property
+    def _variables(self):
+        """当前线程的工作流变量; 未设置线程本地 dict 时回退到主线程 dict。"""
+        d = getattr(self._variables_tls, "d", None)
+        return d if d is not None else self._variables_main
+
+    @_variables.setter
+    def _variables(self, value):
+        self._variables_tls.d = value
+        if threading.current_thread() is threading.main_thread():
+            self._variables_main = value
 
     @property
     def variables(self):
@@ -274,13 +314,24 @@ class WorkflowEngine:
         self._stopped = False
         name = workflow_def.get("name", "未命名工作流")
         steps = workflow_def.get("steps", [])
-        # 外层循环次数 (UI 工具栏设置)
-        outer_loops = int(workflow_def.get("loop_count", 1) or 1)
-        max_minutes = float(workflow_def.get("max_minutes", 0) or 0)
+        # 外层循环次数 (运行栏设置): loop_count<=0 约定为无限循环 (靠「最长分钟」/停止收敛)
+        _raw_loops = workflow_def.get("loop_count", 1)
+        if _raw_loops is None or _raw_loops == "":
+            _raw_loops = 1
+        try:
+            outer_loops = int(_raw_loops)
+        except (TypeError, ValueError):
+            outer_loops = 1
+        infinite = outer_loops <= 0
+        try:
+            max_minutes = float(workflow_def.get("max_minutes", 0) or 0)
+        except (TypeError, ValueError):
+            max_minutes = 0.0
 
         log1("=" * 50)
         log1("工作流启动: {}".format(name))
-        log1("步骤数: {} | 循环: {} | 基准目录: {}".format(len(steps), outer_loops, base_dir))
+        log1("步骤数: {} | 循环: {} | 基准目录: {}".format(
+            len(steps), "无限" if infinite else outer_loops, base_dir))
         log1("=" * 50)
 
         state.running = True
@@ -288,12 +339,14 @@ class WorkflowEngine:
         self._step_results = {}
 
         try:
-            for loop_no in range(max(1, outer_loops)):
+            loop_seq = itertools.count() if infinite else range(max(1, outer_loops))
+            for loop_no in loop_seq:
                 if not self._chk():
                     log1("工作流已停止", "warning")
                     break
                 if loop_no > 0:
-                    log1("--- 外层循环 第 {}/{} 次 ---".format(loop_no + 1, outer_loops))
+                    log1("--- 外层循环 第 {}/{} 次 ---".format(
+                        loop_no + 1, "∞" if infinite else outer_loops))
                 for i, step in enumerate(steps):
                     if not self._chk():
                         log1("工作流已停止", "warning")
@@ -332,14 +385,21 @@ class WorkflowEngine:
             log1("=" * 50)
 
     def _execute_step(self, step, base_dir):
-        """执行单个步骤 (支持 enabled 禁用跳过)。"""
+        """执行单个步骤 (支持 enabled 禁用跳过; 失败时先执行 on_error_rollback 补偿)。"""
         # 禁用节点跳过
         if step.get("enabled", True) is False:
             log1("  跳过已禁用步骤: {}".format(step.get("comment", "") or step.get("type", "")))
             return
 
         step_type = step.get("type", "script")
+        try:
+            self._dispatch(step, step_type, base_dir)
+        except Exception:
+            self._run_rollback(step, base_dir)
+            raise
 
+    def _dispatch(self, step, step_type, base_dir):
+        """按步骤类型分派 (不含 rollback 包装, 由 _execute_step 统一补偿)。"""
         if step_type == "script":
             self._run_script(step, base_dir)
 
@@ -369,8 +429,193 @@ class WorkflowEngine:
                     break
                 time.sleep(0.1)
 
+        elif step_type == "retry":
+            self._run_retry(step, base_dir)
+
+        elif step_type == "workflow":
+            self._run_workflow_ref(step, base_dir)
+
         else:
             log1("未知步骤类型: {}".format(step_type), "warning")
+
+    def _run_rollback(self, step, base_dir):
+        """执行失败补偿子步骤 (best-effort; 补偿自身失败不掩盖原始异常)。"""
+        rollback = step.get("on_error_rollback") or []
+        if not rollback:
+            return
+        log1("  执行失败补偿 ({} 个步骤)...".format(len(rollback)))
+        for sub in rollback:
+            try:
+                self._execute_step(sub, base_dir)
+            except Exception as e:
+                log1("  补偿步骤执行失败 (忽略): {}".format(e), "warning")
+
+    def _run_retry(self, step, base_dir):
+        """重试节点: 子步骤异常时按 delay 退避重试, 超过 max_attempts 抛最后一次异常。"""
+        sub_steps = step.get("steps") or []
+        if not sub_steps:
+            log1("重试节点无子步骤", "warning")
+            return
+        try:
+            max_attempts = int(step.get("max_attempts", 3) or 3)
+        except (TypeError, ValueError):
+            max_attempts = 3
+        if max_attempts < 1:
+            max_attempts = 1
+        try:
+            delay = float(step.get("delay", 1.0) or 0)
+        except (TypeError, ValueError):
+            delay = 0.0
+
+        last_err = None
+        for attempt in range(1, max_attempts + 1):
+            if not self._chk():
+                break
+            log1("重试节点: 第 {}/{} 次尝试".format(attempt, max_attempts))
+            try:
+                for sub in sub_steps:
+                    if not self._chk():
+                        return
+                    self._execute_step(sub, base_dir)
+                return  # 成功
+            except Exception as e:
+                last_err = e
+                log1("重试节点第 {} 次尝试失败: {}".format(attempt, e), "warning")
+                if attempt < max_attempts and delay > 0:
+                    slept = 0.0
+                    while slept < delay:
+                        if not self._chk():
+                            break
+                        time.sleep(0.1)
+                        slept += 0.1
+        raise WorkflowError("重试节点 {} 次后仍失败: {}".format(max_attempts, last_err))
+
+    def _resolve_workflow_target(self, step, base_dir):
+        """解析子工作流目标绝对路径; 缺失/非文件抛 WorkflowError。"""
+        path = step.get("path", "")
+        if not path:
+            raise WorkflowError("子工作流路径为空")
+        if os.path.isabs(path):
+            target = path
+        else:
+            target = os.path.join(base_dir, path)
+        target = os.path.normpath(target)
+        if not os.path.exists(target):
+            raise WorkflowError("子工作流不存在: {}".format(target))
+        if not os.path.isfile(target):
+            raise WorkflowError("子工作流路径不是文件: {}".format(target))
+        return os.path.abspath(target)
+
+    def _run_workflow_ref(self, step, base_dir):
+        """子工作流引用节点: 加载目标 .json, 隔离作用域执行, 输出变量回写父作用域。
+
+        循环引用检测: 执行中工作流绝对路径栈; 深度上限 _WF_MAX_DEPTH。
+        变量语义: 以父作用域为基线副本 + inputs 覆盖 → 子工作流在副本内读写;
+                  结束后仅声明的 outputs 写回父作用域 (与 parallel 分支隔离同理念)。
+        """
+        target = self._resolve_workflow_target(step, base_dir)
+        stack = self._wf_stack
+        if target in stack:
+            chain = " → ".join(stack + [target])
+            raise WorkflowError("检测到工作流循环引用: {}".format(chain))
+        if len(stack) >= _WF_MAX_DEPTH:
+            raise WorkflowError("子工作流嵌套过深 (> {} 层)".format(_WF_MAX_DEPTH))
+
+        wf_def = parse_workflow(target)
+        sub_steps = wf_def.get("steps", [])
+        sub_base = os.path.dirname(target)
+        inputs = step.get("inputs") or {}
+        outputs = step.get("outputs") or []
+
+        scope = dict(self._variables)
+        for k, v in inputs.items():
+            if isinstance(v, str) and "${" in v:
+                import re
+                v = re.sub(r"\$\{([^}]+)\}",
+                           lambda m: str(self._variables.get(m.group(1), "")), v)
+            scope[k] = v
+
+        with self._step_lock:
+            saved_step = self._current_step
+            saved_results = self._step_results
+            self._step_results = {}
+        stack.append(target)
+        log1("进入子工作流: {} ({} 个步骤)".format(os.path.basename(target), len(sub_steps)))
+        try:
+            fatal = self._with_isolated_scope(scope, lambda: self._run_steps(sub_steps, sub_base))
+            if fatal:
+                raise WorkflowError("子工作流执行失败: {}".format(os.path.basename(target)))
+            for k in outputs:
+                if k in scope:
+                    self._variables[k] = scope[k]
+        finally:
+            stack.pop()
+            with self._step_lock:
+                self._current_step = saved_step
+                self._step_results = saved_results
+        log1("离开子工作流: {}".format(os.path.basename(target)))
+
+    def _with_isolated_scope(self, scope_vars, fn):
+        """在隔离变量作用域内执行 fn。
+
+        同时切换 self._variables (工作流侧) 与 engine.variables (引擎侧), 但二者
+        使用**独立** dict: 引擎侧副本防止 execute_script() 的 .clear() 清空工作流
+        作用域。执行结束后只把引擎侧**相对初始快照的变更**合并回 scope_vars,
+        既让 command/script 步骤写回变量可见, 又不覆盖 workflow 侧 (variable 步骤)
+        对同名键的写入。
+        """
+        import engine as eng_mod
+        eng = eng_mod.engine
+        old_wf = self._variables
+        old_eng = getattr(eng, 'variables', None)
+        eng_scope = dict(scope_vars)     # engine 侧 (command/script 写这里)
+        eng_initial = dict(scope_vars)   # engine 侧初始快照, 用于 diff
+        self._variables = scope_vars
+        try:
+            eng.variables = eng_scope
+        except Exception:
+            pass
+        try:
+            result = fn()
+            # 仅合并 engine 侧相对初始快照的变更 (新增/更新), 不覆盖 workflow 侧写入
+            for k, v in eng_scope.items():
+                if k not in eng_initial or eng_initial[k] != v:
+                    scope_vars[k] = v
+            return result
+        finally:
+            self._variables = old_wf
+            try:
+                eng.variables = old_eng
+            except Exception:
+                pass
+
+    def _run_steps(self, steps, base_dir):
+        """顺序执行一组步骤 (单遍), 返回是否发生致命失败 (STOP_ON_ERROR 命中)。
+
+        顶层 run_workflow 与子工作流引用复用同一实现, 保证 STOP_ON_ERROR /
+        暂停停止 / 可视化语义完全一致。
+        """
+        fatal = False
+        for i, step in enumerate(steps):
+            if not self._chk():
+                break  # 用户停止/暂停: 不视为失败, 交由上层 _chk 收敛
+            with self._step_lock:
+                self._current_step = i
+                self._step_results[i] = "running"
+            log1("--- 步骤 {}/{} ---".format(i + 1, len(steps)))
+            try:
+                self._execute_step(step, base_dir)
+                with self._step_lock:
+                    self._step_results[i] = "ok"
+            except Exception as e:
+                with self._step_lock:
+                    self._step_results[i] = "error"
+                log1("步骤 {} 执行失败: {}".format(i + 1, e), "error")
+                if getattr(state, 'STOP_ON_ERROR', True):
+                    self._stopped = True
+                    fatal = True
+                    break
+        return fatal
 
     def _run_command(self, step, base_dir):
         """执行 command 节点: 调用 commands 注册表的命令。
@@ -532,38 +777,37 @@ class WorkflowEngine:
             raise WorkflowError("脚本执行异常: {}".format(e))
 
     def _run_parallel(self, step, base_dir):
-        """并行执行多个子步骤"""
+        """真并行执行多个子步骤。
+
+        每个分支拥有独立变量作用域 (branch_scopes[i]), 分支间互不可见;
+        执行结束后仅将声明为 outputs 的变量按分支定义顺序确定性合并回主作用域。
+        未声明 outputs 时向后兼容旧行为: 合并全部分支变量 (按定义顺序)。
+        """
         sub_steps = step.get("steps", [])
         if not sub_steps:
             return
 
         log1("并行执行 {} 个子步骤...".format(len(sub_steps)))
 
-        # 使用 ThreadPoolExecutor，每个线程操作独立的变量快照
-        # 注意：engine.variables 是共享的，并行线程不应直接修改它
         n = len(sub_steps)
-        step_results = [{} for _ in range(n)]
-        step_errors = [None for _ in range(n)]
-        lock = threading.Lock()
+        outputs = [str(x) for x in (step.get("outputs") or [])]
+        # 向后兼容: 未声明 outputs 时, 合并所有变量 (旧行为)
+        merge_all = not outputs
+
+        # 主线程快照父作用域, 每分支浅拷贝一份独立作用域
+        parent_vars = dict(self._variables)
+        branch_scopes = [dict(parent_vars) for _ in range(n)]
+        branch_errors = [None for _ in range(n)]
 
         def _run_sub_step(sub_step, idx):
-            """在线程中执行子步骤，捕获变量变更到独立快照"""
+            scope = branch_scopes[idx]
             try:
-                import engine as eng_mod
-                eng = eng_mod.engine
-                # 引擎 variables 是全局共享的，多个并行线程同时写会数据竞争。
-                # 用 lock 串行化实际执行（虽牺牲部分并行度，但保证变量一致）。
-                with lock:
-                    # 快照：注入工作流变量后执行
-                    for k, v in self._variables.items():
-                        eng.variables[k] = v
-                    self._execute_step(sub_step, base_dir)
-                    # 捕获该线程产生的变量变更
-                    step_results[idx] = dict(eng.variables)
+                # 隔离作用域: self._variables / engine.variables 均切换为线程本地 dict
+                self._with_isolated_scope(
+                    scope, lambda: self._execute_step(sub_step, base_dir))
                 log1("  并行子步骤 {} 完成".format(idx + 1))
             except Exception as e:
-                with lock:
-                    step_errors[idx] = str(e)
+                branch_errors[idx] = str(e)
                 log1("  并行子步骤 {} 失败: {}".format(idx + 1, e), "error")
 
         max_workers = min(n, 4)
@@ -578,13 +822,17 @@ class WorkflowEngine:
                 except Exception:
                     pass
 
-        # 合并并行结果（按顺序合并变量，后执行的覆盖先执行的）
-        for varset in step_results:
-            if varset:
-                self._variables.update(varset)
+        # 按分支定义顺序确定性合并 (后定义覆盖先定义)
+        for scope in branch_scopes:
+            if merge_all:
+                self._variables.update(scope)
+            else:
+                for k in outputs:
+                    if k in scope:
+                        self._variables[k] = scope[k]
 
         # 报告失败
-        failed_indices = [i + 1 for i, e in enumerate(step_errors) if e]
+        failed_indices = [i + 1 for i, e in enumerate(branch_errors) if e]
         if failed_indices:
             message = "并行步骤 {} 执行失败".format(failed_indices)
             log1(message, "error")

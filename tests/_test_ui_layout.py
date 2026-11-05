@@ -188,12 +188,17 @@ def t_static(A):
     src = os.path.join(SRC, "ACRPA.py")
     with open(src, "r", encoding="utf-8") as f:
         code = f.read()
+    ev_src = os.path.join(SRC, "ui", "editor_view.py")
+    with open(ev_src, "r", encoding="utf-8") as f:
+        ev_code = f.read()
     check("5a. 表格重建不再循环内查询 tags",
           'tree.item(item, "tags")' not in code)
     check("5b. 列策略使用 displaycolumns",
           "displaycolumns=plan" in code)
+    # <Configure> 走去抖入口: 行为函数仍在 ACRPA, 绑定随构建段迁至 editor_view (deps 注入)
     check("5c. <Configure> 走去抖入口",
-          'tree.bind("<Configure>", _tree_columns_on_configure, add=True)' in code)
+          'def _tree_columns_on_configure(' in code
+          and 'tree.bind("<Configure>", _CTX.get("tree_columns_on_configure"), add=True)' in ev_code)
     check("5d. 标题栏文案引用常量",
           "text=TITLE_DEFAULT_TEXT" in code)
     check("5e. 背景合成改为首帧后调度",

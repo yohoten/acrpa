@@ -3,7 +3,7 @@
 P0 Optimization #5: Batched log writing to reduce I/O operations by 80%.
 P1 Enhancement: Structured logging with LogLevel, daily rotation, and retention ( AutomationOperation).
 """
-import queue, time, os, glob, re, shutil
+import queue, sys, time, os, glob, re, shutil
 import tkinter
 import tkinter.font
 import state
@@ -18,45 +18,15 @@ from core.log import (
 from core.util import _safe_get
 from core.fs import atomic_save, atomic_write_bytes, safe_filename
 from core.version import parse_version, compare_versions, version_tuple, version_gt
-
-
-def _darken(hex_color, factor=0.15):
-    """Darken a hex color by multiplying RGB channels."""
-    try:
-        h = hex_color.lstrip("#")
-        r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-        r, g, b = max(0, int(r*(1-factor))), max(0, int(g*(1-factor))), max(0, int(b*(1-factor)))
-        return "#{:02x}{:02x}{:02x}".format(r, g, b)
-    except Exception:
-        return C["acl"]
-
-
-def _srgb_to_lin(c):
-    """sRGB 8bit 通道 → 线性光 (WCAG 定义)。"""
-    c = c / 255.0
-    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
-
-
-def rel_luminance(hex_color):
-    """WCAG 相对亮度 (0=黑, 1=白); 解析失败返回 0.5 (中性)。"""
-    try:
-        s = str(hex_color).strip().lstrip("#")
-        if len(s) == 3:
-            s = "".join(ch * 2 for ch in s)
-        r, g, b = (int(s[i:i + 2], 16) for i in (0, 2, 4))
-    except Exception:
-        return 0.5
-    return (0.2126 * _srgb_to_lin(r) + 0.7152 * _srgb_to_lin(g)
-            + 0.0722 * _srgb_to_lin(b))
-
-
-def text_on(bg, light="#FFFFFF", dark="#1A1A1A"):
-    """按背景相对亮度返回可读前景色 (WCAG 对比度更优者)。
-
-    语义色跨主题会翻转明度 (亮色 ac=#0078D4 深底白字 / 暗色 ac=#4CC2FF 浅底黑字),
-    因此语义底色上的文字色不能写死, 必须按底色计算。
-    """
-    return dark if rel_luminance(bg) > 0.45 else light
+# 颜色运算真源已迁至 core.color (P1-1); 此处 re-export 保持既有
+# `from utils import _darken / text_on / rel_luminance` 调用点不变。
+from core.color import (  # noqa: E402
+    darken as _darken, lighten, blend, transition, contrast,
+    rel_luminance, text_on, hex_to_rgb, rgb_to_hex, rgb_to_hsl, hsl_to_rgb,
+)
+# 缓动控制器真源 (P2-1): ease() 与 core.animation.Animation 共表, 避免两套实现。
+# Animation 供 show_toast 淡入淡出 (P2-3) 复用同一套 after 调度与 reduce_motion 降级。
+from core.animation import CONTROLLERS as _EASE, out_cubic, Animation  # noqa: E402
 
 
 def restyle_combobox_popdown(widget, colors=None):
@@ -79,18 +49,61 @@ def restyle_combobox_popdown(widget, colors=None):
 # === Toast Notification System ===
 
 # 复用单例提示条 (Toplevel 创建/销毁成本高, 提示又是高频反馈)
-_toast = {"win": None, "frame": None, "label": None, "job": None}
+# P2-3: fade_in / fade_out 为淡入/淡出 Animation 句柄, 再次提示时 stop() 清残留定时器。
+_toast = {"win": None, "frame": None, "label": None, "job": None,
+          "fade_in": None, "fade_out": None}
+
+
+def _toast_fps():
+    """动效帧率 (fps) —— 帧间隔 motion_frame()≈16ms → 约 60fps。"""
+    frame = motion_frame()
+    return max(1, 1000 // max(1, int(frame)))
+
+
+def _toast_cancel_anim():
+    """停止淡入/淡出动画 + 取消自动隐藏 job (再次提示前调用, 清残留定时器)。"""
+    win = _toast.get("win")
+    job = _toast.get("job")
+    if job is not None:
+        try:
+            if win is not None:
+                win.after_cancel(job)
+        except Exception:
+            pass
+        _toast["job"] = None
+    for key in ("fade_in", "fade_out"):
+        anim = _toast.get(key)
+        if anim is not None:
+            try:
+                anim.stop()
+            except Exception:
+                pass
+            _toast[key] = None
+
+
+def _toast_apply(win, x, y0, p, a0, a1, dy0, dy1):
+    """单帧应用: 透明度 a0→a1、y 位移 dy0→dy1 (以 y0 为基准, 进度 p∈[0,1])。"""
+    try:
+        p = float(p)
+        a = a0 + (a1 - a0) * p
+        win.attributes("-alpha", max(0.0, min(1.0, a)))
+        win.geometry("+{}+{}".format(x, y0 + int(dy0 + (dy1 - dy0) * p)))
+    except Exception:
+        pass
 
 
 def show_toast(root, message, msg_type="info", duration=2000):
     """
     Display a toast notification.
-    
+
     Args:
         root: Tkinter root window reference
         message: Text to display
         msg_type: "info", "success", "warning", or "error"
         duration: Auto-dismiss time in ms (0 = no auto-dismiss)
+
+    P2-3: 淡入 + 停留 + 淡出用 core.animation.Animation 驱动 (透明度 + 位移),
+    帧间隔 motion_frame()、时长 motion_fast; reduce_motion() 时瞬显即隐 (跳过插值)。
     """
     # 主题化配色：C 会被 apply_theme() 重绑，故函数内实时取色，禁止模块级写死
     # §3.1 符号统一: 用 Segoe UI Symbol 单色码位 ⓘ/✔/✘/⚠ (全角粗体, 非彩色 emoji)
@@ -101,7 +114,9 @@ def show_toast(root, message, msg_type="info", duration=2000):
     # 不再写死白字 (暗色模式下白字在浅底上对比不足)。
     fg_color = text_on(bg_color)
     icon = icon_map.get(msg_type, icon_map["info"])
-    
+
+    _toast_cancel_anim()
+
     # 复用单例窗口: 每次提示都新建 Toplevel 会有明显的创建/销毁开销 (Windows 上
     # 数十 ms 且伴随一次映射闪烁), 而提示条是高频 UI 反馈 (保存/撤销/复制/校验)。
     # 这里保留一个隐藏的 Toplevel + Frame + Label, 再次提示只改文本/配色/位置。
@@ -114,7 +129,7 @@ def show_toast(root, message, msg_type="info", duration=2000):
         win = tkinter.Toplevel(root)
         win.overrideredirect(True)          # No window decorations
         win.attributes("-topmost", True)
-        win.attributes("-alpha", 0.95)
+        win.attributes("-alpha", 0.0)
         content = tkinter.Frame(win)
         content.pack(padx=16, pady=10)
         label = tkinter.Label(content, font=FONT_BUTTON)
@@ -126,10 +141,9 @@ def show_toast(root, message, msg_type="info", duration=2000):
     # Calculate position (center-top of main window)
     try:
         x = root.winfo_x() + root.winfo_width() // 2 - 120
-        y = root.winfo_y() + 60
-        win.geometry("+{}+{}".format(x, y))
+        y0 = root.winfo_y() + 60
     except Exception:
-        pass
+        x, y0 = 0, 60
 
     win.configure(bg=bg_color)
     content.configure(bg=bg_color)
@@ -139,26 +153,37 @@ def show_toast(root, message, msg_type="info", duration=2000):
         win.lift()
         # withdraw/deiconify 后部分 Tk 版本会丢失置顶与透明度, 重新声明一次
         win.attributes("-topmost", True)
-        win.attributes("-alpha", 0.95)
     except Exception:
         pass
 
-    # Auto-dismiss (复用窗口用 withdraw 而非 destroy, 下次 show 直接 deiconify)
-    job = _toast.get("job")
-    if job is not None:
-        try:
-            win.after_cancel(job)
-        except Exception:
-            pass
-        _toast["job"] = None
+    # 淡入: 透明度 0→0.95 + 自上而下位移 12px→0
+    fade_ms = motion("motion_fast")
+    fps = _toast_fps()
+    win.attributes("-alpha", 0.0)
+    win.geometry("+{}+{}".format(x, y0 + 12))
+    fade_in = Animation(
+        fade_ms,
+        lambda p: _toast_apply(win, x, y0, p, 0.0, 0.95, 12, 0),
+        controller=out_cubic, fps=fps, root=win, reduce_motion=reduce_motion)
+    fade_in.start()
+    _toast["fade_in"] = fade_in
+
+    # 停留 + 淡出: duration 后 透明度 0.95→0 + 上移 0→-8, 结束 withdraw (复用不销毁)
     if duration > 0:
-        def _hide(w=win):
-            try:
-                w.withdraw()
-            except Exception:
-                pass
-            _toast["job"] = None
-        _toast["job"] = win.after(duration, _hide)
+        def _begin_fade_out(w=win, xx=x, yy=y0):
+            def _done():
+                try:
+                    w.withdraw()
+                except Exception:
+                    pass
+            fade_out = Animation(
+                fade_ms,
+                lambda p: _toast_apply(w, xx, yy, p, 0.95, 0.0, 0, -8),
+                controller=out_cubic, fps=fps, root=w,
+                reduce_motion=reduce_motion, end=_done)
+            fade_out.start()
+            _toast["fade_out"] = fade_out
+        _toast["job"] = win.after(duration, _begin_fade_out)
 
     return win
 
@@ -768,6 +793,9 @@ TOKENS = {
     # 滚动条厚度 (docs/UI优化方案-v3.md §5.2 D10): 垂直 8 / 横向内嵌工具条 6,
     # 一律由此派生, 禁写 width=6/8/16 裸数字 (ttk 默认 16px 是最离谱的一处)。
     "sb_w": 8, "sb_w_thin": 6,
+    # ── 动效令牌 (P2-7): 时长单位 ms, 帧间隔 16ms≈60fps, 禁写裸 after(200) 等 ──
+    # 时长不做 dpi/ui_scale 缩放 (时间是绝对量), 故单独成类, 不经 sp()。
+    "motion_frame": 16, "motion_fast": 120, "motion_base": 200, "motion_slow": 320,
 }
 
 
@@ -801,9 +829,132 @@ def gap(token="gap"):
     return sp(token)
 
 
+def motion(token="motion_base"):
+    """动效时长 (ms, 绝对时间, 不做 dpi/ui_scale 缩放)。"""
+    return int(TOKENS.get(token, TOKENS["motion_base"]))
+
+
+def motion_frame():
+    """动效每帧刷新间隔 (ms, 默认 16≈60fps)。"""
+    return int(TOKENS.get("motion_frame", 16))
+
+
+def reduce_motion():
+    """「减少动效」开关 (无障碍 + 低配机器, P2-7)。
+
+    真源 state.REDUCE_MOTION (暂未落地时为 False → 保留全动效); 消费方用它
+    决定是否把插值动画退化为一步到位, 避免散落多份判断。
+    """
+    try:
+        return bool(getattr(state, "REDUCE_MOTION", False))
+    except Exception:
+        return False
+
+
+def ease(t, kind="out_cubic"):
+    """轻量缓动插值 (纯函数, P2-1): 归一化进度 t∈[0,1] → 缓动后进度。
+
+    kind: linear | out_quad | out_cubic (默认, 先快后慢) | in_out (先慢后快再慢)。
+    真源 core.animation.CONTROLLERS, 与 Animation 控制器同表, 不引入第三方动画库。
+    """
+    try:
+        t = max(0.0, min(1.0, float(t)))
+    except Exception:
+        t = 0.0
+    return _EASE.get(kind, out_cubic)(t)
+
+
 def icon_size(token="icon_md"):
     """图标边长 (默认 24 设计 px)。"""
     return sp(token)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 窗口图标: 子窗口/对话框统一套「产品图标」(res/automation.ico)
+#   · 此前 settings 等模块各自 `from utils import set_window_icon` 却取不到名字
+#     (函数根本没实现), 异常又被静默吞掉, 于是设置页/弹窗一直显示 Tk 默认羽毛图标。
+#   · 这里给出唯一实现: 路径解析 + iconbitmap(标题栏/Alt+Tab) + WM_SETICON(任务栏)。
+# ═══════════════════════════════════════════════════════════════════════
+
+def icon_path(name="automation.ico"):
+    """产品图标绝对路径; 找不到返回 ""。
+
+    与 ACRPA.py 的路径优先级一致: <根>/res/<name> 优先, 退回 <根>/<name>;
+    冻结后「根」= exe 所在目录, 源码态 = 仓库根 (src 的上级)。
+    """
+    if getattr(sys, "frozen", False):
+        base = os.path.dirname(os.path.abspath(sys.executable))
+    else:
+        base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    for candidate in (os.path.join(base, "res", name), os.path.join(base, name)):
+        if os.path.exists(candidate):
+            return candidate
+    return ""
+
+
+def set_window_icon(window, name="automation.ico"):
+    """给 Toplevel/根窗口设置 ACRPA 产品图标, 返回是否成功。
+
+    · iconbitmap → 标题栏左上角 / Alt+Tab;
+    · WM_SETICON(ICON_SMALL/ICON_BIG) → 任务栏 (iconbitmap 不覆盖任务栏按钮);
+    · 窗口首次 <Map> 后再补设一次: 任务栏按钮在窗口真正显示时才建立,
+      只在创建期设置会被 Windows 用默认图标覆盖 (Win11 尤其明显)。
+
+    纯 Windows API, 任何环境异常都静默返回 False —— 图标绝不该影响开窗。
+    """
+    path = icon_path(name)
+    if not path:
+        return False
+
+    ok = False
+    try:
+        window.iconbitmap(path)
+        ok = True
+    except Exception:
+        pass
+
+    def _apply():
+        try:
+            import ctypes
+            from ctypes import wintypes
+            user32 = ctypes.WinDLL("user32", use_last_error=True)
+
+            load = user32.LoadImageW
+            load.restype = wintypes.HANDLE
+            load.argtypes = [wintypes.HINSTANCE, wintypes.LPCWSTR, wintypes.UINT,
+                             ctypes.c_int, ctypes.c_int, wintypes.UINT]
+            send = user32.SendMessageW
+            send.restype = wintypes.LPARAM
+            send.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+            get_parent = user32.GetParent
+            get_parent.restype = wintypes.HWND
+            get_parent.argtypes = [wintypes.HWND]
+
+            IMAGE_ICON = 1
+            LR_LOADFROMFILE = 0x00000010
+            WM_SETICON = 0x0080
+            ICON_SMALL, ICON_BIG = 0, 1
+
+            hicon = load(None, path, IMAGE_ICON, 0, 0, LR_LOADFROMFILE)
+            if not hicon:
+                return False
+            hwnd = get_parent(wintypes.HWND(window.winfo_id()))
+            if not hwnd:
+                hwnd = window.winfo_id()
+            send(hwnd, WM_SETICON, ICON_SMALL, hicon)
+            send(hwnd, WM_SETICON, ICON_BIG, hicon)
+            return True
+        except Exception:
+            return False
+
+    ok = _apply() or ok
+    try:
+        if not getattr(window, "_acrpa_icon_map_bound", False):
+            window._acrpa_icon_map_bound = True
+            window.bind("<Map>", lambda _e: _apply(), add="+")
+    except Exception:
+        pass
+    return ok
 
 
 # ═══════════════════════════════════════════════════════════════════════

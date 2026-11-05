@@ -301,19 +301,22 @@ def t_wiring_static():
     check("<<ComboboxSelected>>" in wf, "workflow_view 命令切换时重建表单")
 
     a = _read("src/ACRPA.py")
+    ev = _read("src/ui/editor_view.py")
     check("param_form.build_arg_form(" in a, "ACRPA 编辑行对话框接入 param_form")
     check("def _cmd_edit_row_dialog(" in a, "ACRPA 新增 _cmd_edit_row_dialog()")
     check('claim_window(win, "edit_row")' in a, "编辑行窗口声明自管换肤 (claim_window)")
     check("ui_theme.subscribe(_refresh)" in a, "编辑行窗口订阅 ThemeBus 换肤")
     check("ui_theme.unsubscribe(_refresh)" in a, "编辑行窗口关闭时退订 (unsubscribe)")
-    check('tree.bind("<F2>"' in a, "F2 绑定「编辑行」")
+    # S1-B 起 tree 构建迁入 editor_view，F2/Double-1 绑定随之迁入并经 deps 转发到宿主
+    check('tree.bind("<F2>", lambda e: _call("cmd_edit_row_dialog"))' in ev,
+          "F2 绑定「编辑行」(editor_view 经 _call 转发 cmd_edit_row_dialog)")
     check('_tbtn(toolbar_inner,"✎ 编辑",_cmd_edit_row_dialog' in a,
           "工具栏「✎ 编辑」入口指向 _cmd_edit_row_dialog")
     # 不得破坏既有静态断言依赖的字面量
     check('_tbtn(toolbar_inner,"+ 添加",_cmd_add_row,"ac","white"' in a,
           "「+ 添加」按钮字面量保持不变 (theme_bus 断言依赖)")
-    check("tree.bind(\"<Double-1>\", lambda e: _edit_cell(e))" in a,
-          "内联编辑 <Double-1> 绑定语义未被改动 (仍指向 _edit_cell, 且传入事件定位行列)")
+    check('tree.bind("<Double-1>", _CTX.get("edit_cell"))' in ev,
+          "内联编辑 <Double-1> 绑定仍指向 edit_cell (deps 注入 _edit_cell)")
 
 
 # ══════════════════════════════════════════════════════════════════════

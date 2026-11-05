@@ -88,6 +88,9 @@ from tkinter import ttk
 from tkinter import filedialog
 from tkinter import messagebox
 
+from core.scale import clamp_scale, scaled  # P3-2: 工具条缩放按钮共用缩放钳制/换算真源
+from core.hit import detect_point  # P3-3: 节点单击/拖拽几何命中 (共享 node 标签, 免逐节点 tag_bind)
+
 # ── C 期 (路线图 阶段二 第 9 项): 工作流「图」渲染层 ──
 #   flow_graph: 纯逻辑「树 ⇄ 图」(无 tkinter); flow_canvas: 分层布局 + 形状 + 缩放/平移。
 #   两者均**不自建配色真源** —— `_FLOW_COLORS` 仍归本模块, 渲染时显式传入。
@@ -142,6 +145,8 @@ __all__ = [
     "get_wf_tree", "get_wf_paned", "get_wf_flow_canvas", "get_wf_flow_frame",
     "get_wf_outer_paned",
     "get_show_flow", "get_view_btn", "get_flow_colors",
+    "set_context_hook", "get_wf_step_count",
+    # 行为函数 (原名保留)
     # 行为函数 (原名保留)
     "_wf_update_overflow", "_wf_on_wheel", "_wf_flow_on_wheel",
     "_wf_toggle_view", "_wf_insert_step", "_wf_populate_library", "_wf_filter_library",
@@ -150,7 +155,10 @@ __all__ = [
     "_wf_render_flowchart", "_wf_render_flowchart_legacy", "_draw_arrow",
     "_wf_edit_step_by_index", "use_flow_canvas",
     "_wf_drag_start", "_wf_drag_move", "_wf_drag_end", "_wf_refresh_tree",
-    "_wf_new", "_wf_open", "_wf_save", "_wf_add_step", "_wf_edit_step",
+    "_wf_new", "_wf_open", "_wf_save", "_wf_save_as", "_wf_clear",
+    "wf_save", "wf_save_as", "wf_clear", "wf_new", "wf_open",
+    "wf_is_modified", "get_workflow_name",
+    "_wf_add_step", "_wf_edit_step",
     "_wf_export_screenshot", "_wf_delete_step", "_wf_move_up", "_wf_move_down",
     "_wf_clone_step", "_wf_copy_step", "_wf_paste_step", "_wf_toggle_enable",
     "_wf_toggle_comment", "_wf_export_template", "_wf_context_menu", "_wf_run",
@@ -227,15 +235,21 @@ _CTX = {
     "app_root": "", "root": None, "exec_maxmin_var": None,
     "set_window_icon": None, "bind_sel_bold": None, "bind_row_hover": None,
     "load_pil": None, "get_image_grab": None, "colors": None,
+    "ctx": None,
 }
 
 # ── 工作流数据 / 图形色板 / 拖拽状态 (原 ACRPA 模块级常量, 原位迁入) ──
 _wf_data = {"name": "未命名工作流", "steps": []}
-_wf_file = None
+_wf_file = None             # 当前工作流文件 (None = 尚未落盘, 保存时转「另存」)
+# 「已保存」基线签名 (见 _wf_signature / wf_is_modified): 初始基线就是空工作流本身,
+# 因此启动后新加的任何步骤/改名都会被判定为「未保存」, 不会因为「还没存过」而漏提示。
+_wf_saved_sig = json.dumps(_wf_data, sort_keys=True, ensure_ascii=False)
+_wf_context_hook = None     # 宿主注入: fn(name, step_count) —— 更新运行栏工作流上下文条
 
 TYPE_LABELS = {"script": "- 脚本", "parallel": "|| 并行", "condition": "? 条件",
                "wait": "~ 等待", "loop": "↻ 循环", "command": "↯ 命令",
-               "variable": "✚ 变量", "log": "✉ 日志"}
+               "variable": "✚ 变量", "log": "✉ 日志", "retry": "⟳ 重试",
+               "workflow": "⧉ 子工作流"}
 
 # ── 流程图颜色配置 (唯一真源; ACRPA.py 不再定义 _FLOW_COLORS) ──
 _FLOW_COLORS = {
@@ -247,9 +261,12 @@ _FLOW_COLORS = {
     "command":   "#EF4444",  # 红色
     "variable":  "#0EA5E9",  # 天蓝
     "log":       "#64748B",  # 深灰
+    "retry":     "#F97316",  # 橙色 (重试)
+    "workflow":  "#14B8A6",  # 青绿 (子工作流)
 }
 _FLOW_ICONS = {"script": "[>]", "parallel": "⫼", "condition": "◇", "wait": "⧗",
-               "loop": "↻", "command": "↯", "variable": "✚", "log": "✉"}
+               "loop": "↻", "command": "↯", "variable": "✚", "log": "✉",
+               "retry": "⟳", "workflow": "⧉"}
 _NODE_W = 200
 _NODE_H = 36
 _NODE_GAP = 56
@@ -386,6 +403,7 @@ _WF_LIB_NODES = {}            # iid → 命令/动作节点 dict (双击添加 +
 _WF_LIB_DEGRADED = False      # 是否已发过"降级"提示 (只提示一次, 绝不弹模态框)
 _WF_LIB_STATUS = ""           # 最近一次降级提示文本 (状态行 / 测试可读)
 _WF_LIB_MAKER_BY_CMD = None   # 命令名 → 旧构造器 反向索引 (惰性构建, 见 _wf_lib_maker_by_cmd)
+_WF_LIB_GROUP_ICONS = {}       # 分组名 → 图标 (填充库时同步; 命令行沿用分组图标)
 _WF_LIB_TIP_TIMER = None      # 悬停说明的 500ms after 句柄
 _WF_LIB_TIP_IID = None        # 悬停说明当前指向的树行
 
@@ -396,6 +414,11 @@ _WF_LIB_FIELD_LABELS = {"cmd": "命令", "sub": "子族", "group": "分组",
 # 最近使用记录 (存入 APP_ROOT/recent_workflow.json)
 _WF_RECENT = []
 _WF_CLIPBOARD = None  # 复制/粘贴缓冲区
+
+# 工作流撤销/重做快照栈 (深拷贝完整 _wf_data, 有界)
+_WF_UNDO = []
+_WF_REDO = []
+_WF_UNDO_MAX = 100
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -544,7 +567,23 @@ def build(parent, *, colors, fonts, deps=None, tab=None):
     tbtn(wf_toolbar, "打开", lambda: _wf_open(), "ac", "white",
          tip="打开工作流文件").pack(side="left", padx=_wfp)
     tbtn(wf_toolbar, "保存", lambda: _wf_save(), "sc", "white",
-         tip="保存工作流").pack(side="left", padx=_wfp)
+         tip="保存 (Ctrl+S): 已有文件直接覆盖, 未落盘时另存").pack(side="left", padx=_wfp)
+    tbtn(wf_toolbar, "另存", lambda: _wf_save_as(),
+         tip="另存为… (Ctrl+Shift+S)").pack(side="left", padx=_wfp)
+    tbtn(wf_toolbar, "版本", lambda: _wf_version_history(),
+         tip="查看工作流版本历史 (恢复/对比)").pack(side="left", padx=_wfp)
+    sep(wf_toolbar)
+    tbtn(wf_toolbar, "↶ 撤销", lambda: _wf_undo(),
+         tip="撤销上一步修改 (Ctrl+Z)").pack(side="left", padx=_wfp)
+    tbtn(wf_toolbar, "↷ 重做", lambda: _wf_redo(),
+         tip="重做被撤销的修改 (Ctrl+Shift+Z)").pack(side="left", padx=_wfp)
+    sep(wf_toolbar)
+    tbtn(wf_toolbar, "AI 生成", lambda: _wf_ai_generate(),
+         tip="用自然语言描述生成工作流图 (静态校验兜底)").pack(side="left", padx=_wfp)
+    sep(wf_toolbar)
+    # 清空紧邻文件组: 工具栏右侧常被溢出裁剪, 放在末尾会「看不见也点不到」
+    tbtn(wf_toolbar, "清空", lambda: _wf_clear(), "dg", "white",
+         tip="清空工作流所有步骤 (需确认)").pack(side="left", padx=_wfp)
     tbtn(wf_toolbar, "导出模板", lambda: _wf_export_template(),
          tip="导出为工作流模板").pack(side="left", padx=_wfp)
     sep(wf_toolbar)
@@ -560,23 +599,18 @@ def build(parent, *, colors, fonts, deps=None, tab=None):
          tip="添加变量设置").pack(side="left", padx=_wfp)
     tbtn(wf_toolbar, "+ 循环", lambda: _wf_add_step("loop"),
          tip="添加循环块").pack(side="left", padx=_wfp)
+    tbtn(wf_toolbar, "+ 重试", lambda: _wf_add_step("retry"),
+         tip="添加重试块").pack(side="left", padx=_wfp)
+    tbtn(wf_toolbar, "+ 子流程", lambda: _wf_add_step("workflow"),
+         tip="添加子工作流引用").pack(side="left", padx=_wfp)
     sep(wf_toolbar)
-    # 「运行 / 停止」已移除: 由 ② 执行控制工具栏 (root row1) 按当前 Tab 分派承接
-    sep(wf_toolbar)
-    # 执行控制: 循环次数 + 无限最长
-    tkinter.Label(wf_toolbar, text="循环:", font=FONT_SMALL, bg=C["bg"], fg=C["fgm"]).pack(side="left", padx=(0, 2))
-    wf_loop_var = tkinter.StringVar(value="1")
-    tkinter.Spinbox(wf_toolbar, textvariable=wf_loop_var, from_=1, to=9999, width=3,
-        font=FONT_SMALL, bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1).pack(side="left", padx=(0, 6))
-    tkinter.Label(wf_toolbar, text="次 | 最长:", font=FONT_SMALL, bg=C["bg"], fg=C["fgm"]).pack(side="left", padx=(0, 2))
-    # 执行参数口径统一: 「最长执行分钟」与「执行控制」运行控制条共用同一个变量/state 键
-    wf_maxmin_var = _CTX.get("exec_maxmin_var")
-    tkinter.Spinbox(wf_toolbar, textvariable=wf_maxmin_var, from_=0, to=1440, width=4,
-        font=FONT_SMALL, bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1).pack(side="left", padx=(0, 2))
-    tkinter.Label(wf_toolbar, text="分", font=FONT_SMALL, bg=C["bg"], fg=C["fgm"]).pack(side="left", padx=(0, 6))
-    tbtn(wf_toolbar, "变量管理", lambda: _wf_open_variable_manager(),
-         tip="管理工作流变量").pack(side="left", padx=_wfp)
-    sep(wf_toolbar)
+    # 「运行 / 停止」已移除: 由 ② 执行控制工具栏 (root row1) 按当前 Tab 分派承接。
+    # 执行控制「循环次数 / 最长执行分钟」与「变量管理」同样只保留 root row1 运行栏一处
+    # 入口: 本工具栏不再重复摆放文字提示/输入框 (原「循环 / 最长: 跟随上方运行栏」
+    # 提示已随移出循环按钮一并删除), 这里只保留变量对象引用 (与运行栏同一个
+    # StringVar) 供 _wf_run 读取, 避免两处各自维护导致口径分裂。
+    wf_loop_var = _CTX.get("exec_loop_var") or tkinter.StringVar(value="1")
+    wf_maxmin_var = _CTX.get("exec_maxmin_var") or tkinter.StringVar(value="0")
     tbtn(wf_toolbar, "截图", lambda: _wf_export_screenshot(),
          tip="导出流程图截图").pack(side="left", padx=_wfp)
     # 视图切换按钮
@@ -591,6 +625,15 @@ def build(parent, *, colors, fonts, deps=None, tab=None):
         font=FONT_BODY, width=20, relief="solid", bd=1,
         bg=C["ebg"], fg=C["fgb"], insertbackground=C["fgt"])
     wf_name_entry.pack(side="left", padx=(8, 4))
+    # 名称变化: 同步进 _wf_data 并刷新运行栏上下文条。
+    # 写进数据是「重命名 = 一次修改」的判定依据 (退出确认/保存签名都看 _wf_data)。
+    def _wf_on_name_edit(*_a):
+        _wf_data["name"] = wf_name_var.get()
+        _wf_emit_context()
+    try:
+        wf_name_var.trace_add("write", _wf_on_name_edit)
+    except Exception:
+        pass
 
     # ── 主内容区: PanedWindow[操作库 | PanedWindow(列表 + 流程图)] ──
     #   外层 wf_outer_paned 提供操作库侧边栏的拉伸 sash; 内层 wf_paned 管理列表↔流程图分屏。
@@ -705,10 +748,18 @@ def build(parent, *, colors, fonts, deps=None, tab=None):
 
     wf_flow_canvas.bind("<MouseWheel>", _wf_flow_on_wheel)
 
+    # P3-3: 节点交互改为「共享 `node` 标签 + 几何命中」一次性注册 (替代渲染期 N×4 tag_bind)。
+    #   所有节点/端口图元均带 `node` 标签, 命中 idx 由 _wf_hit_node_index 按包围盒解析;
+    #   拖拽移动/结束沿用已登记的 _wf_drag_idx (几何命中仅在按下时解析一次)。
+    wf_flow_canvas.tag_bind("node", "<Double-1>", _wf_node_double_at)
+    wf_flow_canvas.tag_bind("node", "<Button-1>", _wf_node_click_at)
+    wf_flow_canvas.tag_bind("node", "<B1-Motion>", _wf_node_drag_move_at)
+    wf_flow_canvas.tag_bind("node", "<ButtonRelease-1>", _wf_node_drag_end_at)
+
     # WF-B2 (P1-1/P1-2): 检查面板展开列表 + 画布悬浮工具条 + 小地图
     _wf_build_panel_v2()
 
-    # WF-B2 (P1-5/A10): 大纲 → 画布联动 (画布 → 大纲在 _wf_render_flow_canvas 内 tag_bind)
+    # WF-B2 (P1-5/A10): 大纲 → 画布联动 (画布 → 大纲经共享 `node` 标签 _wf_node_click_at)
     try:
         wf_tree.bind("<<TreeviewSelect>>", _wf_on_tree_select)
     except Exception:
@@ -727,6 +778,19 @@ def build(parent, *, colors, fonts, deps=None, tab=None):
 
     wf_tree.bind("<Delete>", lambda e: _wf_delete_step())
 
+    # 撤销 / 重做 (Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y)
+    def _wf_key_undo(event):
+        _wf_undo()
+        return "break"
+    def _wf_key_redo(event):
+        _wf_redo()
+        return "break"
+    wf_tree.bind("<Control-z>", _wf_key_undo)
+    wf_tree.bind("<Control-Z>", _wf_key_undo)
+    wf_tree.bind("<Control-Shift-z>", _wf_key_redo)
+    wf_tree.bind("<Control-Shift-Z>", _wf_key_redo)
+    wf_tree.bind("<Control-y>", _wf_key_redo)
+
     wf_tree.bind("<Button-3>", _wf_context_menu)
 
     # 操作库事件绑定
@@ -743,6 +807,14 @@ def build(parent, *, colors, fonts, deps=None, tab=None):
     # 换肤: 订阅 ThemeBus (幂等, 重复构建只登记一次) —— 取代原 _refresh_theme 的定点回填
     if ui_theme is not None:
         ui_theme.subscribe(refresh_theme)
+
+    # 事件总线 (S3): 订阅宿主发布的工作流高亮刷新 (幂等登记; 本模块为懒构建,
+    # 未构建时无订阅者, 宿主 publish 即 no-op, 天然取代 _WF_LAZY["ok"] 守卫)
+    try:
+        from core.event_bus import bus
+        bus.subscribe("wf_highlight", _wf_update_workflow_highlight)
+    except Exception:
+        pass
 
     return get_widgets()
 
@@ -887,6 +959,11 @@ def _wf_toggle_view():
         wf_paned.add(wf_flow_frame, minsize=200, width=400)
         _wf_show_flow.set(True)
         _wf_render_flowchart()
+    # 按钮文案跟随状态 (此前恒为「[+] 流程图」, 用户无法判断当前是显示还是隐藏)
+    try:
+        _wf_view_btn.configure(text="[-] 流程图" if _wf_show_flow.get() else "[+] 流程图")
+    except Exception:
+        pass
 
 
 # 流程图滚轮 - 使用widget级别绑定
@@ -904,6 +981,7 @@ def _wf_insert_step(step, label=None):
     """
     import copy
     sel = wf_tree.selection()
+    _wf_snapshot_undo()
     if sel:
         idx = wf_tree.index(sel[0])
         _wf_data["steps"].insert(idx + 1, copy.deepcopy(step))
@@ -1069,14 +1147,44 @@ def _wf_lib_group_text(group):
     return str(group or "")
 
 
+def _wf_lib_cmd_icon(item):
+    """命令行图标: 命令自带 icon 优先, 否则沿用所属分组图标 (无分组用 ▸)。"""
+    if not isinstance(item, dict):
+        return "▸"
+    icon = str(item.get("icon") or "").strip()
+    if icon:
+        return icon
+    return _WF_LIB_GROUP_ICONS.get(item.get("group")) or "▸"
+
+
 def _wf_lib_node_text(item):
-    """命令行文本 (`按键  按键名, 次数=1`; 优先 `module_catalog.node_label`)。"""
-    if _module_catalog is not None:
-        try:
-            return _module_catalog.node_label(item)
-        except Exception:
-            pass
-    return str(item.get("cmd") or "") if isinstance(item, dict) else str(item or "")
+    """命令行文本: `◈ 命令名  (关键参数1、参数2…)`。
+
+    与「描述」分离的口径: 行内只给**命令名 + 前 2 个关键字段**, 完整签名
+    (含默认值/枚举) 与 description 一律留在悬停说明 (`_wf_lib_tooltip_text`) 里,
+    避免 180px 侧栏被长参数串撑爆。无结构化参数时退回签名前两项。
+    """
+    if not isinstance(item, dict):
+        return str(item or "")
+    cmd = str(item.get("cmd") or "")
+    text = "{} {}".format(_wf_lib_cmd_icon(item), cmd)
+    if not item.get("has_params"):
+        return text
+    names = []
+    for p in (item.get("params") or ()):
+        if isinstance(p, dict):
+            nm = str(p.get("name") or "").strip()
+            if nm:
+                names.append(nm)
+    if names:
+        return "{}  ({}{})".format(text, "、".join(names[:2]),
+                                   "…" if len(names) > 2 else "")
+    sig = str(item.get("sig") or "")
+    heads = [s.strip() for s in sig.split(",")[:2] if s.strip()]
+    if heads:
+        return "{}  ({}{})".format(text, ", ".join(heads),
+                                   "…" if sig.count(",") > 1 else "")
+    return text
 
 
 def _wf_lib_tooltip_text(item):
@@ -1125,6 +1233,15 @@ def _wf_populate_library(filter_text="", groups_json=None, schema_json=None,
         return 0
     _WF_LIB_NODES = {}
     catalog = _wf_library_catalog(groups_json, schema_json, force_reload)
+    # 分组图标快照: 命令行沿用所属分组图标 (schema 无逐命令 icon 时的低成本方案)
+    try:
+        _WF_LIB_GROUP_ICONS.clear()
+        for _g in (catalog or ()):
+            if isinstance(_g, dict):
+                _WF_LIB_GROUP_ICONS[str(_g.get("group") or "")] = str(
+                    _g.get("icon") or "▫")
+    except Exception:
+        pass
     kw = (filter_text or "").strip()
     hit_map = {}
     for h in _wf_lib_search_hits(kw, catalog):
@@ -1439,47 +1556,33 @@ def _wf_add_recent_clicked():
     _wf_lib_insert_by_name(label)
 
 
-def _wf_render_flowchart(*args):
+def _wf_render_flowchart(*args, dirty=None):
     """在 Canvas 上绘制工作流流程图。
 
     C 期 (路线图 阶段二 第 9 项): 内部改为调用 `ui.flow_canvas.render(...)` ——
     Sugiyama 简化版分层布局 + 形状语义 + 结构化两行文本。函数名与 `_draw_arrow`
     符号保留 (tools/_test_workflow_view_split.py 断言), 并提供回退开关 `use_flow_canvas`:
     关闭或渲染异常时退回旧单列渲染 `_wf_render_flowchart_legacy`。
+
+    P2-7: ``dirty`` 透传 flow_canvas.render 的脏矩形局部重绘 (执行高亮仅外观变化时
+    只重画受影响节点+连线, 不整体重绘)。
     """
     if use_flow_canvas and _flow_canvas is not None and _flow_graph is not None:
         try:
-            return _wf_render_flow_canvas()
+            return _wf_render_flow_canvas(dirty=dirty)
         except Exception:
             pass  # 渲染失败 → 旧渲染兜底, 保证画布不空
     return _wf_render_flowchart_legacy(*args)
 
 
-def _wf_render_flow_canvas(graph=None):
-    """`_wf_data` (树) → promote 成图 → 交由 ui.flow_canvas 分层渲染。
+def _wf_flow_ctx(g):
+    """构建 flow_canvas 渲染/动画上下文 (P2-2 抽离, 渲染与高亮动画同口径)。
 
-    配色仍取本模块唯一真源 `_FLOW_COLORS`; 缩放/平移由 flow_canvas.bind_zoom_pan 挂载
-    (垂直滚轮语义仍属 `_wf_flow_on_wheel`, 不删原绑定)。
-
-    D 期: 支持 `graph` 参数复用「已编辑的图」(端口连线保留) —— 结构未变时
-    (`demote(编辑图) == _wf_data`) 复用会话内最后一次编辑的图, 结构变化自动重新提升。
+    顶层节点 ↔ 原始 steps 序号 tag 映射 + 执行高亮 (current_step / step_results)
+    + 结构色 style 全部在此读取一次, 保证 render() 与 animate_nodes_outline()
+    计算出的目标描边逐位一致。
     """
-    global _FLOW_ZOOM_STATE, _wf_graph_edit, _FLOW_INTERACT_ST
-    if graph is not None:
-        _wf_graph_edit = graph
-    else:
-        reuse = None
-        if _wf_graph_edit is not None:
-            try:
-                if _flow_graph.demote(_wf_graph_edit) == _wf_data:
-                    reuse = _wf_graph_edit
-            except Exception:
-                reuse = None
-        graph = reuse if reuse is not None else _flow_graph.promote(_wf_data)
-        _wf_graph_edit = graph
-    g = graph
     roots = g.roots()
-    # 顶层节点 ↔ 原始 steps 序号 的 tag 映射 (双击编辑 / 拖拽换序契约不变)
     index_tags = {n.id: "node_{}".format(i) for i, n in enumerate(roots)}
 
     cur, results = None, {}
@@ -1492,7 +1595,7 @@ def _wf_render_flow_canvas(graph=None):
 
     state = _CTX.get("state")
     style = _FLOW_STYLE or _refresh_flow_style(C)
-    ctx = {
+    return {
         "darken": _CTX.get("darken"),
         "dark": bool(state is not None and getattr(state, "DARK_MODE", False)),
         "current_step": cur,
@@ -1513,6 +1616,74 @@ def _wf_render_flow_canvas(graph=None):
         "interact_v2": _WF_INTERACT_V2,
         "grid": bool(_WF_INTERACT_V2 and _WF_FLOW_GRID),
     }
+
+
+# ── P3-3 几何命中 (节点单击/双击/拖拽统一按包围盒解析, 替代逐节点 tag_bind) ──
+_WF_NODE_REGIONS = None
+_WF_NODE_HIT_PAD = 2.0
+
+
+def _wf_set_node_regions(regions, pad=2.0):
+    """渲染后灌入节点包围盒 ``[(idx, (x1, y1, x2, y2)), ...]`` (绘制顺序)。
+
+    idx 与 ``roots`` 枚举顺序同源; 单击/双击按 ``detect_point`` 解析 idx,
+    拖拽移动/结束沿用已登记的 ``_wf_drag_idx`` (视觉位移中图坐标不变, 无需重解析)。
+    """
+    global _WF_NODE_REGIONS, _WF_NODE_HIT_PAD
+    _WF_NODE_REGIONS = list(regions)
+    try:
+        _WF_NODE_HIT_PAD = float(pad)
+    except Exception:
+        _WF_NODE_HIT_PAD = 2.0
+
+
+def _wf_hit_node_index(x, y):
+    """→ 光标下节点 idx 或 None (后绘制者优先, 语义对齐旧 node_i tag_bind)。"""
+    if not _WF_NODE_REGIONS:
+        return None
+    try:
+        return detect_point(float(x), float(y), _WF_NODE_REGIONS, _WF_NODE_HIT_PAD)
+    except Exception:
+        return None
+
+
+def _wf_node_hit_pad():
+    """P3-3: 节点点击命中外扩 = 端口半径 sp(4)*zoom + 2 (覆盖端口圆点, 对齐旧 tag_bind)。"""
+    try:
+        sp = _CTX.get("sp")
+        r = float(sp(4)) if callable(sp) else 4.0
+        return max(2.0, r * _wf_current_zoom() + 2.0)
+    except Exception:
+        return 2.0
+
+
+def _wf_render_flow_canvas(graph=None, dirty=None):
+    """`_wf_data` (树) → promote 成图 → 交由 ui.flow_canvas 分层渲染。
+
+    配色仍取本模块唯一真源 `_FLOW_COLORS`; 缩放/平移由 flow_canvas.bind_zoom_pan 挂载
+    (垂直滚轮语义仍属 `_wf_flow_on_wheel`, 不删原绑定)。
+
+    D 期: 支持 `graph` 参数复用「已编辑的图」(端口连线保留) —— 结构未变时
+    (`demote(编辑图) == _wf_data`) 复用会话内最后一次编辑的图, 结构变化自动重新提升。
+
+    P2-7: ``dirty`` 为节点 id 集合时走脏矩形局部重绘 (供执行高亮); None 保持全量。
+    """
+    global _FLOW_ZOOM_STATE, _wf_graph_edit, _FLOW_INTERACT_ST
+    if graph is not None:
+        _wf_graph_edit = graph
+    else:
+        reuse = None
+        if _wf_graph_edit is not None:
+            try:
+                if _flow_graph.demote(_wf_graph_edit) == _wf_data:
+                    reuse = _wf_graph_edit
+            except Exception:
+                reuse = None
+        graph = reuse if reuse is not None else _flow_graph.promote(_wf_data)
+        _wf_graph_edit = graph
+    g = graph
+    roots = g.roots()
+    ctx = _wf_flow_ctx(g)
     fonts = {"body": FONT_BODY, "small": FONT_SMALL, "small_bold": FONT_SMALL_BOLD}
 
     # 缩放/平移: 仅登记一次 (重复渲染不重复绑定); 回调本次重绘以补偿线宽/字号 (P0-4)
@@ -1526,7 +1697,7 @@ def _wf_render_flow_canvas(graph=None):
     zoom = float(_FLOW_ZOOM_STATE.get("scale", 1.0)) if _FLOW_ZOOM_STATE else 1.0
     ctx["zoom"] = zoom
     _flow_canvas.render(wf_flow_canvas, g, colors=_FLOW_COLORS, fonts=fonts,
-                        ctx=ctx, zoom=zoom)
+                        ctx=ctx, zoom=zoom, dirty=dirty)
 
     # D 期连线交互 (端口拖拽建边 / 边选中·Delete 删除 / F 适应窗口 / Ctrl+0 重置
     #   缩放 / Ctrl+Z·Ctrl+Y 撤销重做)。图编辑为视图级 (§11.4), 执行仍走树。
@@ -1550,17 +1721,12 @@ def _wf_render_flow_canvas(graph=None):
     except Exception:
         pass
 
-    # P1-5: 节点单击补「画布 → 大纲」双向联动; 双击编辑 / 拖拽换序绑定保持不变
-    for i in range(len(roots)):
-        tag = "node_{}".format(i)
-        wf_flow_canvas.tag_bind(tag, "<Double-1>",
-            lambda e, idx=i: _wf_edit_step_by_index(idx))
-        wf_flow_canvas.tag_bind(tag, "<Button-1>",
-            lambda e, idx=i: _wf_node_click(e, idx))
-        wf_flow_canvas.tag_bind(tag, "<B1-Motion>",
-            lambda e, idx=i: _wf_drag_move(e, idx))
-        wf_flow_canvas.tag_bind(tag, "<ButtonRelease-1>",
-            lambda e, idx=i: _wf_drag_end(e, idx))
+    # P3-3: 节点单击/双击/拖拽绑定已在 build 时一次性挂到共享 `node` 标签; 此处仅更新
+    #   节点包围盒 (几何命中真源)。pad 覆盖端口圆点, 保持「点端口也先进入节点单击」的旧
+    #   node_i tag_bind 语义 (画布 → 大纲联动 + 双击编辑 + 拖拽换序均不回退)。
+    _wf_set_node_regions(
+        [(i, (n.x, n.y, n.x + n.w, n.y + n.h)) for i, n in enumerate(roots)],
+        pad=_wf_node_hit_pad())
 
     # P1-2: 小地图随本次渲染刷新 (数据源 layout() 已写回的 n.x/y/w/h)
     _wf_draw_minimap()
@@ -1656,11 +1822,6 @@ def _wf_render_flowchart_legacy(*args):
             fill=shadow_color, outline="", tags=("shadow",))
         wf_flow_canvas.tag_lower(shadow_id, node_id)
 
-        # 绑定双击编辑
-        for tag in ("node_{}".format(i),):
-            wf_flow_canvas.tag_bind(tag, "<Double-1>",
-                lambda e, idx=i: _wf_edit_step_by_index(idx))
-
         node_positions.append((x, y))
         y += _NODE_GAP
 
@@ -1676,14 +1837,11 @@ def _wf_render_flowchart_legacy(*args):
     total_h = y + 20
     wf_flow_canvas.configure(scrollregion=(0, 0, canvas_w, max(total_h, 200)))
 
-    # 节点拖拽绑定
-    for i in range(len(steps)):
-        wf_flow_canvas.tag_bind("node_{}".format(i), "<Button-1>",
-            lambda e, idx=i: _wf_drag_start(e, idx))
-        wf_flow_canvas.tag_bind("node_{}".format(i), "<B1-Motion>",
-            lambda e, idx=i: _wf_drag_move(e, idx))
-        wf_flow_canvas.tag_bind("node_{}".format(i), "<ButtonRelease-1>",
-            lambda e, idx=i: _wf_drag_end(e, idx))
+    # P3-3: 单列回退路径同样走共享 `node` 标签 + 几何命中 (绑定已在 build 时一次性注册),
+    #   此处仅更新节点包围盒。单列无端口 → pad 取 2 (与旧 node_i tag_bind 覆盖一致)。
+    _wf_set_node_regions(
+        [(i, (x, y, x + _NODE_W, y + _NODE_H)) for i, (x, y) in enumerate(node_positions)],
+        pad=2.0)
 
 
 def _draw_arrow(canvas, x1, y1, x2, y2, color=None):
@@ -1919,6 +2077,31 @@ def _wf_drag_end(event, idx):
     _wf_render_flowchart()
 
 
+def _wf_step_param_summary(step):
+    """命令步骤详情: `命令  关键参数=值 …` (只显示非空的前 3 项, 名称取自 schema)。"""
+    cmd = str(step.get("cmd") or "")
+    vals = step.get("params") or []
+    names = []
+    if _module_catalog is not None:
+        try:
+            item = _module_catalog.get_command(cmd)
+            if isinstance(item, dict):
+                names = [str(p.get("name") or "") for p in (item.get("params") or ())
+                         if isinstance(p, dict)]
+        except Exception:
+            names = []
+    parts = []
+    for i, v in enumerate(vals[:9]):
+        sv = "" if v is None else str(v).strip()
+        if not sv:
+            continue
+        nm = names[i] if i < len(names) and names[i] else "参数{}".format(i + 1)
+        parts.append("{}={}".format(nm, sv))
+        if len(parts) >= 3:
+            break
+    return "{}  {}".format(cmd, " ".join(parts)) if parts else cmd
+
+
 def _wf_refresh_tree():
     """刷新工作流步骤列表"""
     wf_tree.delete(*wf_tree.get_children())
@@ -1928,7 +2111,8 @@ def _wf_refresh_tree():
         disabled = step.get("enabled", True) is False
         comment = step.get("comment", "")
         if stype == "script":
-            detail = step.get("path", "")
+            _p = str(step.get("path") or "")
+            detail = os.path.basename(_p) if _p else "(未选择脚本)"
         elif stype == "parallel":
             count = len(step.get("steps", []))
             detail = "{} 个子步骤".format(count)
@@ -1939,11 +2123,18 @@ def _wf_refresh_tree():
         elif stype == "loop":
             detail = "循环 {} 次, {} 子步骤".format(step.get("times", "1"), len(step.get("steps", [])))
         elif stype == "command":
-            detail = "{} {}".format(step.get("cmd", ""), step.get("params", [])[:2])
+            detail = _wf_step_param_summary(step)
         elif stype == "variable":
             detail = "{} = {}".format(step.get("var_name", ""), step.get("var_value", ""))
         elif stype == "log":
             detail = step.get("text", "")
+        elif stype == "retry":
+            detail = "最多 {} 次, 间隔 {}s, {} 子步骤".format(
+                step.get("max_attempts", 3), step.get("delay", 1.0),
+                len(step.get("steps", [])))
+        elif stype == "workflow":
+            _p = str(step.get("path") or "")
+            detail = os.path.basename(_p) if _p else "(未选择工作流)"
         else:
             detail = str(step)
         if comment:
@@ -1954,52 +2145,579 @@ def _wf_refresh_tree():
         wf_tree.insert("", "end", text=str(i + 1), values=(label, detail), tags=(tag,))
         wf_tree.tag_configure(tag, foreground=C["fgm"] if disabled else C["fgb"])
     _wf_render_flowchart()
+    _wf_emit_context()
 
 
-def _wf_new():
-    _wf_data["name"] = "未命名工作流"
-    _wf_data["steps"] = []
-    global _wf_file
-    _wf_file = None
-    wf_name_var.set("未命名工作流")
+def _wf_step_count(steps):
+    """递归统计可执行步骤数 (含并行子步骤 / 条件分支 / 循环体), 供运行栏上下文条。"""
+    n = 0
+    for s in (steps or []):
+        if not isinstance(s, dict):
+            continue
+        n += 1
+        t = s.get("type")
+        if t in ("parallel", "loop", "retry"):
+            n += _wf_step_count(s.get("steps") or [])
+        elif t == "condition":
+            for k in ("then", "else"):
+                v = s.get(k)
+                if isinstance(v, dict) and v:
+                    n += _wf_step_count([v])
+                elif isinstance(v, list):
+                    n += _wf_step_count(v)
+    return n
+
+
+def _wf_step_label(s):
+    """单行步骤摘要 (版本历史预览用)。"""
+    if not isinstance(s, dict):
+        return str(s)
+    t = s.get("type", "script")
+    if t == "script":
+        return "script {}".format(s.get("path", ""))
+    if t == "command":
+        return _wf_step_param_summary(s)
+    if t == "variable":
+        return "variable {} = {}".format(s.get("var_name", ""), s.get("var_value", ""))
+    if t in ("parallel", "loop", "retry"):
+        return "{} ({} 子步骤)".format(t, len(s.get("steps", [])))
+    if t == "workflow":
+        return "workflow {}".format(s.get("path", ""))
+    if t == "condition":
+        return "condition if {}".format(s.get("if", ""))
+    if t == "wait":
+        return "wait {}s".format(s.get("seconds", 1))
+    if t == "log":
+        return "log {}".format(s.get("text", ""))
+    return t
+
+
+def _wf_ai_generate():
+    """自然语言 → 工作流图 (流式展示 + flow_graph 静态校验兜底)。"""
+    import tkinter as _tk
+    top = _tk.Toplevel()
+    top.title("AI 生成工作流")
+    top.configure(bg=C["bgc"])
+    top.transient(_window if "_window" in globals() else None)
+    sp = _CTX.get("sp") or (lambda v: v)
+
+    _tk.Label(top, text="用一句话描述你想自动化的流程:", bg=C["bgc"], fg=C["fgt"],
+        font=FONT_BODY).pack(padx=sp(8), pady=(sp(8), 2))
+    desc = _tk.Text(top, width=60, height=4, font=FONT_BODY, bg=C["ebg"],
+        fg=C["fgb"], insertbackground=C["fgt"])
+    desc.pack(padx=sp(8), pady=sp(2))
+
+    status = _tk.StringVar(value="准备就绪")
+    _tk.Label(top, textvariable=status, bg=C["bgc"], fg=C["fgm"],
+        font=FONT_SMALL).pack(padx=sp(8), pady=sp(2))
+
+    preview = _tk.Text(top, width=60, height=8, font=FONT_BODY, bg=C["ebg"],
+        fg=C["fgb"], insertbackground=C["fgt"])
+    preview.pack(padx=sp(8), pady=sp(2), fill="both", expand=True)
+    preview.insert("1.0", "生成的工作流步骤将在这里预览...")
+    preview.configure(state="disabled")
+
+    btn_frame = _tk.Frame(top, bg=C["bgc"])
+    btn_frame.pack(pady=sp(4))
+    gen_btn = _wf_btn(btn_frame, "生成", "ac", command=None, font=FONT_BODY)
+    gen_btn.pack(side="left", padx=2)
+    import_btn = _wf_btn(btn_frame, "导入工作流", "ac", command=None, font=FONT_BODY)
+    import_btn.pack(side="left", padx=2)
+    import_btn.config(state="disabled")
+    _wf_btn(btn_frame, "关闭", "ac", command=top.destroy, font=FONT_BODY).pack(side="left", padx=2)
+
+    _buf = []
+    result_holder = [None]
+
+    def _show_preview(text):
+        try:
+            preview.configure(state="normal")
+            preview.delete("1.0", "end")
+            preview.insert("1.0", "生成中…\n" + text)
+            preview.configure(state="disabled")
+        except Exception:
+            pass
+
+    def _on_delta(chunk):
+        _buf.append(chunk)
+        tail = "".join(_buf)[-240:]
+        try:
+            top.after(0, lambda t=tail: _show_preview(t))
+        except Exception:
+            pass
+
+    def _generate():
+        text = desc.get("1.0", "end").strip()
+        if not text:
+            _toast("请先输入流程描述", "info")
+            return
+        gen_btn.config(state="disabled")
+        status.set("生成中, 请稍候…")
+
+        def _work():
+            try:
+                from ai_client import (create_client_active, resolve_model,
+                                       generate_workflow_from_text, APIError,
+                                       APIAuthError, APIRateLimitError, APITimeoutError)
+                client = create_client_active()
+                data, issues = generate_workflow_from_text(
+                    client, text, resolve_model(), on_delta=_on_delta)
+                result_holder[0] = (data, issues)
+                top.after(0, _on_done)
+            except (APIAuthError, APIRateLimitError, APITimeoutError, APIError) as e:
+                top.after(0, lambda: _on_error(str(e)))
+            except Exception as e:
+                top.after(0, lambda: _on_error(str(e)))
+
+        import threading
+        threading.Thread(target=_work, daemon=True).start()
+
+    def _on_done():
+        gen_btn.config(state="normal")
+        data, issues = result_holder[0]
+        steps = data.get("steps", [])
+        lines = ["工作流: {}".format(data.get("name", "")), ""]
+        for i, s in enumerate(steps):
+            lines.append("[{}] {}".format(i + 1, _wf_step_label(s)))
+        if issues:
+            lines.append("")
+            lines.append("静态检查提示:")
+            for it in issues:
+                lines.append("  - [{}] {}".format(it.get("level", ""), it.get("message", "")))
+        try:
+            preview.configure(state="normal")
+            preview.delete("1.0", "end")
+            preview.insert("1.0", "\n".join(lines))
+            preview.configure(state="disabled")
+        except Exception:
+            pass
+        import_btn.config(state="normal")
+        status.set("生成完成, 共 {} 步骤".format(len(steps)))
+
+    def _on_error(msg):
+        gen_btn.config(state="normal")
+        status.set("生成失败")
+        try:
+            preview.configure(state="normal")
+            preview.delete("1.0", "end")
+            preview.insert("1.0", "生成失败: {}".format(msg))
+            preview.configure(state="disabled")
+        except Exception:
+            pass
+
+    def _import():
+        if not result_holder[0]:
+            return
+        import copy as _copy
+        data, _issues = result_holder[0]
+        _wf_snapshot_undo()
+        _wf_data["name"] = data.get("name") or _wf_data.get("name") or "未命名工作流"
+        _wf_data["steps"] = _copy.deepcopy(data.get("steps", []))
+        try:
+            wf_name_var.set(_wf_data["name"])
+        except Exception:
+            pass
+        _wf_refresh_tree()
+        top.destroy()
+        _toast("已导入 AI 生成的工作流", "success")
+
+    gen_btn.config(command=_generate)
+    import_btn.config(command=_import)
+
+
+def _wf_emit_context():
+    """把 (工作流名, 步数) 推给宿主注入的上下文条回调 (运行栏工作流上下文条)。"""
+    if _wf_context_hook is None:
+        return
+    try:
+        name = (wf_name_var.get() if wf_name_var is not None
+                else _wf_data.get("name", "未命名工作流"))
+        _wf_context_hook(name, _wf_step_count(_wf_data.get("steps", [])))
+    except Exception:
+        pass
+
+
+def set_context_hook(fn):
+    """注入工作流上下文回调: fn(name, step_count) —— 由宿主 ACRPA 调用 (P1-5 后续 / §7-4)。"""
+    global _wf_context_hook
+    _wf_context_hook = fn
+
+
+def _wf_signature():
+    """工作流内容的稳定签名 (「是否有未保存修改」的判定依据)。
+
+    用内容快照比对代替逐点打脏标: 步骤对话框 / 右键菜单 / 拖拽 / 名称输入等任何
+    路径改动 _wf_data 都会被覆盖, 不会出现「改了却没提示保存」的漏标。
+    """
+    try:
+        return json.dumps(_wf_data, sort_keys=True, ensure_ascii=False, default=str)
+    except Exception:
+        return ""
+
+
+def _wf_snapshot_undo():
+    """在修改前深拷贝当前 _wf_data 入撤销栈 (清空重做栈)。"""
+    global _WF_UNDO, _WF_REDO
+    import copy
+    _WF_UNDO.append(copy.deepcopy(_wf_data))
+    if len(_WF_UNDO) > _WF_UNDO_MAX:
+        _WF_UNDO.pop(0)
+    _WF_REDO = []
+
+
+def _wf_restore_snapshot(snap):
+    """恢复快照到 _wf_data 并刷新 UI (不额外记账, 不触碰 _wf_file)。"""
+    import copy
+    _wf_data["name"] = snap.get("name", "未命名工作流")
+    _wf_data["steps"] = copy.deepcopy(snap.get("steps", []))
+    # 名称回写工具栏
+    try:
+        if wf_name_var is not None:
+            wf_name_var.set(_wf_data["name"])
+    except Exception:
+        pass
     _wf_refresh_tree()
 
 
-def _wf_open():
-    fp = filedialog.askopenfilename(title="打开工作流",
-        filetypes=[('JSON', '*.json'), ('YAML', '*.yaml')], initialdir=_CTX.get("app_root", ""))
-    if fp:
+def _wf_undo():
+    """撤销上一步修改 (Ctrl+Z)。"""
+    global _WF_UNDO, _WF_REDO
+    if not _WF_UNDO:
+        _toast("没有可撤销的操作", "info")
+        return
+    import copy
+    _WF_REDO.append(copy.deepcopy(_wf_data))
+    snap = _WF_UNDO.pop()
+    _wf_restore_snapshot(snap)
+    _toast("已撤销", "info")
+
+
+def _wf_redo():
+    """重做被撤销的修改 (Ctrl+Shift+Z)。"""
+    global _WF_UNDO, _WF_REDO
+    if not _WF_REDO:
+        _toast("没有可重做的操作", "info")
+        return
+    import copy
+    _WF_UNDO.append(copy.deepcopy(_wf_data))
+    snap = _WF_REDO.pop()
+    _wf_restore_snapshot(snap)
+    _toast("已重做", "info")
+
+
+def _wf_mark_saved():
+    """把当前内容记为「已保存基线」(新建 / 打开 / 保存 / 清空成功后调用)。"""
+    global _wf_saved_sig
+    _wf_saved_sig = _wf_signature()
+
+
+def wf_is_modified():
+    """当前工作流是否有未保存修改 (退出确认 / 宿主判断用)。"""
+    global _wf_saved_sig
+    current = _wf_signature()
+    if _wf_saved_sig is None:      # 首次调用: 以当前内容为基线 (尚未编辑)
+        _wf_saved_sig = current
+        return False
+    return current != _wf_saved_sig
+
+
+def get_workflow_name():
+    """当前工作流名 (工具栏未构建时退回数据里的名字)。"""
+    try:
+        if wf_name_var is not None:
+            return wf_name_var.get() or "未命名工作流"
+    except Exception:
+        pass
+    return str(_wf_data.get("name") or "未命名工作流")
+
+
+def _wf_sync_name():
+    """把工具栏名称写回 _wf_data (名称也是工作流内容的一部分)。"""
+    try:
+        if wf_name_var is not None:
+            _wf_data["name"] = wf_name_var.get() or _wf_data.get("name") or "未命名工作流"
+    except Exception:
+        pass
+    return _wf_data.get("name")
+
+
+def _wf_save_dir():
+    """保存对话框默认目录: 当前工作流所在目录 > 程序根目录。"""
+    if _wf_file:
         try:
-            from workflow import parse_workflow
-            data = parse_workflow(fp)
-            _wf_data["name"] = data.get("name", os.path.basename(fp))
-            _wf_data["steps"] = data.get("steps", [])
-            global _wf_file
-            _wf_file = fp
-            wf_name_var.set(_wf_data["name"])
-            _wf_refresh_tree()
-            _toast("已加载: {} ({}步骤)".format(_wf_data["name"], len(_wf_data["steps"])), "success")
-        except Exception as e:
-            messagebox.showerror("加载失败", str(e))
+            d = os.path.dirname(os.path.abspath(_wf_file))
+            if os.path.isdir(d):
+                return d
+        except Exception:
+            pass
+    return _CTX.get("app_root", "") or ""
+
+
+def _wf_confirm_discard(action="继续"):
+    """有未保存修改时先确认 (与脚本编辑「新建/打开前放弃修改」同口径)。"""
+    try:
+        if not wf_is_modified():
+            return True
+    except Exception:
+        return True
+    return bool(messagebox.askyesno(
+        "未保存的修改",
+        "工作流「{}」有未保存的修改，{}将丢弃这些修改，是否继续？".format(
+            get_workflow_name(), action)))
+
+
+def _wf_write(fp, action="已保存"):
+    """原子写盘 (临时文件 + os.replace), 成功后把该路径设为当前文件。"""
+    global _wf_file
+    tmp = fp + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(_wf_data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp, fp)
+    except Exception as e:
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except Exception:
+            pass
+        messagebox.showerror("保存失败", str(e))
+        _log1("工作流保存失败: {}".format(e), "error")
+        return False
+    _wf_file = fp
+    _wf_mark_saved()
+    _wf_save_version()
+    _toast("{}: {} ({}步骤)".format(action, os.path.basename(fp),
+                                   len(_wf_data.get("steps") or [])), "success")
+    _log1("工作流{}: {}".format(action, fp))
+    return True
+
+
+def _wf_save_version():
+    """保存当前工作流快照到版本历史 (失败静默, 不阻断保存主流程)。"""
+    try:
+        import copy as _copy
+        from version_manager import get_version_manager
+        get_version_manager().save_workflow_version(
+            _wf_file, _copy.deepcopy(_wf_data), comment="保存")
+    except Exception:
+        pass
+
+
+def _wf_new():
+    """新建 (Ctrl+N 于工作流 Tab): 有未保存修改先确认, 再重置为空白工作流。"""
+    if not _wf_confirm_discard("新建工作流"):
+        return False
+    global _wf_file
+    _wf_snapshot_undo()
+    _wf_file = None
+    _wf_data["name"] = "未命名工作流"
+    _wf_data["steps"] = []
+    try:
+        wf_name_var.set("未命名工作流")
+    except Exception:
+        pass
+    _wf_refresh_tree()
+    _wf_mark_saved()
+    return True
+
+
+def _wf_open():
+    """打开工作流文件 (有未保存修改先确认)。"""
+    if not _wf_confirm_discard("打开其他工作流"):
+        return False
+    fp = filedialog.askopenfilename(title="打开工作流",
+        filetypes=[('JSON', '*.json'), ('YAML', '*.yaml')], initialdir=_wf_save_dir())
+    if not fp:
+        return False
+    try:
+        from workflow import parse_workflow
+        data = parse_workflow(fp)
+    except Exception as e:
+        messagebox.showerror("加载失败", str(e))
+        return False
+    global _wf_file
+    _wf_snapshot_undo()
+    _wf_file = fp
+    _wf_data["name"] = data.get("name") or os.path.basename(fp)
+    _wf_data["steps"] = data.get("steps", [])
+    try:
+        wf_name_var.set(_wf_data["name"])
+    except Exception:
+        pass
+    _wf_refresh_tree()
+    _wf_mark_saved()
+    _toast("已加载: {} ({}步骤)".format(_wf_data["name"], len(_wf_data["steps"])), "success")
+    return True
 
 
 def _wf_save():
+    """保存 (Ctrl+S): 已有目标文件 → 原地覆盖不弹框; 尚未落盘 → 转「另存」。"""
     if not _wf_data.get("steps"):
         messagebox.showwarning("提示", "工作流为空")
-        return
-    _wf_data["name"] = wf_name_var.get()
-    fp = filedialog.asksaveasfilename(title="保存工作流",
+        return False
+    _wf_sync_name()
+    if _wf_file:
+        return _wf_write(_wf_file, "已保存")
+    return _wf_save_as()
+
+
+def _wf_save_as():
+    """另存为 (Ctrl+Shift+S): 总是询问新路径, 成功后该路径成为当前文件。"""
+    if not _wf_data.get("steps"):
+        messagebox.showwarning("提示", "工作流为空")
+        return False
+    _wf_sync_name()
+    cur = _wf_file or ""
+    initial = (os.path.basename(cur) if cur
+               else "{}.json".format(get_workflow_name().strip() or "未命名工作流"))
+    fp = filedialog.asksaveasfilename(title="另存工作流",
         defaultextension=".json", filetypes=[('JSON', '*.json')],
-        initialdir=_CTX.get("app_root", ""))
-    if fp:
+        initialdir=_wf_save_dir(), initialfile=initial)
+    if not fp:
+        return False
+    if not os.path.splitext(fp)[1]:
+        fp += ".json"
+    return _wf_write(fp, "已另存为")
+
+
+def _wf_version_history():
+    """工作流版本历史对话框: 查看 / 恢复 / 对比。"""
+    if not _wf_file:
+        _toast("请先保存工作流 (版本历史跟随文件路径)", "info")
+        return
+    from version_manager import get_version_manager
+    vm = get_version_manager()
+    history = vm.get_workflow_history(_wf_file)
+    if not history:
+        _toast("暂无版本历史", "info")
+        return
+
+    import tkinter as _tk
+    import copy as _copy
+    top = _tk.Toplevel()
+    top.title("工作流版本历史")
+    top.configure(bg=C["bgc"])
+    top.transient(_window if "_window" in globals() else None)
+    sp = _CTX.get("sp") or (lambda v: v)
+
+    _tk.Label(top, text=os.path.basename(_wf_file), bg=C["bgc"], fg=C["fgt"],
+        font=FONT_BODY).pack(pady=(sp(8), 2))
+
+    frame = _tk.Frame(top, bg=C["bgc"])
+    frame.pack(fill="both", expand=True, padx=sp(8), pady=sp(4))
+
+    lb = _tk.Listbox(frame, width=48, height=10, font=FONT_BODY,
+        bg=C["ebg"], fg=C["fgb"], selectbackground=C["acl"], selectforeground=C["fgt"])
+    lb.pack(side="left", fill="both", expand=True)
+    for vnum, ts, cnt, comment in history:
+        lb.insert("end", "v{}  |  {}  |  {}步骤  {}".format(vnum, ts, cnt, comment or ""))
+
+    btn_frame = _tk.Frame(top, bg=C["bgc"])
+    btn_frame.pack(pady=sp(4))
+
+    def _selected():
+        sel = lb.curselection()
+        return history[sel[0]][0] if sel else None
+
+    def _view():
+        vnum = _selected()
+        if not vnum:
+            return
+        data = vm.restore_workflow_version(_wf_file, vnum)
+        if data is None:
+            messagebox.showwarning("提示", "无法加载版本 v{}".format(vnum))
+            return
+        _show_wf_steps_preview(data, "版本 v{}".format(vnum))
+
+    def _restore():
+        vnum = _selected()
+        if not vnum:
+            return
+        data = vm.restore_workflow_version(_wf_file, vnum)
+        if data is None:
+            messagebox.showwarning("提示", "无法加载版本 v{}".format(vnum))
+            return
+        if not messagebox.askyesno("确认", "恢复工作流到版本 v{}？\n(当前内容将被覆盖, 且会写入一条新版本)".format(vnum)):
+            return
+        _wf_data["name"] = data.get("name") or _wf_data.get("name") or "未命名工作流"
+        _wf_data["steps"] = _copy.deepcopy(data.get("steps", []))
         try:
-            with open(fp, "w", encoding="utf-8") as f:
-                json.dump(_wf_data, f, indent=2, ensure_ascii=False)
-            global _wf_file
-            _wf_file = fp
-            _toast("已保存 ({}步骤)".format(len(_wf_data["steps"])), "success")
-        except Exception as e:
-            messagebox.showerror("保存失败", str(e))
+            wf_name_var.set(_wf_data["name"])
+        except Exception:
+            pass
+        _wf_refresh_tree()
+        top.destroy()
+        _toast("已恢复到版本 v{}".format(vnum), "success")
+
+    def _compare():
+        vnum = _selected()
+        if not vnum:
+            return
+        vm._wf_current_steps = _wf_data.get("steps", [])
+        text = vm.diff_workflow_versions(_wf_file, vnum, None)
+        _show_diff_text(text, "工作流对比 (v{} → 当前)".format(vnum))
+
+    _wf_btn(btn_frame, "查看", "ac", command=_view, font=FONT_SMALL).pack(side="left", padx=2)
+    _wf_btn(btn_frame, "恢复", "dg", command=_restore, font=FONT_SMALL).pack(side="left", padx=2)
+    _wf_btn(btn_frame, "对比", "ac", command=_compare, font=FONT_SMALL).pack(side="left", padx=2)
+    _wf_btn(btn_frame, "关闭", "ac", command=top.destroy, font=FONT_SMALL).pack(side="left", padx=2)
+
+
+def _show_wf_steps_preview(data, title):
+    """只读展示某版本工作流的步骤结构 (树形文本)。"""
+    import tkinter as _tk
+    top = _tk.Toplevel()
+    top.title(title)
+    top.configure(bg=C["bgc"])
+    top.transient(_window if "_window" in globals() else None)
+
+    txt = _tk.Text(top, width=64, height=18, font=FONT_BODY, bg=C["ebg"], fg=C["fgb"],
+        insertbackground=C["fgt"])
+    txt.pack(fill="both", expand=True, padx=8, pady=8)
+    lines = ["工作流: {}".format(data.get("name", "")), "=" * 40]
+    for i, s in enumerate(data.get("steps", [])):
+        lines.append("[{}] {}".format(i + 1, _wf_step_label(s)))
+    txt.insert("1.0", "\n".join(lines))
+    txt.configure(state="disabled")
+    _wf_btn(top, "关闭", "ac", command=top.destroy).pack(pady=4)
+
+
+def _show_diff_text(text, title):
+    """只读展示 diff 文本。"""
+    import tkinter as _tk
+    top = _tk.Toplevel()
+    top.title(title)
+    top.configure(bg=C["bgc"])
+    top.transient(_window if "_window" in globals() else None)
+
+    txt = _tk.Text(top, width=80, height=20, font=("Consolas", 10), bg=C["ebg"],
+        fg=C["fgb"], insertbackground=C["fgt"])
+    txt.pack(fill="both", expand=True, padx=8, pady=8)
+    txt.insert("1.0", text)
+    txt.configure(state="disabled")
+    _wf_btn(top, "关闭", "ac", command=top.destroy).pack(pady=4)
+
+
+def _wf_clear():
+    """清空工作流所有步骤 (与「脚本编辑 → 清空」同规格: 先确认, 破坏性提示)。"""
+    if not _wf_data.get("steps"):
+        _toast("工作流已是空的", "info")
+        return False
+    if not messagebox.askyesno("确认", "确定要清空工作流的所有步骤吗？"):
+        return False
+    global _wf_file
+    _wf_snapshot_undo()
+    _wf_file = None
+    _wf_data["steps"] = []
+    _wf_data["name"] = "未命名工作流"
+    try:
+        wf_name_var.set("未命名工作流")
+    except Exception:
+        pass
+    _wf_refresh_tree()
+    _wf_mark_saved()
+    _toast("已清空工作流所有步骤", "warning")
+    return True
 
 
 def _wf_add_step(stype):
@@ -2026,10 +2744,24 @@ def _wf_add_step(stype):
         step = {"type": "variable", "var_name": "var", "var_value": ""}
     elif stype == "loop":
         step = {"type": "loop", "times": "3", "steps": []}
+    elif stype == "retry":
+        step = {"type": "retry", "max_attempts": 3, "delay": 1.0, "steps": []}
+    elif stype == "workflow":
+        fp = filedialog.askopenfilename(title="选择子工作流",
+            filetypes=[('工作流', '*.json'), ('YAML', '*.yaml *.yml'), ('All', '*.*')],
+            initialdir=_CTX.get("app_root", ""))
+        if fp:
+            if _wf_file and os.path.commonprefix([fp, os.path.dirname(_wf_file)]):
+                fp = os.path.relpath(fp, os.path.dirname(_wf_file))
+            step = {"type": "workflow", "path": fp.replace("\\", "/"),
+                    "inputs": {}, "outputs": []}
+        else:
+            return
     else:
         return
     step["enabled"] = True
     step["comment"] = ""
+    _wf_snapshot_undo()
     # 插入到选中位置之后
     sel = wf_tree.selection()
     if sel:
@@ -2050,6 +2782,8 @@ def _wf_edit_step(event=None):
         return
     step = _wf_data["steps"][idx]
     stype = step.get("type", "script")
+    # 编辑对话框会原地修改 step (引用), 打开前先入撤销栈
+    _wf_snapshot_undo()
 
     dlg = tkinter.Toplevel(_root())
     dlg.title("编辑步骤 {}".format(idx + 1))
@@ -2287,6 +3021,111 @@ def _wf_edit_step(event=None):
             dlg.destroy()
         _wf_btn(dlg, "确定", "ac", command=_save_log).pack(pady=10)
 
+    elif stype == "retry":
+        # 重试节点: 最大次数 + 间隔 + 子步骤
+        tkinter.Label(dlg, text="最大重试次数:", bg=C["bgc"], fg=C["fgb"]).pack(pady=(10, 2))
+        ma_var = tkinter.StringVar(value=str(step.get("max_attempts", 3)))
+        tkinter.Entry(dlg, textvariable=ma_var, width=10,
+            font=FONT_BODY, bg=C["ebg"], fg=C["fgb"],
+            insertbackground=C["fgt"]).pack(pady=2)
+        tkinter.Label(dlg, text="重试间隔 (秒):", bg=C["bgc"], fg=C["fgb"]).pack(pady=(6, 2))
+        dly_var = tkinter.StringVar(value=str(step.get("delay", 1.0)))
+        tkinter.Entry(dlg, textvariable=dly_var, width=10,
+            font=FONT_BODY, bg=C["ebg"], fg=C["fgb"],
+            insertbackground=C["fgt"]).pack(pady=2)
+        # 子步骤管理
+        sub_steps = step.get("steps", []) or []
+        tkinter.Label(dlg, text="子步骤 ({} 个):".format(len(sub_steps)),
+            bg=C["bgc"], fg=C["fgb"]).pack(pady=(8, 2))
+        sf = tkinter.Frame(dlg, bg=C["bgc"])
+        sf.pack(fill="both", expand=True, padx=10, pady=2)
+        sub_list = tkinter.Listbox(sf, font=FONT_BODY, bg=C["ebg"], fg=C["fgb"],
+            selectbackground=C["acl"], selectforeground=C["fgt"], height=4)
+        sub_list.pack(side="left", fill="both", expand=True)
+        for s in sub_steps:
+            sub_list.insert("end", s.get("path", s.get("cmd", str(s))))
+        def _add_retry_sub():
+            fp = filedialog.askopenfilename(
+                filetypes=[('Excel', '*.xls'), ('ACRPA 脚本', '*.acrpas')])
+            if fp:
+                if _wf_file and os.path.commonprefix([fp, os.path.dirname(_wf_file)]):
+                    fp = os.path.relpath(fp, os.path.dirname(_wf_file))
+                sub_steps.append({"type": "script", "path": fp.replace("\\", "/")})
+                sub_list.insert("end", fp)
+        def _del_retry_sub():
+            sel = sub_list.curselection()
+            if sel:
+                del sub_steps[sel[0]]
+                sub_list.delete(sel[0])
+        bf = tkinter.Frame(dlg, bg=C["bgc"])
+        bf.pack()
+        _wf_btn(bf, "+ 添加", "ac", command=_add_retry_sub, font=FONT_SMALL).pack(side="left", padx=2, pady=2)
+        _wf_btn(bf, "- 删除", "dg", command=_del_retry_sub, font=FONT_SMALL).pack(side="left", padx=2, pady=2)
+        def _save_retry():
+            if not sub_steps:
+                messagebox.showwarning("提示", "重试节点至少需要 1 个子步骤，请先添加")
+                return
+            try:
+                ma = int(ma_var.get())
+            except ValueError:
+                ma = 3
+            try:
+                dly = float(dly_var.get())
+            except ValueError:
+                dly = 1.0
+            step["max_attempts"] = max(1, ma)
+            step["delay"] = max(0.0, dly)
+            step["steps"] = sub_steps
+            _wf_refresh_tree()
+            dlg.destroy()
+        _wf_btn(dlg, "确定", "ac", command=_save_retry).pack(pady=4)
+
+    elif stype == "workflow":
+        # 子工作流引用: 路径 + 输入变量 + 输出变量
+        tkinter.Label(dlg, text="子工作流路径:", bg=C["bgc"], fg=C["fgb"]).pack(pady=(10, 2))
+        path_var = tkinter.StringVar(value=step.get("path", ""))
+        pf = tkinter.Frame(dlg, bg=C["bgc"])
+        pf.pack(pady=4)
+        tkinter.Entry(pf, textvariable=path_var, width=34,
+            font=FONT_BODY, bg=C["ebg"], fg=C["fgb"],
+            insertbackground=C["fgt"]).pack(side="left", padx=(0, 4))
+        def _browse_wf():
+            fp = filedialog.askopenfilename(
+                filetypes=[('工作流', '*.json'), ('YAML', '*.yaml *.yml'), ('全部', '*.*')])
+            if fp:
+                if _wf_file and os.path.commonprefix([fp, os.path.dirname(_wf_file)]):
+                    fp = os.path.relpath(fp, os.path.dirname(_wf_file))
+                path_var.set(fp.replace("\\", "/"))
+        _wf_btn(pf, "浏览", "ac", command=_browse_wf, font=FONT_SMALL).pack(side="left")
+        tkinter.Label(dlg, text="输入变量 (每行 名称=值, 支持 ${var}):", bg=C["bgc"],
+            fg=C["fgb"]).pack(pady=(6, 2))
+        inputs_text = tkinter.Text(dlg, height=3, width=40,
+            font=FONT_BODY, bg=C["ebg"], fg=C["fgb"], insertbackground=C["fgt"])
+        inputs_text.pack(pady=2)
+        inputs_text.insert("1.0", "\n".join(
+            "{}={}".format(k, v) for k, v in (step.get("inputs") or {}).items()))
+        tkinter.Label(dlg, text="输出变量 (逗号分隔, 执行后写回父作用域):", bg=C["bgc"],
+            fg=C["fgb"]).pack(pady=(6, 2))
+        out_var = tkinter.StringVar(value=", ".join(str(x) for x in (step.get("outputs") or [])))
+        tkinter.Entry(dlg, textvariable=out_var, width=40,
+            font=FONT_BODY, bg=C["ebg"], fg=C["fgb"],
+            insertbackground=C["fgt"]).pack(pady=2)
+        def _save_workflow():
+            inputs = {}
+            for line in inputs_text.get("1.0", "end").splitlines():
+                line = line.strip()
+                if not line or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                inputs[k.strip()] = v.strip()
+            outputs = [x.strip() for x in out_var.get().split(",") if x.strip()]
+            step["path"] = path_var.get()
+            step["inputs"] = inputs
+            step["outputs"] = outputs
+            _wf_refresh_tree()
+            dlg.destroy()
+        _wf_btn(dlg, "确定", "ac", command=_save_workflow).pack(pady=10)
+
     # ── 通用: 启用/禁用 + 备注 ──
     common_frame = tkinter.Frame(dlg, bg=C["bgc"])
     common_frame.pack(fill="x", padx=10, pady=(4, 2))
@@ -2408,6 +3247,7 @@ def _wf_delete_step():
     if sel:
         idx = wf_tree.index(sel[0])
         if idx < len(_wf_data["steps"]):
+            _wf_snapshot_undo()
             del _wf_data["steps"][idx]
             _wf_refresh_tree()
 
@@ -2417,6 +3257,7 @@ def _wf_move_up():
     if sel:
         idx = wf_tree.index(sel[0])
         if idx > 0:
+            _wf_snapshot_undo()
             _wf_data["steps"][idx], _wf_data["steps"][idx - 1] = \
                 _wf_data["steps"][idx - 1], _wf_data["steps"][idx]
             _wf_refresh_tree()
@@ -2427,6 +3268,7 @@ def _wf_move_down():
     if sel:
         idx = wf_tree.index(sel[0])
         if idx < len(_wf_data["steps"]) - 1:
+            _wf_snapshot_undo()
             _wf_data["steps"][idx], _wf_data["steps"][idx + 1] = \
                 _wf_data["steps"][idx + 1], _wf_data["steps"][idx]
             _wf_refresh_tree()
@@ -2441,6 +3283,7 @@ def _wf_clone_step():
     if idx < len(_wf_data["steps"]):
         import copy
         clone = copy.deepcopy(_wf_data["steps"][idx])
+        _wf_snapshot_undo()
         _wf_data["steps"].insert(idx + 1, clone)
         _wf_refresh_tree()
 
@@ -2464,6 +3307,7 @@ def _wf_paste_step():
         return
     import copy
     sel = wf_tree.selection()
+    _wf_snapshot_undo()
     if sel:
         idx = wf_tree.index(sel[0])
         _wf_data["steps"].insert(idx + 1, copy.deepcopy(_WF_CLIPBOARD))
@@ -2480,6 +3324,7 @@ def _wf_toggle_enable():
     idx = wf_tree.index(sel[0])
     if idx < len(_wf_data["steps"]):
         step = _wf_data["steps"][idx]
+        _wf_snapshot_undo()
         step["enabled"] = not step.get("enabled", True)
         _wf_refresh_tree()
         _toast("已{}步骤".format("启用" if step["enabled"] else "禁用"),
@@ -2550,6 +3395,12 @@ def _wf_context_menu(event):
         activebackground=C["acl"], activeforeground=C["fgt"])
     menu.add_command(label="编辑", command=_wf_edit_step)
     menu.add_separator()
+    insert_menu = tkinter.Menu(menu, tearoff=0, bg=C["bgc"], fg=C["fgt"],
+        activebackground=C["acl"], activeforeground=C["fgt"])
+    insert_menu.add_command(label="重试块", command=lambda: _wf_add_step("retry"))
+    insert_menu.add_command(label="子工作流引用", command=lambda: _wf_add_step("workflow"))
+    menu.add_cascade(label="插入", menu=insert_menu)
+    menu.add_separator()
     menu.add_command(label="克隆", command=_wf_clone_step)
     menu.add_command(label="复制", command=_wf_copy_step)
     menu.add_command(label="粘贴", command=_wf_paste_step)
@@ -2582,17 +3433,31 @@ def _wf_run():
         state.quit3 = True
         state.pause_event.set()
 
-    # 读取执行控制参数
+    # 读取执行控制参数 (与运行栏共用变量; loop_count<=0 约定为无限循环)
     try:
-        loop_count = int(wf_loop_var.get())
-    except ValueError:
+        _lv = str(wf_loop_var.get() or "").strip()
+        try:
+            import i18n
+            _inf = i18n.t("exec.loop_infinite")
+        except Exception:
+            _inf = "无限"
+        if _lv and not _lv.isdigit():
+            loop_count = 0 if _lv == _inf else 1
+        else:
+            loop_count = int(_lv) if _lv else 1
+    except Exception:
         loop_count = 1
     try:
         max_minutes = float(wf_maxmin_var.get())
-    except ValueError:
+    except (TypeError, ValueError):
         max_minutes = 0
 
     def _run_thread():
+        try:
+            from core import run_id as _run_id
+            _run_id.new_run()
+        except Exception:
+            pass
         try:
             from workflow import workflow_engine
             workflow_engine._variables.clear()
@@ -2603,6 +3468,12 @@ def _wf_run():
             workflow_engine.run_workflow(wf_def, base)
         except Exception as e:
             _log1("工作流执行异常: {}".format(e), "error")
+        finally:
+            try:
+                from core import run_id as _run_id
+                _run_id.reset()
+            except Exception:
+                pass
 
     import threading
     t = threading.Thread(target=_run_thread, daemon=True)
@@ -2623,6 +3494,11 @@ def _wf_open_variable_manager():
         return
 
     btn = _CTX.get("btn")
+    # 尺寸令牌: 与其它弹窗一致走注入的 utils.sp; 注入缺失时退化为 1:1 像素,
+    # 避免此前直接引用 build() 局部变量 `sp` 导致的 NameError (变量管理弹窗打不开)。
+    sp = _CTX.get("sp")
+    if not callable(sp):
+        sp = lambda v: float(v)
     dlg = tkinter.Toplevel(_root())
     dlg.title("工作流变量管理")
     dlg.geometry("420x380")
@@ -2713,11 +3589,55 @@ def _wf_open_variable_manager():
     dlg.lift(); dlg.focus_force()
 
 
+def _wf_highlight_dirty_ids(indices):
+    """把顶层步骤序号映射为图节点 id 列表 (P2-7 脏矩形局部重绘)。
+
+    仅当「编辑图已存在且结构与 _wf_data 一致」(positions 已由上次全量 layout 写回)
+    时才返回节点 id, 否则返回 None → 调用方退回全量渲染。
+    """
+    g = _wf_graph_edit
+    if g is None or _flow_graph is None:
+        return None
+    try:
+        if _flow_graph.demote(g) != _wf_data:
+            return None
+        roots = g.roots()
+    except Exception:
+        return None
+    out = []
+    for idx in indices:
+        if idx is None or idx < 0 or idx >= len(roots):
+            continue
+        out.append(roots[idx].id)
+    return out or None
+
+
+def _wf_animate_highlight(indices):
+    """执行高亮 step 切换的颜色渐变 (P2-2, GradientItem 语义)。
+
+    结构可安全映射时, 只对受影响节点做 outline 颜色渐变 (itemconfigure, 不做
+    delete/rebuild); 否则退回全量渲染 —— 脏矩形局部重绘 (P2-7) 保持为回退路径。
+    """
+    g = _wf_graph_edit
+    ids = _wf_highlight_dirty_ids(indices)
+    if g is None or ids is None:
+        _wf_render_flowchart()
+        return
+    zoom = float(_FLOW_ZOOM_STATE.get("scale", 1.0)) if _FLOW_ZOOM_STATE else 1.0
+    try:
+        _flow_canvas.animate_nodes_outline(
+            wf_flow_canvas, g, ids, colors=_FLOW_COLORS,
+            ctx=_wf_flow_ctx(g), zoom=zoom)
+    except Exception:
+        _wf_render_flowchart()
+
+
 def _wf_update_workflow_highlight():
     """执行工作流时周期刷新流程图高亮 (供 _periodic 调用)。
 
-    仅在当前步骤变化时重绘, 避免每 100ms 全量重绘导致的闪烁与 CPU 开销;
-    执行结束后复位一次高亮。
+    仅在当前步骤变化时刷新, 避免每 100ms 全量重绘导致的闪烁与 CPU 开销;
+    执行结束后复位一次高亮。P2-2: 步骤切换改为 outline 颜色渐变 (动画只
+    itemconfigure 受影响节点); P2-7 脏矩形局部重绘保持为回退路径。
     """
     try:
         from workflow import workflow_engine
@@ -2727,11 +3647,11 @@ def _wf_update_workflow_highlight():
             cur = workflow_engine.current_step
             if _last != cur:
                 _wf_update_workflow_highlight._last_step = cur
-                _wf_render_flowchart()
+                _wf_animate_highlight([_last, cur])
         elif _last != -1:
             # 执行结束/停止: 复位一次高亮
             _wf_update_workflow_highlight._last_step = -1
-            _wf_render_flowchart()
+            _wf_animate_highlight([_last])
     except Exception:
         pass
 
@@ -2886,12 +3806,13 @@ def _wf_flow_zoom(factor):
     if not isinstance(st, dict):
         return
     try:
-        s = float(st.get("scale", 1.0)) * float(factor)
+        s = scaled(float(st.get("scale", 1.0)), float(factor))
     except Exception:
         return
     lo = float(st.get("min_scale", 0.4))
     hi = float(st.get("max_scale", 2.5))
-    st["scale"] = max(lo, min(hi, s))
+    # P3-2: 乘子缩放 + 钳制统一走 core.scale (等价于 max(lo, min(hi, s)))。
+    st["scale"] = clamp_scale(s, lo, hi)
     _wf_render_flowchart()
 
 
@@ -3161,6 +4082,37 @@ def _wf_node_click(event, idx):
     return _wf_drag_start(event, idx)
 
 
+# ── P3-3 共享 `node` 标签事件入口 (几何命中解析 idx, 替代逐节点 tag_bind) ──
+def _wf_node_click_at(event):
+    """共享 `node` 标签 <Button-1>: 几何命中 → 既有单击 (选中/高亮/拖拽起始)。"""
+    idx = _wf_hit_node_index(event.x, event.y)
+    if idx is None:
+        return None
+    return _wf_node_click(event, idx)
+
+
+def _wf_node_double_at(event):
+    """共享 `node` 标签 <Double-1>: 几何命中 → 编辑对应步骤。"""
+    idx = _wf_hit_node_index(event.x, event.y)
+    if idx is None:
+        return None
+    return _wf_edit_step_by_index(idx)
+
+
+def _wf_node_drag_move_at(event):
+    """共享 `node` 标签 <B1-Motion>: 沿用已登记 _wf_drag_idx (按下时已几何解析)。"""
+    if _wf_drag_idx is None:
+        return None
+    return _wf_drag_move(event, _wf_drag_idx)
+
+
+def _wf_node_drag_end_at(event):
+    """共享 `node` 标签 <ButtonRelease-1>: 沿用 _wf_drag_idx 收尾。"""
+    if _wf_drag_idx is None:
+        return None
+    return _wf_drag_end(event, _wf_drag_idx)
+
+
 def _wf_on_tree_select(event=None):
     """大纲 → 画布 (P1-5/A10): 选中第 i 行 → 画布对应节点高亮 + 视口居中。"""
     if _WF_SYNCING or wf_tree is None:
@@ -3184,6 +4136,11 @@ refresh_tree = _wf_refresh_tree
 update_highlight = _wf_update_workflow_highlight
 run = _wf_run
 stop = _wf_stop
+wf_save = _wf_save
+wf_save_as = _wf_save_as
+wf_clear = _wf_clear
+wf_new = _wf_new
+wf_open = _wf_open
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -3220,6 +4177,14 @@ def get_wf_maxmin_var():
 
 def get_wf_name_var():
     return wf_name_var
+
+
+def get_wf_step_count():
+    """当前工作流的可执行步数 (含嵌套子步骤), 供运行栏上下文条取初值。"""
+    try:
+        return _wf_step_count(_wf_data.get("steps", []))
+    except Exception:
+        return 0
 
 
 def get_wf_tree():

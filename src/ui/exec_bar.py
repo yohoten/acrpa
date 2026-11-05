@@ -87,6 +87,8 @@ __all__ = [
     "get_btn_pause", "get_btn_step",
     "get_btn_stop", "get_btn_step_mode", "get_btn_debug_exec",
     "get_btn_vars_exec", "get_btn_debug_mode",
+    "get_wf_ctx_frame", "get_wf_ctx_name", "get_wf_ctx_steps",
+    "set_active_tab", "set_workflow_context",
     "select_script", "shared_run", "shared_stop", "tip_with_hotkey",
     "update_recent_scripts", "on_script_switched", "add_recent_script",
     "on_loop_sel", "exec_params_commit", "update_overflow", "on_bar_configure",
@@ -128,6 +130,10 @@ _btn_debug_exec = None      # ⚑ 调试
 _btn_vars_exec = None       # ☰ 变量
 _btn_debug_mode = None      # = _btn_debug_exec (调试模式高亮)
 _recent_scripts = []        # 最近使用脚本路径列表 (最长 10)
+_wf_ctx_frame = None        # 工作流上下文条 (名称 / 步数; 仅在「工作流」Tab 显示)
+_wf_ctx_name = None         # 上下文条·工作流名 Label
+_wf_ctx_steps = None        # 上下文条·「将执行 N 步」Label
+_active_tab = 0             # 当前激活 Tab: 0=脚本 / 1=工作流 (驱动变量入口分派)
 
 # ── 注入上下文 (build 填充) ──
 _CTX = {
@@ -140,7 +146,8 @@ _CTX = {
     "step_once": None, "run_workflow": None, "stop_workflow": None,
     "toggle_debug_mode": None, "show_variables_window": None,
     "toggle_step_mode": None, "load_pil": None, "get_pa": None,
-    "get_image_tk": None, "colors": None,
+    "get_image_tk": None, "colors": None, "open_wf_variables": None,
+    "ctx": None,
 }
 
 
@@ -161,8 +168,15 @@ def _pal():
 
 
 def _call(name, *args, **kw):
-    """调用注入的回调 (未注入则安全 no-op)。"""
+    """调用注入的回调 (未注入则回退到共享容器 ctx, 仍无则安全 no-op)。"""
     fn = _CTX.get(name)
+    if fn is None:
+        _c = _CTX.get("ctx")
+        if _c is not None:
+            try:
+                fn = _c.get(name)
+            except Exception:
+                fn = None
     if fn is None:
         return None
     try:
@@ -210,7 +224,8 @@ def build(parent, *, notebook, colors, fonts, deps=None):
         _run_bar, _run_overflow_hint, _script_name_var, _script_switcher, \
         _loop_count_var, _loop_combo, _exec_maxmin_var, _exec_maxmin_sp, \
         _exec_stoponerror_var, _btn_validate, _btn_run, _btn_pause, _btn_step, \
-        _btn_stop, _btn_step_mode, _btn_debug_exec, _btn_vars_exec, _btn_debug_mode
+        _btn_stop, _btn_step_mode, _btn_debug_exec, _btn_vars_exec, _btn_debug_mode, \
+        _wf_ctx_frame, _wf_ctx_name, _wf_ctx_steps
 
     _CTX.update(deps or {})
     _CTX["notebook"] = notebook
@@ -385,7 +400,7 @@ def build(parent, *, notebook, colors, fonts, deps=None):
     _btn_debug_exec = btn_debug_exec
     btn_vars_exec = tkinter.Button(run_bar, text=i18n.t("exec.btn_vars"), font=FONT_BUTTON, bg=C["bgc"], fg=C["fgb"],
         activebackground=C["acl"], activeforeground=C["fgb"], relief="flat", bd=1,
-        cursor="hand2", padx=sp(8), pady=sp(2), command=_call_proxy("show_variables_window"))
+        cursor="hand2", padx=sp(8), pady=sp(2), command=_open_vars_entry)
     btn_vars_exec.pack(side="left", padx=2)
     _btn_vars_exec = btn_vars_exec
     btn_debug_mode = btn_debug_exec   # 供 _toggle_debug_mode 高亮
@@ -396,9 +411,30 @@ def build(parent, *, notebook, colors, fonts, deps=None):
     except Exception:
         pass
 
+    # 工作流上下文条 (P1-5 后续 / §7-4): 工作流 Tab 激活时显示
+    # 「工作流名 · 将执行 N 步」; 变量入口复用上方 ☰ 变量 (按 Tab 分派, 见
+    # _open_vars_entry), 从而「彻底消除两处变量入口」。默认隐藏 (脚本 Tab)。
+    wf_ctx_frame = tkinter.Frame(run_bar, bg=C["bgc"])
+    wf_ctx_name = tkinter.Label(wf_ctx_frame, text="", font=FONT_SMALL, fg=C["fgm"], bg=C["bgc"])
+    wf_ctx_name.pack(side="left")
+    tkinter.Label(wf_ctx_frame, text="·", font=FONT_SMALL, fg=C["fgm"],
+        bg=C["bgc"]).pack(side="left", padx=sp(4))
+    wf_ctx_steps = tkinter.Label(wf_ctx_frame, text="", font=FONT_SMALL, fg=C["fgm"], bg=C["bgc"])
+    wf_ctx_steps.pack(side="left")
+    _wf_ctx_frame = wf_ctx_frame
+    _wf_ctx_name = wf_ctx_name
+    _wf_ctx_steps = wf_ctx_steps
+
     # 换肤: 订阅 ThemeBus (幂等, 重复构建只登记一次) —— 取代原 _refresh_theme 的定点回填
     if ui_theme is not None:
         ui_theme.subscribe(refresh_theme)
+
+    # 事件总线 (S3): 订阅宿主发布的执行状态变更 (幂等登记)
+    try:
+        from core.event_bus import bus
+        bus.subscribe("exec_state", set_state)
+    except Exception:
+        pass
 
     return get_widgets()
 
@@ -1002,6 +1038,56 @@ def get_btn_debug_mode():
     return _btn_debug_mode
 
 
+def get_wf_ctx_frame():
+    return _wf_ctx_frame
+
+
+def get_wf_ctx_name():
+    return _wf_ctx_name
+
+
+def get_wf_ctx_steps():
+    return _wf_ctx_steps
+
+
+def _open_vars_entry():
+    """☰ 变量入口 (按激活 Tab 分派): 脚本 Tab → 变量监视器; 工作流 Tab → 工作流变量。
+
+    「彻底消除两处入口」: 全窗口只有这一个变量按钮, 行为随 Tab 切换 (P1-5 后续 / §7-4)。
+    """
+    if _active_tab == 1:
+        _call("open_wf_variables")
+    else:
+        _call("show_variables_window")
+
+
+def set_active_tab(idx):
+    """切换激活 Tab: 0=脚本 / 1=工作流。工作流 Tab 显示上下文条, 否则隐藏。"""
+    global _active_tab
+    _active_tab = 1 if idx else 0
+    try:
+        if _wf_ctx_frame is not None:
+            _sp = _CTX.get("sp")
+            _pad = (_sp(6), 0) if _sp else (6, 0)
+            if _active_tab == 1:
+                _wf_ctx_frame.pack(side="left", padx=_pad)
+            else:
+                _wf_ctx_frame.pack_forget()
+    except Exception:
+        pass
+
+
+def set_workflow_context(name, steps):
+    """更新工作流上下文条内容 (工作流名 + 步数)。steps 为可执行步数。"""
+    try:
+        if _wf_ctx_name is not None:
+            _wf_ctx_name.configure(text="工作流: {}".format(name or "未命名"))
+        if _wf_ctx_steps is not None:
+            _wf_ctx_steps.configure(text="将执行 {} 步".format(int(steps or 0)))
+    except Exception:
+        pass
+
+
 def get_widgets():
     """取回全部控件句柄 (与构建返回值一致)。"""
     return {
@@ -1018,4 +1104,6 @@ def get_widgets():
         "btn_stop": _btn_stop, "btn_step_mode": _btn_step_mode,
         "btn_debug_exec": _btn_debug_exec, "btn_vars_exec": _btn_vars_exec,
         "btn_debug_mode": _btn_debug_mode,
+        "wf_ctx_frame": _wf_ctx_frame, "wf_ctx_name": _wf_ctx_name,
+        "wf_ctx_steps": _wf_ctx_steps,
     }

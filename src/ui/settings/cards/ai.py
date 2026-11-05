@@ -11,7 +11,7 @@ from tkinter import ttk, messagebox
 import state
 from utils import FONT_TINY, FONT_ICON
 
-from ui.settings.cards._layout import section, row, help_line
+from ui.settings.cards._layout import section, row, switch_row, help_line
 
 CARD_KEY = "ai"
 ROW = 1
@@ -44,7 +44,7 @@ def build(parent, ctx):
     def _add(w, pady=None):
         nonlocal _r
         w.grid(row=_r, column=0, sticky="ew",
-               pady=(sp("row_gap") if pady is None else pady))
+               pady=((0, sp("row_gap")) if pady is None else pady))
         _r += 1
         return w
 
@@ -73,23 +73,16 @@ def build(parent, ctx):
     _sec("增强开关", first=True)
     ai_smart_retry_var = tkinter.BooleanVar(value=state.AI_SMART_RETRY)
 
-    def _mk_smart(p):
-        f = tkinter.Frame(p, bg=C["bgc"])
-        ttk.Checkbutton(f, text="智能重试 (失败时AI分析调整)",
-            variable=ai_smart_retry_var).pack(side="left", padx=(0, 6))
-        _info = tkinter.Label(f, text="ⓘ", font=FONT_ICON,
-            fg=C["ac"], bg=C["bgc"], cursor="hand2")
-        _info.pack(side="left")
-        _info.bind("<Button-1>", _show_ai_info)
-        return f
-
-    _add(row(content, ctx, "", _mk_smart,
-        help="失败时 AI 分析截图并给出修正建议（需配置 API Key）"))
+    _add(switch_row(content, ctx, "智能重试", ai_smart_retry_var,
+                    help="失败时 AI 分析截图并给出修正建议（需配置 API Key）"))
+    ai_info = tkinter.Label(content, text="查看 AI 功能说明", font=FONT_TINY,
+                            fg=C["ac"], bg=C["bgc"], cursor="hand2", anchor="w")
+    ai_info.bind("<Button-1>", _show_ai_info)
+    _add(ai_info)
 
     ai_anomaly_var = tkinter.BooleanVar(value=state.AI_ANOMALY_DETECT)
-    _add(row(content, ctx, "", lambda p: ttk.Checkbutton(
-        p, text="异常检测 (AI监控执行)", variable=ai_anomaly_var),
-        help="每 10 条命令自动检测一次，后台静默运行，无需手动干预"))
+    _add(switch_row(content, ctx, "异常检测", ai_anomaly_var,
+                    help="每 10 条命令检测一次异常模式，并在后台记录结果"))
 
     # === API config (自定义 AI 提供商 / 模型 / BaseURL / Key) ──
     try:
@@ -212,10 +205,8 @@ def build(parent, ctx):
     def _mk_test(p):
         nonlocal ai_test_result
         f = tkinter.Frame(p, bg=C["bgc"])
-        _tbtn = tkinter.Button(f, text="测试连接", font=ctx.FONT_SMALL,
-            bg=C["bgc"], fg=C["fgb"], relief="raised", bd=1, padx=8, pady=1,
-            cursor="hand2", activebackground=_darken(C["bgc"]), activeforeground=C["fgb"],
-            highlightbackground=C["bd"], highlightthickness=1, command=_on_test_connection)
+        _tbtn = ctx.btn(f, "测试连接", _on_test_connection,
+                        tip="使用当前提供商、模型和 API Key 测试连接")
         _tbtn.pack(side="left", padx=(0, 8))
         ai_test_result = tkinter.Label(f, text="", font=ctx.FONT_SMALL,
             fg=C["fgm"], bg=C["bgc"], anchor="w")

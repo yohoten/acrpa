@@ -10,6 +10,10 @@
   * core.util    —— 通用纯函数 (_safe_get)
   * core.fs      —— 原子写盘与安全文件名 (atomic_save / safe_filename)
   * core.version —— 版本号解析 / 比较 (parse_version / compare_versions / version_tuple / version_gt)
+  * core.color  —— 颜色运算纯函数 (blend/transition/darken/lighten/contrast/text_on/hsl, P1-1)
+  * core.animation —— 轻量动画调度器 (Animation + 缓动控制器表, P2-1, 不 import tkinter)
+  * core.scale  —— 等比缩放语义统一 (ratio_of/scaled/clamp_scale/step_scale/fit_scale, P3-2)
+  * core.hit   —— 纯几何命中 (point_in_rect/detect_point/RegionIndex, P3-3, 零 tkinter)
 
 约定: 本包内任何模块不得 import tkinter / tkinter.font。
 """

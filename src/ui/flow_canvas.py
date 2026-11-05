@@ -48,10 +48,15 @@
     bind_zoom_pan(canvas, *, min_scale=0.4, max_scale=2.5, step=1.12, re_render=None)
         -> state dict (内部改「更新 zoom 状态 + 回调重绘」, 保留光标锚点语义)
 
-    blend(color, other, ratio) -> "#RRGGBB"   (Tk canvas 无 alpha 的混色近似)
+    blend(color, other, ratio) -> "#RRGGBB"   (真源 core.color.blend, P1-1 收拢)
 """
 import math
 import os
+
+from core.color import blend, text_on, hex_to_rgb, transition  # P1-1/P2-2: 颜色运算真源
+from core.animation import Animation, out_cubic  # P2-2: GradientItem 颜色渐变语义
+from core.scale import clamp_scale, step_scale, fit_scale  # P3-2: 缩放钳制/步进/适应窗口真源
+from core.hit import RegionIndex  # P3-3: 节点几何命中真源 (渲染后灌包围盒, 替代 item 命中)
 
 
 def _flow_theme():
@@ -78,6 +83,9 @@ NODE_H = 36
 H_GAP = 46
 V_GAP = 56
 MARGIN = 28
+#: 长链折行阈值: 纯线性工作流 (每层 1 节点) 超过该行数时按「蛇形多列」排布,
+#: 用横向空间换纵向空间, 避免 20+ 步的全流程被压成一根很长的单列。
+MAX_ROWS = 8
 
 
 def _is_color(value):
@@ -86,38 +94,8 @@ def _is_color(value):
             and len(value) in (4, 7))
 
 
-def blend(color, other, ratio):
-    """线性混色 (纯函数, 不 import tkinter): result = color*(1-ratio) + other*ratio。
-
-    · 输入/输出均为 #RRGGBB (接受 #RGB); ratio 自动裁剪到 [0, 1];
-    · 非法输入回退返回 color 原值 (绝不抛异常)。
-    Tk canvas 的 fill 不支持 alpha, 「40% 透明 / 淡化 30%」一律以本函数近似
-    (P0-2 禁用态、P0-3 结构色)。
-    """
-    def _rgb(c):
-        c = c.lstrip("#")
-        if len(c) == 3:
-            c = "".join(ch * 2 for ch in c)
-        return int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
-
-    try:
-        r1, g1, b1 = _rgb(color)
-        r2, g2, b2 = _rgb(other)
-    except Exception:
-        return color
-    try:
-        t = float(ratio)
-    except Exception:
-        t = 0.0
-    t = max(0.0, min(1.0, t))
-    r = int(round(r1 * (1.0 - t) + r2 * t))
-    g = int(round(g1 * (1.0 - t) + g2 * t))
-    b = int(round(b1 * (1.0 - t) + b2 * t))
-    return "#{:02X}{:02X}{:02X}".format(r, g, b)
-
-
 def text_color_on(bg, light=None, dark=None):
-    """按底色相对亮度选前景色 (WCAG; 与 utils.text_on 同口径, 本模块零依赖故内置)。
+    """按底色相对亮度选前景色 (WCAG; 真源 core.color.text_on, P1-1 收拢)。
 
     节点填充随类型色/主题变化 (禁用态还会与 flowbg 混色变浅), 单一常量字色
     必然在其中一侧对比不足 —— 逐节点按填充色计算。
@@ -126,18 +104,7 @@ def text_color_on(bg, light=None, dark=None):
         light = _flow_theme().FLOW_TEXT_ON_LIGHT
     if dark is None:
         dark = _flow_theme().FLOW_TEXT_ON_DARK
-    c = str(bg or "").strip().lstrip("#")
-    if len(c) == 3:
-        c = "".join(ch * 2 for ch in c)
-    if len(c) != 6:
-        return light
-    try:
-        rgb = [int(c[i:i + 2], 16) / 255.0 for i in (0, 2, 4)]
-    except ValueError:
-        return light
-    lin = [v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4 for v in rgb]
-    lum = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
-    return dark if lum > 0.45 else light
+    return text_on(bg, light, dark) if hex_to_rgb(bg) is not None else light
 
 
 def resolve_style(ctx):
@@ -180,11 +147,98 @@ def _scaled_font(font, zoom):
 # 独立使用时的兜底标签/图标 (调用方可经 ctx 覆盖为 workflow_view 的真源)
 _TYPE_LABELS = {"script": "- 脚本", "parallel": "|| 并行", "condition": "? 条件",
                 "wait": "~ 等待", "loop": "↻ 循环", "command": "↯ 命令",
-                "variable": "✚ 变量", "log": "✉ 日志"}
+                "variable": "✚ 变量", "log": "✉ 日志", "retry": "⟳ 重试",
+                "workflow": "⧉ 子工作流"}
 _TYPE_ICONS = {"script": "[>]", "parallel": "⫼", "condition": "◇", "wait": "⧗",
-               "loop": "↻", "command": "↯", "variable": "✚", "log": "✉"}
+               "loop": "↻", "command": "↯", "variable": "✚", "log": "✉",
+               "retry": "⟳", "workflow": "⧉"}
 
 _ROWS = "fgnode_"
+
+
+# ══════════════════════════════════════════════════════════════════════
+# P2-2: 状态切换颜色渐变 (GradientItem 语义)
+# ══════════════════════════════════════════════════════════════════════
+
+def _motion_ms(token="motion_fast"):
+    """惰性读 utils.motion(token) (动效时长, ms); 取不到回退模块默认 (P2-2)。"""
+    try:
+        from utils import motion
+        return int(motion(token))
+    except Exception:
+        return {"motion_fast": 120, "motion_base": 200, "motion_slow": 320}.get(token, 120)
+
+
+def _motion_fps():
+    """惰性读 utils.motion_frame() → fps; 取不到回退 60 (16ms/帧)。"""
+    try:
+        from utils import motion_frame
+        return max(1, 1000 // int(motion_frame()))
+    except Exception:
+        return 60
+
+
+def node_shape_item(canvas, nid):
+    """节点形状图元 id (含非空 outline 的 polygon/rectangle, 跳过 shadow 的空 outline)。
+
+    渲染时节点的「主形状」是唯一带非空 outline 的多边形/矩形; shadow 为 fill-only、
+    文本为 text、parallel 内框/loop 范围带为装饰 (outline 取 text_on 或空), 均排除。
+    """
+    try:
+        for it in canvas.find_withtag(_ROWS + str(nid)):
+            if canvas.type(it) in ("polygon", "rectangle"):
+                o = canvas.itemcget(it, "outline") or ""
+                if o:
+                    return it
+    except Exception:
+        pass
+    return None
+
+
+def animate_item_color(canvas, item, parameter, target, *, duration=None, root=None,
+                       reduce_motion=None, controller=out_cubic, end=None):
+    """GradientItem 语义 (P2-2): 把 ``item`` (单个或序列) 的 ``parameter`` 颜色渐变到 ``target``。
+
+    · 起点默认取各 item 当前 ``itemcget(parameter)``; 逐帧
+      ``itemconfigure(parameter=transition(start, target, p))``;
+    · ``reduce_motion`` 为真 (或 Animation 惰性读 state.REDUCE_MOTION) → 一步到位;
+    · 起点/终点非法或起点==终点 → 直接对齐 target (不调度 after)。
+    返回 Animation 实例; 一步到位/无动画项时返回 None。
+    """
+    try:
+        items = list(item)
+    except TypeError:
+        items = [item]
+    if not items or not _is_color(target):
+        return None
+    starts = []
+    for it in items:
+        try:
+            s = canvas.itemcget(it, parameter) or ""
+        except Exception:
+            s = ""
+        starts.append(s if _is_color(s) else target)
+
+    def _set(p):
+        for it, s in zip(items, starts):
+            try:
+                canvas.itemconfigure(it, **{parameter: transition(s, target, p)})
+            except Exception:
+                pass
+
+    if all(s == target for s in starts):
+        _set(1.0)
+        if end is not None:
+            end()
+        return None
+
+    if duration is None:
+        duration = _motion_ms("motion_fast")
+    anim = Animation(duration, _set, controller=controller, end=end,
+                     fps=_motion_fps(), root=root, reduce_motion=reduce_motion)
+    anim.start()
+    # reduce_motion 一步到位时 start() 不调度任何任务 → active=False → 返回 None
+    return anim if anim.active else None
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -264,8 +318,13 @@ def _barycenter_order(layers, fwd, rev):
 
 
 def layout(graph, *, node_w=NODE_W, node_h=NODE_H, h_gap=H_GAP, v_gap=V_GAP,
-           margin=MARGIN):
-    """分层布局: 写回 node.x/y/w/h, 返回画布 (width, height)。"""
+           margin=MARGIN, max_rows=MAX_ROWS):
+    """分层布局: 写回 node.x/y/w/h, 返回画布 (width, height)。
+
+    纯线性工作流 (每层仅 1 个节点) 且层数超过 ``max_rows`` 时改走「蛇形多列」:
+    第 1 列自上而下, 第 2 列自下而上, 依此类推, 相邻两列首尾相邻, 连线仍然短;
+    ``max_rows=None/0`` 关闭折行 (回到单列竖排)。
+    """
     ids = [n.id for n in graph.nodes]
     if not ids:
         return float(2 * margin + node_w), float(2 * margin + node_h)
@@ -277,6 +336,30 @@ def layout(graph, *, node_w=NODE_W, node_h=NODE_H, h_gap=H_GAP, v_gap=V_GAP,
     for n in graph.nodes:                      # 初始层内顺序 = 节点创建顺序
         layers.setdefault(layer[n.id], []).append(n.id)
     _barycenter_order(layers, fwd, rev)
+
+    # ── 长链折行: 多列展示 (非单列) ──────────────────────────────────
+    if max_rows and len(layers) > max_rows and all(
+            len(row) <= 1 for row in layers.values()):
+        seq = []
+        for L in sorted(layers):
+            seq.extend(layers[L])
+        n = len(seq)
+        cols = int(math.ceil(n / float(max_rows)))
+        rows = int(math.ceil(n / float(cols)))
+        for idx, nid in enumerate(seq):
+            node = graph.node(nid)
+            if node is None:
+                continue
+            c, r = divmod(idx, rows)
+            if c % 2 == 1:                     # 蛇形: 奇数列自下而上
+                r = rows - 1 - r
+            node.x = float(margin + c * (node_w + h_gap))
+            node.y = float(margin + r * (node_h + v_gap))
+            node.w = float(node_w)
+            node.h = float(node_h)
+        width = float(2 * margin + cols * node_w + max(0, cols - 1) * h_gap)
+        height = float(2 * margin + rows * node_h + max(0, rows - 1) * v_gap)
+        return width, height
 
     row_w = {}
     for L, row in layers.items():
@@ -295,10 +378,51 @@ def layout(graph, *, node_w=NODE_W, node_h=NODE_H, h_gap=H_GAP, v_gap=V_GAP,
             node.w = float(node_w)
             node.h = float(node_h)
 
+    _center_merges(graph, layers, layer, node_w, h_gap, margin, total_w)
+
     n_layers = len(layers)
     width = float(2 * margin + total_w)
     height = float(2 * margin + n_layers * node_h + max(0, n_layers - 1) * v_gap)
     return width, height
+
+
+def _center_merges(graph, layers, layer, node_w, h_gap, margin, total_w):
+    """汇聚点居中 (P1-2 后续 b): 前向入度 >= 2 的节点, x 对齐到其前驱中心点均值。
+
+    · 只改 x (不改 y / w / h / 边), 分层与层序不变 —— 低风险后处理;
+    · 目标 x 与同层兄弟重叠时退回兄弟边缘 (保持行内间距), 再夹紧到行内区间;
+    · 纯链 (无分支) 图中不存在入度 >= 2 的节点, 本函数为无操作。
+    """
+    fwd, _rev = _forward_adjacency(graph)
+    preds = {n.id: [] for n in graph.nodes}
+    for n in graph.nodes:
+        for v in fwd.get(n.id, []):
+            preds[v].append(n.id)
+    for n in graph.nodes:
+        ps = preds.get(n.id, [])
+        if len(ps) < 2:
+            continue
+        centers = []
+        for p in ps:
+            pn = graph.node(p)
+            if pn is not None:
+                centers.append(pn.x + pn.w / 2.0)
+        if not centers:
+            continue
+        cx = sum(centers) / float(len(centers))
+        new_x = cx - node_w / 2.0
+        lo = margin
+        hi = margin + total_w - node_w
+        for nid in layers[layer[n.id]]:
+            if nid == n.id:
+                continue
+            o = graph.node(nid)
+            if o is None:
+                continue
+            if new_x < o.x + o.w and o.x < new_x + node_w:
+                new_x = (o.x + o.w + h_gap if cx >= o.x + o.w / 2.0
+                         else o.x - node_w - h_gap)
+        n.x = float(max(lo, min(hi, new_x)))
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -328,33 +452,142 @@ def _arrow_head(canvas, x, y, direction, color, tags="arrow", *, size=6):
     canvas.create_polygon(*pts, fill=color, outline=color, tags=tags)
 
 
+def _display_width(s):
+    """显示列宽 (CJK 等东亚字符计 2 列, 其余 1 列) —— 供按节点宽度截断/折行。"""
+    n = 0
+    for ch in s:
+        n += 2 if ord(ch) > 0x2E80 else 1
+    return n
+
+
+def _ellipsize(s, budget):
+    """把 s 截断到 budget 显示列, 超出时末尾补省略号; 返回非空串。"""
+    if _display_width(s) <= budget:
+        return s
+    budget = max(2, budget)
+    out = []
+    used = 0
+    for ch in s:
+        w = 2 if ord(ch) > 0x2E80 else 1
+        if used + w > budget - 1:          # 给省略号留 1 列
+            break
+        out.append(ch)
+        used += w
+    return "".join(out).rstrip() + "…"
+
+
+def _detail_budget(node_w, zoom=1.0):
+    """详情行显示列预算: 由设计宽度 (未缩放) 估算, 与 zoom 无关 (字号随 zoom 同比)。
+
+    设计宽度 = node_w / zoom (= sp(NODE_W)); 9pt 字形平均约 8px/列 → budget ≈ 25。
+    """
+    try:
+        dw = float(node_w) / max(float(zoom), 1e-6)
+    except Exception:
+        dw = float(NODE_W)
+    return max(8, int(round(dw / 8.0)))
+
+
 def _node_detail(node):
-    """节点详情行 (与原单列渲染口径一致)。"""
+    """节点详情行 (语义文本, 不做固定字符截断; 最终按节点宽度在 _draw_node 中截断)。
+
+    原实现用 [:18]/[:20] 硬截断, CJK 内容显示宽度为 ASCII 两倍时仍会撑破节点;
+    改为先产出完整语义文本, 再统一按「显示列预算」截断 + 省略号 (P1-2 后续 a)。
+    """
     d = node.data
     typ = node.type
     if typ == "script":
-        detail = os.path.basename(d.get("path", "") or "")[:20] or "未选择"
+        detail = os.path.basename(d.get("path", "") or "") or "未选择"
     elif typ == "parallel":
         detail = "{} 子步骤".format(len(node.body_ids()))
     elif typ == "condition":
-        detail = (d.get("if", "") or "条件")[:18]
+        detail = d.get("if", "") or "条件"
     elif typ == "wait":
         detail = "{}s".format(d.get("seconds", 1))
     elif typ == "loop":
-        detail = "{}".format(d.get("times", "1"))[:18]
+        detail = "{}".format(d.get("times", "1"))
     elif typ == "command":
-        detail = "{}".format(d.get("cmd", ""))[:18]
+        detail = "{}".format(d.get("cmd", ""))
     elif typ == "variable":
-        detail = "{}={}".format(d.get("var_name", ""), d.get("var_value", ""))[:20]
+        detail = "{}={}".format(d.get("var_name", ""), d.get("var_value", ""))
     elif typ == "log":
-        detail = "{}".format(d.get("text", ""))[:18]
+        detail = "{}".format(d.get("text", ""))
+    elif typ == "retry":
+        detail = "{} 次 ×{}".format(d.get("max_attempts", 3), len(node.body_ids()))
+    elif typ == "workflow":
+        detail = os.path.basename(d.get("path", "") or "") or "未选择"
     else:
-        detail = str(d)[:20]
+        detail = str(d)
     if node.comment:
-        detail = "{} #{}".format(detail, node.comment[:8])
+        detail = "{} #{}".format(detail, node.comment)
     if not node.enabled:
         detail = "○ " + detail
     return detail
+
+
+def _node_appearance(node, colors, ctx, style, zoom):
+    """节点外观三元组 (fill, outline, width) —— 渲染与高亮动画同口径 (P2-2 抽离)。
+
+    复用「禁用态保留类型色」(P0-2) + 「执行高亮/错误态描边」(sc/dg) 的既有规则,
+    保证 render() 与 animate_nodes_outline() 计算出的目标描边逐位一致。
+    """
+    base = colors.get(node.type, _fallback_color())
+    disabled = not node.enabled
+    if disabled:
+        flowbg = style.get("flowbg")
+        if _is_color(flowbg):
+            fill = blend(base, flowbg, style.get("disabled_mix", 0.4))
+        else:
+            fill = style.get("disabled_color") or base
+    else:
+        fill = base
+    darken = ctx.get("darken")
+    outline = darken(fill) if callable(darken) else fill
+    width = 2 * zoom
+    index = _node_index(ctx, node.id)
+    if index is not None and ctx.get("current_step") == index:
+        outline = ctx.get("sc") or outline
+        width = 3 * zoom
+    elif index is not None and (ctx.get("step_results") or {}).get(index) == "error":
+        outline = ctx.get("dg") or outline
+        width = 3 * zoom
+    return fill, outline, width
+
+
+def animate_nodes_outline(canvas, graph, node_ids, *, colors, ctx=None, zoom=1.0,
+                          duration=None, root=None, reduce_motion=None,
+                          controller=out_cubic):
+    """执行高亮 step 切换的颜色渐变 (P2-2, GradientItem 语义)。
+
+    对 ``node_ids`` 命中的节点, 按当前 ctx 计算目标描边 (含执行/错误态) 后:
+      · 宽度即时对齐目标 (2·zoom / 3·zoom), 仅颜色做渐变 (spec: outline/fill 渐变);
+      · 只 ``itemconfigure`` 受影响节点的形状图元, 不做 delete/rebuild —— 与 P2-7
+        脏矩形局部重绘正交 (结构变化仍走 render(dirty=))。
+    返回 list[Animation]; reduce_motion 一步到位或无可动画项时返回空列表。
+    """
+    ctx = ctx or {}
+    style = resolve_style(ctx)
+    if duration is None:
+        duration = _motion_ms("motion_base")      # 高亮步进用 200ms
+    wanted = {str(x) for x in (node_ids or ())}
+    anims = []
+    for n in graph.nodes:
+        if str(n.id) not in wanted:
+            continue
+        shape = node_shape_item(canvas, n.id)
+        if shape is None:
+            continue
+        _fill, outline, width = _node_appearance(n, colors, ctx, style, zoom)
+        try:
+            canvas.itemconfigure(shape, width=max(1.0, width))
+        except Exception:
+            pass
+        anim = animate_item_color(canvas, shape, "outline", outline,
+                                  duration=duration, root=root,
+                                  reduce_motion=reduce_motion, controller=controller)
+        if anim is not None:
+            anims.append(anim)
+    return anims
 
 
 def _draw_node(canvas, node, colors, fonts, ctx, *, zoom=1.0, sp=None, style=None):
@@ -366,28 +599,10 @@ def _draw_node(canvas, node, colors, fonts, ctx, *, zoom=1.0, sp=None, style=Non
     style = style or resolve_style(ctx)
     index = _node_index(ctx, node.id)
     base = colors.get(typ, _fallback_color())
-
-    # P0-2: 禁用态**保留类型色** —— 填充 = blend(类型色, flowbg, 0.4) (无 alpha 近似),
-    # 禁止整体变灰 (移除旧的 DISABLED_COLOR 覆盖); 描边取混色, 文本第 2 行叠删除线。
     disabled = not node.enabled
-    if disabled:
-        flowbg = style.get("flowbg")
-        if _is_color(flowbg):
-            color = blend(base, flowbg, style.get("disabled_mix", 0.4))
-        else:
-            color = style.get("disabled_color") or base
-    else:
-        color = base
 
-    darken = ctx.get("darken")
-    outline = darken(color) if callable(darken) else color
-    width = 2 * zoom
-    if index is not None and ctx.get("current_step") == index:
-        outline = ctx.get("sc") or outline
-        width = 3 * zoom
-    elif index is not None and (ctx.get("step_results") or {}).get(index) == "error":
-        outline = ctx.get("dg") or outline
-        width = 3 * zoom
+    # 填充/描边/线宽由 _node_appearance 统一计算 (P0-2 禁用态 + 执行/错误态描边)
+    color, outline, width = _node_appearance(node, colors, ctx, style, zoom)
 
     tags = ["node", _ROWS + node.id]
     itag = ctx.get("index_tags", {}).get(node.id)
@@ -395,8 +610,11 @@ def _draw_node(canvas, node, colors, fonts, ctx, *, zoom=1.0, sp=None, style=Non
         tags.append(itag)
 
     # 阴影 (P0-3: 走 ctx["style"], resolve_style 已补齐回退)
+    # 阴影也带节点标签 (P2-7): 使 `fgnode_<id>` 完整覆盖该节点全部图元,
+    # 供脏矩形局部重绘按标签整体删除/重建, 不残留孤儿阴影。
     shadow_id = canvas.create_rectangle(x + 2, y + 2, x + w + 2, y + h + 2,
-                                        fill=style["shadow"], outline="", tags=("shadow",))
+                                        fill=style["shadow"], outline="",
+                                        tags=("shadow",) + tuple(tags))
 
     # 字色按「本节点实际填充色」算: 禁用节点已与 flowbg 混浅, 固定白字会不可读
     text_on = text_color_on(color) if _is_color(color) else style["text_on_node"]
@@ -424,8 +642,10 @@ def _draw_node(canvas, node, colors, fonts, ctx, *, zoom=1.0, sp=None, style=Non
 
     icon = ctx.get("icons", {}).get(typ) or _TYPE_ICONS.get(typ, "?")
     label = ctx.get("type_labels", {}).get(typ) or _TYPE_LABELS.get(typ, typ)
-    line1 = "{} {} #{}".format(icon, label, (index + 1) if index is not None else "-")
-    text = "{}\n{}".format(line1, _node_detail(node))
+    budget = _detail_budget(w, zoom)
+    line1 = _ellipsize("{} {} #{}".format(
+        icon, label, (index + 1) if index is not None else "-"), budget)
+    text = "{}\n{}".format(line1, _ellipsize(_node_detail(node), budget))
     text_id = canvas.create_text(cx, cy, text=text, fill=text_on, justify="center",
                                  anchor="center",
                                  font=_scaled_font(fonts.get("small_bold"), zoom),
@@ -461,11 +681,14 @@ def _draw_forward_edge(canvas, e, s, d, color, fonts, ctx, *, zoom=1.0, sp=None,
     line_w = max(1.0, sp(1) * zoom)          # A2: zoom==1.0 时 == sp(1)
     canvas.create_line(sx, sy, dx, dy, fill=color, width=line_w,
                        tags=("arrow", "edge:" + str(e.id)))
-    _arrow_head(canvas, dx, dy, "down", color, size=sp(6) * zoom)
+    # P2-7: 箭头/标签也带 edge:<eid> 标签, 与主干线一起被脏矩形局部重绘整组删除。
+    _arrow_head(canvas, dx, dy, "down", color, size=sp(6) * zoom,
+                tags=("arrow", "edge:" + str(e.id)))
     if e.label:
         mx, my = (sx + dx) / 2.0, (sy + dy) / 2.0
         canvas.create_text(mx + 8, my, text=e.label, fill=color, anchor="w",
-                           font=_scaled_font(fonts.get("small"), zoom), tags=("arrow",))
+                           font=_scaled_font(fonts.get("small"), zoom),
+                           tags=("arrow", "edge:" + str(e.id)))
 
 
 def _draw_back_edge(canvas, e, s, d, color, fonts, *, zoom=1.0, sp=None, style=None):
@@ -487,7 +710,7 @@ def _draw_back_edge(canvas, e, s, d, color, fonts, *, zoom=1.0, sp=None, style=N
     if e.label:
         canvas.create_text(bow - 4, (sy + dy) / 2.0, text=e.label, anchor="e",
                            fill=color, font=_scaled_font(fonts.get("small"), zoom),
-                           tags=("arrow",))
+                           tags=("arrow", "edge:" + str(e.id)))
 
 
 def _draw_terminal(canvas, cx, cy, text, color, fonts, tags, *, zoom=1.0, sp=None, style=None):
@@ -542,7 +765,7 @@ def _draw_grid(canvas, x0, y0, x1, y1, style, sp, zoom, *, fine=16, coarse=4):
 # 渲染入口
 # ══════════════════════════════════════════════════════════════════════
 
-def render(canvas, graph, *, colors, fonts=None, ctx=None, zoom=1.0):
+def render(canvas, graph, *, colors, fonts=None, ctx=None, zoom=1.0, dirty=None):
     """把 graph 画到 canvas 上, 返回统计 dict (nodes/edges/width/height)。
 
     zoom: 渲染期缩放乘子 (P0-4 / P1-2 / WF-B2)。
@@ -551,6 +774,11 @@ def render(canvas, graph, *, colors, fonts=None, ctx=None, zoom=1.0):
         并经 layout() 把缩放后的 x/y/w/h **写回** graph.nodes —— 故渲染后 graph 坐标为
         缩放坐标 (fit_to_view/缩放按钮因此视觉生效); 线宽/字号/端口半径/箭头等仍按
         zoom 线性补偿。
+
+    dirty: 可选, 节点 id 集合 (str 或 iterable)。提供且图非空时走**脏矩形局部重绘**
+        (P2-7): 只删除/重建这些节点及其关联边, 不 delete("all")、不重跑 layout()/
+        start/end/网格 —— 前提是画布上已存在一次全量渲染且布局几何未变 (执行高亮等
+        仅外观变化场景)。缺省 None → 保持全量重绘 (结构/布局变化必须用全量)。
     """
     colors = colors or {}
     fonts = fonts or {}
@@ -563,6 +791,12 @@ def render(canvas, graph, *, colors, fonts=None, ctx=None, zoom=1.0):
         zoom = 1.0
     style = resolve_style(ctx)                  # P0-3: 结构色真源 (含回退)
     sp = _sp_of(ctx)                            # P0-1: 尺寸令牌 (缺失→恒等)
+
+    dirty_ids = _as_ids(dirty)
+    if dirty_ids and list(graph.nodes):
+        return _render_dirty(canvas, graph, dirty_ids, colors, fonts,
+                             ctx, zoom, style, sp)
+
     canvas.delete("all")
 
     nodes = list(graph.nodes)
@@ -572,6 +806,7 @@ def render(canvas, graph, *, colors, fonts=None, ctx=None, zoom=1.0):
                            fill=ctx.get("fgm") or style["terminal"],
                            anchor="center", tags=("empty",))
         canvas.configure(scrollregion=(0, 0, 400, 150))
+        canvas._node_regions = None          # P3-3: 空图清空几何命中索引 (防陈旧 id)
         return {"nodes": 0, "edges": 0, "width": 400, "height": 150}
 
     # P0-1: 布局几何经 ctx["sp"] 注入 (sp 缺失时恒等 → 退回设计像素默认值)。
@@ -634,11 +869,92 @@ def render(canvas, graph, *, colors, fonts=None, ctx=None, zoom=1.0):
     for n in nodes:
         _draw_node(canvas, n, colors, fonts, ctx, zoom=zoom, sp=sp, style=style)
 
+    # P3-3: 渲染后把节点包围盒灌入画布 (几何命中真源); 悬停/拖拽命中改走 RegionIndex,
+    # 不再逐 mousemove find_overlapping + gettags。dirty 局部重绘不重建 (几何未变)。
+    try:
+        canvas._node_regions = RegionIndex(_node_regions(graph))
+    except Exception:
+        canvas._node_regions = None
+
     total_w = max(width, 400)
     total_h = end_y + sp(30) - start_y + sp(20)
     canvas.configure(scrollregion=(0, start_y - 10, total_w, end_y + 40))
     return {"nodes": len(nodes), "edges": len(graph.edges),
             "width": total_w, "height": total_h}
+
+
+def _as_ids(dirty):
+    """把 dirty 入参规范化为节点 id 集合 (P2-7)。None→空集; str→单元素; 可迭代→集合。"""
+    if dirty is None:
+        return set()
+    if isinstance(dirty, str):
+        return {dirty}
+    try:
+        return set(dirty)
+    except TypeError:
+        return set()
+
+
+def _render_dirty(canvas, graph, dirty_ids, colors, fonts, ctx, zoom, style, sp):
+    """脏矩形局部重绘 (P2-7): 只删除并重建 ``dirty_ids`` 命中的节点 + 关联边。
+
+    · 不 delete("all")、不重跑 layout()/START/END/网格 —— 布局几何未变, 只按标签
+      局部更新图元, 供「执行高亮」等仅外观变化场景使用;
+    · 关联边 (任一端点命中) 一起重建, 避免节点描边/位移后连线悬空;
+    · scrollregion 不重算 (几何未变, 沿用上次全量渲染的结果);
+    · 返回统计 dict 与全量 render 同构 (width/height 由当前节点包围盒估算, 供报告用)。
+    """
+    nodes = list(graph.nodes)
+    idset = {n.id for n in nodes}
+    target = {nid for nid in dirty_ids if nid in idset}
+    if not target:                               # 命中空 → 退回全量 (保证画布正确)
+        canvas.delete("all")
+        return render(canvas, graph, colors=colors, fonts=fonts, ctx=ctx, zoom=zoom)
+
+    edge_ids = set()
+    for e in graph.edges:
+        if e.src in target or e.dst in target:
+            edge_ids.add(e.id)
+
+    for nid in target:                           # 1) 删除受影响节点 (整组图元)
+        try:
+            canvas.delete(_ROWS + str(nid))
+        except Exception:
+            pass
+    for eid in edge_ids:                         # 2) 删除受影响边 (线+箭头+标签)
+        try:
+            canvas.delete("edge:" + str(eid))
+        except Exception:
+            pass
+
+    edge_color = style["edge"]                   # 3) 重建关联边 (先画, 节点覆盖其上)
+    back_color = style["edge_back"]
+    for e in graph.edges:
+        if e.id not in edge_ids:
+            continue
+        s, d = graph.node(e.src), graph.node(e.dst)
+        if s is None or d is None:
+            continue
+        if e.back_edge:
+            _draw_back_edge(canvas, e, s, d, back_color, fonts,
+                            zoom=zoom, sp=sp, style=style)
+        else:
+            _draw_forward_edge(canvas, e, s, d, edge_color, fonts, ctx,
+                               zoom=zoom, sp=sp, style=style)
+
+    for n in nodes:                              # 4) 重建受影响节点
+        if n.id in target:
+            _draw_node(canvas, n, colors, fonts, ctx, zoom=zoom, sp=sp, style=style)
+
+    try:                                         # 5) 包围盒估算宽高 (供统计, 不写 scrollregion)
+        xs = [n.x for n in nodes]; xe = [n.x + n.w for n in nodes]
+        ys = [n.y for n in nodes]; ye = [n.y + n.h for n in nodes]
+        width = float(max(xe) - min(xs) + 2 * sp(MARGIN))
+        height = float(max(ye) - min(ys) + 2 * sp(MARGIN))
+    except Exception:
+        width, height = 400.0, 150.0
+    return {"nodes": len(nodes), "edges": len(graph.edges),
+            "width": max(width, 400.0), "height": max(height, 150.0)}
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -697,14 +1013,14 @@ def bind_zoom_pan(canvas, *, min_scale=0.4, max_scale=2.5, step=1.12, re_render=
           "panning": False, "re_render": re_render}
 
     def _clamp(v):
-        return max(min_scale, min(max_scale, v))
+        return clamp_scale(v, min_scale, max_scale)
 
     def _on_zoom(event):
         delta = getattr(event, "delta", 0)
         if not delta:
             return "break"
         prev = st["scale"]
-        new = _clamp(prev * (step if delta > 0 else 1.0 / step))
+        new = _clamp(step_scale(prev, step, delta > 0))
         if abs(new - prev) < 1e-9:
             return "break"
         try:
@@ -793,7 +1109,7 @@ def _draw_ports(canvas, node, fill, outline, tags, *, zoom=1.0, sp=None, style=N
     ports = [("in", cx, y)]
     if node.type == "condition":
         ports += [("true", x + w * 0.3, y + h), ("false", x + w * 0.7, y + h)]
-    elif node.type in ("parallel", "loop"):
+    elif node.type in ("parallel", "loop", "retry"):
         ports.append(("body", cx, y + h))
     else:
         ports.append(("out", cx, y + h))
@@ -828,8 +1144,25 @@ def port_at(canvas, x, y, pad=8):
     return nid, port
 
 
+def _node_regions(graph):
+    """节点几何包围盒 [(id, (x1, y1, x2, y2)), ...] (按 graph.nodes 绘制顺序)。
+
+    P3-3: 渲染后把该列表灌入 ``canvas._node_regions`` (RegionIndex), 命中检测走
+    几何判定, 不再逐 mousemove 调 find_overlapping + gettags。
+    """
+    return [(n.id, (n.x, n.y, n.x + n.w, n.y + n.h)) for n in graph.nodes]
+
+
 def node_at(canvas, x, y, pad=2):
-    """→ 光标下节点 id 或 None。"""
+    """→ 光标下节点 id 或 None (P3-3: 优先几何 RegionIndex 命中, 缺失回退 item 命中)。"""
+    idx = getattr(canvas, "_node_regions", None)
+    if idx is not None:
+        try:
+            hit = idx.query(x, y, pad)
+        except Exception:
+            hit = None
+        if hit is not None:
+            return hit
     return _tags_at(canvas, x, y, "fgnode_", pad)
 
 
@@ -877,6 +1210,24 @@ def view_center(canvas, cx, cy):
         pass
 
 
+def _center_axis(canvas, axis):
+    """把指定轴的内容居中 (不移动另一轴), 供 fit_to_view 的单轴优先级滚动使用。"""
+    sr = _scrollregion(canvas)
+    if not sr:
+        return
+    x0, y0, x1, y1 = sr
+    vw, vh = _viewport(canvas)
+    try:
+        if axis == "x":
+            tw = max(x1 - x0, 1.0)
+            canvas.xview_moveto(max(0.0, min(1.0, ((x0 + x1) / 2.0 - vw / 2.0 - x0) / tw)))
+        else:
+            th = max(y1 - y0, 1.0)
+            canvas.yview_moveto(max(0.0, min(1.0, ((y0 + y1) / 2.0 - vh / 2.0 - y0) / th)))
+    except Exception:
+        pass
+
+
 def fit_to_view(canvas, margin=24, *, zoom_state=None, re_render=None,
                 min_scale=0.4, max_scale=2.5):
     """适应窗口 (P1-2 升级: 按视口等比算 zoom + 居中)。
@@ -898,9 +1249,8 @@ def fit_to_view(canvas, margin=24, *, zoom_state=None, re_render=None,
             z0 = 1.0
         sw = max(sr[2] - sr[0], 1.0)
         sh = max(sr[3] - sr[1], 1.0)
-        z = z0 * min(max(vw - 2.0 * margin, 1.0) / sw,
-                     max(vh - 2.0 * margin, 1.0) / sh)
-        z = max(min_scale, min(max_scale, z))
+        # P3-2: 视口/内容 等比系数走 core.scale.fit_scale, 再钳制到 [min_scale, max_scale]。
+        z = clamp_scale(z0 * fit_scale(vw, vh, sw, sh, margin), min_scale, max_scale)
         if abs(z - z0) > 1e-6:
             zoom_state["scale"] = z
             try:
@@ -908,7 +1258,25 @@ def fit_to_view(canvas, margin=24, *, zoom_state=None, re_render=None,
             except Exception:
                 pass
         sr = _scrollregion(canvas) or sr
-        view_center(canvas, (sr[0] + sr[2]) / 2.0, (sr[1] + sr[3]) / 2.0)
+        x0, y0, x1, y1 = sr
+        cw = max(x1 - x0, 1.0)
+        ch = max(y1 - y0, 1.0)
+        over_w = (cw * z) - vw
+        over_h = (ch * z) - vh
+        # ── 自适应滚动 (P1-2 后续 c): 按内容朝向选择优先轴 ──
+        # 适配后仍有溢出的轴 → 滚到「起点」(纵向优先看顶部, 横向优先看左侧);
+        # 两轴都放得下 → 居中。
+        try:
+            if over_h > 1.0 and over_w <= 1.0:
+                canvas.yview_moveto(0.0)      # 纵向溢出: 顶部优先
+                _center_axis(canvas, "x")
+            elif over_w > 1.0 and over_h <= 1.0:
+                canvas.xview_moveto(0.0)      # 横向溢出: 左侧优先
+                _center_axis(canvas, "y")
+            else:
+                view_center(canvas, (x0 + x1) / 2.0, (y0 + y1) / 2.0)
+        except Exception:
+            pass
         return
     # 旧行为: 不改缩放 (避免与 zoom 状态失配)
     sr = _scrollregion(canvas)
@@ -1059,6 +1427,7 @@ def bind_interactions(canvas, graph, *, colors=None, fonts=None, ctx=None,
 
     st = {"selected_edge": None, "rubber": None, "src": None,
           "undos": [], "redos": [], "hover": None, "hover_items": {},
+          "hover_anims": {},
           "marquee": None, "marquee_origin": None, "selected_nodes": set()}
 
     def _notify(msg):
@@ -1136,6 +1505,12 @@ def bind_interactions(canvas, graph, *, colors=None, fonts=None, ctx=None,
 
     def _clear_hover_ring(nid):
         hid = st["hover_items"].pop(nid, None)
+        anim = st["hover_anims"].pop(nid, None)
+        if anim is not None:
+            try:
+                anim.stop()
+            except Exception:
+                pass
         if hid is not None:
             try:
                 canvas.delete(hid)
@@ -1155,13 +1530,27 @@ def bind_interactions(canvas, graph, *, colors=None, fonts=None, ctx=None,
         if box is None:
             return
         inset = max(1.0, float(sp(1)) * _zoom_now())   # 内缩 1px
+        # P2-2: 悬停描边颜色渐变 (GradientItem 语义) —— 起点取节点形状填充色
+        # (圆环内缩叠在节点填充上, 同色即不可见), 再渐变到 rubber_color(ac)。
+        shape = node_shape_item(canvas, nid)
+        try:
+            start = canvas.itemcget(shape, "fill") if shape is not None else ""
+        except Exception:
+            start = ""
+        if not _is_color(start):
+            start = ctx.get("flowbg") or style.get("flowbg") or rubber_color
         try:
             hid = canvas.create_rectangle(
                 box[0] + inset, box[1] + inset, box[2] - inset, box[3] - inset,
-                outline=rubber_color, width=max(1.0, float(sp(2)) * _zoom_now()),
+                outline=start, width=max(1.0, float(sp(2)) * _zoom_now()),
                 tags=("hover", "fhover_" + str(nid)))
             canvas.tag_raise(hid)
             st["hover_items"][nid] = hid
+            anim = animate_item_color(canvas, hid, "outline", rubber_color,
+                                      duration=_motion_ms("motion_fast"),
+                                      root=canvas, reduce_motion=None)
+            if anim is not None:
+                st["hover_anims"][nid] = anim
         except Exception:
             pass
 

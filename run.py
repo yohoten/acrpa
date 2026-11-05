@@ -176,6 +176,12 @@ def _start_gui():
         print(f"\n程序异常: {e}")
         import traceback
         traceback.print_exc()
+        # G2-2: 启动/构建异常落独立文件 (catch 在此, 不会走 excepthook → 需手动留痕)
+        try:
+            import crashlog
+            crashlog.log_startup_error(traceback.format_exc(), "app.main")
+        except Exception:
+            pass
         cleanup_and_exit(1)
 
 

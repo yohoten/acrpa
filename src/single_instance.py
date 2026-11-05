@@ -587,6 +587,11 @@ def _run_workflow_async(path):
     """无头执行一次工作流（与 scheduler._run_workflow 同一条执行入口）。"""
     def _work():
         try:
+            from core import run_id as _run_id
+            _run_id.new_run()
+        except Exception:
+            pass
+        try:
             import workflow as wf_mod
             import state as st
             wf_def = wf_mod.parse_workflow(path)
@@ -597,6 +602,12 @@ def _run_workflow_async(path):
             try:
                 import crashlog
                 crashlog.log_once("ipc.workflow", "工作流执行失败: {}".format(e), "error")
+            except Exception:
+                pass
+        finally:
+            try:
+                from core import run_id as _run_id
+                _run_id.reset()
             except Exception:
                 pass
     threading.Thread(target=_work, name="acrpa-ipc-workflow", daemon=True).start()

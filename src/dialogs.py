@@ -373,6 +373,23 @@ def _show_help_dialog_legacy():
             command=_open_readme)
         _readme_btn.pack(side="left", padx=(0, sp("gap_tight")))
         attach_tooltip(_readme_btn, "打开在线 README（离线时回退本地文件）")
+        # 打开日志目录: 用户排查「程序没反应 / 报错」时无需手工翻找 logs/
+        def _open_log_dir():
+            try:
+                _dir = state.log_dir()
+                if not os.path.isdir(_dir):
+                    os.makedirs(_dir, exist_ok=True)
+                os.startfile(_dir)
+                log1("已打开日志目录: {}".format(_dir))
+            except Exception as e:
+                log1("打开日志目录失败: {}".format(e), "warning")
+        _logdir_btn = tkinter.Button(btn_row, text="打开日志目录", font=FONT_SMALL,
+            bg=C["bgc"], fg=C["fgb"], relief="flat", bd=1, cursor="hand2",
+            padx=sp("sp_md"), pady=sp("gap_tight"),
+            activebackground=C["acl"], activeforeground=C["fgb"],
+            command=_open_log_dir)
+        _logdir_btn.pack(side="left", padx=(0, sp("gap_tight")))
+        attach_tooltip(_logdir_btn, "打开日志保存目录（acrpa_*.log / crash_*.log）")
         tkinter.Button(btn_row, text="关闭", font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"],
             relief="flat", bd=1, cursor="hand2", padx=sp("sp_md"), pady=sp("gap_tight"),
             activebackground=C["acl"], activeforeground=C["fgb"],
@@ -566,19 +583,339 @@ def open_version_history():
 
 
 # ======================================================================
+# 失败现场查看器 (只读: 查看变量/截图/上下文 + 两次运行对比, 不重跑)
+# ======================================================================
+def open_failure_viewer():
+    """打开失败现场查看器。
+
+    扫描 ``engine.failure_context_dir()`` 下的 ``fail_context_*.json``,
+    按时间倒序列出; 选中一条查看失败时的变量 (脱敏)、截图、命令参数与上下文;
+    支持选取两条记录做「两次运行对比」(变量并集 diff + 截图并排 + 元信息)。
+    全程只读, 不触发任何重跑。
+    """
+    try:
+        from engine import scan_failure_contexts as _scan
+    except Exception:
+        _scan = lambda d=None: []
+
+    def _red(v):
+        try:
+            import interp
+            return interp.redact(v)
+        except Exception:
+            return str(v)
+
+    def _show_img(label, path, w=340, h=210):
+        if not path or not os.path.exists(path):
+            label.configure(image="", text="(无截图)")
+            label.image = None
+            return
+        try:
+            _load_pil()
+            img = Image.open(path)
+            ratio = min(w / img.width, h / img.height)
+            if ratio < 1.0:
+                img = img.resize((max(1, int(img.width * ratio)),
+                                  max(1, int(img.height * ratio))), Image.LANCZOS)
+            pimg = ImageTk.PhotoImage(img)
+            label.configure(image=pimg, text="")
+            label.image = pimg
+        except Exception:
+            label.configure(image="", text="(截图加载失败)")
+            label.image = None
+
+    dlg = tkinter.Toplevel(root)
+    from ui.window_shell import apply_window_shell
+    shell = apply_window_shell(
+        dlg, "失败现场查看", size="lg", min_size=("dlg_sm_w", "dlg_sm_h"),
+        parent=root, icon_setter=_set_window_icon, colors=C)
+    body = shell.content
+    body.columnconfigure(0, weight=1)
+    body.rowconfigure(1, weight=1)
+
+    # ── 工具栏 ──
+    tb = tkinter.Frame(body, bg=C["bgc"])
+    tb.grid(row=0, column=0, sticky="ew", pady=(0, gap("gap_tight")))
+    tkinter.Label(tb, text="失败现场查看", font=FONT_TITLE, bg=C["bgc"],
+                  fg=C["fgt"]).pack(side="left")
+    status_var = tkinter.StringVar(value="")
+    tkinter.Label(tb, textvariable=status_var, font=FONT_SMALL,
+                  bg=C["bgc"], fg=C["ac"]).pack(side="right")
+
+    # ── 主体: 左列表 + 右详情 ──
+    pan = tkinter.PanedWindow(body, orient="horizontal",
+                              bg=C["bgc"], sashwidth=sp("sb_w"),
+                              sashrelief="flat", relief="flat", bd=0)
+    pan.grid(row=1, column=0, sticky="nsew")
+
+    # 左: 记录列表
+    left = tkinter.Frame(pan, bg=C["bgc"])
+    left.columnconfigure(0, weight=1)
+    left.rowconfigure(0, weight=1)
+    tree = ttk.Treeview(left, columns=("time", "run", "target", "row", "cmd", "msg"),
+                        show="headings", selectmode="extended")
+    for cid, txt, w, anchor in (
+        ("time", "时间", 150, "w"),
+        ("run", "run_id", 110, "center"),
+        ("target", "目标", 120, "w"),
+        ("row", "行", 44, "center"),
+        ("cmd", "命令", 100, "w"),
+        ("msg", "错误", 220, "w"),
+    ):
+        tree.heading(cid, text=txt)
+        tree.column(cid, width=w, anchor=anchor, stretch=(cid == "msg"))
+    bind_sel_bold(tree)
+    tsy = tkinter.Scrollbar(left, orient="vertical", command=tree.yview,
+                            width=sp("sb_w"), relief="flat", bg=C["bd"],
+                            troughcolor=C["bgc"])
+    tree.configure(yscrollcommand=tsy.set)
+    tree.grid(row=0, column=0, sticky="nsew")
+    tsy.grid(row=0, column=1, sticky="ns")
+    pan.add(left, minsize=280, width=560)
+
+    # 右: 详情
+    right = tkinter.Frame(pan, bg=C["bgc"])
+    right.columnconfigure(0, weight=1)
+    right.rowconfigure(2, weight=1)
+    meta_var = tkinter.StringVar(value="(选择左侧记录查看详情)")
+    tkinter.Label(right, textvariable=meta_var, font=FONT_SMALL, bg=C["bgc"],
+                  fg=C["fgb"], justify="left", anchor="w",
+                  wraplength=520).grid(row=0, column=0, sticky="ew")
+
+    sub = tkinter.PanedWindow(right, orient="horizontal", bg=C["bgc"],
+                              sashwidth=sp("sb_w"), sashrelief="flat",
+                              relief="flat", bd=0)
+    sub.grid(row=1, column=0, sticky="nsew", pady=gap("gap_tight"))
+
+    # 变量表
+    vf = tkinter.Frame(sub, bg=C["bgc"])
+    vf.columnconfigure(0, weight=1)
+    vf.rowconfigure(0, weight=1)
+    vtree = ttk.Treeview(vf, columns=("k", "v"), show="headings", selectmode="browse")
+    vtree.heading("k", text="变量")
+    vtree.heading("v", text="值 (脱敏)")
+    vtree.column("k", width=140, anchor="w")
+    vtree.column("v", width=260, anchor="w")
+    vsy = tkinter.Scrollbar(vf, orient="vertical", command=vtree.yview,
+                            width=sp("sb_w"), relief="flat", bg=C["bd"],
+                            troughcolor=C["bgc"])
+    vtree.configure(yscrollcommand=vsy.set)
+    vtree.grid(row=0, column=0, sticky="nsew")
+    vsy.grid(row=0, column=1, sticky="ns")
+    sub.add(vf, minsize=200, width=400)
+
+    # 截图
+    shot_frame = tkinter.Frame(sub, bg=C["bgc"])
+    shot_lbl = tkinter.Label(shot_frame, text="(无截图)", font=FONT_SMALL,
+                             bg=C["bgc"], fg=C["fgm"])
+    shot_lbl.pack(expand=True, fill="both")
+    sub.add(shot_frame, minsize=200, width=360)
+
+    # 上下文 (prev/next 行)
+    ctx_text = tkinter.Text(right, font=FONT_LOG, bg=C["logbg"], fg=C["logfg"],
+                            height=4, wrap="none", relief="flat", bd=0,
+                            padx=sp("sp_sm"), pady=sp("gap"))
+    ctx_sy = tkinter.Scrollbar(right, orient="vertical", command=ctx_text.yview,
+                               width=sp("sb_w"))
+    ctx_text.grid(row=2, column=0, sticky="nsew", pady=(gap("gap_tight"), 0))
+    ctx_sy.grid(row=2, column=1, sticky="ns")
+    ctx_text.config(yscrollcommand=ctx_sy.set, state="disabled")
+    pan.add(right, minsize=320, width=620)
+
+    # ── 底部操作 ──
+    bf = tkinter.Frame(body, bg=C["bgc"])
+    bf.grid(row=2, column=0, sticky="ew", pady=(gap("gap_tight"), 0))
+    _btn(bf, "对比两次运行", lambda: _compare_placeholder(), "ac", "white").pack(side="left", padx=sp("gap_tight"))
+    _btn(bf, "刷新", lambda: _refresh(), C["bgc"], C["fgb"]).pack(side="left", padx=sp("gap_tight"))
+    _btn(bf, "关闭", dlg.destroy, C["bgc"], C["fgb"]).pack(side="right", padx=sp("gap_tight"))
+
+    _all = []
+
+    def _refresh():
+        nonlocal _all
+        _all = _scan()
+        for item in tree.get_children():
+            tree.delete(item)
+        for it in _all:
+            tree.insert("", "end", iid=str(id(it)), values=(
+                it.get("time", ""),
+                it.get("run_id", "") or "-",
+                os.path.basename(str(it.get("script", "") or "")),
+                it.get("row", ""),
+                it.get("cmd", ""),
+                str(it.get("message", ""))[:80],
+            ))
+        status_var.set("共 {} 条失败记录".format(len(_all)))
+
+    def _by_selection():
+        sel = tree.selection()
+        out = []
+        for iid in sel:
+            for it in _all:
+                if str(id(it)) == iid:
+                    out.append(it)
+                    break
+        return out
+
+    def _on_select(_evt=None):
+        sel = _by_selection()
+        if not sel:
+            meta_var.set("(选择左侧记录查看详情)")
+            vtree.delete(*vtree.get_children())
+            _show_img(shot_lbl, "", 0, 0)
+            return
+        it = sel[0]
+        meta_var.set(
+            "run_id: {}\n时间: {}\n目标: {}\n行: {}    命令: {}    尝试: {}\n错误: {}".format(
+                it.get("run_id") or "-",
+                it.get("time") or "-",
+                it.get("script") or "-",
+                it.get("row") or "-",
+                it.get("cmd") or "-",
+                it.get("attempts") or 0,
+                str(it.get("message") or "")[:200],
+            ))
+        for item in vtree.get_children():
+            vtree.delete(item)
+        for k, v in (it.get("vars") or {}).items():
+            vtree.insert("", "end", values=(str(k), _red(v)))
+        _show_img(shot_lbl, it.get("screenshot") or "", 340, 210)
+        # 上下文
+        ctx = it.get("context") or {}
+        lines = []
+        prev = ctx.get("prev")
+        nxt = ctx.get("next")
+        if prev:
+            lines.append("上一行: {} {}".format(prev.get("cmd", ""), " ".join(prev.get("args", []))))
+        lines.append(">>> 失败行: {} {}".format(it.get("cmd", ""), " ".join(it.get("args", []))))
+        if nxt:
+            lines.append("下一行: {} {}".format(nxt.get("cmd", ""), " ".join(nxt.get("args", []))))
+        ctx_text.config(state="normal")
+        ctx_text.delete("1.0", "end")
+        ctx_text.insert("1.0", "\n".join(lines))
+        ctx_text.config(state="disabled")
+
+    def _compare_placeholder():
+        sel = _by_selection()
+        if len(sel) < 2:
+            messagebox.showwarning("提示", "请先在左侧按住 Ctrl 选中两条失败记录")
+            return
+        _compare(sel[0], sel[1])
+
+    def _compare(a, b):
+        dd = tkinter.Toplevel(dlg)
+        dd.title("失败现场对比")
+        place_dialog(dd, 720, 560, parent=dlg)
+        dd.transient(dlg)
+        dd.configure(bg=C["bgc"])
+        _set_window_icon(dd)
+        dd.columnconfigure(0, weight=1)
+        dd.rowconfigure(0, weight=1)
+
+        outer = tkinter.Frame(dd, bg=C["bgc"])
+        outer.grid(row=0, column=0, sticky="nsew", padx=sp("gap"), pady=sp("gap"))
+        outer.columnconfigure(0, weight=1)
+        outer.rowconfigure(1, weight=1)
+
+        tkinter.Label(outer, text="A: {}  [{}]        B: {}  [{}]".format(
+            a.get("time"), a.get("run_id") or "-", b.get("time"), b.get("run_id") or "-"),
+            font=FONT_SMALL, bg=C["bgc"], fg=C["fgt"], anchor="w",
+            justify="left").grid(row=0, column=0, sticky="ew", pady=(0, gap("gap_tight")))
+
+        # 变量并集 diff 表
+        dvf = tkinter.Frame(outer, bg=C["bgc"])
+        dvf.grid(row=1, column=0, sticky="nsew")
+        dvf.columnconfigure(0, weight=1)
+        dvf.rowconfigure(0, weight=1)
+        dtree = ttk.Treeview(dvf, columns=("k", "sa", "va", "vb"),
+                             show="headings", selectmode="browse")
+        dtree.heading("k", text="变量")
+        dtree.heading("sa", text="状态")
+        dtree.heading("va", text="运行 A")
+        dtree.heading("vb", text="运行 B")
+        dtree.column("k", width=130, anchor="w")
+        dtree.column("sa", width=56, anchor="center")
+        dtree.column("va", width=230, anchor="w")
+        dtree.column("vb", width=230, anchor="w")
+        dsy = tkinter.Scrollbar(dvf, orient="vertical", command=dtree.yview,
+                                width=sp("sb_w"), relief="flat", bg=C["bd"],
+                                troughcolor=C["bgc"])
+        dtree.configure(yscrollcommand=dsy.set)
+        dtree.grid(row=0, column=0, sticky="nsew")
+        dsy.grid(row=0, column=1, sticky="ns")
+
+        _MISSING = object()
+        av = a.get("vars") or {}
+        bv = b.get("vars") or {}
+        for k in sorted(set(av) | set(bv)):
+            x, y = av.get(k, _MISSING), bv.get(k, _MISSING)
+            if x is _MISSING:
+                st, sx, sy = "仅B", "-", _red(y)
+            elif y is _MISSING:
+                st, sx, sy = "仅A", _red(x), "-"
+            elif x != y:
+                st, sx, sy = "变更", _red(x), _red(y)
+            else:
+                st, sx, sy = "相同", _red(x), _red(y)
+            dtree.insert("", "end", values=(str(k), st, sx, sy),
+                         tags=(st,))
+        dtree.tag_configure("仅B", foreground=C["wn"])
+        dtree.tag_configure("仅A", foreground=C["wn"])
+        dtree.tag_configure("变更", foreground=C["ac"])
+
+        _btn(outer, "关闭", dd.destroy, C["bgc"], C["fgb"]).grid(
+            row=2, column=0, sticky="e", pady=(gap("gap_tight"), 0))
+        dd.bind("<Escape>", lambda e: dd.destroy())
+
+    tree.bind("<<TreeviewSelect>>", _on_select)
+    _refresh()
+    dlg.bind("<Escape>", lambda e: dlg.destroy())
+
+
+# ======================================================================
 # AI 脚本生成器
 # ======================================================================
-def open_ai_panel():
-    """Open AI script generation dialog with conversational (chat-style) layout.
+def _wf_step_summary(s):
+    """单行工作流步骤摘要 (AI 工作流生成结果卡片用)。"""
+    if not isinstance(s, dict):
+        return str(s)
+    t = s.get("type", "script")
+    if t == "script":
+        return "script {}".format(s.get("path", ""))
+    if t == "command":
+        return "command {}".format(s.get("cmd", ""))
+    if t == "variable":
+        return "variable {} = {}".format(s.get("var_name", ""), s.get("var_value", ""))
+    if t in ("parallel", "loop", "retry"):
+        return "{} ({} 子步骤)".format(t, len(s.get("steps", [])))
+    if t == "workflow":
+        return "workflow {}".format(s.get("path", ""))
+    if t == "condition":
+        return "condition if {}".format(s.get("if", ""))
+    if t == "wait":
+        return "wait {}s".format(s.get("seconds", 1))
+    if t == "log":
+        return "log {}".format(s.get("text", ""))
+    return t
+
+
+def open_ai_panel(mode="script", on_workflow_import=None):
+    """Open AI generation dialog with conversational (chat-style) layout.
+
+    mode: "script" (脚本生成, 默认) | "workflow" (工作流图生成)。两者共用同一套
+    对话式界面 / 流式展示 / API Key 检查 / 错误处理, 仅生成后端与结果卡片不同:
+    · script    → generate_script_content + normalize_ai_output, 卡片「插入表格」;
+    · workflow  → generate_workflow_from_text, 卡片「导入工作流」(回调注入 on_workflow_import)。
 
     借鉴 AI Agent 对话界面:
     · 主区域为对话消息流 (用户消息 + AI 回复交替展示)
     · 底部为聊天式输入栏 (输入框 + 发送按钮一体化, Enter 发送)
     · 快速示例变为建议提示词 (suggested prompts)
-    · AI 生成的脚本以结构化卡片形式展示, 附带操作按钮
+    · AI 生成的脚本/工作流以结构化卡片形式展示, 附带操作按钮
     """
+    _is_workflow = (mode == "workflow")
     dlg = tkinter.Toplevel(root)
-    dlg.title("AI 脚本生成器")
+    dlg.title("AI 工作流生成器" if _is_workflow else "AI 脚本生成器")
     place_dialog(dlg, 660, 720)
     dlg.minsize(500, 560)
     dlg.transient(root)
@@ -601,8 +938,9 @@ def open_ai_panel():
     top_bar.columnconfigure(1, weight=1)
 
     # 左: 标题 (fgt 强对比, 换肤时保持)
-    _title_lbl = tkinter.Label(top_bar, text="  AI 脚本生成器", font=FONT_TITLE,
-        bg=C["bgc"], fg=C["fgt"])
+    _title_lbl = tkinter.Label(top_bar,
+        text=("  AI 工作流生成器" if _is_workflow else "  AI 脚本生成器"),
+        font=FONT_TITLE, bg=C["bgc"], fg=C["fgt"])
     _ui_theme.set_fg_token(_title_lbl, "fgt")
     _title_lbl.grid(row=0, column=0, sticky="w", pady=sp("gap"))
 
@@ -685,17 +1023,19 @@ def open_ai_panel():
     # ── 对话消息管理 ──
     _msg_widgets = []     # 所有消息行 (用于清空)
     _last_script = [None] # 最近一次生成的脚本内容 (供插入按钮使用)
+    _last_workflow = [None]  # 最近一次生成的工作流 (data, issues), 供导入按钮使用
 
     def _scroll_to_bottom():
         dlg.update_idletasks()
         chat_canvas.yview_moveto(1.0)
 
-    def _add_message(role, text, script_content=None):
+    def _add_message(role, text, script_content=None, workflow_data=None):
         """向对话流添加一条消息。
 
         role: "user" / "ai" / "system"
         text: 消息文本
         script_content: 若提供, 在消息下方追加脚本预览卡片 + 操作按钮
+        workflow_data: 若提供 (wf_data, issues), 追加工作流预览卡片 + 操作按钮
         """
         msg_frame = tkinter.Frame(chat_inner, bg=C["bg"])
         msg_frame.pack(fill="x", padx=sp("sp_md"), pady=(sp("gap_tight"), sp("gap_tight")))
@@ -822,6 +1162,68 @@ def open_ai_panel():
                 command=lambda c=script_content: _copy_script(c))
             copy_card_btn.pack(side="left", padx=sp("gap_tight"))
 
+        # 工作流预览卡片 (AI 工作流生成结果)
+        if workflow_data:
+            _last_workflow[0] = workflow_data
+            wf_d, wf_issues = workflow_data
+            import json as _json
+            steps = list(wf_d.get("steps", []))
+            lines = ["工作流: {}".format(wf_d.get("name", ""))]
+            for i, s in enumerate(steps):
+                lines.append("[{}] {}".format(i + 1, _wf_step_summary(s)))
+            if wf_issues:
+                lines.append("")
+                lines.append("静态检查提示:")
+                for it in wf_issues:
+                    lines.append("  - [{}] {}".format(
+                        it.get("level", ""), it.get("message", "")))
+            wf_summary = "\n".join(lines)
+            wf_json = _json.dumps(wf_d, ensure_ascii=False, indent=2)
+
+            card_frame = tkinter.Frame(bubble_frame, bg=C["logbg"],
+                highlightbackground=C["ac"], highlightthickness=1)
+            _ui_theme.set_role(card_frame, "logbg")
+            card_frame.pack(fill="x", padx=sp("gap"), pady=(sp("gap_tight"), sp("gap")))
+
+            card_header = tkinter.Frame(card_frame, bg=C["logbg"])
+            _ui_theme.set_role(card_header, "logbg")
+            card_header.pack(fill="x", padx=sp("gap"), pady=(sp("gap"), sp("gap_tight")))
+            tkinter.Label(card_header, text="📋 生成的工作流", font=FONT_SMALL,
+                bg=C["logbg"], fg=C["ac"]).pack(side="left")
+            tkinter.Label(card_header, text="{} 步骤".format(len(steps)),
+                font=FONT_TINY, bg=C["logbg"], fg=C["fgm"]).pack(side="right")
+
+            wf_txt = tkinter.Text(card_frame, font=FONT_LOG,
+                bg=C["logbg"], fg=C["logfg"], wrap="none", relief="flat", bd=0,
+                padx=sp("gap"), pady=sp("gap_tight"),
+                height=min(12, max(4, len(lines) + 1)),
+                insertbackground=C["fgt"],
+                selectbackground=C["acl"], selectforeground=C["fgt"])
+            wf_txt.pack(fill="x", padx=sp("gap"), pady=(0, sp("gap_tight")))
+            wf_txt.insert("1.0", wf_summary)
+            wf_txt.configure(state="disabled")
+
+            card_btns = tkinter.Frame(card_frame, bg=C["logbg"])
+            _ui_theme.set_role(card_btns, "logbg")
+            card_btns.pack(fill="x", padx=sp("gap"), pady=(0, sp("gap")))
+
+            import_card_btn = tkinter.Button(card_btns, text="↓ 导入工作流",
+                font=FONT_SMALL, bg=C["sc"], fg=_ui_theme.text_on(C["sc"]),
+                relief="flat", bd=1, padx=sp("sp_sm"), pady=sp("gap_tight"), cursor="hand2",
+                activebackground=_darken(C["sc"]),
+                activeforeground=_ui_theme.text_on(_darken(C["sc"])),
+                command=lambda d=wf_d, iss=wf_issues: _import_workflow(d, iss))
+            _ui_theme.set_role(import_card_btn, "sc")
+            import_card_btn.pack(side="left")
+
+            copy_card_btn = tkinter.Button(card_btns, text="📋 复制 JSON",
+                font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"],
+                relief="flat", bd=1, padx=sp("gap"), pady=sp("gap_tight"), cursor="hand2",
+                activebackground=_darken(C["bgc"]), activeforeground=C["fgb"],
+                highlightbackground=C["bd"], highlightthickness=1,
+                command=lambda j=wf_json: _copy_script(j))
+            copy_card_btn.pack(side="left", padx=sp("gap_tight"))
+
         _scroll_to_bottom()
 
     def _copy_script(content):
@@ -842,6 +1244,7 @@ def open_ai_panel():
                 pass
         _msg_widgets.clear()
         _last_script[0] = None
+        _last_workflow[0] = None
         _add_welcome()
 
     clear_chat_btn.config(command=_clear_chat)
@@ -1069,11 +1472,23 @@ def open_ai_panel():
                     except Exception:
                         pass
 
+                # 流式展示: 逐段更新思考占位标签 (尾部预览)
+                _streamed = []
+                def _on_delta(chunk):
+                    _streamed.append(chunk)
+                    tail = "".join(_streamed)[-64:].replace("\n", " ")
+                    try:
+                        dlg.after(0, lambda t=tail: thinking_lbl.configure(
+                            text="⧗ 生成中… " + t))
+                    except Exception:
+                        pass
+
                 raw_output, _resp = generate_script_content(
                     client,
                     messages=[{"role": "user", "content": prompt}],
                     model=resolve_model(),
-                    on_retry=_note_retry)
+                    on_retry=_note_retry,
+                    on_delta=_on_delta)
 
                 generated_script = normalize_ai_output(raw_output)
 

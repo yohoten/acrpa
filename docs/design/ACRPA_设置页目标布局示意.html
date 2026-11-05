@@ -1,0 +1,49 @@
+<h2 class="sr-only" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">ACRPA 设置页采用左侧分组导航、右侧单页表单和底部保存状态栏的暗色布局</h2>
+<div style="width:100%;max-width:680px;background:#202020;border:0.5px solid #3F3F3F;border-radius:12px;overflow:hidden;color:#E0E0E0;font-family:var(--font-sans);display:grid;grid-template-columns:168px minmax(0,1fr);font-size:13px;line-height:1.6">
+  <aside style="background:#262626;border-right:0.5px solid #3F3F3F;padding:16px 10px;min-height:480px;display:flex;flex-direction:column">
+    <div style="color:#FFFFFF;font-size:15px;font-weight:500;padding:0 8px 12px">设置</div>
+    <div style="background:#202020;border:0.5px solid #3F3F3F;border-radius:8px;color:#A0A0A0;padding:5px 9px;margin:0 2px 16px">搜索设置</div>
+    <div style="color:#A0A0A0;font-size:11px;padding:0 8px 4px">常用</div>
+    <div style="padding:5px 9px;border-radius:6px">常规</div>
+    <div style="padding:5px 9px;border-radius:6px">执行</div>
+    <div style="padding:5px 9px;border-radius:6px">录制与日志</div>
+    <div style="padding:5px 9px;border-radius:6px">定时任务</div>
+    <div style="color:#A0A0A0;font-size:11px;padding:12px 8px 4px">智能与高级</div>
+    <div style="padding:5px 9px;border-radius:6px;background:#094771;color:#FFFFFF;border-left:3px solid #4CC2FF">AI 与 OCR</div>
+    <div style="padding:5px 9px;border-radius:6px">浏览器与驱动</div>
+    <div style="color:#A0A0A0;font-size:11px;padding:12px 8px 4px">连接</div>
+    <div style="padding:5px 9px;border-radius:6px">设备互联</div>
+    <div style="padding:5px 9px;border-radius:6px">扩展与市场</div>
+    <div style="margin-top:auto;padding:7px 9px;color:#A0A0A0">关于</div>
+  </aside>
+  <main style="min-width:0;display:flex;flex-direction:column;background:#202020">
+    <div style="padding:20px 22px 14px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+      <div><div style="font-size:15px;font-weight:500;color:#FFFFFF">AI 与 OCR</div><div style="font-size:11px;color:#A0A0A0">配置智能重试、模型服务与文字识别</div></div>
+      <div style="font-size:11px;color:#6CCB5F;white-space:nowrap">自动保存已开启</div>
+    </div>
+    <div style="padding:0 22px 18px;display:grid;gap:12px">
+      <section style="background:#2B2B2B;border:0.5px solid #3F3F3F;border-radius:8px;padding:15px 16px">
+        <div style="font-size:14px;font-weight:500;color:#FFFFFF;margin-bottom:12px">AI 服务</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:13px">
+          <div><div>识别失败时使用 AI 智能重试</div><div style="font-size:11px;color:#A0A0A0">分析当前截图并给出修正建议</div></div>
+          <div style="width:36px;height:20px;border-radius:10px;background:#4CC2FF;position:relative;flex:none"><span style="position:absolute;width:14px;height:14px;border-radius:50%;background:#202020;right:3px;top:3px"></span></div>
+        </div>
+        <div style="display:grid;grid-template-columns:104px minmax(0,1fr);align-items:center;gap:10px 12px">
+          <span style="color:#A0A0A0">服务提供商</span><span style="background:#262626;border:0.5px solid #3F3F3F;border-radius:6px;padding:5px 9px">DeepSeek<span style="float:right;color:#A0A0A0">⌄</span></span>
+          <span style="color:#A0A0A0">接口地址</span><span style="background:#262626;border:0.5px solid #3F3F3F;border-radius:6px;padding:5px 9px;color:#A0A0A0">https://api.example.com/v1</span>
+          <span style="color:#A0A0A0">API 密钥</span><span style="background:#262626;border:0.5px solid #3F3F3F;border-radius:6px;padding:5px 9px;color:#A0A0A0">••••••••••••••••</span>
+        </div>
+        <div style="font-size:11px;color:#A0A0A0;margin:6px 0 12px 116px">密钥仅保存在 Windows 凭据库</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-left:116px;flex-wrap:wrap">
+          <button style="background:#4CC2FF;color:#202020;border:1px solid #4CC2FF;border-radius:6px;padding:5px 13px;font-size:12px">测试连接</button>
+          <button style="background:#262626;color:#E0E0E0;border:0.5px solid #3F3F3F;border-radius:6px;padding:5px 11px;font-size:12px">管理提供商…</button>
+        </div>
+      </section>
+      <section style="background:#2B2B2B;border:0.5px solid #3F3F3F;border-radius:8px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div><div style="font-weight:500;color:#FFFFFF">OCR 识别</div><div style="font-size:11px;color:#A0A0A0">自动选择可用后端，启动时预加载模型</div></div>
+        <button style="background:#262626;color:#E0E0E0;border:0.5px solid #3F3F3F;border-radius:6px;padding:5px 11px;font-size:12px;white-space:nowrap">查看识别设置</button>
+      </section>
+    </div>
+    <footer style="margin-top:auto;border-top:0.5px solid #3F3F3F;padding:9px 22px;display:flex;justify-content:space-between;color:#A0A0A0;font-size:11px"><span style="color:#6CCB5F">● 所有更改已保存</span><span>关闭窗口前自动完成保存</span></footer>
+  </main>
+</div>

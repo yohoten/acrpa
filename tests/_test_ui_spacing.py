@@ -46,6 +46,7 @@ C5_EXCLUDE = frozenset({"ui/theme.py", "netlink/webui.py"})
 COLOR_WHITELIST = {
     "ACRPA.py": frozenset({"#FFFFFF"}),
     "app.py": frozenset({"#000000", "#666666", "#B45309", "#FFFFFF"}),
+    "core/color.py": frozenset({"#000000", "#1A1A1A", "#808080", "#FFFFFF"}),  # P1-1: 中性默认色常量
     "reminder.py": frozenset({"#0078D4", "#1F1F1F", "#333333", "#5F5F5F",
                               "#C42B1C", "#E1E1E1", "#FFFFFF"}),
     "utils.py": frozenset({"#1A1A1A", "#7C3AED", "#FFFFFF"}),

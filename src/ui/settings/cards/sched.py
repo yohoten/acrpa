@@ -11,6 +11,7 @@ from tkinter import ttk
 import state
 import scheduler as sched
 from utils import FONT_TINY
+from ui.widgets.rounded_button import RoundedSwitch
 
 CARD_KEY = "sched"
 ROW = 2
@@ -32,7 +33,8 @@ def build(parent, ctx):
     _register_nav_card(CARD_KEY, card)
 
     # UI vars for scheduler (复用 ACRPA 启动时创建的变量，避免调度器线程引用失效)
-    if state._sched_enabled_var is None:
+    # getattr 防御: ACRPA.py 尚未执行到 init 段 (如单测/诊断环境) 时属性不存在。
+    if getattr(state, "_sched_enabled_var", None) is None:
         state._sched_enabled_var = tkinter.BooleanVar(value=state.SCHED_ENABLED)
     _sched_hour_var = tkinter.StringVar(value="{:02d}".format(state.SCHED_HOUR))
     _sched_minute_var = tkinter.StringVar(value="{:02d}".format(state.SCHED_MINUTE))
@@ -45,8 +47,10 @@ def build(parent, ctx):
     enable_frame = tkinter.Frame(content, bg=C["bgc"])
     enable_frame.grid(row=0, column=0, sticky="ew", padx=8, pady=(2,2))
 
-    ttk.Checkbutton(enable_frame, text="启用定时",
-        variable=state._sched_enabled_var).pack(side="left", padx=(0,8))
+    tkinter.Label(enable_frame, text="启用定时", font=ctx.FONT_BODY,
+        fg=C["fgb"], bg=C["bgc"]).pack(side="left", padx=(0, 8))
+    RoundedSwitch(enable_frame, variable=state._sched_enabled_var,
+                  colors=C).pack(side="left", padx=(0, 12))
 
     # 定时调度说明
     sched_desc_frame = tkinter.Frame(content, bg=C["bgc"])

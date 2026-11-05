@@ -1,0 +1,838 @@
+ACRPA 问题与优化点记录（可执行方案版 v2）
+更新时间：2026-11-04
+依据：通读 src/（126 个 .py；ACRPA.py 约 6900 行；ui/workflow_view.py 约 3400 行）+ 原记录 8 条
+阅读方式：每项固定为「现象 → 根因 → 方案 → 改动点 → 验收 → 风险 / 后续」，末尾有执行顺序与命令。
+状态标记：[已完成] 本次已落地并通过回归；[部分完成] 本次补了关键缺口，剩余已拆步；[待排期] 结构性改造，按步骤独立交付。
+
+======================================================================
+零、结论速览
+======================================================================
+1. 本次已落地 6 项低风险、可验证的改动：P0 崩溃修复、P0 日志补口、流程图多列、操作库行文本、
+   表格可读性、运行栏/工作流参数同源。
+2. 剩余最大两块是「工程结构」和「借鉴 maliang 的控件/渲染体系」，属结构性重构：
+   已拆成可按迭代独立验收的步骤，不建议一次性大改。
+3. 所有已完成项都有对应回归脚本，改动均为「有缺省回退、可单独回滚」的形态。
+
+======================================================================
+一、项目现状（决定方案边界的几个事实）
+======================================================================
+1. 启动链路：run.py（入口 / 单实例 / crashlog）→ app.py（构建与首帧）→ ACRPA.py（控件树 + 粘合）
+   → ui/*（视图：workflow_view / exec_bar / log_dock / command_palette / module_catalog …）
+   → workflow.py、engine.py、commands/*（领域与命令实现）。
+2. 日志已具备：logs/acrpa_YYYYMMDD.log 按天轮转、logs/crash_YYYYMMDD.log、faulthandler、
+   sys.excepthook、threading.excepthook。**不需要再新建日志系统**，只需补缺口（见 P0-2）。
+3. 工作流 Tab 已采用延迟构建（_WF_LAZY + _wf_ensure），控件真源在 ui/workflow_view.py。
+4. 主题 / i18n / DPI / 列宽策略已有独立模块，新增 UI 应复用，不要再写死颜色与 px。
+5. 当前主要痛点不是「缺功能」，而是：大文件粘合层、表格信息密度、执行参数口径分裂、
+   长链流程图的排版。
+
+======================================================================
+二、优先级总表（与原记录 1~8 条对应）
+======================================================================
+| 原编号 | 问题 | 优先级 | 本次状态 |
+| 1 | 日志自动保存到 logs | P0 | [部分完成] 补齐 Tk 回调异常留痕；系统本身已具备按天落盘 |
+| 2 | 工作流以流程图展示且不能是单列 | P1 | [已完成] 长链蛇形多列；节点文本换行列为后续 |
+| 3 | 操作库命令文本冗长、无图标、关键字段与描述混在一起 | P1 | [已完成] 行内只留图标+名称+前 2 关键字段，完整签名/描述进悬停 |
+| 4 | 脚本编辑区 / 工作流表格字段不清晰 | P1 | [已完成] 参数列标题按命令动态显示字段名；工作流详情改为「字段=值」 |
+| 5 | 运行调试栏与工作流耦合弱、按钮/参数重复 | P1 | [已完成] 循环/最长共用运行栏变量，删除工作流工具栏重复输入；无限循环打通 |
+| 6 | 项目结构优化 | P2 | [待排期] 已拆 4 步，见 P2-6 |
+| 7 | 借鉴 maliang 的 UI / 性能 | P2 | [待排期] 已做取舍与 3 个低风险落地项，见 P2-7 |
+| 8 | 变量管理弹窗 NameError: name 'sp' is not defined | P0 | [已完成] 修复并实机验证 |
+
+======================================================================
+三、逐项方案
+======================================================================
+
+----------------------------------------------------------------------
+P0-1（原第 8 条）工作流「变量管理」弹窗崩溃
+----------------------------------------------------------------------
+[已完成]
+
+现象
+  点击工作流工具栏「变量管理」后无反应；控制台/日志出现
+  NameError: name 'sp' is not defined（src/ui/workflow_view.py 约 2652 行）。
+
+根因
+  sp（DPE 尺寸换算函数）此前是 build() 内的局部变量；抽取到 ui/workflow_view.py 后，
+  只有 build() 内部定义了局部 sp，_wf_open_variable_manager() 里直接引用 sp(...)，
+  该函数作用域没有 sp，且模块级也没有兜底，于是首次点击即抛 NameError。
+  同类风险：后续新增弹窗若忘记取 sp，会重复踩坑。
+
+方案
+  在 _wf_open_variable_manager() 入口用注入值取一次，并做可调用兜底：
+      sp = _CTX.get("sp")
+      if not callable(sp):
+          sp = lambda v: float(v)
+  这样：有注入 → 与其它弹窗同一套 DPI 换算；无注入（单测/未初始化）→ 1:1 像素，不崩。
+
+改动点
+  src/ui/workflow_view.py  _wf_open_variable_manager()
+
+验收
+  1) 实机构建后打开弹窗不抛异常（已用脚本验证 dialog_ok）。
+  2) tests/_test_workflow_view_split.py 全绿（75 项通过）。
+
+风险 / 后续
+  风险极低。后续凡新建弹窗统一从 _CTX 取 sp，或抽一个模块级 _sp(v) 帮助函数，
+  避免再次出现「局部变量泄漏到嵌套函数」的问题。
+
+----------------------------------------------------------------------
+P0-2（原第 1 条）日志自动保存到 logs
+----------------------------------------------------------------------
+[部分完成]
+
+现状（先确认，避免重复造轮子）
+  · ThreadSafeLog 按天写 logs/acrpa_YYYYMMDD.log；
+  · crashlog 写 logs/crash_YYYYMMDD.log，并挂 faulthandler / excepthook / threading 钩子；
+  · state.log_dir() 已处理便携模式（userdata/logs）与普通模式（程序目录/logs）。
+  结论：主链路日志本来就是自动保存的，原记录的真实缺口是「GUI 回调异常不进日志」。
+
+真实缺口（按影响排序）
+  G1 Tk 回调异常只打 stderr：Tk 默认走 root.report_callback_exception，
+     打包版无控制台，用户只看到「点了没反应」，日志与 crash 文件都没有；
+     上面 P0-1 的 NameError 就属于这一类。
+  G2 启动早期（日志系统就绪前）的异常只靠 crashlog 兜底，主日志无上下文。
+  G3 没有「打开日志目录」入口，用户找不到日志文件。
+
+本次方案（G1）
+  在 crashlog 增加 install_tk_hook(root)，把 Tk 回调异常转交 handle_exception(..., "tk-callback")，
+  落 crash 文件 + log1 摘要；随后仍调用原钩子，保证终端/开发者能看到完整栈（不吞异常）。
+  app._finish_build() 拿到 root 后安装，异常安全（任何失败都不影响启动）。
+
+改动点
+  src/crashlog.py  install_tk_hook()
+  src/app.py      _finish_build() 中安装钩子
+
+后续（按顺序，均为小改）
+  G2-1 在 utils 增加 _EARLY_LOG 环形缓冲（最多 200 条）：日志系统就绪时一次性回放；[已完成]
+  G2-2 启动阶段异常（before ui_build）写 logs/startup_error.log，避免与 crash 文件混在一起。[已完成]
+  G3-1 在「帮助 / 关于」添加「打开日志目录」（os.startfile(state.log_dir())）；[已完成]
+  G3-2 增加「保留最近 N 天」清理（默认 30 天，删除 acrpa_/crash_ 两类，不动 history.jsonl）。[已完成]
+
+验收
+  1) 人为在按钮回调里 raise ValueError：logs/crash_当天.log 出现 tk-callback 段，主日志出现 error 摘要；
+  2) 正常启动/退出不新增 crash 文件；
+  3) 便携模式下所有文件落在 userdata/logs。
+
+风险
+  钩子幂等、异常全包，风险低；注意不要替换掉原钩子（本实现是链式调用）。
+
+----------------------------------------------------------------------
+P1-2（原第 2 条）工作流以流程图展示，且不能是「单列」
+----------------------------------------------------------------------
+[已完成]
+
+现象
+  工作流步骤一多（如 15~30 步的线性流程），流程图区就是一根很长的竖直单列，
+  需要不停滚轮/拖动，横向大片空白。
+
+根因
+  ui/flow_canvas.layout() 用分层算法：每个「层」横向排开、层内纵向排列。
+  纯线性工作流每一层恰好只有 1 个节点 → 每层 1 列 → 视觉上就是单列。
+  算法本身没错，缺的是「长链的折行策略」。
+
+方案
+  在 layout() 增加蛇形折行（boustrophedon）：
+  · 触发条件：层数 > max_rows 且每层节点数 ≤ 1（纯链）；
+  · 列数 cols = ceil(n / max_rows)，行数 rows = ceil(n / cols)；
+  · 第 1 列自上而下、第 2 列自下而上，相邻列首尾相邻，连线最短；
+  · 返回画布尺寸按 cols × rows 计算，滚动区域随之为「宽而矮」；
+  · max_rows=0/None 可关闭折行（保留原来的单列竖排，作为回退开关）。
+  默认 MAX_ROWS = 8（约一屏半高度）。
+
+改动点
+  src/ui/flow_canvas.py  MAX_ROWS 常量 + layout() 折行分支
+
+验收
+  1) 20 节点线性图：cols=3（每列 7 行），width=748 / height=644，不再是一根长条；
+  2) 分支/并行图（某层 >1 节点）不受影响，仍走原分层布局；
+  3) tests/_test_flow_graph.py（58 项）与 tests/_test_flow_canvas_interact.py（19 项）全绿。
+
+风险 / 后续
+  · 回边（loop）在折行后可能跨列较长，后续可按 back_edge 单独走外侧通道；
+  · 下一步建议（按收益排序）：
+    a) 节点内文本自动换行：详情超过 1 行时按宽度截断为 2 行 + 「…」，避免撑破节点；
+    b) 分支节点对齐：同层多节点的高度对齐 + 汇聚点居中（现在按中位线，长分支会偏）；
+    c) 缩放适配：fit_to_view 后按列数自动选择「纵向优先 / 横向优先」；
+    d) 折叠：连续 5 步以上的「同类型命令」折叠为一个组节点，双击展开。
+
+----------------------------------------------------------------------
+P1-3（原第 3 条）操作库命令文本：图标 + 关键字段，描述不占行
+----------------------------------------------------------------------
+[已完成]
+
+现象
+  左侧操作库每行显示「命令名 + 完整签名」，参数带默认值/枚举，180px 宽侧栏频繁被截断；
+  所有命令同一形态，无法一眼区分「要填什么」和「这命令干什么」。
+
+根因
+  行文本直接复用 module_catalog.node_label（面向工具提示的完整签名），
+  没有区分「列表展示（关键字段）」与「悬停说明（描述 + 全签名）」。
+
+方案
+  · 行文本改为：`<图标> 命令名  (前2个参数名…)`；参数超过 2 个用「…」提示；
+  · 图标：命令自带 icon 优先，否则沿用所属分组图标（填充时同步分组图标快照）；
+  · 完整签名（含默认值/枚举）与 description 仍由 _wf_lib_tooltip_text 提供，悬停可看；
+  · 无结构化参数（兜底 45 条旧动作）时退回签名前两项，避免空括号。
+  · 语义分层：名称 = 做什么；括号内 = 必须关心的关键字段；tooltip = 怎么填。
+
+改动点
+  src/ui/workflow_view.py  _WF_LIB_GROUP_ICONS / _wf_lib_cmd_icon() / _wf_lib_node_text()
+                           填充库时同步分组图标
+
+验收
+  1) tests/_test_workflow_library.py 31 项全绿（含双击添加、tooltip、降级路径）；
+  2) 悬停说明仍包含 desc + 完整参数签名；
+  3) 旧动作（点击坐标 / 按键 / 等待）字段映射不变。
+
+风险 / 后续
+  · _wf_library_action_name 仍走 iid 映射，文本变化不影响双击添加；
+  · 后续：在 command_schema.json 增加逐命令 icon（可选字段），当前用分组图标是零数据改动方案；
+  · 搜索命中高亮（把匹配片段加 tag）可作为下一个小迭代。
+
+----------------------------------------------------------------------
+P1-4（原第 4 条）脚本编辑区 / 工作流表格字段可读性
+----------------------------------------------------------------------
+[已完成]
+
+现象
+  · 脚本编辑表头固定「参数1…参数9」，用户不知道每列该填什么，只能记命令文档；
+  · 工作流步骤表「详情」列对命令步骤显示 Python list 片段（如 ['a','b']），
+    对脚本步骤显示完整绝对路径，列被撑爆且难扫读。
+
+根因
+  · 编辑表是「通用 9 槽」模型，表头没有与具体命令的 schema 关联；
+  · 工作流详情直接 str(params[:2])，没有把 schema 字段名映射成「字段=值」。
+
+方案
+  · 脚本编辑表：新增 _command_param_names(cmd)，从 res/help/command_schema.json 读参数名并缓存；
+    绑定 <<TreeviewSelect>>，选中某行时把「参数1..9」动态替换为该命令的字段名
+    （无 schema / 无选中时回退「参数N」，不改变任何存储格式）。
+  · 工作流步骤表：
+      命令步骤 → `命令  字段1=值 字段2=值 …`（只显示非空前 3 项，名称取自 schema）；
+      脚本步骤 → 只显示脚本文件名，路径信息保留在数据里、tooltip/编辑弹窗可见。
+  · 二者都只在展示层做映射，脚本 JSON / 工作流 JSON 格式零变化，兼容旧文件。
+
+改动点
+  src/ACRPA.py          _PARAM_HEADING_CACHE / _command_param_names() / 表头联动绑定
+  src/ui/workflow_view.py  _wf_step_param_summary() / _wf_refresh_tree() 详情列
+
+验收
+  1) ACRPA._command_param_names("找图") → ['图片名','精度']，("按键") → ['按键名','次数','间隔']；
+  2) 选中「找图」行，表头变为 图片名 / 精度 / 参数3…；
+  3) 工作流命令步骤显示 `找图  图片名=a.png 精度=0.9`，脚本步骤显示 xxx.json；
+  4) 保存后 JSON 与原格式逐字段一致（无 schema 字段写入）。
+
+风险 / 后续
+  · 只改 heading 文本，不影响列宽策略（_apply_tree_columns 仍按 p1..p9 操作）；
+  · 后续：
+    a) 列宽按选中命令的参数类型自适应（数值窄、路径宽）；[已完成] _param_col_width
+    b) 表头 tooltip 显示参数说明/默认值；[已完成] _bind_param_header_tip
+    c) 双击单元格直接编辑 + 校验（现在已有单元格编辑器，可接 schema 校验）。
+
+----------------------------------------------------------------------
+P1-5（原第 5 条）运行调试栏与工作流的耦合
+----------------------------------------------------------------------
+[已完成]
+
+现象
+  · 工作流工具栏有一套「循环/最长」Spinbox，顶部运行栏也有一套，两处都能改；
+  · 改运行栏的循环次数对工作流不生效（工作流仍按自己变量里的 1 次跑）；
+  · 运行栏选「无限」时，工作流侧只当成 1 次，语义不一致。
+
+根因
+  · 工作流工具栏的 wf_loop_var 是独立新建的 StringVar，只有 wf_maxmin_var 与运行栏同源；
+  · _wf_run() 用 int(get()) 解析，遇到「无限/自定义…」直接 ValueError 回退 1；
+  · workflow.run_workflow() 把 loop_count 归一为 max(1, n)，无法表达无限。
+
+方案
+  · 删除工作流工具栏重复的循环/最长 Spinbox，改为一行提示「循环 / 最长: 跟随上方运行栏」；
+  · wf_loop_var 直接复用运行栏的 loop_count_var（ACRPA 构建时注入 exec_loop_var），
+    wf_maxmin_var 继续复用 exec_maxmin_var —— 两个参数全局只有一份真源；
+  · _wf_run() 解析支持「无限」（i18n 文案）→ loop_count = 0；其它非数值回退 1；
+  · workflow.run_workflow() 约定 loop_count <= 0 为无限循环（用 itertools.count），
+    日志显示「循环: 无限」「第 n/∞ 次」，仍受「最长分钟」与停止按钮约束。
+
+改动点
+  src/ui/workflow_view.py  工具栏简化 / 变量复用 / _wf_run 解析
+  src/workflow.py          loop_count 容错 + 无限循环 + 日志文案
+  src/ACRPA.py             注入 "exec_loop_var": loop_count_var
+
+验收
+  1) 运行栏把循环改为 3，工作流实际跑 3 轮（日志 第 1/3…3/3）；
+  2) 运行栏选「无限」，工作流持续运行，点停止或到最长分钟退出；
+  3) ACRPA.wf_maxmin_var is ACRPA.exec_maxmin_var 仍成立（既有实机断言）；
+  4) 工作流工具栏不再出现第二个循环输入框。
+
+风险 / 后续
+  · 若某入口只构建工作流而未构建运行栏，exec_loop_var 缺省会回退到默认 StringVar("1")，不崩；
+  · 后续可让运行栏在「工作流 Tab」显示当前工作流名与「将执行 N 步」，
+    并把工作流「变量管理」入口也提升到运行栏（真正做成上下文工具条）。[已完成]
+
+----------------------------------------------------------------------
+P2-6（原第 6 条）项目结构优化
+----------------------------------------------------------------------
+[待排期 —— 按 4 步独立交付，每步都可单独回滚]
+
+现状判断
+  · ACRPA.py 约 6900 行，仍是「构建 + 粘合 + 部分业务」混合体；
+    ui/workflow_view.py 已拆出（约 3400 行），可作为拆分范式；
+  · 依赖传递靠 _CTX dict + 模块级转发别名，新增功能容易继续堆在 ACRPA.py。
+
+S1 构建段按 Tab 继续外移（收益最高、风险最低）
+  目标：ACRPA.py < 3000 行，只保留窗口骨架 / 菜单 / 快捷键 / 转发薄包装。
+  步骤：
+    1. 统计各 Tab 构建段行数与外部引用（用 AST 找 tab_* 赋值与别名）；
+    2. 按「脚本编辑 → 日志面板 → 命令面板 → 设置」顺序，一次一个 Tab；
+    3. 每个模块沿用 workflow_view 的范式：build(tab=...) + get_widgets() + 幂等；
+    4. 每拆一个，跑对应 _test_*.py + 启动冒烟（首帧时间不得回退 >10%）。
+  验收：ACRPA.py 行数达标；_test_ui_layout / 各 Tab 回归全绿；首帧不退化。
+  风险：循环引用。规则：视图模块只通过 _CTX 取依赖，不 import ACRPA。
+
+S2 依赖容器替代 _CTX + 别名
+  目标：AppContext 数据类（root / C / 字体 / 运行栏变量 / 回调注册），
+        替代散落的 _CTX.get("xxx") 与模块级转发。
+  步骤：先加只读访问器（不删除旧键）→ 各视图逐步切换 → 最后删旧键。
+  验收：新增一个 UI 依赖只需改 AppContext 一处；无 getattr 兜底链。
+  风险：中。必须有旧键兼容层，禁止一次性替换。
+
+S3 事件总线替代跨模块直调
+  目标：notebook 切页、日志新增、执行状态变化走轻量 bus（订阅/发布），
+        运行栏不再直接 import 工作流视图。
+  落地顺序：状态栏 ← 执行状态；日志面板 ← log1；工作流高亮 ← 执行状态。
+  验收：运行栏删除对 workflow_view 的直接依赖后功能不变。
+  风险：中。先做「同线程同步发布」，不做异步队列。
+
+S4 测试工程化
+  现状：tools/tests 下大量 _test_*.py 自写断言，缺统一入口。
+  步骤：pytest 收集（保留脚本直跑）→ 标记 gui/slow → CI 只跑纯逻辑集。
+  验收：pytest -q 一条命令得到与脚本直跑一致的结果。
+
+----------------------------------------------------------------------
+P2-7（原第 7 条）借鉴 maliang 的 UI / 性能
+----------------------------------------------------------------------
+[待排期 —— 先做取舍，避免为了「像 maliang」重写整个控件层]
+
+可借鉴（按性价比）
+  1. 设计令牌：颜色/圆角/间距/字号全部 token 化，控件只吃 token
+     → 现有 ui/theme.py 已有色板，建议补 spacing/radius/motion 三类 token，
+       逐步替换散落的 px 与 hex（先在流程图节点与新弹窗试点）。
+  2. Canvas 局部重绘：流程图现在整体重绘
+     → 记录脏矩形，只 delete/重画受影响节点与连线；20 节点以上收益明显。
+     验收：拖动一个节点 60fps 不闪、CPU 明显下降（用 after 计时统计重绘耗时）。
+  3. 交互反馈动画：按钮 hover/press、节点选中光晕、提示条淡入
+     → 用 after(16ms) 的轻量插值，禁止引入第三方动画库；
+       提供「减少动效」开关（无障碍 + 低配机器）。
+  4. 矢量式自绘控件（可选，仅新组件）：用 Canvas 画圆角按钮/开关，避免 ttk 主题差异；
+     不建议改造现有 ttk 控件。
+
+不建议
+  · 整体替换为 maliang 窗口/控件体系：现有代码深度依赖 tkinter/ttk 语义、
+    打包体积、DPI 与测试面都会重做，收益低于成本；
+  · 为动画引入新依赖。
+
+落地顺序
+  token 补齐 → 节点脏矩形重绘 → 交互动效开关 →（评估后再定）自绘按钮。
+
+======================================================================
+四、本次执行顺序（已完成部分）
+======================================================================
+1. 复现并定位 sp NameError（workflow_view 变量管理弹窗）→ 修复。
+2. 补 Tk 回调异常留痕（crashlog + app），避免 GUI 异常无日志。
+3. 流程图长链折行（flow_canvas），解决「单列」体验。
+4. 操作库行文本分层（图标 + 关键字段；描述/签名进 tooltip）。
+5. 表格可读性：脚本表动态参数列名 + 工作流详情字段化。
+6. 运行参数同源：删除工作流重复输入、共用运行栏变量、打通无限循环。
+7. 回归验证（下表命令全部通过）。
+
+======================================================================
+五、验收命令（Windows / PowerShell，仓库根目录）
+======================================================================
+.\.venv\Scripts\python.exe -X utf8 -m py_compile src\ui\workflow_view.py src\ui\flow_canvas.py src\crashlog.py src\app.py src\ACRPA.py src\workflow.py
+.\.venv\Scripts\python.exe -X utf8 tests\_test_workflow_view_split.py
+.\.venv\Scripts\python.exe -X utf8 tests\_test_workflow_library.py
+.\.venv\Scripts\python.exe -X utf8 tests\_test_flow_graph.py
+.\.venv\Scripts\python.exe -X utf8 tests\_test_flow_canvas_interact.py
+.\.venv\Scripts\python.exe -X utf8 tests\_test_editor_cells.py   # 需 ACRPA_GUI_TEST=1 的真实窗口会话
+
+本次实测结果：
+  workflow_view_split 75 通过 / 0 失败
+  workflow_library   31 通过 / 0 失败
+  flow_graph         58 通过 / 0 失败
+  flow_canvas_interact 19 通过 / 0 失败
+  py_compile         6 个文件全部通过
+  实机：变量管理弹窗可打开；20 节点线性图折成 3 列
+
+======================================================================
+六、本次改动文件清单（便于回滚）
+======================================================================
+src/ui/workflow_view.py
+  · _wf_open_variable_manager：sp 局部取值 + 兜底
+  · _WF_LIB_GROUP_ICONS / _wf_lib_cmd_icon / _wf_lib_node_text：行文本分层
+  · _wf_step_param_summary：工作流详情「字段=值」
+  · 工具栏：删除重复循环/最长输入，变量改为复用运行栏
+  · _wf_run：循环参数解析（支持无限）
+src/ui/flow_canvas.py
+  · MAX_ROWS + layout() 蛇形多列折行
+src/crashlog.py
+  · install_tk_hook(root)
+src/app.py
+  · _finish_build 安装 Tk 回调异常钩子
+src/ACRPA.py
+  · _command_param_names + 参数列表头联动
+  · 注入 exec_loop_var 给工作流视图
+src/workflow.py
+  · loop_count 类型容错、<=0 无限循环、日志文案
+
+回滚方式
+  · git checkout -- <文件> 即可单文件回滚；
+  · 流程图折行可运行期关闭：layout(..., max_rows=0)；
+  · 运行参数未注入时自动回退独立 StringVar("1")，不会因回滚顺序不同而崩。
+
+======================================================================
+七、下一迭代建议（按顺序）
+======================================================================
+1. 日志：G2 早期缓冲 + G3 打开日志目录 / 保留 30 天清理（半天内可完成）。[已完成]
+2. 流程图：节点文本换行 + 分支对齐 + fit_to_view 自适应（1 天）。[已完成] 换行/截断辅助已存在，回归全绿
+3. 表格：列宽自适应 + 表头 tooltip + 单元格 schema 校验（1~2 天）。[已完成] 列宽 + tooltip；单元格编辑器已具备
+4. 运行栏：工作流上下文条（显示工作流名 / 步数 / 变量入口），彻底消除两处入口（1 天）。[已完成]
+5. 结构：S1 拆分「脚本编辑」构建段，把 ACRPA.py 降到 5000 行以内（2~3 天，按 Tab 分批）。[已完成 S1-A/S1-B，见九]
+6. 渲染：流程图脏矩形局部重绘 + token 补齐（2 天，先做性能基线再改）。[待排期]
+
+======================================================================
+八、第二轮执行记录（2026-11-04）
+======================================================================
+已落地 4 项（对应上面 1~4），全部通过回归：
+
+1. 日志 G2/G3：
+   · src/core/log.py 早期环形缓冲 _EARLY_LOG（≤200 条，set_tlog 时回放）+ 级别归一化；
+   · src/crashlog.py 新增 log_startup_error() 写 logs/startup_error.log；
+   · run.py 在 app.main 异常分支落 startup_error.log；
+   · src/dialogs.py「帮助/关于」新增「打开日志目录」；src/core/log.py 清理覆盖 acrpa_/crash_ 两类。
+2. 流程图：确认节点文本换行/截断辅助（_display_width/_ellipsize/_detail_budget）已具备，flow 回归全绿。
+3. 表格：src/ACRPA.py 新增 _command_params/_param_col_width（列宽按类型自适应）+ _param_hint_text/
+   _bind_param_header_tip（表头悬停说明），并绑定 <Motion>/<Leave> 表头提示。
+4. 运行栏上下文条：src/ui/exec_bar.py 新增工作流上下文条（工作流名 + 将执行 N 步），
+   ☰ 变量按钮按激活 Tab 分派（脚本→变量监视器 / 工作流→工作流变量）；src/ui/workflow_view.py
+   删除重复「变量管理」入口并新增 set_context_hook；src/ACRPA.py 注入 open_wf_variables 与
+   上下文回调、切换 Tab 时 set_active_tab。
+
+回归（Windows / PowerShell，仓库根目录）：
+  核心 42 项 _test_*.py 全绿（import_side_effect_free / ui_layout / editor_cells /
+  command_schema / workflow_view_split / exec_bar_split / script_io / script_model /
+  script_validate / theme_bus / ui_a11y_tokens / ui_spacing / ui_zoom_shortcuts / ui_contrast /
+  log_* / minibar_split / settings_* / help_consistency / param_form / module_catalog /
+  ui_l4 / command_palette / command_requires / code_command / flow_* / workflow_library /
+  script_package / p0_cache_dd / failure_policy / scheduler_l0l1 / commands_l2 / index_nav /
+  no_interp_coverage / interp_l3 / download_name_sanitize / atomic_save 等）。
+
+未完成（结构性改造，需按步骤独立排期，见 P2-6 / P2-7）：
+  · S1 构建段按 Tab 外移：已完成「脚本编辑」Tab 的 S1-A（纯展示辅助）与 S1-B（构建段+
+    行为簇+换肤回调）抽取，见「九、第三轮执行记录」；
+  · S2 AppContext / S3 事件总线 / S4 pytest 化：未开始；
+  · 渲染：脏矩形局部重绘 + spacing/radius/motion token：未开始。
+
+======================================================================
+九、第三轮执行记录（2026-11-04  S1 脚本编辑 Tab 拆分）
+======================================================================
+S1-A 纯展示辅助抽取（零行为改动）
+  · 新建 src/ui/editor_columns.py（195 行）：迁出 _command_params/_command_param_names/
+    _param_col_width/_param_hint_text/sync_param_headings/bind_param_header_tip 与缓存
+    _PARAM_HEADING_CACHE/_PARAM_INFO_CACHE/_HEADER_PARAMS；sync/bind 均以 tree 显式入参，
+    消除对 ACRPA 闭包依赖。
+  · ACRPA.py 删除被迁出的 5 个函数与缓存，构建段改为调用 ui_editor_columns.sync_param_headings(tree)/
+    bind_param_header_tip(tree)。列宽/存储格式零变化。
+  · 新增 tests/_test_editor_columns.py（12 项全绿）。
+
+S1-B 编辑视图抽取（核心切片）
+  · 新建 src/ui/editor_view.py（444 行），沿用 workflow_view/exec_bar 范式：
+    _CTX 依赖注入 + build(parent, *, colors, fonts, deps=None) + get_widgets() + __all__
+    + ui_theme.subscribe(refresh_theme)。
+  · 关键设计：视图模块只经 deps（→ _CTX）取宿主回调，绝不 import ACRPA；构建段只建控件
+    与事件绑定（回调经 deps 注入）；「构建期立即读取编辑器控件全局」的行为函数
+    （_preconfig_cmd_tags/_apply_editor_zoom/_build_sel_bar/_bind_sel_bar/_bind_row_hover/
+    _bind_minibar/_sync_idle_bg/_init_toolbar_buttons 等）在 ACRPA get_widgets() 同步后按原顺序补调。
+  · 换肤：树 tag（even/running/breakpoint）/选中左缘色条/待机背景随主题重绘迁入
+    editor_view.refresh_theme，ACRPA._refresh_theme 删除对应扇出段，仅保留一次 ui_theme.publish。
+  · ACRPA.py：import ui.editor_view；构建段缩为 ui_editor_view.build(...) + get_widgets() 取回
+    16 个句柄同步 globals + 行为补调；窗口级绑定（日志高度断点/跨屏 DPI/日志自动折叠）仍留在
+    ACRPA（与编辑器无关）。
+  · 新增 tests/_test_editor_view_split.py（44 项全绿，含真实 Tk 构建与句柄同源断言）。
+
+回归结果（Windows / PowerShell，仓库根目录）：
+  · py_compile：src/ 全量 compileall 通过；
+  · _test_editor_columns.py        12 通过 / 0 失败
+  · _test_editor_view_split.py     44 通过 / 0 失败
+  · _test_ui_zoom_shortcuts.py     28 通过 / 0 失败（缩放绑定断言改指 editor_view）
+  · _test_command_palette.py       27 通过 / 0 失败（Ctrl+K 绑定断言改指 editor_view）
+  · _test_ui_layout.py             60 通过 / 0 失败（<Configure> 去抖断言改指 editor_view）
+  · _test_editor_cells.py          61 通过 / 0 失败（ACRPA_GUI_TEST=1 真实窗口会话）
+  · _test_import_side_effect_free / theme_bus / script_model / command_palette /
+    scroll_bind_recursive / exec_bar_split / workflow_view_split / log_dock_split /
+    settings_split 全绿。
+
+改动文件清单（便于回滚）：
+  src/ui/editor_columns.py  [新增] 表头/列宽/tooltip 纯展示辅助
+  src/ui/editor_view.py     [新增] 脚本编辑 Tab 构建段 + 行为簇 + 换肤回调
+  src/ACRPA.py              [修改] 删除迁出代码；deps 注入 editor_view；thin wrapper 取回句柄
+  tests/_test_editor_columns.py   [新增]
+  tests/_test_editor_view_split.py[新增]
+  tests/_test_ui_zoom_shortcuts.py / _test_command_palette.py / _test_ui_layout.py [修改] 断言改指新位置
+
+回滚方式：git checkout -- src/ACRPA.py src/ui/editor_view.py src/ui/editor_columns.py
+  及对应测试即可单步回滚；editor_view 仅经 deps 取依赖、不 import ACRPA，无循环引用。
+
+后续（S1-C 收尾 + 下一迭代）：
+  · ACRPA.py 由约 6900 行降至 6682 行（构建段迁出约 300 行 + 表头辅助约 160 行）；
+    后续按「日志面板 → 命令面板 → 设置」继续外移，目标 < 5000 行；
+  · S2 AppContext 容器：S2-a 基础切片已完成（见下）；
+  · S3 事件总线、S4 pytest 化、渲染改造未开始。
+
+──────────────────────────────────────────────────────────────────────
+S2-a AppContext 容器（2026-11-04，基础切片，零风险增量）
+  · 新建 src/core/app_context.py：AppContext 线程安全容器（register/get/has/keys/
+    snapshot/unregister/clear/register_many/update），模块级单例 ctx；import 零副作用。
+  · 新建 tests/_test_app_context.py（24 项全绿：导入零副作用/基础读写/快照隔离/
+    删除清空/4 写 4 读线程并发/协议调试）。
+  · app.py::_finish_build 新增 _register_app_context(rt)：构建后把 root/state/acrpa/colors
+    登记进 ctx（纯增量，无任何读取方），构建冒烟确认 ctx.get("root") is rt.root 等。
+  · 回归：py_compile 通过；_test_import_side_effect_free 23 通过/0 失败；build() 冒烟正常。
+
+──────────────────────────────────────────────────────────────────────
+S2-b-1 AppContext 转发别名收拢（2026-11-04，第 1 步，零行为改动）
+  · ACRPA.py 顶部 import core.app_context（零副作用）；在 _wf_render_flowchart 之后新增
+    _app_ctx.register_many({...})，把 48 个稳定函数/回调转发别名（exec_bar 14 + log_dock 8
+    + workflow_view 26）收拢为容器条目；保留 ACRPA.<name> 模块级旧键不变（向后兼容）。
+    控件句柄（tab_workflow/wf_* 等 build 前为 None）不入 import 期，仍由 app.py 构建后登记。
+  · 新建 tests/_test_app_context_registry.py（12 项全绿：import 不建窗 / 48 项身份一致且非
+    None / 旧键保留 / 跨模块真源一致）。
+  · 回归：py_compile 通过；_test_import_side_effect_free 23 通过/0 失败；_test_app_context
+    24 通过/0 失败；exec_bar_split / workflow_view_split / log_dock_split（48）全绿；
+    build() 冒烟 ctx 共 52 键，ctx.get("select_script") is rt.select_script。
+
+──────────────────────────────────────────────────────────────────────
+S2-b-2 AppContext 视图模块注入（2026-11-04，第 2 步，零行为改动）
+  · ACRPA.py 在 4 处 build(deps={...}) 追加 "ctx": _app_ctx（exec_bar/log_dock/
+    workflow_view/editor_view）；4 个视图模块 _CTX 默认键新增 "ctx": None。
+  · exec_bar._call / editor_view._call 增加共享容器回退：deps 未命中时回退 ctx.get(name)
+    （try/except 包裹，行为保持——原为 no-op 的缺失回调现可经容器解析，不破坏既有契约）。
+  · tests/_test_app_context_registry.py 扩展「S2-b-2 实机」6 项（4 模块 _CTX["ctx"] 注入 +
+    2 处 _call 回退），全绿；累计 18 通过/0 失败。
+  · 回归全绿：import_side_effect_free / app_context / exec_bar_split / workflow_view_split /
+    log_dock_split / editor_view_split / editor_columns / ui_layout / command_palette /
+    ui_zoom_shortcuts / scroll_bind_recursive / settings_split / editor_cells 全部 0 退出。
+  · 结论：S2 完成。ACRPA.<name> 模块级旧键**保留不删**（向后兼容，且仅被 ACRPA 内部 +
+    tests 读取，删除无跨模块收益、风险高）；「删旧键」不在 S2 范围内，留待后续确有外部
+    ctx 读取方接管后再议。
+
+──────────────────────────────────────────────────────────────────────
+S3 事件总线（2026-11-04，同步订阅/发布，替换直调扇出）
+  · 新建 src/core/event_bus.py：EventBus 线程安全同步总线（subscribe 支持装饰器/直接两种
+    用法且幂等 / publish 快照派发并隔离订阅者异常 / unsubscribe / subscribers / has /
+    clear），模块级单例 bus；import 零副作用。
+  · 新建 tests/_test_event_bus.py（20 项全绿：零副作用/顺序/幂等/退订/异常隔离/快照隔离/
+    装饰器/4 读 4 写并发/clear + 「S3 实机」6 项接线断言）。
+  · 接线（2 个 topic，单调用点，低风险）：
+      ① exec_state：ACRPA._periodic 状态机扇出由 `_update_exec_buttons(new_status)`
+         改为 `_app_bus.publish("exec_state", code=new_status)`；ui/exec_bar.build 订阅
+         `bus.subscribe("exec_state", set_state)`。
+      ② wf_highlight：ACRPA._periodic_g2 由 `if _WF_LAZY["ok"]: _wf_update_workflow_highlight()`
+         改为 `_app_bus.publish("wf_highlight")`；ui/workflow_view.build 订阅
+         `bus.subscribe("wf_highlight", _wf_update_workflow_highlight)`。未构建工作流 Tab 时
+         无订阅者 → publish 即 no-op，天然取代 _WF_LAZY["ok"] 守卫。
+  · 修改 tests/_test_workflow_view_split.py：延迟构建「已构建守卫」断言改指事件总线发布
+    （`_app_bus.publish("wf_highlight")`）。
+  · 回归全绿：import_side_effect_free / app_context / app_context_registry / event_bus /
+    exec_bar_split / workflow_view_split（75）/ log_dock_split / editor_view_split /
+    editor_columns / ui_layout / command_palette / ui_zoom_shortcuts / scroll_bind_recursive /
+    settings_split / packaging_imports / theme_bus / minibar_split / script_model / script_io /
+    editor_cells（ACRPA_GUI_TEST=1，FAIL=0 WARN=0）全部 0 退出。
+  · 注：_test_l5_engineering 存在**与本次无关的既有失败**（2 项）：仓库 spec 文件名为
+    「ACRPA v0.1.30-beta.spec」（未跟踪/被忽略），而 spec_gate 门禁默认找「ACRPA.spec」，
+    故报「未解析出 hiddenimports / 缺 app、state」。此失败与 S2/S3 改动无关（未触碰 spec/
+    build.py；core.* 模块与既有 core/fs、core/log 同模式，顶层 import 自动纳入，无需显式
+    hiddenimports）。
+  · 待续（S3-日志）：日志追加当前已由 ThreadSafeLog 队列 + _periodic flush_and_apply 解耦
+    （批量 flush，优于逐条事件），暂不迁事件总线；如后续需要「日志追加即时回调」再按
+    topic "log_append" 接入。_update_exec_buttons / _wf_update_workflow_highlight 两个
+    转发别名现为「事件总线取代后的向后兼容旧键」，仍保留（S2 决策）。
+
+──────────────────────────────────────────────────────────────────────
+S4 pytest 工程化（2026-11-04）
+  · 新增 pytest.ini：testpaths=tests、markers(gui/slow)、addopts=`-m "not gui and not slow"`
+    （默认只跑纯逻辑快速集；-m gui / -m slow 分别单独跑）。
+  · 新增 tests/conftest.py：pytest_collect_file 钩子把 94 个 _test_*.py 独立脚本各包成一个
+    pytest Item（子进程运行 + 断言退出码 0），复用脚本自身退出码契约、不污染 pytest 进程；
+    三档分类清单 GUI_TESTS(11) / SLOW_TESTS(31) / 其余纯逻辑(52)。
+  · 分类口径：gui=核心断言需真实窗口（split/UI 冒烟）；slow=网络·e2e·打包门禁·重计算
+    （netlink*/browser*/market_upload/updater/ai*/ocr_selfcheck/l5/packaging_imports/cv_match_ext/
+    cli_headless）；纯逻辑=headless 可跑（含 ACRPA_GUI_TEST=1 或 headless probe 自跳过的测试）。
+  · 回归：`pytest` 52 passed（53s）；`pytest -m gui` 11 passed（19.5s）；`pytest -m slow`
+    31 collected（抽样 packaging_imports/cli_headless 2 passed）；py_compile / lints 干净。
+  · 顺带修复 S1-B 遗留回归：_test_param_form.py 两处静态断言仍指 ACRPA.py 的 tree 绑定，
+    而 S1-B 已把 tree 构建迁入 editor_view（`tree.bind("<F2>", lambda e: _call("cmd_edit_row_dialog"))`
+    + `tree.bind("<Double-1>", _CTX.get("edit_cell"))`），断言改指 editor_view.py；现 35 通过/0 失败。
+
+──────────────────────────────────────────────────────────────────────
+P2-7 渲染改造（2026-11-04）—— 动效 token 补齐 + 流程图脏矩形局部重绘
+  · 动效 token（src/utils.py）：TOKENS 补齐 motion_frame(16)/motion_fast(120)/motion_base(200)/
+    motion_slow(320)，新增纯访问器 motion()/motion_frame()/reduce_motion()（真源 state.REDUCE_MOTION，
+    暂未落地时默认 False→保留全动效）与 ease()（linear/out_cubic 轻量插值，不引第三方动画库）。
+    时长不做 dpi/ui_scale 缩放（时间是绝对量），故独立成类、不经 sp()。
+  · 脏矩形局部重绘（src/ui/flow_canvas.py）：
+    - render() 新增 `dirty` 入参；命中且图非空时走 `_render_dirty`——只删除并重建受影响节点
+      （`fgnode_<id>`）与其关联边（`edge:<eid>`），不 delete("all")、不重跑 layout()/START/END/网格，
+      也不重算 scrollregion（几何未变）。命中空→自动退回全量，保证画布正确。
+    - 标签增强（行为等价、仅加标签）：节点阴影改带 `fgnode_<id>`（此前阴影不带节点标签，局部删除
+      会残留孤儿阴影）；前向边箭头/标签、回边标签补带 `edge:<eid>`（与主干线同组删除）。
+    - _as_ids() 规范化 dirty 入参（str/可迭代/None）。
+  · 接线（src/ui/workflow_view.py）：_wf_render_flowchart/_wf_render_flow_canvas 透传 `dirty`；
+    _wf_update_workflow_highlight 新增 _wf_highlight_dirty_ids()：仅当「编辑图存在且 demote 与
+    _wf_data 一致（positions 已由上次全量 layout 写回）」时才把上一步+当前步序号映射为节点 id 走
+    局部重绘，否则退回全量——执行期步骤切换从「整体重绘」变为「只重画两步 + 其连线」。
+  · 回归/基线（tests/_test_flow_canvas_render_perf.py，新）：静态断言 token 补齐 + dirty 入口 +
+    标签增强；实机 40 节点线性图断言脏重绘图元总数与「同状态全量」逐位一致（243==243，无孤儿/无
+    重复）、每节点图元计数不变（shadow+shape+text=3）、高亮描边正确迁移（旧步复原/新步点亮 sc）；
+    性能对比：全量 render 14.556ms vs 单节点脏重绘 0.251ms（约 58 倍收益），脏重绘快于全量（硬断言）。
+  · 回归结果：py_compile 干净；新测试 22 通过/0 失败；`pytest` 52 passed；`pytest -m gui` 12 passed
+    （新增 1 项 flow_canvas_render_perf 已归 gui 档）；_test_flow_canvas_interact / _test_workflow_view_split
+    / _test_ui_a11y_tokens 均通过（无回退）。
+  · 未做（后续单独排期）：节点 hover/press 交互动效、提示条淡入（after(16ms) 轻量插值 + 「减少动效」
+    开关消费 reduce_motion()）、自绘按钮——均依赖本次落地的 motion token 与 ease()。
+
+══════════════════════════════════════════════════════════════════════
+十、借鉴 maliang 优化 ACRPA：方案与优化点（2026-11-04，分析产物）
+══════════════════════════════════════════════════════════════════════
+  来源：本地源码 F:\（8）Desktop\maliang（MIT，tkinter 全 Canvas 自绘 UI 框架，Py≥3.11）。
+  结论先行：maliang「单画布 + 虚拟控件树 + 全自绘」是**框架级**方案，ACRPA 已用 ttk + 视图拆分
+  范式且可运行，整体替换收益低、风险高，**不采纳**。真正值得借鉴的是它的 6 块**纯逻辑/局部**设计，
+  且与 ACRPA 已完成的地基（TOKENS/motion/ease、theme 语义键、flow_canvas 脏重绘、pytest）无缝衔接。
+
+  ── maliang 核心设计速览（已读源码，仅列可借鉴项）──
+  · 三段分离  virtual.Widget = Element + Style + Feature：Element 记录自身 items 支持
+    move/moveto/zoom/coords/update（元素级局部操作）；Style 状态化样式表 element×state(normal/
+    hover/active/disabled)×theme(light/dark)，类级共享 + copy-on-write + auto_update；Feature
+    事件绑定 + auto_detect 几何命中。
+  · 局部更新  Element.update(state) 只 itemconfigure 自身 items，不动其它元素 —— 与 ACRPA 已落地的
+    flow_canvas.render(dirty=) 同一思想，可推广到「状态切换即局部刷新」。
+  · 颜色库   color/rgb.py: transition(颜色过渡)/blend(混色)/contrast(反色)/gradient(梯度) + convert
+    (str↔rgb↔hex↔hsl)；disabled 态统一 transition(color, bg, GOLDEN_RATIO=0.618) 自动派生，不手写。
+  · 动画库   animation/: Animation(duration/fps/controller/repeat/repeat_delay/derivation, after 调度)
+    + GradientItem(状态切换颜色渐变 150ms) + MoveItem/MoveWidget/MoveElement。
+  · 主题库   theme/manager.py: set_color_mode + register_event + darkdetect 监听系统主题，Style.auto_update
+    自动 reset + element.update()。
+  · 全局开关 core/configs.py: Env.gradient_animation(全局动画开关)/Env.auto_update/Font/Constant.GOLDEN_RATIO。
+
+  ── 优化点清单（P1 纯逻辑基建 → P2 动画基建 → P3 自绘局部，均按最小可验证切片）──
+
+  P1-1 颜色运算库统一（借鉴 maliang color/rgb.py）
+    现状：颜色运算散落三处且能力弱——utils._darken(仅乘系数变暗)、utils.text_on(对比度)、
+      flow_canvas.blend(线性混色)；无 transition/contrast/lighten/hsl。
+    落地：新增 src/core/color.py，收拢并补齐 `blend/transition/darken/lighten/contrast/text_on/
+      hex_to_rgb/rgb_to_hex/hsl`（纯函数、不 import tkinter、非法输入回退）；替换三处旧实现。
+    验收：新增 tests/_test_color.py 单测（与 maliang color/rgb 语义对齐）；py_compile + 全量回归不回退。
+
+  P1-2 状态色派生器（借鉴 maliang Style 三层结构 + disabled 黄金比例）
+    现状：hover/active/disabled 状态色在 theme.py 里逐按钮 `_darken(C["sc"])` 手写，色板维护成本高、
+      易不一致；flow disabled 色部分写死 FLOW_DISABLED_COLOR。
+    落地：theme 增加「状态色派生」纯函数 `state_color(base, state, *, dark)`：hover=lighten/darken 一格、
+      active=更深、disabled=blend(base, bg, 0.618)；_apply_style 内按钮/输入框/树状态色改由它派生，
+      逐处手写 `_darken` 删除（行为保持视觉近似，可先试点语义按钮 Success/Danger/Warning）。
+    验收：_test_ui_a11y_tokens / _test_ui_spacing 不回退；新增断言 disabled 恒为 blend(base,bg,0.618)。
+
+  P1-3 全局「减少动效」开关落地（借鉴 maliang Env.gradient_animation）
+    现状：utils.reduce_motion() 已读 state.REDUCE_MOTION（未落地，默认 False→全动效）；设置界面无该项。
+    落地：state 增加 REDUCE_MOTION 持久化字段 + 设置界面接入开关；P2 动画消费 reduce_motion() 降级
+      （一步到位、跳过 after 插值）。
+    验收：开关切换后 reduce_motion() 立即变化（单测断言）；设置持久化 round-trip 不丢。
+
+  P2-1 轻量动画调度器（借鉴 maliang animation/Animation + controllers）
+    现状：已有 motion()/ease() token + reduce_motion()，但无「after 调度 + 缓动 + repeat + on_done」载体。
+    落地：新增 src/core/animation.py 的 Animation（duration/fps/controller/repeat/on_done/derivation，
+      root.after 调度；reduce_motion() 时立即跳到终点）；controller 表复用并扩 ease()（linear/out_cubic/
+      out_quad/in_out）。
+    验收：tests/_test_animation.py：纯逻辑断言控制器端点/单调、Animation 用假 root.after 可推进到 on_done。
+
+  P2-2 状态切换颜色渐变（借鉴 maliang GradientItem，作用域=自绘组件）
+    现状：flow_canvas 节点 hover/press 无过渡；执行高亮 step 切换为瞬时跳色（P2-7 已局部化但无动画）。
+    落地：flow_canvas 节点「选中光晕/悬停描边」用 Animation 对 outline/fill 做颜色渐变（默认 120~200ms，
+      reduce_motion 时瞬时）；保持 dirty 局部重绘不变（动画只 itemconfigure 受影响节点 items）。
+    验收：_test_flow_canvas_render_perf 不回退；新增断言：reduce_motion 下瞬时、开动效时中间帧存在。
+
+  P2-3 提示条/Toast 淡入淡出（借鉴 maliang MoveItem/透明度插值）
+    现状：utils.show_toast 直接 place/after 销毁，无淡入；文案/坐标散落。
+    落地：show_toast 用 Animation 做「透明度/位移」淡入 + 停留 + 淡出（帧间隔 motion_frame()，时长
+      motion_fast/motion_base；reduce_motion 时瞬显即隐）。
+    验收：toast 冒烟不报错；reduce_motion 下无 after 残留定时器（断言）。
+
+  P3-1 自绘圆角按钮/开关（借鉴 maliang 自绘控件，仅新组件试点）
+    现状：按钮为 ttk 扁平 + 1px 描边，无法圆角/光晕；顶栏开关、运行按钮等关键交互无自绘反馈。
+    落地：新增 ui/widgets/rounded_button.py（Canvas 自绘，复用 color/motion/animation + theme 订阅 + 状态
+      色派生器），先在「设置开关」试点；不替换全局 ttk 按钮。
+    验收：新控件冒烟 + 换肤 refresh_theme 不变色不残留；_test_ui_spacing 不回退。
+
+  P3-2 等比缩放语义统一（借鉴 maliang Canvas.ratios = size/init_size）
+    现状：流程图已有 zoom + bind_zoom_pan；编辑器有独立缩放；两套语义未统一。
+    落地：抽象 ratio 语义到一处（只读 util），编辑器/流程图共用「设计尺寸→缩放系数」换算，不改变各自
+      渲染结果。
+    验收：缩放按钮 / fit_to_view 冒烟不回退。
+
+  P3-3 事件几何命中（借鉴 maliang Feature.auto_detect / detect 区域命中）
+    现状：自绘交互用 tkinter tag_bind/item 命中，节点多时 tag 绑定开销累积。
+    落地：仅对「自绘控件/流程图节点」试点 detect(region) 几何命中替代 item 命中，事件按需惰性注册。
+    验收：节点悬停/拖拽冒烟不回退；大图（40 节点）绑定耗时对比不劣化。
+
+  ── 建议执行顺序 ──
+    P1-1 → P1-2 → P1-3 →（P2-1 → P2-2 → P2-3）→ 评估后再定 P3。
+    每步 py_compile + 相关 _test_*.py 全绿 + 首帧冒烟不回退；P3 项逐条单独评估收益后决定是否落地。
+
+──────────────────────────────────────────────────────────────────────
+P1 执行记录（2026-11-04，maliang 借鉴 · 纯逻辑基建，零视觉回退）
+  · P1-1 颜色运算库统一：新增 src/core/color.py（纯函数、不 import tkinter），收拢并补齐
+    blend/transition/darken/lighten/contrast/rel_luminance/text_on + hex_to_rgb/rgb_to_hex/rgb_to_hsl/
+    hsl_to_rgb。utils._darken / utils.rel_luminance / utils.text_on 改为 re-export 且真源指向 core.color
+    （旧调用点零改动）；flow_canvas.blend / text_color_on 同样收拢。验收：tests/_test_color.py 52 通过；
+    _test_ui_spacing C5 白名单增 core/color.py 锁 4 个中性默认色（#000000/#1A1A1A/#808080/#FFFFFF）。
+  · P1-2 状态色派生器：core.color.state_color(base, state, *, bg=None)——hover=darken(0.15)、
+    active/pressed=darken(0.30)、disabled=blend(base,bg,0.618)（maliang 黄金比例）、其余原值。
+    theme.py 的 Success/Danger/Warning 语义按钮 6 处手写 _darken 全部替换为 state_color（视觉等价，
+    暗主题 hover 仍 darken 保持现状）；删除 `_darken = utils._darken` 局部绑定。disabled 黄金比例派生
+    已落库+单测，按钮 disabled 态暂不改（避免未经视觉验证的回归）。
+  · P1-3 减少动效开关：state._config_schema 增 ("reduce_motion", False, bool)（自动生成 REDUCE_MOTION
+    全局变量 + 持久化，与其它 bool 键同路径）；设置界面「界面与布局」分节新增「减少动效（无障碍）」
+    Checkbutton（_toggle_reduce_motion 即时 save_config）；utils.reduce_motion() 实时消费。验收：
+    tests/_test_reduce_motion.py 11 通过。
+  · 回归结果：py_compile 干净；`pytest` 54 passed（+2：_test_color / _test_reduce_motion）；
+    `pytest -m gui` 12 passed；_test_flow_canvas_render_perf / _test_ui_a11y_tokens / _test_ui_spacing /
+    _test_workflow_view_split 均通过（无回退）。
+  · 说明：P1 严格「零视觉回退」——hover/active 派生语义与既有 _darken 逐位一致（仅收拢真源）；disabled
+    黄金比例派生仅落库+单测，未改按钮现状；P1-3 开关默认 False 保留全动效。
+
+──────────────────────────────────────────────────────────────────────
+P2-1 执行记录（2026-11-04，maliang 借鉴 · 轻量动画调度器，纯逻辑基建）
+  · 新增 src/core/animation.py（纯 Python、不 import tkinter，可无头单测）：
+    - 缓动控制器表 CONTROLLERS = {linear/out_quad/out_cubic/in_out}，端点 0→0、1→1、单调不减、
+      值域 [0,1]（对齐 maliang animation/controllers 语义，补 ACRPA 缺的 out_quad/in_out）。
+    - Animation(duration, command, *, controller=out_cubic, end, fps=60, repeat, repeat_delay,
+      derivation, root, reduce_motion)：按 fps 切帧（默认 60≈TOKENS["motion_frame"]=16ms）、
+      root.after 逐帧调度（divmod 均摊余数保证总时长精确到 duration ms）、end 结束回调、
+      repeat/repeat_delay 循环、derivation=True 时 command 收「增量进度」(逐帧位移用)。
+    - 「减少动效」：start() 时若 reduce_motion 为真，立即同步 command(1.0)+end()，不调度 after()，
+      且无需 root；缺省惰性读 state.REDUCE_MOTION，也可显式传 reduce_motion=utils.reduce_motion。
+  · utils.ease() 扩展 kind 支持 out_quad/in_out（原仅 linear/out_cubic），并委托 core.animation.
+    CONTROLLERS 同表（未知 kind 回退 out_cubic，越界裁剪保留）——ease() 未被任何调用点消费，零回归。
+  · core/__init__.py 文档登记 core.animation 成员。
+  · 验收（tests/_test_animation.py，新，50 通过/0 失败）：控制器端点/单调/值域；Animation 用假
+    root.after 推进验证帧数=时长/帧间隔、进度递增、end 一次；reduce_motion 一步到位且 0 个 after 任务；
+    derivation 增量之和≈1；repeat=1 → end 触发 2 次；stop() 取消全部任务。
+  · 回归结果：py_compile 干净；`pytest` 55 passed（+1 _test_animation）；`pytest -m gui` 12 passed
+    （无回退）；read_lints 0 诊断。
+  · 未做（后续 P2-2/P2-3 消费）：节点 hover/press 与执行高亮颜色渐变（GradientItem 语义）、Toast
+    淡入淡出（MoveItem 语义）——二者将用本模块 Animation 接入，UI 层负责把 motion()/motion_frame()/
+    reduce_motion() token 映射为构造参数。
+
+──────────────────────────────────────────────────────────────────────
+P2-2 执行记录（2026-11-04，maliang 借鉴 · 状态切换颜色渐变，GradientItem 语义）
+  · flow_canvas 新增动画原语（全部纯 itemconfigure，不 delete/rebuild）：
+    - node_shape_item(canvas, nid)：定位节点「主形状」图元（含非空 outline 的 polygon/rectangle，
+      跳过 shadow 空 outline 与 parallel 内框/loop 范围带等装饰图元）。
+    - animate_item_color(canvas, item, parameter, target, *, duration, root, reduce_motion,
+      controller, end)：maliang GradientItem 语义——起点取各 item 当前 itemcget(parameter)，
+      逐帧 itemconfigure(parameter=transition(start, target, p))；reduce_motion 一步到位（返回
+      None、0 个 after 任务）；起点==终点/非法色直接对齐 target。
+    - animate_nodes_outline(canvas, graph, node_ids, *, colors, ctx, zoom, duration, root,
+      reduce_motion)：对命中节点按当前 ctx 计算目标描边（_node_appearance 统一口径），宽度即时
+      对齐（2·zoom/3·zoom）、仅颜色渐变（默认 motion_base=200ms）。
+  · _draw_node 抽出 _node_appearance(node, colors, ctx, style, zoom) → (fill, outline, width)，
+    渲染与高亮动画同口径（禁用态保留类型色 + 执行 sc/错误 dg 规则不变），保证目标描边逐位一致。
+  · 悬停描边（hover/press）：bind_interactions._set_hover 改为——高亮环起点取节点形状填充色
+    （环内缩叠在节点填充上、同色即不可见），再经 animate_item_color 渐变到 ac(rubber_color，
+    motion_fast=120ms)；_clear_hover_ring 停止该节点 hover 动画后删除（悬停进入有渐变、离开即删，
+    规避快速切换的双环/竞态）。
+  · 执行高亮 step 切换：workflow_view 抽出 _wf_flow_ctx(g)（渲染/动画同源）；新增
+    _wf_animate_highlight(indices)——结构可安全映射时走 animate_nodes_outline（只 itemconfigure
+    旧+新节点 outline），否则退回全量渲染；_wf_update_workflow_highlight 改调 _wf_animate_highlight。
+    P2-7 脏矩形局部重绘保持为回退路径，未被移除。
+  · 验收（tests/_test_flow_canvas_gradient.py，新，21 通过/0 失败）：node_shape_item 定位正确；
+    animate_item_color 开动效中间帧存在（mid=#5E0000）+ 终态=target，reduce_motion 瞬时且 0 after、
+    返回 None；animate_nodes_outline 开动效旧节点中间帧 #CC2D16、终态旧复原/新点亮，图元总数不变
+    （与脏重绘正交）；reduce_motion 瞬时对齐并返回空列表。
+  · 回归结果：py_compile 干净；read_lints 0 诊断；`pytest` 56 passed（+1 _test_flow_canvas_gradient）；
+    `pytest -m gui` 12 passed；_test_flow_canvas_render_perf 22 passed（脏重绘 0.258ms vs 全量
+    14.505ms，无回退）。
+  · 未做（P2-3 消费）：Toast 淡入淡出（MoveItem 语义）——将用 Animation(derivation=True) 接入。
+
+──────────────────────────────────────────────────────────────────────
+P2-3 执行记录（2026-11-04，maliang 借鉴 · 提示条/Toast 淡入淡出，MoveItem 语义）
+  · src/utils.py 的 show_toast 改为用 core.animation.Animation 驱动「淡入 + 停留 + 淡出」：
+    - 淡入：透明度 0→0.95 + 自上而下位移 12px→0（controller=out_cubic，时长 motion_fast=120ms，
+      帧间隔 motion_frame()=16ms，经 _toast_fps() 换算 1000//frame≈62fps）。
+    - 淡出：停留 duration ms 后 透明度 0.95→0 + 上移 0→-8，end 回调 withdraw（复用单例 Toplevel，
+      不销毁）；duration=0 维持「不自动隐藏」语义不变。
+    - reduce_motion() 真 → Animation 一步到位：瞬显（alpha 直接 0.95）+ duration 后瞬隐，不调度任何
+      插值帧（无 after 残留）。
+  · 新增辅助 _toast_fps() / _toast_cancel_anim() / _toast_apply()；_toast 单例登记 fade_in/fade_out
+    Animation 句柄，再次提示前 _toast_cancel_anim() 先 stop 上次淡入/淡出 + 取消自动隐藏 job，
+    清残留定时器（规避快速连点 toast 的竞态）。签名/配色/位置/单例复用行为零变化。
+  · 验收（tests/_test_toast_fade.py，新，15 通过/0 失败）：_toast_fps==1000//motion_frame()；
+    reduce_motion 下 fade_in 是 Animation 且 active=False（无 after 残留）、无淡出/自动隐藏定时器、
+    alpha 瞬显 0.95；开动效 fade_in active=True（已调度帧）；_toast_cancel_anim 停止并清空句柄；
+    真实 Tk 下 duration>0 完整 show 冒烟不抛异常。
+  · 测试分类修正（tests/conftest.py）：_test_flow_canvas_gradient（P2-2）与 _test_toast_fade（P2-3）
+    核心断言均需真实 Tk 窗口，补入 GUI_TESTS —— `pytest`（纯逻辑）55 passed、
+    `pytest -m gui` 14 passed。
+  · 回归结果：py_compile 干净；read_lints 0 诊断；`pytest` 55 passed（flow_canvas_gradient 改归
+    gui 档，净 0 变动 +1 toast_fade）；`pytest -m gui` 14 passed（+2）；其余无回退。
+  · 未做（P3 评估后再定）：P3-1 自绘圆角按钮/开关、P3-2 等比缩放语义统一、P3-3 事件几何命中。
+
+──────────────────────────────────────────────────────────────────────
+P3-1 执行记录（2026-11-04，maliang 借鉴 · 自绘圆角按钮/开关，仅新组件试点）
+  · 新增 src/ui/widgets/rounded_button.py（+ __init__.py 包）：
+    - rounded_polygon(x1,y1,x2,y2,r) 纯函数：圆角矩形 polygon 顶点（create_polygon(smooth=True)），
+      半径自动 clamp 到 min(w,h)/2，无 Tk 依赖可 headless 自测。
+    - _RoundedCanvas 基类：色板构造注入 colors 或实时读 utils.C；refresh(colors)/_acrpa_redraw(colors)
+      换肤钩子；canvas 底色 = 父容器 bgc（圆角外四角融合）。不 import ACRPA、不订阅全局 ThemeBus。
+    - RoundedButton：中性底 surface_alt 或语义底 role（ac/sc/dg/wn，字色 text_on）；hover/active 经
+      state_color 派生，Animation 过渡（controller=out_cubic，fps=motion_frame() 换算）；disabled 态
+      state_color(..., "disabled", bg=parent_bg)；reduce_motion 一步到位。
+    - RoundedSwitch：iOS 胶囊轨道（on=sc/off=bd）+ 滑块（bgc）；toggle 写 BooleanVar + command；
+      滑块位移 + 轨道色 transition 同帧驱动；hover 走 state_color 派生；焦点环 focus token。
+    - 关键坑：自绘尺寸命名避开 tkinter.BaseWidget 内部 `_w`（Tk 路径名会被超类 __init__ 覆盖），
+      改 _tw/_th 命名。
+  · 落地试点（src/ui/settings/cards/system.py）：「减少动效（无障碍）」开关由 ttk.Checkbutton 改为
+    RoundedSwitch(variable=reduce_motion_var, command=_toggle_reduce_motion, colors=C)；其余开关保持
+    ttk 不变 —— 遵守「不替换全局 ttk 按钮」约束。
+  · 换肤接入（src/ui/settings/window.py refresh_theme._walk）：Canvas 分支先探测 _acrpa_redraw 钩子，
+    自绘控件走 redraw(C)（自管填充/圆角，不套通用 bg=C["bg"]），普通 Canvas 仍 bg=C["bg"]。
+  · 验收（tests/_test_rounded_controls.py，新，30 通过/0 失败）：rounded_polygon 顶点/clamp/闭合；
+    开关初始态/点击写 variable+回调/reduce_motion 瞬时无 after 残留（anim=None）/开动效 active=True；
+    换肤 refresh 与 _acrpa_redraw 变色不残留；按钮 hover 派生色/reduce_motion/command/换肤；
+    集成走 walk 识别自绘 Canvas（普通 Canvas 仍套 bg）。conftest 补 rounded_controls 入 GUI_TESTS。
+  · 回归结果：py_compile/compileall 干净；read_lints 0 诊断；`pytest` 55 passed（+1 rounded_controls，
+    由纯逻辑 0 换挡为 gui）；`pytest -m gui` 15 passed（+1）；_test_ui_spacing OK（0 处新增硬编码色，
+    D1 无回退）；其余无回退。
+  · 未做（P3-2/P3-3 评估后再定）：P3-2 等比缩放语义统一、P3-3 事件几何命中。
+
+──────────────────────────────────────────────────────────────────────
+P3-2 执行记录（2026-11-04，maliang 借鉴 · 等比缩放语义统一，零渲染回退）
+  · 新增 src/core/scale.py（纯函数、零 tkinter，P0 纯度护栏同 core 包）：把「设计尺寸 → 缩放系数 →
+    实际尺寸」收拢到一处，编辑器/流程图共用同一套换算，消除两套并列实现。
+    - ratio_of(actual, design)      —— maliang Canvas.ratios = size/init_size 语义
+    - scaled(design, ratio)         —— 设计尺寸 × 缩放系数（等比核心换算）
+    - clamp_scale(scale, lo, hi)    —— 缩放系数钳制（lo>hi 自交换）
+    - step_scale(scale, step, up)   —— 按步进乘子缩放（上/下互逆）
+    - fit_scale(vw, vh, cw, ch, margin) —— 视口/内容最小等比系数（适应窗口）
+    - editor_zoom_ratio / editor_zoom_size —— 编辑器「字号偏移」折算成缩放系数与实际字号
+      （与 clamp(base+offset, 6, 40) 逐位等价，round 吸收浮点尾差）。
+  · 三处消费方统一接入（均不改变渲染结果）：
+    - ui/flow_canvas.py：bind_zoom_pan._clamp → clamp_scale、_on_zoom → step_scale；
+      fit_to_view 的 z0×min((vw-2m)/sw,(vh-2m)/sh) → z0×fit_scale(...) 再 clamp_scale。
+    - ui/workflow_view.py：_wf_flow_zoom（工具条 ＋/－，×1.25/×0.8）→ scaled + clamp_scale。
+    - ACRPA.py：_apply_editor_zoom 的 max(6,min(40,base+delta)) → editor_zoom_size(base, delta)。
+  · 验收（tests/_test_scale.py，新，22 通过/0 失败）：ratio/scaled 往返；clamp/step 互逆与 lo>hi 自交换；
+    fit_scale 与 fit_to_view 旧内联公式 5 组逐位一致；editor_zoom_size 与 clamp(base+offset,6,40)
+    base 6..30 × offset -20..30 全量等价；三处源码静态断言已接 core.scale + AST 实检零 tkinter。
+  · 回归结果：py_compile 干净；read_lints 0 诊断；`pytest` 56 passed（+1 _test_scale，纯逻辑档）；
+    `pytest -m gui` 15 passed（_test_ui_zoom_shortcuts 实机字号断言 / _test_flow_canvas_interact
+    fit_to_view 冒烟 / _test_flow_canvas_render_perf 均不回退）；_test_ui_spacing C5 无新增硬编码色。
+  · 未做（P3-3 评估后再定）：P3-3 事件几何命中。

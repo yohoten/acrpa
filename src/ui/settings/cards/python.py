@@ -12,7 +12,7 @@ from tkinter import ttk
 import state
 from utils import FONT_TINY
 
-from ui.settings.cards._layout import section, row, help_line
+from ui.settings.cards._layout import section, row, switch_row, help_line
 
 CARD_KEY = "python"
 ROW = 9
@@ -39,7 +39,7 @@ def build(parent, ctx):
     def _add(w, pady=None):
         nonlocal _r
         w.grid(row=_r, column=0, sticky="ew",
-               pady=(sp("row_gap") if pady is None else pady))
+               pady=((0, sp("row_gap")) if pady is None else pady))
         _r += 1
         return w
 
@@ -66,8 +66,8 @@ def build(parent, ctx):
         state="readonly", width=26)))
 
     py_full_var = tkinter.BooleanVar(value=bool(getattr(state, "PYTHON_FULL_ENABLED", False)))
-    _add(row(py_content, ctx, "", lambda p: ttk.Checkbutton(
-        p, text="允许 full 权限（独立进程执行任意代码）", variable=py_full_var)))
+    _add(switch_row(py_content, ctx, "允许 full 权限", py_full_var,
+                    help="在独立进程中执行任意代码，仅用于完全信任的脚本"))
 
     py_full_warn = _add(help_line(py_content, ctx,
         "⚠ 完全权限可绕过沙箱执行任意代码与命令，仅在完全信任的脚本上启用", level="err"))

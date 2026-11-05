@@ -32,6 +32,7 @@ except Exception:
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ACRPA_SRC = os.path.join(BASE, "src", "ACRPA.py")
 STATE_SRC = os.path.join(BASE, "src", "state.py")
+EDITOR_VIEW_SRC = os.path.join(BASE, "src", "ui", "editor_view.py")
 
 _PASS, _FAIL = [], []
 
@@ -59,6 +60,7 @@ def t_config():
 def t_source():
     print("\n── Z2/Z3/Z4/Z5/Z6 源码断言 ──")
     src = read(ACRPA_SRC)
+    ev = read(EDITOR_VIEW_SRC) if os.path.exists(EDITOR_VIEW_SRC) else ""
 
     check('_EDITOR_STYLE = "ScriptEditor.Treeview"' in src,
           "编辑区使用派生样式, 不影响变量/时序/工作流列表")
@@ -68,9 +70,10 @@ def t_source():
           if "register_ui_scale_hook" in src else False,
           "ui_scale 变更后重新应用 (基准字号会变)")
 
+    # 缩放绑定 (Ctrl+滚轮/加/等/减/0) 已随构建段迁至 ui/editor_view.py
     for seq in ("<Control-MouseWheel>", "<Control-plus>", "<Control-equal>",
                 "<Control-minus>", "<Control-Key-0>"):
-        check(seq in src, "绑定了 {}".format(seq))
+        check(seq in ev, "绑定了 {} (editor_view)".format(seq))
 
     check("root.bind_all(_seq" in src or "root.bind_all(_seq, _hotkey(_fn))" in src,
           "快捷键走窗口级 bind_all")

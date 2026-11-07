@@ -13,6 +13,7 @@ import os, sys, shutil, subprocess
 BASE = os.path.dirname(os.path.abspath(__file__))
 SRC  = os.path.join(BASE, "src")
 RES  = os.path.join(BASE, "res")
+DOCS = os.path.join(BASE, "docs")
 DIST = os.path.join(BASE, "dist")
 
 _VER = (open(os.path.join(BASE, "VERSION"), encoding="utf-8-sig").readline().strip() if os.path.isfile(os.path.join(BASE, "VERSION")) else "").lstrip("vV")
@@ -27,6 +28,33 @@ ENTRY = os.path.join(BASE, "run.py")
 # 重量级可选后端。**精简仍是默认取向** —— excludes 列表与体积报告继续保留,
 # 只是不再用 15 MB 卡死构建。
 MAX_EXE_MB = 300.0
+
+
+def _referenced_docs():
+    """扫描 res/help/*.md 中被 `](docs/xxx.md)` 引用的根目录文档，返回相对 docs/ 的文件名列表。
+
+    只收根目录（不含子目录）的 docs/*.md；子目录文档（如 docs/design/…）不打包，
+    由帮助窗口在本地未命中时回落在线仓库链接。
+    """
+    import re as _re
+    refs = set()
+    help_dir = os.path.join(RES, "help")
+    if not os.path.isdir(help_dir):
+        return []
+    pat = _re.compile(r"\]\(docs/([^)\s]+\.md)\)", _re.IGNORECASE)
+    for fn in sorted(os.listdir(help_dir)):
+        if not fn.lower().endswith(".md"):
+            continue
+        try:
+            with open(os.path.join(help_dir, fn), encoding="utf-8") as f:
+                txt = f.read()
+        except Exception:
+            continue
+        for m in pat.finditer(txt):
+            rel = m.group(1).replace("\\", "/")
+            if "/" not in rel:      # 仅根目录文件
+                refs.add(rel)
+    return sorted(refs)
 
 
 def exe_candidates():
@@ -127,6 +155,7 @@ _PROJECT_MODULES = [
     # 静态分析看不到 → 打包后设置窗口只剩左侧导航、右侧内容空白。现已改为静态
     # 导入，此处再显式声明作双保险（新增 UI 模块请同步追加）。
     "ui", "ui.theme", "ui.log_dock", "ui.exec_bar", "ui.workflow_view",
+    "ui.sched_tab",
     # S0-03/S0-04: 模块库数据源适配器 —— workflow_view 在函数内惰性 import,
     # 静态分析不可见; 漏加则冻结版模块库退化为硬编码兜底 45 条 (历史踩过)。
     "ui.flow_canvas", "ui.command_palette", "ui.param_form", "ui.module_catalog",
@@ -376,6 +405,17 @@ def build(onefile=True, console=False, clean_first=False):
 
     if os.path.exists(ICON): cmd += ["--icon", ICON]
     if os.path.isdir(RES):   cmd += ["--add-data", "{}{}res".format(RES, os.pathsep)]
+    # docs/：只打包「帮助页实际引用」的根目录 docs/*.md + docs/releases/（不整包 docs/，
+    # 避免把 docs/design、docs/analysis 等内部设计稿随便携版外发）。
+    # 未打包的仓库文档在帮助窗口点击时回落到在线仓库链接。
+    for rel in _referenced_docs():
+        src_file = os.path.join(DOCS, rel)
+        if os.path.isfile(src_file):
+            cmd += ["--add-data", "{}{}docs".format(src_file, os.pathsep)]
+    notes_dir = os.path.join(DOCS, "releases")
+    if os.path.isdir(notes_dir):
+        cmd += ["--add-data", "{}{}docs{}releases".format(
+            notes_dir, os.pathsep, os.sep, os.sep)]
     # 插件目录: 插件是运行时动态加载的 .py 源码, 必须随包分发;
     # 其余项目模块已由 PYZ 收集, 不再整体打包 src (避免 __pycache__ 等冗余)
     PLUGINS_SRC = os.path.join(SRC, "plugins")

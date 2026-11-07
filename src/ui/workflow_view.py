@@ -474,6 +474,53 @@ def _root():
     return _CTX.get("root")
 
 
+# ── §5.4 分栏 sash 记忆 (workflow 两处分栏) ─────────────────────────────
+def _wf_save_sash(*_a):
+    """拖拽 sash 结束后读回外层/内层 sashpos, 单键写盘。"""
+    try:
+        st = _CTX.get("state")
+        if st is None or wf_outer_paned is None or wf_paned is None:
+            return
+        st.set_layout_sash("workflow", "outer", st.sash_pos(wf_outer_paned, 0), persist=True)
+        st.set_layout_sash("workflow", "inner", st.sash_pos(wf_paned, 0), persist=True)
+    except Exception:
+        pass
+
+
+def _wf_restore_sash(_attempt=0):
+    """构建后恢复工作流分栏 (首帧未映射时有界重试)。"""
+    try:
+        if wf_outer_paned is None or wf_paned is None:
+            return
+        ow = wf_outer_paned.winfo_width()
+        if ow <= 1:
+            if _attempt < 3:
+                try:
+                    wf_outer_paned.after(120, lambda: _wf_restore_sash(_attempt + 1))
+                except Exception:
+                    pass
+            return
+        st = _CTX.get("state")
+        if st is not None:
+            d = st.get_layout_sash().get("workflow", {})
+            if d.get("outer"):
+                try:
+                    st.sash_set_pos(wf_outer_paned, 0,
+                                    max(120, min(int(d["outer"]), ow - 300)))
+                except Exception:
+                    pass
+            if d.get("inner"):
+                iw = wf_paned.winfo_width()
+                if iw > 1:
+                    try:
+                        st.sash_set_pos(wf_paned, 0,
+                                        max(150, min(int(d["inner"]), iw - 200)))
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
+
 # ══════════════════════════════════════════════════════════════════════
 # 构建 (原 ACRPA.build_app 内 "TAB 4: 工作流" 段: :5139-5381)
 # ══════════════════════════════════════════════════════════════════════
@@ -680,6 +727,16 @@ def build(parent, *, colors, fonts, deps=None, tab=None):
     wf_lib_sy.grid(row=2, column=1, sticky="ns", pady=(0, 2))
     wf_lib_tree.configure(yscrollcommand=wf_lib_sy.set)
 
+    # §5.2 行 hover + 选中加粗 (与脚本编辑/定时任务一致)
+    _bind_hover = _CTX.get("bind_row_hover")
+    _bind_bold = _CTX.get("bind_sel_bold")
+    if _bind_hover:
+        try: _bind_hover(wf_lib_tree)
+        except Exception: pass
+    if _bind_bold:
+        try: _bind_bold(wf_lib_tree)
+        except Exception: pass
+
     # 最近使用
     wf_recent_label = tkinter.Label(wf_lib_frame, text="最近使用", font=FONT_SMALL,
         bg=C["bgc"], fg=C["fgm"])
@@ -713,6 +770,14 @@ def build(parent, *, colors, fonts, deps=None, tab=None):
     wf_tree.configure(yscrollcommand=wf_sy.set)
     wf_tree.grid(row=0, column=0, sticky="nsew")
     wf_sy.grid(row=0, column=1, sticky="ns")
+
+    # §5.2 行 hover + 选中加粗 (步骤列表)
+    if _bind_hover:
+        try: _bind_hover(wf_tree)
+        except Exception: pass
+    if _bind_bold:
+        try: _bind_bold(wf_tree)
+        except Exception: pass
 
     wf_paned.add(wf_list_frame, minsize=150, width=280)
 
@@ -770,6 +835,14 @@ def build(parent, *, colors, fonts, deps=None, tab=None):
     # 将操作库与右侧分屏加入外层 PanedWindow (操作库可拖拽拉伸, 最小 120, 默认 180)
     wf_outer_paned.add(wf_lib_frame, minsize=120, width=180)
     wf_outer_paned.add(wf_paned, minsize=300)
+
+    # §5.4 分栏 sash 记忆: 拖拽结束后写盘, 首帧有界恢复
+    wf_outer_paned.bind("<ButtonRelease-1>", _wf_save_sash)
+    wf_paned.bind("<ButtonRelease-1>", _wf_save_sash)
+    try:
+        wf_outer_paned.after_idle(_wf_restore_sash)
+    except Exception:
+        pass
 
     # 操作库显示名 → 节点构造器 `_WF_LIB_ACTIONS`: S0-04 起提到**模块级**定义
     #   (见 `_WF_LIB_CATEGORIES` 之后的同名赋值) —— 兜底路径与"命令名 ↔ 显示名"反查需要在
@@ -2589,7 +2662,7 @@ def _show_diff_text(text, title):
     top.configure(bg=C["bgc"])
     top.transient(_window if "_window" in globals() else None)
 
-    txt = _tk.Text(top, width=80, height=20, font=("Consolas", 10), bg=C["ebg"],
+    txt = _tk.Text(top, width=80, height=20, font=FONT_LOG, bg=C["ebg"],
         fg=C["fgb"], insertbackground=C["fgt"])
     txt.pack(fill="both", expand=True, padx=8, pady=8)
     txt.insert("1.0", text)

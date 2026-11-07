@@ -27,9 +27,14 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
                      sched.SchedMixin, object):
     """设备互联窗口 (薄壳 + mixin 组合)。"""
     # __init__
-    def __init__(self, root):
+    def __init__(self, root, host=None):
         self.root = root
         self.win = None
+        self.host = None
+        self._canvas = None
+        self._inner = None
+        self._vscroll = None
+        self._embedded = host is not None
         self._pump_id = None
         # 主题色表快照 (建窗时的 utils.C), 供 refresh_theme 做旧色→新色映射
         self._theme_snapshot = None
@@ -88,12 +93,12 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
         self._web_allow_remote_var = None  # 允许局域网控制 BooleanVar
         self._web_pin_btn = None           # [设置/重置控制 PIN] 按钮
         self._web_tls_lbl = None           # 协议/控制/证书状态 Label
-        self._build()
+        self._build(host)
 
     # alive
     def alive(self):
         try:
-            return self.win is not None and bool(self.win.winfo_exists())
+            return self.host is not None and bool(self.host.winfo_exists())
         except Exception:
             return False
 
@@ -101,18 +106,19 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
     def show(self):
         if not self.alive():
             return
-        try:
-            self.win.deiconify()
-            self.win.lift()
-            self.win.focus_force()
-        except Exception:
-            pass
+        if not self._embedded:
+            try:
+                self.win.deiconify()
+                self.win.lift()
+                self.win.focus_force()
+            except Exception:
+                pass
         if self._pump_id is None:
             self._schedule_pump(PUMP_INTERVAL_MS)
 
     # close
     def close(self):
-        """保存窗口几何 → 销毁；幂等。"""
+        """保存窗口几何 → 销毁；幂等。内嵌 Tab 不销毁宿主/根窗口。"""
         self._close_pair_dialog()
         self._close_audit_dialog()
         self._close_rs_dialog()
@@ -124,6 +130,10 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
             except Exception:
                 pass
             self._pump_id = None
+        if self._embedded:
+            self.host = None
+            self.win = None
+            return
         try:
             if self.alive():
                 state.NETLINK_UI_WINDOW = self.win.geometry()
@@ -136,6 +146,7 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
         except Exception:
             pass
         self.win = None
+        self.host = None
 
     # _set_icon
     def _set_icon(self, window):
@@ -150,8 +161,11 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
             pass
 
     # refresh_theme
-    def refresh_theme(self):
+    def refresh_theme(self, dark=None, colors=None, prev=None):
         """主题切换后重刷本窗口配色 (含各 Treeview/Text 的 tag 前景)。
+
+        dark/colors/prev 为 ThemeBus.publish 派发契约 (订阅回调统一签名);
+        本实现直接读 utils.C (publish 前已切到新色板), 参数仅占位不依赖。
 
         utils.apply_theme 会重绑 utils.C, 但本窗口的面板/按钮颜色是建窗时写死的旧色,
         且各 Treeview 的 tag 前景只在建窗时配置过一次 —— 若不重刷, 切换主题后本窗口仍停留在旧配色。
@@ -250,8 +264,8 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
                     pass
                 _walk(w)
 
-        # 本窗 + 已打开的子对话框 (存在则活, 不存在为空操作)
-        windows = [self.win]
+        # 宿主 (独立窗口或内嵌 Tab 面板) + 已打开的子对话框 (存在则活, 不存在为空操作)
+        windows = [self.host if self.host is not None else self.win]
         for attr in ("_pair_dlg", "_audit_dlg", "_rs_dlg",
                      "_shot_dlg", "_web_dlg"):
             d = getattr(self, attr, None)
@@ -296,55 +310,107 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
                 pass
         self._theme_snapshot = dict(cur)
         try:
-            self.win.update_idletasks()
+            (self.host if self.host is not None else self.win).update_idletasks()
         except Exception:
             pass
 
     # _build
-    def _build(self):
+    def _build(self, host=None):
         C = utils.C
         self._theme_snapshot = dict(C)
-        win = tkinter.Toplevel(self.root)
-        self.win = win
-        try:    # 声明自管换肤: 通用 walk 不再跨入, 由本类 refresh_theme 负责
-            from ui import theme as _ui_theme
-            _ui_theme.claim_window(win, "netlink_window")
-        except Exception:
-            pass
-        win.title("设备互联 — ACRPA")
-        geom = ""
-        try:
-            geom = getattr(state, "NETLINK_UI_WINDOW", "") or ""
-        except Exception:
-            geom = ""
-        try:
-            ok = bool(geom) and bool(utils.geometry_in_screen(self.root, geom))
-        except Exception:
-            ok = False
-        # 外壳 (底色/尺寸/最小尺寸/居中/记忆位置) 统一走 window_shell:
-        # 尺寸按设计 px 交付, 缩放只由 place_dialog 做一次 (P2 逐窗套用)。
-        try:
-            from ui.window_shell import apply_window_chrome
-            apply_window_chrome(win, size=(780, 700), min_size=(700, 560),
-                                geometry=geom if ok else None, center=not ok,
-                                bg_key="bg", colors=C)
-        except Exception:
-            if ok:
+        if host is not None:
+            # 内嵌到 Tab 面板: 宿主为传入容器, 对话框父窗口回退到主窗口。
+            # 内容包进纵向可滚动 Canvas, 避免设备互联控件树过高时被 Tab 裁切。
+            self.host = host
+            self.win = host.winfo_toplevel() if hasattr(host, "winfo_toplevel") else self.root
+            host.columnconfigure(0, weight=1)
+            host.rowconfigure(0, weight=1)
+            canvas = tkinter.Canvas(host, bg=C["bg"], highlightthickness=0,
+                                    bd=0, relief="flat")
+            sb = ttk.Scrollbar(host, orient="vertical", command=canvas.yview)
+            canvas.configure(yscrollcommand=sb.set)
+            canvas.grid(row=0, column=0, sticky="nsew")
+            sb.grid(row=0, column=1, sticky="ns")
+            win = tkinter.Frame(canvas, bg=C["bg"])
+            _inner_id = canvas.create_window((0, 0), window=win, anchor="nw")
+            self._canvas = canvas
+            self._inner = win
+            self._vscroll = sb
+            # 内容宽度随视口伸缩, 高度按内容自适应 (整栏纵向滚动)
+            def _sync_inner_width(event):
                 try:
-                    win.geometry(geom)
+                    canvas.itemconfigure(_inner_id, width=event.width)
                 except Exception:
-                    win.geometry("780x700")
-            else:
-                win.geometry("780x700")
-            try:
-                win.minsize(utils.sp(700), utils.sp(560))
+                    pass
+
+            def _on_wheel(event):
+                try:
+                    canvas.yview_scroll(int(-event.delta / 120), "units")
+                except Exception:
+                    pass
+
+            def _bind_wheel(w):
+                for child in w.winfo_children():
+                    try:
+                        cls = child.winfo_class()
+                        if cls in ("Treeview", "Text", "Listbox",
+                                   "TCombobox", "Spinbox"):
+                            continue
+                        child.bind("<MouseWheel>", _on_wheel, add="+")
+                    except Exception:
+                        pass
+                    _bind_wheel(child)
+
+            canvas.bind("<Configure>", _sync_inner_width, add="+")
+            canvas.bind("<MouseWheel>", _on_wheel, add="+")
+            try:    # 声明自管换肤: 通用 walk 不再跨入, 由本类 refresh_theme 负责
+                from ui import theme as _ui_theme
+                _ui_theme.claim_window(host, "netlink_window")
             except Exception:
                 pass
+        else:
+            win = tkinter.Toplevel(self.root)
+            self.win = win
+            self.host = win
+            try:    # 声明自管换肤: 通用 walk 不再跨入, 由本类 refresh_theme 负责
+                from ui import theme as _ui_theme
+                _ui_theme.claim_window(win, "netlink_window")
+            except Exception:
+                pass
+        if host is None:
+            # 独立窗口外壳 (标题/尺寸/最小尺寸/居中/记忆位置/图标/关闭协议)
+            win.title("设备互联 — ACRPA")
+            geom = ""
+            try:
+                geom = getattr(state, "NETLINK_UI_WINDOW", "") or ""
+            except Exception:
+                geom = ""
+            try:
+                ok = bool(geom) and bool(utils.geometry_in_screen(self.root, geom))
+            except Exception:
+                ok = False
+            try:
+                from ui.window_shell import apply_window_chrome
+                apply_window_chrome(win, size=(780, 700), min_size=(700, 560),
+                                    geometry=geom if ok else None, center=not ok,
+                                    bg_key="bg", colors=C)
+            except Exception:
+                if ok:
+                    try:
+                        win.geometry(geom)
+                    except Exception:
+                        win.geometry("780x700")
+                else:
+                    win.geometry("780x700")
+                try:
+                    win.minsize(utils.sp(700), utils.sp(560))
+                except Exception:
+                    pass
+            self._set_icon(win)
+            win.protocol("WM_DELETE_WINDOW", self.close)
         win.configure(bg=C["bg"])
-        self._set_icon(win)
-        win.protocol("WM_DELETE_WINDOW", self.close)
         win.columnconfigure(0, weight=1)
-        win.rowconfigure(5, weight=1)   # 日志面板可伸缩
+        win.rowconfigure(2, weight=1)   # 主区 (2 列 PanedWindow) 可伸缩
 
         # ── 0. 顶部状态条 ──
         top = tkinter.Frame(win, bg=C["bg"])
@@ -418,9 +484,60 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
                        cursor="hand2", padx=utils.sp(10), pady=utils.sp(1),
                        command=self._on_apply).pack(side="left")
 
+        # ── 主区: 2 列 PanedWindow (左3右1, 可调节) ──
+        # 左列 = 设备管理 (设备列表/详情/已配对/操控/远程指令/传输),
+        # 右列 = 日志面板 (常驻侧栏)。分隔条可拖动调整比例。
+        paned = ttk.PanedWindow(win, orient="horizontal")
+        paned.grid(row=2, column=0, sticky="nsew", padx=utils.sp(10), pady=(0, utils.sp(4)))
+        self._paned = paned
+        left = tkinter.Frame(paned, bg=C["bg"])
+        right = tkinter.Frame(paned, bg=C["bg"])
+        paned.add(left, weight=3)
+        paned.add(right, weight=1)
+        left.columnconfigure(0, weight=1)
+        left.rowconfigure(0, weight=0)   # 设备列表
+        left.rowconfigure(1, weight=0)   # 选中设备详情
+        left.rowconfigure(2, weight=0)   # 已配对设备
+        left.rowconfigure(3, weight=0)   # 操控按钮组
+        left.rowconfigure(4, weight=1)   # 远程指令 (可伸缩)
+        left.rowconfigure(5, weight=1)   # 传输 (可伸缩)
+        right.columnconfigure(0, weight=1)
+        right.rowconfigure(0, weight=1)  # 日志面板 (可伸缩)
+
+        # 默认按 3:1 分栏; 容器映射后恢复缓存 sashpos (无缓存则 0.75)。
+        def _init_sash():
+            try:
+                w = paned.winfo_width()
+                if w > 0:
+                    cached = None
+                    try:
+                        cached = state.get_layout_sash().get("netlink", {}).get("main")
+                    except Exception:
+                        cached = None
+                    if cached is not None:
+                        pos = max(300, min(int(cached), w - 200))
+                    else:
+                        pos = int(w * 0.75)
+                    paned.sashpos(0, pos)
+            except Exception:
+                pass
+
+        # §5.4 分栏 sash 记忆: 拖拽结束写盘
+        def _save_sash(_e=None):
+            try:
+                state.set_layout_sash("netlink", "main", paned.sashpos(0), persist=True)
+            except Exception:
+                pass
+        paned.bind("<ButtonRelease-1>", _save_sash)
+
+        try:
+            self._sash_init_id = win.after(80, _init_sash)
+        except Exception:
+            self._sash_init_id = None
+
         # ── 2. 设备列表 ──
-        mid = tkinter.Frame(win, bg=C["bg"])
-        mid.grid(row=2, column=0, sticky="nsew", padx=utils.sp(10), pady=(0, utils.sp(4)))
+        mid = tkinter.Frame(left, bg=C["bg"])
+        mid.grid(row=0, column=0, sticky="nsew", padx=0, pady=(0, utils.sp(4)))
         mid.columnconfigure(0, weight=1)
 
         cols = ("dev", "state", "script", "progress", "latency", "perm")
@@ -447,8 +564,8 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
         self.tv.bind("<<TreeviewSelect>>", self._on_select)
 
         # ── 3. 选中设备详情 ──
-        det = tkinter.Frame(win, bg=C["bg"])
-        det.grid(row=3, column=0, sticky="ew", padx=utils.sp(10), pady=(0, utils.sp(4)))
+        det = tkinter.Frame(left, bg=C["bg"])
+        det.grid(row=1, column=0, sticky="ew", padx=0, pady=(0, utils.sp(4)))
         det.columnconfigure(1, weight=1)
         tkinter.Label(det, text="进度", font=utils.FONT_SMALL,
                       bg=C["bg"], fg=C["fgm"]).grid(row=0, column=0, sticky="w", padx=(0, utils.sp(6)))
@@ -487,8 +604,8 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
         self.lbl_sched.grid(row=2, column=0, columnspan=4, sticky="w", pady=(utils.sp(2), 0))
 
         # ── 3b. 已配对设备（本机授予的远程权限）──
-        self.lf_paired = ttk.LabelFrame(win, text="已配对设备（本机授予的远程权限）")
-        self.lf_paired.grid(row=4, column=0, sticky="ew", padx=utils.sp(10), pady=(0, utils.sp(4)))
+        self.lf_paired = ttk.LabelFrame(left, text="已配对设备（本机授予的远程权限）")
+        self.lf_paired.grid(row=2, column=0, sticky="ew", padx=0, pady=(0, utils.sp(4)))
         self.lf_paired.columnconfigure(0, weight=1)
         pcols = ("name", "fp", "perm", "last")
         self.tv_paired = ttk.Treeview(self.lf_paired, columns=pcols,
@@ -535,9 +652,9 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
                                               state="disabled", command=self._on_peer_remove)
         self.btn_peer_remove.pack(side="left")
 
-        # ── 4. 日志面板 ──
-        logfr = tkinter.Frame(win, bg=C["bg"])
-        logfr.grid(row=5, column=0, sticky="nsew", padx=utils.sp(10), pady=(0, utils.sp(4)))
+        # ── 4. 日志面板 (右列, 常驻侧栏) ──
+        logfr = tkinter.Frame(right, bg=C["bg"])
+        logfr.grid(row=0, column=0, sticky="nsew", padx=(utils.sp(6), 0), pady=0)
         logfr.columnconfigure(0, weight=1)
         logfr.rowconfigure(0, weight=1)
         self.txt_log = tkinter.Text(logfr, height=8, font=utils.FONT_LOG,
@@ -551,8 +668,8 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
         self.txt_log.tag_configure("wn", foreground=utils.themed("wn", "#f59e0b"))
 
         # ── 5. 操控按钮组 (Phase 2-2b: 按选中设备权限/运行态启用) ──
-        ctl = tkinter.Frame(win, bg=C["bg"])
-        ctl.grid(row=6, column=0, sticky="ew", padx=utils.sp(10), pady=(0, utils.sp(4)))
+        ctl = tkinter.Frame(left, bg=C["bg"])
+        ctl.grid(row=3, column=0, sticky="ew", padx=0, pady=(0, utils.sp(4)))
 
         def _mk_ctl(text, command):
             b = tkinter.Button(ctl, text=text, font=utils.FONT_BUTTON,
@@ -601,9 +718,10 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
             pass
 
         # ── 6. 远程指令结果 ──
-        self.lf_cmd = ttk.LabelFrame(win, text="远程指令")
-        self.lf_cmd.grid(row=7, column=0, sticky="ew", padx=utils.sp(10), pady=(0, utils.sp(4)))
+        self.lf_cmd = ttk.LabelFrame(left, text="远程指令")
+        self.lf_cmd.grid(row=4, column=0, sticky="nsew", padx=0, pady=(0, utils.sp(4)))
         self.lf_cmd.columnconfigure(0, weight=1)
+        self.lf_cmd.rowconfigure(0, weight=1)
         ccols = ("time", "dev", "cmd", "result")
         self.tv_cmd = ttk.Treeview(self.lf_cmd, columns=ccols, show="headings",
                                    height=5)
@@ -613,7 +731,7 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
             self.tv_cmd.column(cid, width=width, anchor="w")
         # §4.5 降级: show="headings" 无 #0 列 → 选中行加粗
         utils.bind_sel_bold(self.tv_cmd)
-        self.tv_cmd.grid(row=0, column=0, sticky="ew", padx=(utils.sp(6), 0), pady=(utils.sp(2), 0))
+        self.tv_cmd.grid(row=0, column=0, sticky="nsew", padx=(utils.sp(6), 0), pady=(utils.sp(2), 0))
         csb = ttk.Scrollbar(self.lf_cmd, orient="vertical", command=self.tv_cmd.yview)
         csb.grid(row=0, column=1, sticky="ns", pady=(utils.sp(2), 0))
         self.tv_cmd.configure(yscrollcommand=csb.set)
@@ -626,9 +744,10 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
         self.lbl_cmd_empty.grid(row=1, column=0, sticky="w", padx=utils.sp(8), pady=(0, utils.sp(2)))
 
         # ── 8. 传输 (Phase3-1b: TOPIC_TRANSFER 进度) ──
-        self.lf_xfer = ttk.LabelFrame(win, text="传输")
-        self.lf_xfer.grid(row=8, column=0, sticky="ew", padx=utils.sp(10), pady=(0, utils.sp(4)))
+        self.lf_xfer = ttk.LabelFrame(left, text="传输")
+        self.lf_xfer.grid(row=5, column=0, sticky="nsew", padx=0, pady=(0, utils.sp(4)))
         self.lf_xfer.columnconfigure(0, weight=1)
+        self.lf_xfer.rowconfigure(0, weight=1)
         xcols = ("dev", "file", "progress", "state")
         self.tv_xfer = ttk.Treeview(self.lf_xfer, columns=xcols, show="headings",
                                     height=4)
@@ -638,7 +757,7 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
             self.tv_xfer.column(cid, width=width, anchor="w")
         # §4.5 降级: show="headings" 无 #0 列 → 选中行加粗
         utils.bind_sel_bold(self.tv_xfer)
-        self.tv_xfer.grid(row=0, column=0, sticky="ew", padx=(utils.sp(6), 0), pady=(utils.sp(2), 0))
+        self.tv_xfer.grid(row=0, column=0, sticky="nsew", padx=(utils.sp(6), 0), pady=(utils.sp(2), 0))
         xsb = ttk.Scrollbar(self.lf_xfer, orient="vertical", command=self.tv_xfer.yview)
         xsb.grid(row=0, column=1, sticky="ns", pady=(utils.sp(2), 0))
         self.tv_xfer.configure(yscrollcommand=xsb.set)
@@ -653,11 +772,18 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
         # ── 9. 底部状态行 ──
         self.lbl_bottom = tkinter.Label(win, text="互联未启动", font=utils.FONT_SMALL,
                                         bg=C["bg"], fg=C["fgm"], anchor="w")
-        self.lbl_bottom.grid(row=9, column=0, sticky="ew", padx=utils.sp(10), pady=(0, utils.sp(2)))
+        self.lbl_bottom.grid(row=3, column=0, sticky="ew", padx=utils.sp(10), pady=(utils.sp(4), utils.sp(2)))
         # Phase4-3 传输加密状态（只读：明文 / TLS（指纹 N 个））
         self.lbl_tls = tkinter.Label(win, text="传输：明文", font=utils.FONT_SMALL,
                                      bg=C["bg"], fg=C["fgm"], anchor="w")
-        self.lbl_tls.grid(row=10, column=0, sticky="ew", padx=utils.sp(10), pady=(0, utils.sp(8)))
+        self.lbl_tls.grid(row=4, column=0, sticky="ew", padx=utils.sp(10), pady=(0, utils.sp(8)))
+
+        # 内嵌模式: 全部控件就绪后再递归绑定滚轮 (可滚动的 Treeview/Text/Listbox 除外)
+        if host is not None:
+            try:
+                _bind_wheel(win)
+            except Exception:
+                pass
 
         self._schedule_pump(PUMP_INTERVAL_MS)
 

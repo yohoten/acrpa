@@ -133,7 +133,8 @@ _recent_scripts = []        # 最近使用脚本路径列表 (最长 10)
 _wf_ctx_frame = None        # 工作流上下文条 (名称 / 步数; 仅在「工作流」Tab 显示)
 _wf_ctx_name = None         # 上下文条·工作流名 Label
 _wf_ctx_steps = None        # 上下文条·「将执行 N 步」Label
-_active_tab = 0             # 当前激活 Tab: 0=脚本 / 1=工作流 (驱动变量入口分派)
+_active_tab = 0             # 当前激活 Tab 索引 (宿主 Notebook 顺序; 驱动变量入口分派)
+_TAB_WORKFLOW = 1           # 工作流 Tab 在宿主 Notebook 中的索引 (与 ACRPA._TAB_WORKFLOW 一致)
 
 # ── 注入上下文 (build 填充) ──
 _CTX = {
@@ -1055,21 +1056,21 @@ def _open_vars_entry():
 
     「彻底消除两处入口」: 全窗口只有这一个变量按钮, 行为随 Tab 切换 (P1-5 后续 / §7-4)。
     """
-    if _active_tab == 1:
+    if _active_tab == _TAB_WORKFLOW:
         _call("open_wf_variables")
     else:
         _call("show_variables_window")
 
 
 def set_active_tab(idx):
-    """切换激活 Tab: 0=脚本 / 1=工作流。工作流 Tab 显示上下文条, 否则隐藏。"""
+    """切换激活 Tab (宿主 Notebook 索引枚举)。工作流 Tab 显示上下文条, 否则隐藏。"""
     global _active_tab
-    _active_tab = 1 if idx else 0
+    _active_tab = idx
     try:
         if _wf_ctx_frame is not None:
             _sp = _CTX.get("sp")
             _pad = (_sp(6), 0) if _sp else (6, 0)
-            if _active_tab == 1:
+            if _active_tab == _TAB_WORKFLOW:
                 _wf_ctx_frame.pack(side="left", padx=_pad)
             else:
                 _wf_ctx_frame.pack_forget()

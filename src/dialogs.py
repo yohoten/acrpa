@@ -2763,33 +2763,35 @@ def _sched_task_dialog(parent, task=None, on_done=None, prefill=None):
 # ======================================================================
 # 计划任务管理窗口
 # ======================================================================
-def open_sched_manager():
-    """打开计划任务管理窗口（多任务表格 + 执行日志）"""
+def build_sched_manager(parent, win_parent=None, show_log_button=True):
+    """在 parent 容器内构建「计划任务管理」界面（工具栏 + 表格 + 搜索 + 右键 + 日志）。
+
+    parent:         承载管理界面的容器（Frame 或 Toplevel）。
+    win_parent:     子对话框（新建/编辑/日志/右键菜单）的父窗口；默认取 parent 本身（若是窗口）或 root。
+    show_log_button: 是否显示「查看日志」按钮（Tab 内已内嵌「执行记录」面板时置 False）。
+    返回句柄 dict: {"tree": mgr_tree, "refresh": _mgr_refresh, "toolbar": mgr_toolbar}。
+    """
     import scheduler as sched_module
-    dlg = tkinter.Toplevel(root)
-    dlg.title("计划任务管理 — ACRPA")
-    place_dialog(dlg, 780, 520)
-    dlg.minsize(600, 400)
-    dlg.transient(root)
-    dlg.configure(bg=C["bgc"])
-    _set_window_icon(dlg)
-    dlg.columnconfigure(0, weight=1)
-    dlg.rowconfigure(0, weight=0)
-    dlg.rowconfigure(1, weight=1)
+    if win_parent is None:
+        win_parent = parent if isinstance(parent, (tkinter.Toplevel, tkinter.Tk)) else root
+
+    parent.columnconfigure(0, weight=1)
+    parent.rowconfigure(0, weight=0)
+    parent.rowconfigure(1, weight=1)
 
     # 工具栏
-    mgr_toolbar = tkinter.Frame(dlg, bg=C["bgc"])
+    mgr_toolbar = tkinter.Frame(parent, bg=C["bgc"])
     mgr_toolbar.grid(row=0, column=0, sticky="ew", padx=sp("gap"), pady=(sp("gap"), sp("gap_tight")))
 
     def _mgr_new_task():
         # 表单统一走 _sched_task_dialog (目标三型 + 触发器 + 执行语义, L0/L1)
-        _sched_task_dialog(dlg, None, _mgr_refresh)
+        _sched_task_dialog(win_parent, None, _mgr_refresh)
 
     def _mgr_edit_task(tid):
         task = next((t for t in state.SCHED_TASKS if t.get("id") == tid), None)
         if task is None:
             return
-        _sched_task_dialog(dlg, task, _mgr_refresh)
+        _sched_task_dialog(win_parent, task, _mgr_refresh)
 
     _btn(mgr_toolbar, "新建任务", _mgr_new_task, "ac", "white").pack(side="left", padx=sp("hairline"))
     _btn(mgr_toolbar, "编辑", lambda: (
@@ -2797,9 +2799,10 @@ def open_sched_manager():
         C["bgc"], C["fgb"]).pack(side="left", padx=sp("hairline"))
     _btn(mgr_toolbar, "刷新", lambda: _mgr_refresh(), C["bgc"], C["fgb"]).pack(side="left", padx=sp("hairline"))
     tkinter.Frame(mgr_toolbar, bg=C["bd"], width=2, height=20).pack(side="left", fill="y", padx=sp("gap_tight"))
-    _btn(mgr_toolbar, "查看日志", lambda: _mgr_show_logs(dlg),
-        C["bgc"], C["fgb"]).pack(side="left", padx=sp("hairline"))
-    tkinter.Frame(mgr_toolbar, bg=C["bd"], width=2, height=20).pack(side="left", fill="y", padx=sp("gap_tight"))
+    if show_log_button:
+        _btn(mgr_toolbar, "查看日志", lambda: _mgr_show_logs(win_parent),
+            C["bgc"], C["fgb"]).pack(side="left", padx=sp("hairline"))
+        tkinter.Frame(mgr_toolbar, bg=C["bd"], width=2, height=20).pack(side="left", fill="y", padx=sp("gap_tight"))
     # L4 #5 搜索增强: 空格分隔多关键词 AND + 日期关键词(2026-10 / 10-23)
     tkinter.Label(mgr_toolbar, text="搜索:", font=FONT_SMALL,
         bg=C["bgc"], fg=C["fgm"]).pack(side="left", padx=(0, sp("gap_tight")))
@@ -2818,7 +2821,7 @@ def open_sched_manager():
         font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"]).pack(side="right")
 
     # 任务表格
-    list_f = tkinter.Frame(dlg, bg=C["bgc"], highlightbackground=C["bd"], highlightthickness=1)
+    list_f = tkinter.Frame(parent, bg=C["bgc"], highlightbackground=C["bd"], highlightthickness=1)
     list_f.grid(row=1, column=0, sticky="nsew", padx=sp("gap"), pady=(0, sp("gap")))
     list_f.columnconfigure(0, weight=1); list_f.rowconfigure(0, weight=1)
 
@@ -2828,7 +2831,9 @@ def open_sched_manager():
     for c, t, w in [("name", "任务名称", 110), ("target", "目标", 150),
         ("plan", "计划", 160), ("next_run", "下次执行", 130),
         ("last_run", "上次执行", 130), ("status", "状态", 60)]:
-        mgr_tree.heading(c, text=t); mgr_tree.column(c, width=w, minwidth=40)
+        mgr_tree.heading(c, text=t)
+        mgr_tree.column(c, width=w, minwidth=40,
+                        stretch=(c in ("name", "target", "plan")))
     # §4.5 降级: show="headings" 无 #0 列 → 选中行加粗
     bind_sel_bold(mgr_tree)
     msy = tkinter.Scrollbar(list_f, orient="vertical", command=mgr_tree.yview,
@@ -2836,18 +2841,34 @@ def open_sched_manager():
     mgr_tree.configure(yscrollcommand=msy.set)
     mgr_tree.grid(row=0, column=0, sticky="nsew"); msy.grid(row=0, column=1, sticky="ns")
 
+    _mgr_sig = {"v": None}
+
+    def _mgr_update_count(shown, query):
+        try:
+            if shown == 0:
+                txt = "无匹配任务" if query else "暂无计划任务，点击「新建任务」添加"
+            else:
+                txt = "共 {} 条{}".format(
+                    shown, "" if shown == len(state.SCHED_TASKS)
+                    else " / 全部 {} 条".format(len(state.SCHED_TASKS)))
+            _mgr_count.configure(text=txt)
+        except Exception:                       # noqa: BLE001
+            pass
+
     def _mgr_refresh():
-        for item in mgr_tree.get_children():
-            mgr_tree.delete(item)
+        # tag 颜色统一在函数入口配置一次（避免每行重复 + 主题切换后用最新 C）
+        mgr_tree.tag_configure("en", foreground=C["fgb"])
+        mgr_tree.tag_configure("dis", foreground=C["fgm"])
+        mgr_tree.tag_configure("exp", foreground=C["wn"])
         try:
             query = mgr_search_var.get()
         except Exception:                       # noqa: BLE001
             query = ""
-        shown = 0
+        # 变化驱动: 先计算「应显示的行」签名，未变化则跳过整表重建，
+        # 只兜底校正计数——避免调度器周期刷新/搜索输入时无谓地 delete+insert 造成卡顿。
+        rows = []
         for task in state.SCHED_TASKS:
-            # 单一数据来源: scheduler.task_summary() (目标/计划/下次/上次/状态)
             row = sched_module.task_summary(task)
-            # L4 #5: 纯函数过滤（多关键词 AND / 日期关键词 / 可选拼音首字母）
             if not sched_row_matches(row, query, task):
                 continue
             tag = "en" if row["enabled"] else "dis"
@@ -2855,24 +2876,38 @@ def open_sched_manager():
                 tag = "exp"
             vals = (row["name"], row["target"], row["plan"],
                     row["next_run"], row["last_run"], row["status"])
-            mgr_tree.insert("", "end", values=vals, iid=row["id"], tags=(tag,))
-            mgr_tree.tag_configure("en", foreground=C["fgb"])
-            mgr_tree.tag_configure("dis", foreground=C["fgm"])
-            mgr_tree.tag_configure("exp", foreground=C["wn"])
-            shown += 1
+            rows.append((row["id"], tag, vals))
+        new_sig = (query, tuple(rows))
+        if _mgr_sig["v"] == new_sig:
+            _mgr_update_count(len(rows), query)
+            return
+        _mgr_sig["v"] = new_sig
+        # 保留选中与滚动位置，避免后台/搜索刷新时表格跳动
         try:
-            _mgr_count.configure(text="共 {} 条{}".format(
-                shown, "" if shown == len(state.SCHED_TASKS)
-                else " / 全部 {} 条".format(len(state.SCHED_TASKS))))
+            sel = list(mgr_tree.selection())
+            yv = mgr_tree.yview()
+        except Exception:                       # noqa: BLE001
+            sel, yv = [], ()
+        for item in mgr_tree.get_children():
+            mgr_tree.delete(item)
+        for iid, tag, vals in rows:
+            mgr_tree.insert("", "end", values=vals, iid=iid, tags=(tag,))
+        try:
+            for tid in sel:
+                if mgr_tree.exists(tid):
+                    mgr_tree.selection_set(tid)
+            if yv:
+                mgr_tree.yview_moveto(yv[0])
         except Exception:                       # noqa: BLE001
             pass
+        _mgr_update_count(len(rows), query)
 
     def _mgr_context(event):
         sel = mgr_tree.selection()
         if not sel: return
         tid = sel[0]
         task = next((t for t in state.SCHED_TASKS if t["id"] == tid), None)
-        menu = tkinter.Menu(dlg, tearoff=0, bg=C["bgc"], fg=C["fgt"],
+        menu = tkinter.Menu(win_parent, tearoff=0, bg=C["bgc"], fg=C["fgt"],
             activebackground=C["acl"], activeforeground=C["fgt"])
         if task:
             en = task.get("enabled", True)
@@ -2889,13 +2924,16 @@ def open_sched_manager():
         finally: menu.grab_release()
 
     def _del_task(tid):
-        if messagebox.askyesno("确认", "确定删除此任务?"):
+        if messagebox.askyesno("确认", "确定删除此任务?", parent=win_parent):
             sched_module.remove_task(tid); _mgr_refresh()
             show_toast(root, "任务已删除", "warning")
 
     mgr_tree.bind("<Button-3>", _mgr_context)
     mgr_tree.bind("<Delete>", lambda e: (
         _del_task(mgr_tree.selection()[0]) if mgr_tree.selection() else None))
+    # 双击行直接编辑
+    mgr_tree.bind("<Double-1>", lambda e: (
+        _mgr_edit_task(mgr_tree.selection()[0]) if mgr_tree.selection() else None))
 
     def _mgr_show_logs(parent):
         ldlg = tkinter.Toplevel(parent)
@@ -2904,45 +2942,8 @@ def open_sched_manager():
         ldlg.transient(parent)
         ldlg.configure(bg=C["bgc"])
         _set_window_icon(ldlg)
-        ldlg.columnconfigure(0, weight=1); ldlg.rowconfigure(1, weight=1)
-
-        ltbar = tkinter.Frame(ldlg, bg=C["bgc"])
-        ltbar.grid(row=0, column=0, sticky="ew", padx=sp("gap"), pady=(sp("gap"), sp("gap_tight")))
-        _btn(ltbar, "刷新", lambda: _log_refresh(), C["bgc"], C["fgb"]).pack(side="left", padx=sp("hairline"))
-        _btn(ltbar, "清除", lambda: (sched_module.clear_task_logs(), _log_refresh()),
-            C["dg"], "white").pack(side="left", padx=sp("hairline"))
-
-        lf = tkinter.Frame(ldlg, bg=C["bgc"], highlightbackground=C["bd"], highlightthickness=1)
-        lf.grid(row=1, column=0, sticky="nsew", padx=sp("gap"), pady=(0, sp("gap")))
-        lf.columnconfigure(0, weight=1); lf.rowconfigure(0, weight=1)
-
-        log_tree = ttk.Treeview(lf,
-            columns=("task","script","time","status","trigger"),
-            show="headings", selectmode="browse")
-        for c, t, w in [("task","任务",100),("script","脚本",120),("time","时间",140),
-            ("status","状态",70),("trigger","触发",60)]:
-            log_tree.heading(c, text=t); log_tree.column(c, width=w, minwidth=40)
-        lsy = tkinter.Scrollbar(lf, orient="vertical", command=log_tree.yview,
-            width=sp("sb_w"), relief="flat", bg=C["bd"], troughcolor=C["bgc"])
-        log_tree.configure(yscrollcommand=lsy.set)
-        log_tree.grid(row=0, column=0, sticky="nsew"); lsy.grid(row=0, column=1, sticky="ns")
-        log_tree.tag_configure("ok", foreground=C["sc"])
-        log_tree.tag_configure("fail", foreground=C["dg"])
-        log_tree.tag_configure("info", foreground=C["ac"])
-        # §4.5 降级: show="headings" 无 #0 列 → 选中行加粗
-        bind_sel_bold(log_tree)
-
-        def _log_refresh():
-            for item in log_tree.get_children():
-                log_tree.delete(item)
-            for e in reversed(sched_module.get_task_logs(200)):
-                s = e.get("status","")
-                tag = "ok" if "成功" in s or "运行" in s else ("fail" if "失败" in s or "异常" in s else "info")
-                log_tree.insert("", "end", values=(
-                    e.get("task_name",""), e.get("script_name",""),
-                    e.get("time",""), s, e.get("trigger","")), tags=(tag,))
-        _log_refresh()
-
+        ldlg.columnconfigure(0, weight=1); ldlg.rowconfigure(0, weight=1)
+        build_sched_log(ldlg)
         ldlg.bind("<Escape>", lambda e: ldlg.destroy())
 
     # L4 #5: 搜索输入即时过滤
@@ -2951,10 +2952,106 @@ def open_sched_manager():
     except Exception:                           # noqa: BLE001
         pass
     # L4 #6 降级: 拖放需第三方依赖 → Ctrl+V 粘贴路径即新建任务
-    bind_paste_new_task(mgr_tree, dlg, _mgr_refresh)
-    bind_paste_new_task(dlg, dlg, _mgr_refresh)
+    bind_paste_new_task(mgr_tree, win_parent, _mgr_refresh)
+    if isinstance(parent, tkinter.Toplevel):
+        # 独立窗口形态: 焦点在窗口空白处也能 Ctrl+V 新建（Tab 形态避免绑到 root 抢编辑器粘贴）
+        bind_paste_new_task(parent, win_parent, _mgr_refresh)
 
     _mgr_refresh()
+    return {"tree": mgr_tree, "refresh": _mgr_refresh, "toolbar": mgr_toolbar}
+
+
+def build_sched_log(parent):
+    """在 parent 容器内构建内嵌「执行记录」面板（工具栏 + 日志表）。
+
+    供 Tab 底部内嵌与独立「查看日志」弹窗复用。返回句柄 dict:
+    {"tree": log_tree, "refresh": _log_refresh, "clear": _log_clear, "toolbar": ltbar}。
+    """
+    import scheduler as sched_module
+
+    parent.columnconfigure(0, weight=1)
+    parent.rowconfigure(0, weight=0)
+    parent.rowconfigure(1, weight=1)
+
+    ltbar = tkinter.Frame(parent, bg=C["bgc"])
+    ltbar.grid(row=0, column=0, sticky="ew", padx=sp("gap"), pady=(sp("gap_tight"), sp("gap_tight")))
+    tkinter.Label(ltbar, text="执行记录", font=FONT_SMALL,
+                  bg=C["bgc"], fg=C["fgb"]).pack(side="left", padx=(0, sp("gap")))
+    _btn(ltbar, "刷新", lambda: _log_refresh(), C["bgc"], C["fgb"]).pack(side="left", padx=sp("hairline"))
+    _btn(ltbar, "清除", lambda: (sched_module.clear_task_logs(), _log_refresh()),
+         C["dg"], "white").pack(side="left", padx=sp("hairline"))
+
+    lf = tkinter.Frame(parent, bg=C["bgc"], highlightbackground=C["bd"], highlightthickness=1)
+    lf.grid(row=1, column=0, sticky="nsew", padx=sp("gap"), pady=(0, sp("gap")))
+    lf.columnconfigure(0, weight=1); lf.rowconfigure(0, weight=1)
+
+    log_tree = ttk.Treeview(lf,
+        columns=("task", "script", "time", "status", "trigger"),
+        show="headings", selectmode="browse")
+    for c, t, w in [("task", "任务", 100), ("script", "脚本", 140), ("time", "时间", 140),
+                    ("status", "状态", 80), ("trigger", "触发", 70)]:
+        log_tree.heading(c, text=t); log_tree.column(c, width=w, minwidth=40)
+    lsy = tkinter.Scrollbar(lf, orient="vertical", command=log_tree.yview,
+                            width=sp("sb_w"), relief="flat", bg=C["bd"], troughcolor=C["bgc"])
+    log_tree.configure(yscrollcommand=lsy.set)
+    log_tree.grid(row=0, column=0, sticky="nsew"); lsy.grid(row=0, column=1, sticky="ns")
+    log_tree.tag_configure("ok", foreground=C["sc"])
+    log_tree.tag_configure("fail", foreground=C["dg"])
+    log_tree.tag_configure("info", foreground=C["ac"])
+    # §4.5 降级: show="headings" 无 #0 列 → 选中行加粗
+    bind_sel_bold(log_tree)
+
+    _log_sig = {"v": None}
+
+    def _log_refresh():
+        # 变化驱动: 日志未变化时跳过整表重建，避免高频刷新卡顿。
+        entries = list(reversed(sched_module.get_task_logs(200)))
+        rows = []
+        for e in entries:
+            s = e.get("status", "")
+            tag = "ok" if "成功" in s or "运行" in s else ("fail" if "失败" in s or "异常" in s else "info")
+            rows.append((tag, (e.get("task_name", ""), e.get("script_name", ""),
+                               e.get("time", ""), s, e.get("trigger", ""))))
+        sig = tuple(rows)
+        if _log_sig["v"] == sig:
+            return
+        _log_sig["v"] = sig
+        try:
+            sel = list(log_tree.selection())
+            yv = log_tree.yview()
+        except Exception:                       # noqa: BLE001
+            sel, yv = [], ()
+        for item in log_tree.get_children():
+            log_tree.delete(item)
+        for tag, vals in rows:
+            log_tree.insert("", "end", values=vals, tags=(tag,))
+        try:
+            for tid in sel:
+                if log_tree.exists(tid):
+                    log_tree.selection_set(tid)
+            if yv:
+                log_tree.yview_moveto(yv[0])
+        except Exception:                       # noqa: BLE001
+            pass
+
+    def _log_clear():
+        sched_module.clear_task_logs()
+        _log_refresh()
+
+    _log_refresh()
+    return {"tree": log_tree, "refresh": _log_refresh, "clear": _log_clear, "toolbar": ltbar}
+
+
+def open_sched_manager():
+    """打开计划任务管理窗口（多任务表格 + 执行日志）—— 独立窗口入口。"""
+    dlg = tkinter.Toplevel(root)
+    dlg.title("计划任务管理 — ACRPA")
+    place_dialog(dlg, 780, 520)
+    dlg.minsize(600, 400)
+    dlg.transient(root)
+    dlg.configure(bg=C["bgc"])
+    _set_window_icon(dlg)
+    build_sched_manager(dlg, win_parent=dlg)
     dlg.bind("<Escape>", lambda e: dlg.destroy())
 
 

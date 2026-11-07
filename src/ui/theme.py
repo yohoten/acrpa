@@ -24,7 +24,7 @@ __all__ = [
     "colors", "apply_theme",
     "set_role", "get_role", "clear_role", "roled", "resolve_bg", "SEMANTIC_TOKENS",
     "subscribe", "unsubscribe", "publish", "subscriber_count", "clear_subscribers",
-    "claim_window", "is_claimed", "claimed_count",
+    "claim_window", "is_claimed", "claimed_widgets", "claimed_count",
     "CAT_GROUPS", "CAT_COLORS", "cat_color",
     "FLOW_FALLBACK_COLOR", "FLOW_DISABLED_COLOR", "flow_fallback_style",
 ]
@@ -335,6 +335,12 @@ def is_claimed(win):
         if w is win:
             return True
     return False
+
+
+def claimed_widgets():
+    """返回当前存活的自管换肤控件集合 (清理一次, 供通用 walk 批量判定)。"""
+    _prune_claimed()
+    return {w for w, _o in _claimed_windows}
 
 
 # ── 语义底色上的文字色 ──

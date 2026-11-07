@@ -59,7 +59,7 @@ from tkinter import ttk
 
 __all__ = [
     "build", "init_ctx", "refresh_theme", "flush_and_apply",
-    "toggle_dock", "on_sash_release", "autoscroll_changed",
+    "toggle_dock", "toggle_body", "on_sash_release", "autoscroll_changed",
     "apply_cbar", "apply_filter", "search_next", "clear_view", "export_view",
     "set_toggle_button",
     "get_rz", "get_tlog", "get_scroll", "get_card", "get_header", "get_toolbar",
@@ -91,7 +91,7 @@ _log_level_var = None       # StringVar 级别过滤
 _log_search_var = None      # StringVar 搜索关键字
 _log_level_combo = None     # 级别下拉
 _log_search_entry = None    # 搜索输入框
-_log_collapse_btn = None    # 头部「▾ 收起」按钮
+_log_collapse_btn = None    # 头部「收起 ▲ / 展开 ▼」折叠按钮
 _log_dock_toggle_btn = None # 状态栏「▾ 日志」展开入口
 _parent_dock = None         # main_paned 内的 pane 容器 (原 bottom_dock)
 _main_paned = None          # 承载 pane 的 PanedWindow
@@ -109,6 +109,7 @@ _CTX = {
 
 # ── 面板状态 / 级别 tag 表 / 过滤与色条游标 (原 ACRPA 模块级常量, 原位迁入) ──
 _log_dock_state = {"visible": True, "h": 160}
+_log_body_collapsed = False   # 日志体折叠态 (§3.5: 只隐表体, 保留标题 + 工具条)
 _LOG_LEVEL_TAGS = ("info", "success", "warning", "error")
 _logfilter = {"applied": 0}   # 已应用过滤到的行号 (增量)
 # §4.6 左缘 2px 色条: 级别 tag ↔ cbar_<tag> ↔ 行首字形 ▌
@@ -237,14 +238,19 @@ def build(parent, *, log_dir, colors, fonts, deps=None):
         _main_paned.bind("<ButtonRelease-1>", on_sash_release)
     _lh = lh
 
-    _log_collapse_btn = tkinter.Button(lh, text="▾ 收起", font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"],
+    _log_collapse_btn = tkinter.Button(lh, text="收起 ▲", font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"],
         activebackground=C["acl"], relief="flat", bd=1, cursor="hand2", padx=6, pady=1,
-        command=toggle_dock)
+        command=toggle_body)
     _log_collapse_btn.grid(row=0, column=2, sticky="e", padx=(4, 0))
 
-    # 将日志 Dock 作为 pane#1 加入 (默认高 160, 最小 60)
+    # 将日志 Dock 作为 pane#1 加入 (最小 60; stretch=always 随窗口等比, 不抢增量)
     if _main_paned is not None:
-        _main_paned.add(parent, minsize=60, height=160, stretch="never")
+        _main_paned.add(parent, minsize=60, height=160, stretch="always")
+        # 首帧后恢复/设置 sash: 优先 state.LAYOUT_SASH, 否则「窗口高 − 180」
+        try:
+            _main_paned.after_idle(_restore_sash)
+        except Exception:
+            pass
 
     # ③ 日志工具条: 级别过滤 / 关键字搜索 / 清空 / 导出
     lt = tkinter.Frame(card_log, bg=C["bgc"]); lt.grid(row=1, column=0, sticky="ew", padx=6, pady=(0, 2))
@@ -548,17 +554,22 @@ def flush_and_apply():
 # ══════════════════════════════════════════════════════════════════════
 
 def _toggle_log_dock(event=None):
-    """收起/展开底部常驻日志面板 (记忆收起前高度)。"""
+    """收起/展开底部常驻日志面板 (记忆收起前高度, 并持久化 sash)。"""
     try:
         if _log_dock_state["visible"]:
             try: _log_dock_state["h"] = _parent_dock.winfo_height() or 160
             except Exception: pass
+            _persist_sash(_log_dock_state["h"])
             _main_paned.forget(_parent_dock)
             _log_dock_state["visible"] = False
         else:
             _main_paned.add(_parent_dock, minsize=60,
-                            height=_log_dock_state["h"], stretch="never")
+                            height=_log_dock_state["h"], stretch="always")
             _log_dock_state["visible"] = True
+            try:
+                _main_paned.after_idle(_restore_sash)
+            except Exception:
+                pass
         try:
             _log_dock_toggle_btn.config(
                 text=("▾ 日志" if _log_dock_state["visible"] else "▸ 日志"))
@@ -568,11 +579,75 @@ def _toggle_log_dock(event=None):
         pass
 
 
+def toggle_body(event=None):
+    """折叠/展开日志体 (§3.5): 只隐表体, 保留标题 + 工具条, 按钮文案随状态切换。"""
+    global _log_body_collapsed
+    try:
+        _log_body_collapsed = not _log_body_collapsed
+        if _log_frame is not None:
+            if _log_body_collapsed:
+                _log_frame.grid_remove()
+            else:
+                _log_frame.grid()
+        if _log_collapse_btn is not None:
+            _log_collapse_btn.config(text="展开 ▼" if _log_body_collapsed else "收起 ▲")
+        if not _log_body_collapsed:
+            # 展开时补一次刷新, 确保表体重新可见后内容最新 (§3.5)
+            try:
+                flush_and_apply()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+def _persist_sash(h=None):
+    """把日志 Dock 高度写入 state.LAYOUT_SASH["main"]["dock"] (单键写盘)。"""
+    try:
+        if h is None:
+            h = _log_dock_state.get("h", 160)
+        import state
+        state.set_layout_sash("main", "dock", max(60, int(h)), persist=True)
+    except Exception:
+        pass
+
+
+def _restore_sash(_attempt=0):
+    """构建/展开后恢复日志 Dock 高度 (优先缓存, 否则「窗口高 − 180」)。"""
+    try:
+        if _main_paned is None or _parent_dock is None:
+            return
+        total_h = _main_paned.winfo_height()
+        if total_h <= 1:
+            # 首帧可能尚未映射; 有界重试, 避免「默认 160 永不纠正」
+            if _attempt < 3:
+                try:
+                    _main_paned.after(120, lambda: _restore_sash(_attempt + 1))
+                except Exception:
+                    pass
+            return
+        cached = None
+        try:
+            import state
+            cached = state.get_layout_sash().get("main", {}).get("dock")
+        except Exception:
+            cached = None
+        if cached is None:
+            h = 180
+        else:
+            h = max(60, min(int(cached), max(60, total_h - 200)))
+        # tkinter.PanedWindow 无 sashpos; 垂直分栏用 sash_place(0, 0, y)
+        state.sash_set_pos(_main_paned, 0, max(200, total_h - h))
+    except Exception:
+        pass
+
+
 def _on_log_sash_release(event=None):
-    """拖动 sash 后记忆日志面板高度。"""
+    """拖动 sash 后记忆日志面板高度并持久化 (§5.4)。"""
     try:
         if _log_dock_state["visible"]:
             _log_dock_state["h"] = max(60, _parent_dock.winfo_height())
+            _persist_sash(_log_dock_state["h"])
     except Exception:
         pass
 
@@ -1024,7 +1099,7 @@ def get_search_entry():
 
 
 def get_collapse_btn():
-    """头部「▾ 收起」按钮。"""
+    """头部「收起 ▲ / 展开 ▼」折叠按钮。"""
     return _log_collapse_btn
 
 

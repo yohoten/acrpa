@@ -12,7 +12,6 @@ PAGE_DEFS = (
     ("自动化", (
         ("execution", "执行", "设置输入模式、重试、超时与运行保护。"),
         ("recording", "录制与日志", "管理动作录制、日志保存和诊断导出。"),
-        ("schedule", "定时任务", "配置执行计划、重复规则与轮询间隔。"),
     )),
     ("智能与连接", (
         ("ai_ocr", "AI 与 OCR", "配置 AI 服务、文字识别和原生 OCR 后端。"),
@@ -30,7 +29,7 @@ PAGE_META = {page: (title, desc) for _group, pages in PAGE_DEFS
              for page, title, desc in pages}
 CARD_TO_PAGE = {
     "system": "general", "exec": "execution", "record": "recording",
-    "log": "recording", "sched": "schedule", "ai": "ai_ocr",
+    "log": "recording", "ai": "ai_ocr",
     "advanced": "execution", "netlink": "netlink", "python": "extensions",
     "market": "extensions", "extensions": "extensions", "quick": "about",
 }
@@ -43,8 +42,6 @@ PAGE_ALIASES = {
                   "bound_window_title", "stop_on_error", "基础执行"),
     "recording": ("recording_stop_hotkey", "enable_log_saving", "log_level",
                   "log_retention", "record", "日志"),
-    "schedule": ("sched_enabled", "sched_hour", "sched_minute",
-                 "sched_repeat_mode", "sched_poll_interval", "scheduler"),
     "ai_ocr": ("api_model", "api_key", "ai_provider", "ai_base_url",
                "ai_smart_retry", "ai_anomaly_detect", "ocr_preload",
                "ocr_threads", "ocr_preferred_backend", "paddle_dll", "ocr"),

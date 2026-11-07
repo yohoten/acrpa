@@ -55,13 +55,12 @@ _toggle_fold = None
 _highlight_after = None
 _after_jobs = set()
 _search_records = []
-_CARD_KEYS = ("exec", "ai", "sched", "record", "log", "system", "quick",
+_CARD_KEYS = ("exec", "ai", "record", "log", "system", "quick",
               "advanced", "netlink", "python", "market", "extensions")
 _PAGE_BUILD = {
     "general": (("system", None),),
     "execution": (("exec", None), ("advanced", "execution")),
     "recording": (("record", None), ("log", None)),
-    "schedule": (("sched", None), ("advanced", "schedule")),
     "ai_ocr": (("ai", None), ("advanced", "ocr")),
     "browser": (("advanced", "browser"),),
     "netlink": (("netlink", None),),
@@ -133,12 +132,12 @@ def _log1(msg, level="info"):
 
 
 def _card_modules():
-    from ui.settings.cards import exec as c_exec, ai as c_ai, sched as c_sched
+    from ui.settings.cards import exec as c_exec, ai as c_ai
     from ui.settings.cards import record as c_record, log as c_log, system as c_system
     from ui.settings.cards import quick as c_quick, advanced as c_advanced
     from ui.settings.cards import netlink as c_netlink, python as c_python
     from ui.settings.cards import market as c_market, extensions as c_extensions
-    return {"exec": c_exec, "ai": c_ai, "sched": c_sched, "record": c_record,
+    return {"exec": c_exec, "ai": c_ai, "record": c_record,
             "log": c_log, "system": c_system, "quick": c_quick, "advanced": c_advanced,
             "netlink": c_netlink, "python": c_python, "market": c_market,
             "extensions": c_extensions}
@@ -911,8 +910,16 @@ def open_settings_window():
         return card, content_frame, title_row, arrow
 
     def btn(parent, text, command, bg=None, fg=None, tip=None):
-        bg = bg or C["bgc"]
-        role = next((key for key in ("ac", "sc", "wn", "dg") if bg == C.get(key)), None)
+        # bg 语义: 既可以是语义键字符串 ("ac"/"sc"/"dg"/"wn"), 也可以是实际颜色值。
+        # 此前按 `bg == C.get(key)` 判定, 而卡片普遍传的是字符串键, 导致 role 恒为 None,
+        # 语义按钮全部退化为中性 surface_alt 底色, 失去应有的色彩与对比度。
+        role = None
+        if bg:
+            if bg in ("ac", "sc", "wn", "dg"):
+                role = bg
+            else:
+                role = next((key for key in ("ac", "sc", "wn", "dg")
+                             if bg == C.get(key)), None)
         button = RoundedButton(parent, text=text, command=command, colors=C,
                                role=role, tooltip=tip)
         return button
@@ -948,7 +955,6 @@ def open_settings_window():
     ctx.flash_saved = _flash_saved
     ctx.later = _later
     ctx.track_card_vars = _track_card_vars
-    ctx.set_sched_label = lambda label: globals().__setitem__("_sched_next_label", label)
     ctx.ensure_tray = _ensure_tray
     ctx.destroy_tray = _destroy_tray
     ctx.toggle_fold = _toggle_fold

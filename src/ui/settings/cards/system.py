@@ -324,12 +324,12 @@ def build(parent, ctx):
     _hk_lines, _hk_bad = [], False
     try:
         import hotkey_win as _hkwin
-        _backend = str(getattr(state, "HOTKEY_BACKEND", "poll") or "poll").lower()
+        _backend = str(getattr(state, "HOTKEY_BACKEND", "register") or "register").lower()
         _mgr = _hkwin.HotkeyManager.existing_instance()
         _errs = dict(_mgr.errors()) if _mgr is not None else {}
         if _backend != "register":
             _hk_lines.append(
-                "热键后端：轮询（兼容默认）。改为 register 可启用吞键式全局热键。")
+                "热键后端：轮询（兼容回退）。改为 register 可启用吞键式全局热键。")
         elif _errs:
             _hk_bad = True
             _hk_lines.append("热键注册失败（该条已退回轮询，功能仍可用）：")

@@ -32,7 +32,9 @@ TASK_VERSION = 1
 _root = None
 _sched_enabled_var = None
 _sched_next_label = None
-_sched_task_tree = None  # 多任务 Treeview 引用
+_sched_task_tree = None      # 多任务 Treeview 引用（回退路径）
+_task_tree_refresh = None    # 多任务 Treeview 刷新回调（优先于 _sched_task_tree）
+_gui_refresh_pending = False  # 主线程刷新请求去重标志
 _stop_event = threading.Event()      # 旧「单任务定时执行」的停止信号
 _multi_stop = threading.Event()      # 多任务调度线程的停止信号（与上面解耦，互不误杀）
 _last_start_time = 0
@@ -75,12 +77,14 @@ _PENDING_MAX_AGE = 600           # 排队项超过 10 分钟视为过期丢弃
 # ======================================================================
 # 依赖注入
 # ======================================================================
-def set_gui_refs(root, enabled_var, next_label, task_tree=None):
-    global _root, _sched_enabled_var, _sched_next_label, _sched_task_tree
+def set_gui_refs(root, enabled_var, next_label, task_tree=None, task_tree_refresh=None):
+    global _root, _sched_enabled_var, _sched_next_label, _sched_task_tree, _task_tree_refresh
     _root = root
     _sched_enabled_var = enabled_var
     _sched_next_label = next_label
     _sched_task_tree = task_tree
+    if task_tree_refresh is not None:
+        _task_tree_refresh = task_tree_refresh
 
 
 def set_exec_hooks(stop_fn=None, main_run_fn=None):
@@ -1002,11 +1006,8 @@ def multi_task_loop(main_run_fn=None):
                     except Exception as e:
                         log1("计划任务判定异常: {}".format(e), "error")
 
-                if _root and _sched_task_tree:
-                    try:
-                        _root.after(0, _refresh_task_tree)
-                    except Exception:
-                        pass
+                if _root and (_task_tree_refresh is not None or _sched_task_tree):
+                    _request_gui_refresh()
 
                 stop_now = False
                 for _ in range(_poll_interval()):
@@ -1088,11 +1089,43 @@ def _slots_text(task):
 # ======================================================================
 # Treeview 刷新（调度器内部注入的 Treeview 用；任务管理器有独立实现）
 # ======================================================================
+def _request_gui_refresh():
+    """请求在主线程刷新任务树（去重：同一时刻只排一个刷新请求，避免调度线程
+    每轮都往 Tk 事件队列堆积全量重绘导致卡顿）。"""
+    global _gui_refresh_pending
+    if _gui_refresh_pending or _root is None:
+        return
+    _gui_refresh_pending = True
+
+    def _cb():
+        global _gui_refresh_pending
+        _gui_refresh_pending = False
+        try:
+            if _task_tree_refresh is not None:
+                _task_tree_refresh()
+            else:
+                _refresh_task_tree()
+        except Exception:
+            pass
+
+    try:
+        _root.after(0, _cb)
+    except Exception:
+        _gui_refresh_pending = False
+
+
 def _refresh_task_tree():
-    """刷新计划任务 Treeview"""
+    """刷新计划任务 Treeview（回退路径：仅当未注入刷新回调时使用）。
+
+    列布局与任务管理器一致: name/target/plan/next_run/last_run/status (6 列)，
+    避免 values 与列数错位。
+    """
     if not _sched_task_tree:
         return
     try:
+        _sched_task_tree.tag_configure("enabled", foreground=themed("sc"))
+        _sched_task_tree.tag_configure("disabled", foreground=themed("fgm"))
+        _sched_task_tree.tag_configure("expired", foreground=themed("wn"))
         for item in _sched_task_tree.get_children():
             _sched_task_tree.delete(item)
         for task in state.SCHED_TASKS:
@@ -1101,15 +1134,14 @@ def _refresh_task_tree():
                 row["name"],
                 row["target"],
                 row["plan"],
-                _slots_text(task),
                 row["next_run"],
                 row["last_run"],
                 row["status"],
             )
             tag = "enabled" if row["enabled"] else "disabled"
+            if row["status"] in ("已过期", "已达上限"):
+                tag = "expired"
             _sched_task_tree.insert("", "end", values=values, iid=row["id"], tags=(tag,))
-            _sched_task_tree.tag_configure("enabled", foreground=themed("sc"))
-            _sched_task_tree.tag_configure("disabled", foreground=themed("fgm"))
     except Exception:
         pass
 

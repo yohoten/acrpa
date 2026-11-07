@@ -20,7 +20,6 @@ _SECTION_TITLES = {
     "execution": "运行保护",
     "ocr": "OCR 识别",
     "browser": "浏览器与输入驱动",
-    "schedule": "调度高级选项",
 }
 _OCR_BACKEND_MAP = {"自动": "auto", "PaddleOCR": "paddle",
                     "PaddleOCR.dll": "paddle_dll",
@@ -392,19 +391,10 @@ class _Builder:
                    help="仅在选择驱动键鼠输入模式时使用"))
         self.handles["dd_dll_path_var"] = dll_path
 
-    def schedule(self):
-        self.sec("调度轮询", first=True)
-        poll = self.var(tkinter.StringVar, str(state.SCHED_POLL_INTERVAL))
-        self.add(row(self.content, self.ctx, "轮询间隔", lambda p: self.spin(
-            p, poll, 5, 600, 5, 5, "调度轮询间隔", 30, 5, 600),
-            unit="秒", help="定时任务检查间隔；修改后自动保存"))
-        self.handles["sched_poll_var"] = poll
-
-
 def build(parent, ctx, section=None):
     if section is not None and section not in _SECTION_TITLES:
         raise ValueError("未知高级设置分节: {}".format(section))
-    sections = (section,) if section else ("execution", "ocr", "browser", "schedule")
+    sections = (section,) if section else ("execution", "ocr", "browser")
     title = _SECTION_TITLES.get(section, "高级设置")
     card, content, title_row, _ = ctx.make_collapsible_card(parent, title, "⚒")
     card.grid(row=ROW, column=0, sticky="ew", **ctx.PAD)
@@ -435,7 +425,9 @@ def apply(ctx, handles):
     state.BROWSER_CHANNEL = _CHANNEL_VALUE_OF.get(handles["browser_channel_var"].get(), "")
     state.BROWSER_PERSISTENT = bool(handles["browser_persistent_var"].get())
     state.BROWSER_USER_DATA_DIR = handles["browser_profile_var"].get().strip()
-    state.SCHED_POLL_INTERVAL = _int_or(handles["sched_poll_var"], 30, 5, 600)
+    poll_var = handles.get("sched_poll_var")
+    if poll_var is not None:
+        state.SCHED_POLL_INTERVAL = _int_or(poll_var, 30, 5, 600)
     state.DD_DLL_PATH = handles["dd_dll_path_var"].get().strip()
     state.PADDLE_DLL_ENABLED = bool(handles["paddle_dll_enabled_var"].get())
     state.PADDLE_DLL_DIR = handles["paddle_dll_dir_var"].get().strip()

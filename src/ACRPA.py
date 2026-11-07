@@ -63,7 +63,7 @@ from tray import SystemTray
 import dialogs
 from dialogs import (init_ctx, show_help_dialog, show_update_dialog,
                      open_version_history, open_ai_panel, open_ai_debug_dialog,
-                     open_failure_viewer, open_sched_manager)
+                     open_failure_viewer)
 # 独立设置窗口模块 (设置 Tab 已分离，主题切换时由 _refresh_theme 同步)
 import settings_window
 # UI 基础层 (阶段二第 2 项): 主题色板 / 样式应用 / 换肤事件总线。
@@ -84,6 +84,7 @@ from ui import exec_bar as ui_exec_bar
 # src/ui/workflow_view.py。本文件只保留「转发别名」(tab_workflow / wf_* / _wf_run /
 # _wf_stop / _wf_refresh_tree 等) 与构建期的 get_widgets() 取回; 领域层 src/workflow.py 不迁、不改。
 from ui import workflow_view as ui_workflow_view
+from ui import sched_tab as ui_sched_tab
 # 通用后台任务执行器 (threading 工作 + queue 投递 + root.after 轮询回主线程)。
 # Tk 非线程安全: 耗时 IO/解析一律丢给 bg_task, 控件操作只在主线程回调里做。
 # 未 start 时 submit() 退化为同步执行 → 无 GUI 环境/测试脚本的既有断言不变。
@@ -160,9 +161,14 @@ def _tray_open_settings():
         log1("打开设置失败: {}".format(e), "error")
 
 def _tray_open_scheduler():
-    """托盘菜单：打开定时执行设置"""
+    """托盘菜单：打开定时执行设置（聚焦主窗口并切到「定时任务」Tab，不再弹窗）。"""
     try:
-        open_sched_manager()
+        ensure = _SCHED_LAZY.get("ensure")
+        if ensure is not None:
+            ensure()
+        tab = _SCHED_LAZY.get("tab")
+        if tab is not None:
+            notebook.select(tab)
         root.deiconify()
         root.lift()
         root.focus_force()
@@ -1235,6 +1241,11 @@ def _do_close():
         import netlink_window; netlink_window.close_window()
     except Exception: pass
     try:
+        _dwin = _DEV_LINK_LAZY.get("win")
+        if _dwin is not None:
+            _dwin.close()
+    except Exception: pass
+    try:
         import netlink; netlink.stop_netlink()
     except Exception: pass
     
@@ -1281,6 +1292,11 @@ def _exit_for_update():
     state._closing = True
     try:
         import netlink_window; netlink_window.close_window()
+    except Exception: pass
+    try:
+        _dwin = _DEV_LINK_LAZY.get("win")
+        if _dwin is not None:
+            _dwin.close()
     except Exception: pass
     try:
         import netlink; netlink.stop_netlink()
@@ -1397,13 +1413,16 @@ def _refresh_theme():
     # apply_theme 同时重绑 utils.C (themed() 等既有引用依赖它)
     apply_theme(root, style)
 
+    # 独立窗口/内嵌面板若已声明「自管换肤」(ui_theme.claim_window), 通用 walk 不再跨入 ——
+    # 由所属模块的 ThemeBus 订阅回调负责, 避免跨窗口串扰/覆盖特化配色。
+    # (内嵌 Tab 面板也可声明: 设备互联 Tab 即由 ui.netlink.window.refresh_theme 自管)
+    _claimed = ui_theme.claimed_widgets()
+
     def _walk(p, prev):
         for w in p.winfo_children():
             try:
                 cls = w.winfo_class()
-                # 独立窗口若已声明「自管换肤」(ui_theme.claim_window), 通用 walk 不再跨入 ——
-                # 由该窗口所属模块的 ThemeBus 订阅回调负责, 避免跨窗口串扰/覆盖特化配色。
-                if cls == "Toplevel" and ui_theme.is_claimed(w):
+                if w in _claimed:
                     continue
                 # 图例色点等: 前景色是「语义色标」(节点类型色), 不能按主题重置,
                 # 只让底色跟随父容器。创建处打 _acrpa_keep_fg 标记即可豁免。
@@ -3103,7 +3122,7 @@ def _sync_legend():
     if not _LEGEND_AUTO:
         for _names, f in _LEGEND_GROUPS:
             try:
-                f.pack(side="left", padx=(2, 0))
+                f.pack(side="left", padx=(12, 0))  # §4.1 P2-1: 组间距统一 12
             except Exception:
                 pass
         try:
@@ -3117,7 +3136,7 @@ def _sync_legend():
         on = any(n in used for n in names)
         try:
             if on:
-                f.pack(side="left", padx=(2, 0))
+                f.pack(side="left", padx=(12, 0))  # §4.1 P2-1: 组间距统一 12
                 hit += 1
             else:
                 f.pack_forget()
@@ -3808,6 +3827,12 @@ def _cmd_snippet():
     def _refresh_list():
         cat = _cur_cat()
         kw = (search_var.get() or "").strip().lower()
+        # 记录原选中索引 (iid 即列表索引字符串), 重建后尽量恢复, 避免表格跳动
+        try:
+            sel = stree.selection()
+            sel_iid = sel[0] if sel else None
+        except Exception:
+            sel_iid = None
         for iid in stree.get_children():
             stree.delete(iid)
         _cache["items"] = []
@@ -3823,7 +3848,10 @@ def _cmd_snippet():
             _cache["items"].append(it)
         kids = stree.get_children()
         if kids:
-            stree.selection_set(kids[0]); stree.focus(kids[0]); _show_preview(kids[0])
+            if sel_iid is not None and stree.exists(sel_iid):
+                stree.selection_set(sel_iid); stree.focus(sel_iid); _show_preview(sel_iid)
+            else:
+                stree.selection_set(kids[0]); stree.focus(kids[0]); _show_preview(kids[0])
 
     def _on_cat(e=None):
         state.SNIPPET_LAST_CAT = _cur_cat()
@@ -4396,7 +4424,13 @@ def _show_variables_window():
     btn_frame.pack(fill="x", padx=5, pady=(0, 5))
     
     def refresh_vars():
-        """Refresh the variables display"""
+        """Refresh the variables display (保留选中, 避免重建后表格跳动)"""
+        # 记录选中变量名, 重建清空选择后按名称恢复
+        try:
+            sel = var_tree.selection()
+            sel_name = var_tree.item(sel[0], "values")[0] if sel else None
+        except Exception:
+            sel_name = None
         for item in var_tree.get_children():
             var_tree.delete(item)
         
@@ -4416,8 +4450,18 @@ def _show_variables_window():
         for var_name, var_value in state_vars.items():
             var_tree.insert("", "end", values=(var_name, str(var_value)), tags=("state",))
         
-        # 主题化: 硬编码紫 → 语义键 ai (换肤由 _refresh_theme 重配)
+        # 主题化: 硬编码紫 → 语义键 ai (换肤由 _refresh_theme 重配; 已移出循环)
         var_tree.tag_configure("state", foreground=themed("ai"))
+        # 恢复选中 (按变量名查找新 iid)
+        if sel_name is not None:
+            try:
+                for item in var_tree.get_children():
+                    vals = var_tree.item(item, "values")
+                    if vals and vals[0] == sel_name:
+                        var_tree.selection_set(item)
+                        break
+            except Exception:
+                pass
     
     def add_var():
         """Add a new variable"""
@@ -4566,28 +4610,46 @@ def _show_variables_window():
     timing_tree.pack(side="left", fill="both", expand=True, padx=5, pady=5)
     tsb.pack(side="right", fill="y", pady=5)
 
-    def refresh_timing():
-        """Refresh execution timing display"""
-        if not win.winfo_exists():
-            return
+    # 变化驱动刷新缓存: 签名 = (行数, 最新写入时间戳)，能同时捕捉「追加新行」与
+    # 「同一行覆盖更新」。仅当签名变化时才重建表格，空闲时零 Tcl 调用。
+    _timing_sig = [None]
+
+    def _timing_tree_rebuild(items):
+        """全量重建耗时表 (由内容变化触发, 不再每 2 秒空转重绘)。"""
+        # tag 颜色统一配置一次 (移出循环, 且主题切换后用最新 themed())
+        timing_tree.tag_configure("ok", foreground=themed("sc"))
+        timing_tree.tag_configure("fail", foreground=themed("dg"))
         for item in timing_tree.get_children():
             timing_tree.delete(item)
-        if hasattr(state, '_exec_timings') and state._exec_timings:
-            # Sort by row number
-            sorted_rows = sorted(state._exec_timings.items(), key=lambda x: x[0])
-            for row_num, tdata in sorted_rows:
-                status_text = "✔" if tdata["success"] else "✘"
-                tag = "ok" if tdata["success"] else "fail"
-                timing_tree.insert("", "end", values=(
-                    row_num, tdata["cmd"][:12],
-                    "{:.3f}s".format(tdata["elapsed"]),
-                    status_text), tags=(tag,))
-            timing_tree.tag_configure("ok", foreground=themed("sc"))
-            timing_tree.tag_configure("fail", foreground=themed("dg"))
-            # Auto-scroll to latest
-            children = timing_tree.get_children()
-            if children:
-                timing_tree.see(children[-1])
+        if not items:
+            return
+        sorted_rows = sorted(items.items(), key=lambda x: x[0])
+        for row_num, tdata in sorted_rows:
+            status_text = "✔" if tdata["success"] else "✘"
+            tag = "ok" if tdata["success"] else "fail"
+            timing_tree.insert("", "end", values=(
+                row_num, tdata["cmd"][:12],
+                "{:.3f}s".format(tdata["elapsed"]),
+                status_text), tags=(tag,))
+        # Auto-scroll to latest
+        children = timing_tree.get_children()
+        if children:
+            timing_tree.see(children[-1])
+
+    def refresh_timing():
+        """Refresh execution timing display (仅内容变化时重建, 空闲零开销)"""
+        if not win.winfo_exists():
+            return
+        items = getattr(state, '_exec_timings', None) or {}
+        latest = 0
+        for t in items.values():
+            ts = t.get("time", 0) if isinstance(t, dict) else 0
+            if ts > latest:
+                latest = ts
+        sig = (len(items), latest)
+        if sig != _timing_sig[0]:
+            _timing_sig[0] = sig
+            _timing_tree_rebuild(items)
         if win.winfo_exists():
             win.after(2000, refresh_timing)
     refresh_timing()
@@ -4994,6 +5056,16 @@ _WF_LIB_ACTIONS = None
 #   构建, 保证 IPC/快捷键/定时任务等**绕过 Tab 切换**的调用方也能正常执行。
 #   守卫: ensure 自身幂等 (built 标记), 重复调用不会二次构建。
 _WF_LAZY = {"built": False, "ok": False, "ensure": None}
+# 「定时任务」Tab 懒构建守卫 (tab 引用供托盘入口直接 select)
+_SCHED_LAZY = {"built": False, "ok": False, "tab": None, "ensure": None}
+# 「设备互联」Tab 懒构建守卫 (原独立窗口内嵌, 首次切到该 Tab 才构建)
+_DEV_LINK_LAZY = {"built": False, "ok": False, "tab": None, "ensure": None, "win": None}
+
+# ── Notebook Tab 索引枚举 (§3.3): 显式命名, 避免 0/1 魔法数漂移 ──
+_TAB_EDIT = 0        # 脚本编辑
+_TAB_WORKFLOW = 1    # 工作流
+_TAB_DEVLINK = 2     # 设备互联
+_TAB_SCHED = 3       # 定时任务
 
 
 def _wf_ensure():
@@ -5321,7 +5393,8 @@ def _periodic_g2(inline=False):
             if pc is None or pc.get("sched_val") != sched_val:
                 if pc is not None:
                     pc["sched_val"] = sched_val
-                settings_window.update_sched_next_label(sched_val)
+                # 下次执行标签现归「定时任务」Tab 持有 (设置窗口已移除定时任务)
+                ui_sched_tab.update_sched_next_label(sched_val)
     except Exception:
         pass
     # ⑥ 调度器保活
@@ -5496,10 +5569,33 @@ def _hotkey_win_dispatch(action):
 
 
 def _hotkey_win_execute(action):
-    """主线程执行 WM_HOTKEY 命中的动作 (日志文案与轮询路径逐字一致)。"""
+    """主线程执行 WM_HOTKEY 命中的动作 (日志文案与轮询路径逐字一致)。
+
+    action 命名约定:
+      * "run" / "pause" / "stop"               → 内建全局热键
+      * "rec_stop:cfg"                          → 配置的停止录制热键
+      * "task:<tid>:<run|stop>"                → 任务级热键
+    """
     try:
         if action == "pause" and not state.running:
             return   # 未运行时忽略暂停热键 (与 _hotkey_poll 同款判定)
+        # 停止录制热键 (硬编码 + 配置): 仅在录制中生效, 幂等设置 flag
+        if action.startswith("rec_stop:"):
+            if state.recording:
+                state.record_stop = True
+                log1("热键: 停止录制")
+            return
+        # 任务级热键: "task:<tid>:<run|stop>"
+        if action.startswith("task:"):
+            _, tid, taction = action.split(":", 2)
+            if taction == "stop":
+                log1("任务停止热键触发: {}".format(tid))
+                stop_execution()
+            else:
+                log1("任务热键触发: {}".format(tid))
+                sched.run_task_now(tid, main_run)
+            return
+        # 内建全局热键
         log1("热键触发: {}".format(action))
         fn = _hotkey_executors.get(action)
         if fn:
@@ -5511,13 +5607,14 @@ def _hotkey_win_execute(action):
 def _hotkey_win_sync():
     """S1-04 步骤 1/2: 按 state.HOTKEY_BACKEND 重建 RegisterHotKey 注册表。
 
-    * ``poll`` (默认): 清空注册表 → _HOTKEY_WIN_OK 为空 → 轮询行为与改造前逐字节等价;
-    * ``register``    : 交给 HotkeyManager 注册, 成功项记入 _HOTKEY_WIN_OK (轮询跳过),
-      失败项 (含 1409 已被其他程序占用) 记入 _HOTKEY_WIN_ERRS 并**自动落回轮询**。
+    * ``poll``    : 清空注册表 → _HOTKEY_WIN_OK 为空 → 轮询行为与改造前逐字节等价;
+    * ``register`` (默认): 交给 HotkeyManager 注册内建/录制停止/任务级全部热键,
+      成功项记入 _HOTKEY_WIN_OK (轮询跳过), 失败项 (含 1409 已被其他程序占用)
+      记入 _HOTKEY_WIN_ERRS 并**自动落回轮询**。
     绝不抛异常。
     """
     global _HOTKEY_WIN_OK, _HOTKEY_WIN_ERRS
-    backend = str(getattr(state, "HOTKEY_BACKEND", "poll") or "poll").strip().lower()
+    backend = str(getattr(state, "HOTKEY_BACKEND", "register") or "register").strip().lower()
     if backend != "register":
         # poll 模式: 不构造 manager、不起线程、不碰 user32 —— 与改造前逐字节等价。
         # 若刚从 register 切回来, 才需要真正注销 (instance 已存在且持有注册项)。
@@ -5535,10 +5632,18 @@ def _hotkey_win_sync():
         return
     mgr = hotkey_win.HotkeyManager.instance()
     bindings = {}
+    # ① 内建热键 run/pause/stop (字符串 spec, 复用 parse_spec 解析)
     for action, key in (("run", "HOTKEY_RUN"), ("pause", "HOTKEY_PAUSE"),
                         ("stop", "HOTKEY_STOP")):
         if action in _HOTKEY_ACTIONS:
             bindings[action] = str(getattr(state, key, "") or "")
+    # ② 配置的停止录制热键 (已解析为 (mods, vk))。硬编码 Ctrl+Shift+Q/S 刻意不注册:
+    #    RegisterHotKey 会吞键, 而 Ctrl+Shift+S 是编辑器「另存为」, 注册会破坏它。
+    if _RECORD_STOP_SPEC:
+        bindings["rec_stop:cfg"] = _RECORD_STOP_SPEC
+    # ③ 任务级热键 (tuple spec: (frozenset(mods), vk))
+    for tkey, (tid, _tname, taction) in _TASK_HOTKEYS.items():
+        bindings["task:{}:{}".format(tid, taction)] = tkey
     if not hotkey_win.is_supported():
         _HOTKEY_WIN_OK = set()
         _HOTKEY_WIN_ERRS = {a: hotkey_win.MSG_ERR_NON_WIN for a in bindings}
@@ -5549,8 +5654,7 @@ def _hotkey_win_sync():
         _HOTKEY_WIN_OK = set(mgr.registered_actions())
         _HOTKEY_WIN_ERRS = dict(errs)
         for action, err in errs.items():
-            log1("热键 {} ({}) {} —— 该条继续由轮询兜住".format(
-                action, bindings.get(action, ""), err), "warning")
+            log1("热键 {} {} —— 该条继续由轮询兜住".format(action, err), "warning")
     except Exception as e:
         _HOTKEY_WIN_OK = set()
         _HOTKEY_WIN_ERRS = {}
@@ -5647,14 +5751,8 @@ def _rebuild_hotkey_specs():
     _RECORD_STOP_SPEC = _parse_hotkey_spec(getattr(state, "RECORDING_STOP_HOTKEY", ""))
     _recstop_prev = False
     # 内建热键表变了下游的任务热键冲突判定也要跟着变 → 一并重建
+    # (RegisterHotKey 注册表统一在 _rebuild_task_hotkeys 末尾重建, 此处不再重复)
     _rebuild_task_hotkeys()
-    # ── S1-04 步骤 1: RegisterHotKey 后端重建 (仅 register 模式; 失败项落回轮询) ──
-    # 冲突检测结论不受影响: 上面的内建/任务热键表与 4 条日志文案完全不变, 这里只是把
-    # **已解析成功**的条目额外交给系统注册, 失败条目仍由 _hotkey_poll 继续兜住。
-    try:
-        _hotkey_win_sync()
-    except Exception:
-        pass
 
 
 def _task_hotkey_signature():
@@ -5725,6 +5823,12 @@ def _rebuild_task_hotkeys():
             table[key] = (tid, tname, action)
     _TASK_HOTKEYS = table
     _task_hotkey_prev = {k: False for k in table}
+    # 任务级热键已纳入 WM_HOTKEY: 变化后同步重建注册表 (失败项自动落回轮询)。
+    # 注意: _rebuild_hotkey_specs 也依赖此处统一 sync (内建/录制停止/任务热键一并注册)。
+    try:
+        _hotkey_win_sync()
+    except Exception:
+        pass
 
 
 # ── 配置变更监听器: 保存配置后自动同步运行时状态 ──
@@ -5775,7 +5879,9 @@ def _hotkey_poll():
     global _recstop_prev
     if state._closing: return
     try:
-        # 固定录制停止热键: Ctrl+Shift+Q / Ctrl+Shift+S (行为保留，不做回归)
+        # 固定录制停止热键: Ctrl+Shift+Q / Ctrl+Shift+S (行为保留，不做回归)。
+        # 刻意保持轮询而非 RegisterHotKey: 后者会吞键, 而 Ctrl+Shift+S 是编辑器「另存为」,
+        # 注册会导致另存为失效。仅配置的 RECORDING_STOP_HOTKEY 走 WM_HOTKEY。
         ctrl = ctypes.windll.user32.GetAsyncKeyState(0x11) & 0x8000
         shift = ctypes.windll.user32.GetAsyncKeyState(0x10) & 0x8000
         q = ctypes.windll.user32.GetAsyncKeyState(0x51) & 0x8000
@@ -5788,7 +5894,7 @@ def _hotkey_poll():
         # 复用 _parse_hotkey_spec 的解析结果与同款边沿检测, 按住不重复触发;
         # 解析失败/为空时 _RECORD_STOP_SPEC 为 None → 仅走上面的硬编码热键。
         rnow = False
-        if _RECORD_STOP_SPEC:
+        if _RECORD_STOP_SPEC and "rec_stop:cfg" not in _HOTKEY_WIN_OK:
             rmods, rvk = _RECORD_STOP_SPEC
             rbase = all(ctypes.windll.user32.GetAsyncKeyState(m) & 0x8000
                         for m in rmods)
@@ -5819,6 +5925,9 @@ def _hotkey_poll():
 
         # ── 任务级热键 (L1-5): 与内建热键同款边沿检测; 冲突项已在重建时告警忽略 ──
         for tkey, (tid, tname, taction) in list(_TASK_HOTKEYS.items()):
+            taction_name = "task:{}:{}".format(tid, taction)
+            if taction_name in _HOTKEY_WIN_OK:
+                continue   # 已由 WM_HOTKEY 接管, 仅注册失败项落回轮询兜底
             tmods, tvk = tkey
             try:
                 tpressed = all(
@@ -6106,7 +6215,7 @@ def build_app():
         _title_text_session, _tlog, _wf_show_flow, _wf_view_btn, _wfp, bottom_dock, \
         btn_debug_exec, btn_debug_mode, btn_pause, btn_run, btn_step, btn_step_mode, btn_stop, \
         btn_validate, btn_vars_exec, bundle_res, c, card_log, card_run, color, ctypes, dark_btn, dark_frame, \
-        dash_info, devlink_btn, e, edit_file_label, exec_bar, exec_maxmin_sp, exec_maxmin_var, \
+        dash_info, e, edit_file_label, exec_bar, exec_maxmin_sp, exec_maxmin_var, \
         exec_stoponerror_var, f, fold_btn, help_btn, hicon, hwnd, i, ico_path, label, \
         legend_frame, legend_inner, lh, log_auto_scroll, log_dock_toggle_btn, log_frame, \
         log_level_var, log_search_var, loop_count_var, lt, main_paned, netlink, notebook, \
@@ -6347,12 +6456,6 @@ def build_app():
     help_btn.pack(side="left", padx=(0, utils.sp(2)))
     utils.attach_tooltip(help_btn, "帮助 / 使用说明")
 
-    # 互联按钮 — 打开「设备互联」独立窗口 (与设置按钮同级样式)
-    devlink_btn = tkinter.Label(dark_frame, text="⊕", font=FONT_ICON_MD,
-        fg=C["fgm"], bg=C["bg"], cursor="hand2", padx=utils.sp(2))
-    devlink_btn.pack(side="left", padx=(0, utils.sp(2)))
-    utils.attach_tooltip(devlink_btn, "设备互联")
-
     # ── 可达性补齐 (路线图 §5.5): 图标 Label → 可 Tab 聚焦 + 可键盘激活 + 可访问名 ──
     # 在 <Enter>/<Leave> tooltip 绑定之后调用, 以免 set_accessible_name 抢先挂上 tooltip。
     # <Return>/<space> 与鼠标点击触发同一处理函数 (纯键盘等价)。
@@ -6361,7 +6464,6 @@ def build_app():
     utils.bind_icon_activate(dark_btn, toggle_dark, "切换深浅色主题")
     utils.bind_icon_activate(settings_btn, settings_window.open_settings_window, "打开设置")
     utils.bind_icon_activate(help_btn, show_help_dialog, "帮助")
-    utils.bind_icon_activate(devlink_btn, open_devlink, "设备互联")
 
     # ③ 主区: 垂直 PanedWindow —— 上 pane 内容(notebook) / 下 pane 常驻日志面板
     # (tkinter grid 无可拖 sash, 「可拖 + minsize + 一键收起」的原生正解即 PanedWindow)
@@ -6593,10 +6695,16 @@ def build_app():
     # ======================================================================
     tab_workflow = tkinter.Frame(notebook, bg=C["bg"])
     notebook.add(tab_workflow, text="  工作流  ")   # 第2个Tab (执行控制已升级为常驻工具栏)
+    tab_devlink = tkinter.Frame(notebook, bg=C["bg"])
+    notebook.add(tab_devlink, text="  设备互联  ")  # 第3个Tab (多设备互联, 原独立窗口内嵌)
+    _DEV_LINK_LAZY["tab"] = tab_devlink
+    tab_sched = tkinter.Frame(notebook, bg=C["bg"])
+    notebook.add(tab_sched, text="  定时任务  ")   # 第4个Tab (左管理 + 右设置)
+    _SCHED_LAZY["tab"] = tab_sched
     # 设置已分离为独立窗口 (settings_window.open_settings_window)，不再占用 Tab
 
     def _build_workflow_tab(*_a, **_kw):
-        """首次切到「工作流」Tab 时构建其内容 (幂等; 异常只记一次, 不重试)。"""
+        """首次切到「工作流」Tab 时构建其内容 (幂等; 失败置 built=False, 下次重试)。"""
         global _WF_LIB_ACTIONS, _wf_show_flow, _wf_view_btn, wf_canvas, wf_flow_canvas, \
             wf_flow_frame, wf_flow_scroll_y, wf_lib_frame, wf_lib_search, wf_lib_sy, \
             wf_lib_tree, wf_list_frame, wf_loop_var, wf_main, wf_maxmin_var, \
@@ -6605,7 +6713,6 @@ def build_app():
             wf_toolbar_overflow_hint, wf_tree
         if _WF_LAZY["built"]:
             return
-        _WF_LAZY["built"] = True
         try:
             ui_workflow_view.build(
                 notebook, tab=tab_workflow, colors=C,
@@ -6623,12 +6730,14 @@ def build_app():
                       "bind_sel_bold": _bind_sel_bold, "bind_row_hover": _bind_row_hover,
                       "load_pil": _load_pil, "get_image_grab": lambda: ImageGrab,
                       "ctx": _app_ctx})
-        except Exception as exc:      # 构建失败 → 保留空 Tab, 不影响其余功能
+        except Exception as exc:      # 构建失败 → 保留空 Tab, 允许下次切 Tab 重试
+            _WF_LAZY["built"] = False
             try:
                 log1("工作流 Tab 构建失败: %s" % (exc,), "error")
             except Exception:
                 pass
             return
+        _WF_LAZY["built"] = True
         # ── 转发别名: 既有直读 ACRPA.<name> 的引用 (tools / _periodic) 契约不变 ──
         _wfh = ui_workflow_view.get_widgets()
         wf_toolbar_outer = _wfh["wf_toolbar_outer"]
@@ -6665,19 +6774,75 @@ def build_app():
             pass
         _WF_LAZY["ok"] = True
 
-    def _on_wf_tab_changed(_event=None):
-        """notebook 切换: 命中「工作流」Tab 时才构建 (其余 Tab 切换零成本)。"""
+    def _build_sched_tab(*_a, **_kw):
+        """首次切到「定时任务」Tab 时构建其内容 (幂等; 失败置 built=False, 下次重试)。"""
+        if _SCHED_LAZY["built"]:
+            return
         try:
-            if notebook.select() == str(tab_workflow):
+            ui_sched_tab.build(
+                notebook, tab=tab_sched, colors=C,
+                fonts={"title": FONT_TITLE, "body": FONT_BODY,
+                       "small": FONT_SMALL, "button": FONT_BUTTON,
+                       "small_bold": FONT_SMALL_BOLD, "log": FONT_LOG},
+                deps={"ui_theme": ui_theme, "sp": utils.sp,
+                      "state": state, "log1": log1,
+                      "show_toast": utils.show_toast,
+                      "root": root, "app_root": APP_ROOT,
+                      "main_run": main_run})
+        except Exception as exc:      # 构建失败 → 保留空 Tab, 允许下次切 Tab 重试
+            _SCHED_LAZY["built"] = False
+            try:
+                log1("定时任务 Tab 构建失败: %s" % (exc,), "error")
+            except Exception:
+                pass
+            return
+        _SCHED_LAZY["built"] = True
+        _SCHED_LAZY["ok"] = True
+
+    def _build_devlink_tab(*_a, **_kw):
+        """首次切到「设备互联」Tab 时内嵌 NetLink 面板 (幂等; 失败置 built=False, 下次重试)。"""
+        if _DEV_LINK_LAZY["built"]:
+            return
+        try:
+            from ui.netlink import window as _nl_window
+            _dwin = _nl_window.NetLinkWindow(root, host=tab_devlink)
+            _DEV_LINK_LAZY["win"] = _dwin
+            # 内嵌实例自管换肤 (宿主 frame 已被 claim_window, 通用 walk 不再跨入)
+            try:
+                ui_theme.subscribe(_dwin.refresh_theme)
+            except Exception:
+                pass
+        except Exception as exc:      # 构建失败 → 保留空 Tab, 允许下次切 Tab 重试
+            _DEV_LINK_LAZY["built"] = False
+            try:
+                log1("设备互联 Tab 构建失败: %s" % (exc,), "error")
+            except Exception:
+                pass
+            return
+        _DEV_LINK_LAZY["built"] = True
+        _DEV_LINK_LAZY["ok"] = True
+
+    def _on_wf_tab_changed(_event=None):
+        """notebook 切换: 按 Tab 索引枚举构建 + 同步执行栏形态 (§3.3)。"""
+        try:
+            idx = notebook.index(notebook.select())
+        except Exception:
+            return
+        try:
+            if idx == _TAB_WORKFLOW:
                 _build_workflow_tab()
-                ui_exec_bar.set_active_tab(1)
-            else:
-                ui_exec_bar.set_active_tab(0)
+            elif idx == _TAB_DEVLINK:
+                _build_devlink_tab()
+            elif idx == _TAB_SCHED:
+                _build_sched_tab()
+            ui_exec_bar.set_active_tab(idx)
         except Exception:
             pass
 
     notebook.bind("<<NotebookTabChanged>>", _on_wf_tab_changed, add="+")
     _WF_LAZY["ensure"] = _build_workflow_tab
+    _DEV_LINK_LAZY["ensure"] = _build_devlink_tab
+    _SCHED_LAZY["ensure"] = _build_sched_tab
 
     # Wire scheduler to GUI (设置窗口为独立窗口: 勾选变量在此创建并复用，下次执行标签由设置窗口注入)
     state._sched_enabled_var = tkinter.BooleanVar(value=state.SCHED_ENABLED)
@@ -6713,6 +6878,8 @@ def build_app():
         fg=C["fgm"],bg=C["bg"],cursor="hand2")
     log_dock_toggle_btn.grid(row=0,column=3,sticky="e",padx=(utils.sp(8),0))
     log_dock_toggle_btn.bind("<Button-1>", lambda e: _toggle_log_dock())
+    # §5.2 图标按钮键盘可达: <Return>/<space> + 焦点环 + 可访问名
+    utils.bind_icon_activate(log_dock_toggle_btn, _toggle_log_dock, "日志面板")
     # 注入日志面板的「展开入口」(日志面板先于状态栏构建, 故此处回填)
     ui_log_dock.set_toggle_button(log_dock_toggle_btn)
 

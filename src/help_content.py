@@ -305,6 +305,15 @@ def parse_markdown_subset(text):
             blocks.append(Block(kind="olist", items=items))
             continue
 
+        # 引用块 >（连续 > 行合并为一段，行内样式由渲染层逐行解析）
+        if s.startswith(">"):
+            buf = []
+            while i < n and lines[i].strip().startswith(">"):
+                buf.append(lines[i].strip()[1:].strip())
+                i += 1
+            blocks.append(Block(kind="blockquote", text="\n".join(buf)))
+            continue
+
         # 段落：合并连续非空、非块起始行
         buf = [s]
         i += 1

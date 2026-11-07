@@ -253,7 +253,7 @@ def build(parent, *, notebook, colors, fonts, deps=None):
         _ld.clear()
     for label, group in (_CTX.get("legend_items") or []):
         f = tkinter.Frame(legend_inner, bg=C.get("bg"))
-        f.pack(side="left", padx=(2, 0))
+        f.pack(side="left", padx=(12, 0))  # §4.1 P2-1: 图例组间距统一 12
         _dot = tkinter.Label(f, text="●", font=FONT_ICON,
                              fg=ui_theme.cat_color(group), bg=C.get("bg"))
         _dot._acrpa_keep_fg = True

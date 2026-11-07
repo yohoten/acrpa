@@ -14,8 +14,8 @@
 
 特性：
     · 非模态（默认 transient 但不 grab_set）；配置键 help_modal=True 时恢复模态。
-    · 左侧章节导航（Listbox 选中高亮）+ 右侧可滚动内容区（Text）。
-    · 顶部搜索框（即时过滤章节/命令 + 命中高亮）；「复制本章」「下载模板」按钮；「关闭」按钮。
+    · 左侧章节导航（Treeview 悬停/选中高亮）+ 右侧可滚动内容区（Text）。
+    · 顶部搜索框（即时过滤章节/命令 + 命中高亮，聚焦高亮）；「下载模板」「关闭」按钮；内容区复制图标。
     · Markdown 子集渲染（标题分级/列表/代码块/表格/水平线/可点击链接）。
     · 链接：docs/… 走 resolve_doc_path + os.startfile；http(s) 走浏览器；失败可见提示。
     · 命令速查：get_command_groups() 渲染分组 + 条目，逐条可复制。
@@ -28,7 +28,9 @@ import os
 import shutil
 import sys
 import tkinter
+import tkinter.font as tkfont
 from tkinter import filedialog
+from tkinter import ttk
 
 import state
 
@@ -65,6 +67,21 @@ _CONTACT_ICON_NAME = "bg-ac.ico"
 
 # 内置资源：脚本编辑模板（相对 res/；res/ 已被整体打包，冻结首启释放到 <exe>/res）
 _TEMPLATE_RES_REL = "template/ACRPA脚本编辑模板与说明.xlsx"
+
+# 在线仓库：便携版只打包「帮助页实际引用」的 docs/*.md + docs/releases/，
+# 其余仓库路径（docs/design、docs/analysis、src/… 等）解析不到时回落到在线仓库链接。
+_REPO_BASE = "https://github.com/yohoten/acrpa/blob/main/"
+_REPO_PREFIXES = ("docs/", "src/", "lib/", "res/", "tools/", "tests/")
+
+
+def _repo_url(target):
+    """把仓库相对路径（docs/…、src/… 等）转成在线仓库链接；非仓库路径返回 None。"""
+    t = (target or "").strip()
+    low = t.lower()
+    for p in _REPO_PREFIXES:
+        if low.startswith(p):
+            return _REPO_BASE + t
+    return None
 
 # 模块级单实例
 _instance = None
@@ -114,6 +131,9 @@ def _block_text(block):
     if kind == "table":
         return "\n".join(" | ".join(str(c) for c in row)
                          for row in getattr(block, "rows", []))
+    if kind == "blockquote":
+        return "\n".join("> " + ln
+                         for ln in (getattr(block, "text", "") or "").split("\n"))
     if kind == "hr":
         return "-" * 40
     return getattr(block, "text", "") or ""
@@ -139,15 +159,32 @@ class _HelpWindow(object):
         self.text = None
         self.entry = None
         self.search_var = None
-        self._copy_btn = None
         self._close_btn = None
         self._dl_btn = None
         self._search_lbl = None
+        self._copy_icon_btn = None
+        self._copy_icon_cv = None
+        self._copy_icon_hover = False
         self._scrolls = []
         self._contact_photo = None
         self._nav_frame = None
+        self._nav_title = None
+        self._nav_sep = None
+        self._nav_style = None
+        self._nav_hover_id = None
         self._txt_frame = None
+        self._txt_header = None
+        self._txt_title = None
+        self._txt_header_sep = None
         self._bar_frame = None
+        self._sep_frame = None
+        self._hint_bar = None
+        self._hint_lbl = None
+
+        # 内容区缩放（Ctrl+滚轮 / Ctrl+加减），只影响正文 tag 字体，不污染命名字体
+        self._zoom = 1.0
+        self._zoom_fonts = {}
+        self._zoom_fonts_zoom = None
 
         self._link_targets = {}
         self._copy_targets = {}
@@ -271,12 +308,12 @@ class _HelpWindow(object):
 
         win.columnconfigure(0, weight=0)
         win.columnconfigure(1, weight=1)
-        win.rowconfigure(1, weight=1)
+        win.rowconfigure(2, weight=1)
 
         # 顶部工具栏
         self._bar_frame = tkinter.Frame(win, bg=C["bgc"])
         self._bar_frame.grid(row=0, column=0, columnspan=2, sticky="ew",
-                             padx=scaled(8), pady=(scaled(8), scaled(4)))
+                             padx=scaled(8), pady=(scaled(8), scaled(6)))
         self._search_lbl = tkinter.Label(self._bar_frame, text="搜索:",
                                          font=self.f_small, fg=C["fgm"],
                                          bg=C["bgc"])
@@ -284,8 +321,10 @@ class _HelpWindow(object):
         self.search_var = tkinter.StringVar()
         self.entry = tkinter.Entry(self._bar_frame, textvariable=self.search_var,
                                    font=self.f_small, bg=C["ebg"], fg=C["fgb"],
-                                   relief="solid", bd=1, insertbackground=C["fgt"],
-                                   width=30)
+                                   relief="flat", bd=0, insertbackground=C["fgt"],
+                                   highlightthickness=1,
+                                   highlightbackground=C["bd"],
+                                   highlightcolor=C["ac"], width=30)
         self.entry.pack(side="left", padx=(scaled(4), scaled(8)))
         self.search_var.trace_add("write", lambda *a: self._on_search())
         self.entry.bind("<Return>", lambda e: self._jump_first_hit())
@@ -297,13 +336,6 @@ class _HelpWindow(object):
             padx=scaled(12), pady=scaled(3), activebackground=C["acl"],
             activeforeground=C["fgb"], command=self._on_close)
         self._close_btn.pack(side="right")
-        self._copy_btn = tkinter.Button(
-            self._bar_frame, text="复制本章", font=self.f_small, bg=C["ac"],
-            fg=text_on(C["ac"]), relief="flat", bd=1, cursor="hand2",
-            padx=scaled(12), pady=scaled(3), activebackground=C["ach"],
-            activeforeground=text_on(C["ach"]), command=self._copy_current)
-        self._copy_btn.pack(side="right", padx=(0, scaled(6)))
-        attach_tooltip(self._copy_btn, "复制当前章节为纯文本到剪贴板")
         self._dl_btn = tkinter.Button(
             self._bar_frame, text="下载模板", font=self.f_small, bg=C["bgc"],
             fg=C["fgb"], relief="flat", bd=1, cursor="hand2",
@@ -312,62 +344,126 @@ class _HelpWindow(object):
         self._dl_btn.pack(side="right", padx=(0, scaled(6)))
         attach_tooltip(self._dl_btn, "下载 ACRPA 脚本编辑模板 (.xlsx) 到本地")
 
-        # 左：章节导航
+        # 工具栏底部细分隔线
+        self._sep_frame = tkinter.Frame(win, bg=C["bd"], height=scaled(1))
+        self._sep_frame.grid(row=1, column=0, columnspan=2, sticky="ew",
+                             padx=scaled(8))
+
+        # 左：章节导航（含「目录」标题 + 细分隔线）
         self._nav_frame = tkinter.Frame(win, bg=C["bgc"])
-        self._nav_frame.grid(row=1, column=0, sticky="nsew",
+        self._nav_frame.grid(row=2, column=0, sticky="nsew",
                              padx=(scaled(8), scaled(4)),
-                             pady=(0, scaled(8)))
-        self._nav_frame.rowconfigure(0, weight=1)
+                             pady=(scaled(4), scaled(8)))
         self._nav_frame.columnconfigure(0, weight=1)
-        self.nav = tkinter.Listbox(
-            self._nav_frame, font=self.f_body, activestyle="none",
-            bg=C["bgc"], fg=C["fgb"], selectbackground=C["acl"],
-            selectforeground=C["fgt"], highlightthickness=0, bd=0,
-            exportselection=False, width=18)
-        self.nav.grid(row=0, column=0, sticky="nsew")
+        self._nav_frame.rowconfigure(2, weight=1)
+        self._nav_title = tkinter.Label(
+            self._nav_frame, text="目 录", font=self.f_small, fg=C["fgm"],
+            bg=C["bgc"], anchor="w", padx=scaled(6), pady=scaled(4))
+        self._nav_title.grid(row=0, column=0, columnspan=2, sticky="ew")
+        self._nav_sep = tkinter.Frame(self._nav_frame, bg=C["bd"],
+                                      height=scaled(1))
+        self._nav_sep.grid(row=1, column=0, columnspan=2, sticky="ew",
+                           pady=(0, scaled(4)))
+        # 章节导航改用 Treeview：支持整行悬停高亮 + 选中高亮（Listbox 无法逐项着色）
+        self._nav_style = ttk.Style()
+        self._nav_style.configure("HelpNav.Treeview",
+                                  background=C["bgc"],
+                                  fieldbackground=C["bgc"],
+                                  foreground=C["fgb"],
+                                  borderwidth=0, relief="flat",
+                                  rowheight=scaled(26))
+        self._nav_style.map("HelpNav.Treeview",
+                            background=[("selected", C["acl"])],
+                            foreground=[("selected", C["fgt"])])
+        self.nav = ttk.Treeview(
+            self._nav_frame, show="tree", selectmode="browse",
+            style="HelpNav.Treeview", cursor="hand2")
+        self.nav.grid(row=2, column=0, sticky="nsew")
+        self.nav.tag_configure("hover", background=C["ebg"])
         nav_scroll = tkinter.Scrollbar(
             self._nav_frame, width=sp("sb_w"), relief="flat", bg=C["bd"],
             troughcolor=C["logbg"], elementborderwidth=0,
             activebackground=C["fgm"])
-        nav_scroll.grid(row=0, column=1, sticky="ns")
-        self.nav.config(yscrollcommand=nav_scroll.set)
-        nav_scroll.config(command=self.nav.yview)
+        nav_scroll.grid(row=2, column=1, sticky="ns")
+        self.nav.configure(yscrollcommand=nav_scroll.set)
+        nav_scroll.configure(command=self.nav.yview)
         self._scrolls.append(nav_scroll)
-        self.nav.bind("<<ListboxSelect>>", self._on_nav_select)
+        self.nav.bind("<<TreeviewSelect>>", self._on_nav_select)
+        self.nav.bind("<Motion>", self._on_nav_motion)
+        self.nav.bind("<Leave>", self._on_nav_leave)
 
-        # 右：内容区
-        self._txt_frame = tkinter.Frame(win, bg=C["bgc"])
-        self._txt_frame.grid(row=1, column=1, sticky="nsew",
+        # 右：内容区（卡片边框 + 顶部标题栏）
+        self._txt_frame = tkinter.Frame(win, bg=C["bgc"], bd=0,
+                                        highlightthickness=1,
+                                        highlightbackground=C["bd"])
+        self._txt_frame.grid(row=2, column=1, sticky="nsew",
                              padx=(scaled(4), scaled(8)),
-                             pady=(0, scaled(8)))
-        self._txt_frame.rowconfigure(0, weight=1)
+                             pady=(scaled(4), scaled(8)))
         self._txt_frame.columnconfigure(0, weight=1)
+        self._txt_frame.rowconfigure(2, weight=1)
+        # 内容卡片头部：左「内 容」标题，右复制图标
+        self._txt_header = tkinter.Frame(self._txt_frame, bg=C["bgc"])
+        self._txt_header.grid(row=0, column=0, sticky="ew")
+        self._txt_header.columnconfigure(0, weight=1)
+        self._txt_title = tkinter.Label(
+            self._txt_header, text="内 容", font=self.f_small, fg=C["fgm"],
+            bg=C["bgc"], anchor="w", padx=scaled(6), pady=scaled(4))
+        self._txt_title.grid(row=0, column=0, sticky="w")
+        self._copy_icon_btn = self._create_copy_icon(self._txt_header)
+        self._copy_icon_btn.grid(row=0, column=1, sticky="e",
+                                 padx=(0, scaled(6)), pady=scaled(2))
+        attach_tooltip(self._copy_icon_btn, "复制当前章节为纯文本到剪贴板")
+        # attach_tooltip 会绑定 Enter/Leave；这里用 add 追加悬停高亮，二者并存
+        self._copy_icon_btn.bind("<Enter>", lambda e: self._on_copy_icon_enter(),
+                                 add="+")
+        self._copy_icon_btn.bind("<Leave>", lambda e: self._on_copy_icon_leave(),
+                                 add="+")
+        self._txt_header_sep = tkinter.Frame(self._txt_frame, bg=C["bd"],
+                                             height=scaled(1))
+        self._txt_header_sep.grid(row=1, column=0, sticky="ew")
         self.text = tkinter.Text(
             self._txt_frame, font=self.f_body, wrap="word", bg=C["logbg"],
             fg=C["logfg"], relief="flat", bd=0, padx=scaled(12),
             pady=scaled(10), insertbackground=C["fgt"],
             selectbackground=C["acl"], selectforeground=C["fgt"], cursor="arrow")
-        self.text.grid(row=0, column=0, sticky="nsew")
+        self.text.grid(row=2, column=0, sticky="nsew")
         txt_scroll = tkinter.Scrollbar(
             self._txt_frame, width=sp("sb_w"), relief="flat", bg=C["bd"],
             troughcolor=C["logbg"], elementborderwidth=0,
             activebackground=C["fgm"])
-        txt_scroll.grid(row=0, column=1, sticky="ns")
+        txt_scroll.grid(row=2, column=1, sticky="ns")
         self.text.config(yscrollcommand=txt_scroll.set)
         txt_scroll.config(command=self.text.yview)
         self._scrolls.append(txt_scroll)
         self.text.bind("<Button-1>", self._on_text_click)
         self.text.bind("<Motion>", self._on_text_motion)
 
+        # 底部：快捷键提示条（弱化显示，帮助新用户发现操作）
+        self._hint_bar = tkinter.Frame(win, bg=C["bgc"])
+        self._hint_bar.grid(row=3, column=0, columnspan=2, sticky="ew",
+                            padx=scaled(8), pady=(scaled(2), scaled(6)))
+        self._hint_lbl = tkinter.Label(
+            self._hint_bar, font=self.f_tiny, fg=C["fgm"], bg=C["bgc"],
+            anchor="w", text="Esc 关闭 · Ctrl+F 搜索 · ↑↓ 切换章节 · Ctrl+滚轮/加减缩放 · 点击下划线文字可打开链接或复制")
+        self._hint_lbl.pack(side="left")
+
         # 主题标签一次性配置
         self._configure_tags()
 
-        # 键盘：Esc 关闭 / Ctrl+F 聚焦搜索 / ↑↓ 导航
+        # 键盘：Esc 关闭 / Ctrl+F 聚焦搜索 / ↑↓ 导航 / Ctrl+加减·滚轮 缩放
         win.bind("<Escape>", lambda e: self._on_close())
         win.bind("<Control-f>", lambda e: (self.entry.focus_set(),
                                            "break")[1])
         self.nav.bind("<Up>", lambda e: (self._move_nav(-1), "break")[1])
         self.nav.bind("<Down>", lambda e: (self._move_nav(1), "break")[1])
+        for seq in ("<Control-plus>", "<Control-equal>", "<Control-KP_Add>"):
+            win.bind(seq, self._on_zoom_in)
+        for seq in ("<Control-minus>", "<Control-KP_Subtract>"):
+            win.bind(seq, self._on_zoom_out)
+        win.bind("<Control-0>", self._on_zoom_reset)
+        self.text.bind("<Control-MouseWheel>", self._on_text_wheel)
+        self.text.bind("<Control-Button-4>", self._on_text_wheel_up)
+        self.text.bind("<Control-Button-5>", self._on_text_wheel_down)
 
         # 几何
         self._apply_geometry()
@@ -428,36 +524,49 @@ class _HelpWindow(object):
     def _configure_tags(self):
         C = self.colors
         t = self.text
-        t.tag_configure("h1", font=self.f_title, foreground=C["fgt"],
+        F = self._make_zoom_fonts()
+        t.tag_configure("h1", font=F["title"], foreground=C["fgt"],
                         spacing1=scaled(6), spacing3=scaled(4))
-        t.tag_configure("h2", font=self.f_button, foreground=C["fgt"],
+        t.tag_configure("h2", font=F["button"], foreground=C["fgt"],
                         spacing1=scaled(6), spacing3=scaled(2))
-        t.tag_configure("h3", font=self.f_button, foreground=C["fgb"],
+        t.tag_configure("h3", font=F["button"], foreground=C["fgb"],
                         spacing1=scaled(4), spacing3=scaled(1))
-        t.tag_configure("para", font=self.f_body, foreground=C["fgb"],
-                        spacing1=scaled(1), spacing3=scaled(1))
-        t.tag_configure("src", font=self.f_tiny, foreground=C["fgm"])
-        t.tag_configure("desc", font=self.f_small, foreground=C["fgb"])
-        t.tag_configure("param", font=self.f_small, foreground=C["fgm"])
-        t.tag_configure("cmd", font=self.f_button, foreground=C["ac"])
-        t.tag_configure("bold", font=self.f_button, foreground=C["fgt"])
-        t.tag_configure("inline", font=self.f_log, foreground=C["ac"])
-        t.tag_configure("code", font=self.f_log, foreground=C["logfg"],
+        # 章节标题下的 accent 短线锚点
+        t.tag_configure("titlebar", font=F["tiny"], foreground=C["ac"],
+                        spacing1=scaled(2), spacing3=scaled(8))
+        t.tag_configure("para", font=F["body"], foreground=C["fgb"],
+                        spacing1=scaled(2), spacing3=scaled(6))
+        t.tag_configure("src", font=F["tiny"], foreground=C["fgm"])
+        t.tag_configure("desc", font=F["small"], foreground=C["fgb"])
+        t.tag_configure("param", font=F["small"], foreground=C["fgm"])
+        t.tag_configure("cmd", font=F["button"], foreground=C["ac"])
+        t.tag_configure("bold", font=F["button"], foreground=C["fgt"])
+        t.tag_configure("inline", font=F["log"], foreground=C["ac"])
+        # 代码块：衬底色 + 缩进，形成独立块，阅读更清晰
+        t.tag_configure("code", font=F["log"], foreground=C["logfg"],
+                        background=C["ebg"],
                         lmargin1=scaled(12), lmargin2=scaled(12),
-                        spacing1=scaled(2), spacing3=scaled(2))
-        t.tag_configure("ulist", font=self.f_body, foreground=C["fgb"],
-                        lmargin1=scaled(14), lmargin2=scaled(26))
-        t.tag_configure("olist", font=self.f_body, foreground=C["fgb"],
-                        lmargin1=scaled(14), lmargin2=scaled(26))
-        t.tag_configure("table", font=self.f_small, foreground=C["fgb"],
+                        spacing1=scaled(4), spacing3=scaled(6))
+        # 引用块：弱化字号/颜色 + 左缩进，作为「提示/说明」的视觉提示
+        t.tag_configure("blockquote", font=F["small"], foreground=C["fgm"],
+                        lmargin1=scaled(18), lmargin2=scaled(18),
+                        spacing1=scaled(2), spacing3=scaled(4))
+        t.tag_configure("ulist", font=F["body"], foreground=C["fgb"],
+                        lmargin1=scaled(14), lmargin2=scaled(26),
+                        spacing3=scaled(2))
+        t.tag_configure("olist", font=F["body"], foreground=C["fgb"],
+                        lmargin1=scaled(14), lmargin2=scaled(26),
+                        spacing3=scaled(2))
+        t.tag_configure("table", font=F["small"], foreground=C["fgb"],
                         lmargin1=scaled(8), lmargin2=scaled(8))
-        t.tag_configure("thead", font=self.f_button, foreground=C["fgt"],
+        t.tag_configure("thead", font=F["button"], foreground=C["fgt"],
+                        background=C["ebg"],
                         lmargin1=scaled(8), lmargin2=scaled(8))
-        t.tag_configure("hr", font=self.f_body, foreground=C["bd"],
+        t.tag_configure("hr", font=F["body"], foreground=C["bd"],
                         spacing1=scaled(4), spacing3=scaled(4))
         t.tag_configure("hit", background=C["ac"],
                         foreground=text_on(C["ac"]))
-        t.tag_configure("copyhint", font=self.f_tiny, foreground=C["fgm"],
+        t.tag_configure("copyhint", font=F["tiny"], foreground=C["fgm"],
                         underline=True)
         # 已有链接标签按新主题重刷
         for lk in self._link_targets:
@@ -490,23 +599,61 @@ class _HelpWindow(object):
             self.win.configure(bg=C["bgc"])
         except Exception:
             pass
-        for f in (self._bar_frame, self._nav_frame, self._txt_frame):
+        for f in (self._bar_frame, self._nav_frame, self._txt_frame,
+                  self._hint_bar, self._txt_header):
             try:
                 f.configure(bg=C["bgc"])
             except Exception:
                 pass
+        try:
+            self._txt_frame.configure(highlightbackground=C["bd"])
+        except Exception:
+            pass
+        try:
+            self._sep_frame.configure(bg=C["bd"])
+        except Exception:
+            pass
+        try:
+            self._nav_sep.configure(bg=C["bd"])
+        except Exception:
+            pass
+        try:
+            self._txt_header_sep.configure(bg=C["bd"])
+        except Exception:
+            pass
+        try:
+            self._nav_title.configure(bg=C["bgc"], fg=C["fgm"])
+        except Exception:
+            pass
+        try:
+            self._txt_title.configure(bg=C["bgc"], fg=C["fgm"])
+        except Exception:
+            pass
+        try:
+            self._hint_lbl.configure(bg=C["bgc"], fg=C["fgm"])
+        except Exception:
+            pass
         try:
             self._search_lbl.configure(bg=C["bgc"], fg=C["fgm"])
         except Exception:
             pass
         try:
             self.entry.configure(bg=C["ebg"], fg=C["fgb"],
-                                 insertbackground=C["fgt"])
+                                 insertbackground=C["fgt"],
+                                 highlightbackground=C["bd"],
+                                 highlightcolor=C["ac"])
         except Exception:
             pass
         try:
-            self.nav.configure(bg=C["bgc"], fg=C["fgb"],
-                               selectbackground=C["acl"], selectforeground=C["fgt"])
+            # 导航 Treeview：背景/前景/选中色走 style（hover 色走 tag）
+            self._nav_style.configure("HelpNav.Treeview",
+                                      background=C["bgc"],
+                                      fieldbackground=C["bgc"],
+                                      foreground=C["fgb"])
+            self._nav_style.map("HelpNav.Treeview",
+                                background=[("selected", C["acl"])],
+                                foreground=[("selected", C["fgt"])])
+            self.nav.tag_configure("hover", background=C["ebg"])
         except Exception:
             pass
         try:
@@ -528,20 +675,115 @@ class _HelpWindow(object):
         except Exception:
             pass
         try:
-            # 字色按底亮度重算 (暗色 ac=#4CC2FF 为浅色, 白字不可读)
-            from utils import text_on as _text_on
-            self._copy_btn.configure(bg=C["ac"], fg=_text_on(C["ac"]),
-                                     activebackground=C["ach"],
-                                     activeforeground=_text_on(C["ach"]))
-        except Exception:
-            pass
-        try:
             self._dl_btn.configure(bg=C["bgc"], fg=C["fgb"],
                                    activebackground=C["acl"],
                                    activeforeground=C["fgb"])
         except Exception:
             pass
+        try:
+            # 复制图标是 Canvas 绘制，主题切换时重绘即可
+            self._redraw_copy_icon()
+        except Exception:
+            pass
         self._configure_tags()
+
+    # ── 复制图标（内容区右上角）─────────────────────────────────
+    def _create_copy_icon(self, parent):
+        """用 Canvas 画一个「双页」复制图标（不依赖字体字形，跨平台可靠）。"""
+        s = scaled(16)
+        cv = tkinter.Canvas(parent, width=s, height=s, bg=self.colors["bgc"],
+                            highlightthickness=0, bd=0, cursor="hand2")
+        self._copy_icon_cv = cv
+        cv.bind("<Button-1>", lambda e: self._copy_current())
+        self._redraw_copy_icon()
+        return cv
+
+    def _redraw_copy_icon(self):
+        cv = getattr(self, "_copy_icon_cv", None)
+        if cv is None:
+            return
+        C = self.colors
+        bg = C["acl"] if self._copy_icon_hover else C["bgc"]
+        fg = C["fgb"]
+        cv.delete("all")
+        cv.configure(bg=bg)
+        # 前页（左下，实心，盖住后页重叠处）
+        cv.create_rectangle(scaled(3), scaled(6), scaled(11), scaled(14),
+                            fill=bg, outline=fg, width=1)
+        # 后页（右上，仅轮廓）
+        cv.create_rectangle(scaled(6), scaled(3), scaled(14), scaled(11),
+                            outline=fg, width=1)
+
+    def _on_copy_icon_enter(self):
+        self._copy_icon_hover = True
+        self._redraw_copy_icon()
+
+    def _on_copy_icon_leave(self):
+        self._copy_icon_hover = False
+        self._redraw_copy_icon()
+
+    # ── 内容缩放（Ctrl+滚轮 / Ctrl+加减）────────────────────────
+    def _zoom_font(self, role):
+        """按当前 _zoom 生成局部缩放字体，绝不改动命名字体。"""
+        try:
+            base = tkfont.Font(root=self.root, name=role, exists=True)
+            fam = base.cget("family")
+            size = int(base.cget("size"))
+            weight = base.cget("weight")
+            slant = base.cget("slant")
+        except Exception:
+            fam, size, weight, slant = "TkDefaultFont", 10, "normal", "roman"
+        return tkfont.Font(root=self.root, family=fam,
+                           size=max(1, int(round(size * self._zoom))),
+                           weight=weight, slant=slant)
+
+    def _make_zoom_fonts(self):
+        """生成/缓存各角色的缩放字体（zoom 变化时才重建）。"""
+        if (getattr(self, "_zoom_fonts_zoom", None) == self._zoom
+                and self._zoom_fonts):
+            return self._zoom_fonts
+        out = {}
+        for role in ("title", "body", "small", "button", "log", "tiny"):
+            out[role] = self._zoom_font(role)
+        self._zoom_fonts = out
+        self._zoom_fonts_zoom = self._zoom
+        return out
+
+    def _apply_zoom(self, delta):
+        new = max(0.6, min(2.5, self._zoom + delta))
+        if abs(new - self._zoom) < 1e-6:
+            return
+        self._zoom = new
+        # 仅重配 tag 字体即可，已渲染正文会随 tag 自动重排
+        self._configure_tags()
+
+    def _on_zoom_in(self, _e=None):
+        self._apply_zoom(0.1)
+        return "break"
+
+    def _on_zoom_out(self, _e=None):
+        self._apply_zoom(-0.1)
+        return "break"
+
+    def _on_zoom_reset(self, _e=None):
+        self._apply_zoom(1.0 - self._zoom)
+        return "break"
+
+    def _on_text_wheel(self, event):
+        try:
+            delta = int(event.delta)
+        except Exception:
+            delta = 0
+        self._apply_zoom(0.1 if delta > 0 else (-0.1 if delta < 0 else 0))
+        return "break"
+
+    def _on_text_wheel_up(self, _e=None):
+        self._apply_zoom(0.1)
+        return "break"
+
+    def _on_text_wheel_down(self, _e=None):
+        self._apply_zoom(-0.1)
+        return "break"
 
     # ── 导航 ────────────────────────────────────────────────────
     def _section_by_id(self, sid):
@@ -564,22 +806,23 @@ class _HelpWindow(object):
     def _load_nav(self):
         self._suppress_nav = True
         try:
-            self.nav.delete(0, "end")
+            self.nav.delete(*self.nav.get_children())
             self._nav_ids = []
             for s in self._visible_sections():
-                self.nav.insert("end", s.title)
+                self.nav.insert("", "end", iid=s.id, text=s.title)
                 self._nav_ids.append(s.id)
+            self._nav_hover_id = None
         finally:
             self._suppress_nav = False
 
     def select_index(self, idx):
         try:
-            if 0 <= idx < self.nav.size():
-                self.nav.selection_clear(0, "end")
-                self.nav.selection_set(idx)
-                self.nav.activate(idx)
-                self.nav.see(idx)
-                self._render_by_id(self._nav_ids[idx])
+            if 0 <= idx < len(self._nav_ids):
+                sid = self._nav_ids[idx]
+                self.nav.selection_set(sid)
+                self.nav.see(sid)
+                self._set_nav_hover(None)
+                self._render_by_id(sid)
                 return True
         except Exception:
             pass
@@ -595,9 +838,12 @@ class _HelpWindow(object):
 
     def _move_nav(self, delta):
         try:
-            sel = self.nav.curselection()
-            idx = (sel[0] if sel else -1) + delta
-            idx = max(0, min(self.nav.size() - 1, idx))
+            sel = self.nav.selection()
+            if sel and sel[0] in self._nav_ids:
+                idx = self._nav_ids.index(sel[0]) + delta
+            else:
+                idx = 0 if delta > 0 else len(self._nav_ids) - 1
+            idx = max(0, min(len(self._nav_ids) - 1, idx))
             self.select_index(idx)
         except Exception:
             pass
@@ -606,12 +852,42 @@ class _HelpWindow(object):
         if self._suppress_nav:
             return
         try:
-            sel = self.nav.curselection()
+            sel = self.nav.selection()
             if not sel:
                 return
-            self._render_by_id(self._nav_ids[sel[0]])
+            self._set_nav_hover(None)
+            self._render_by_id(sel[0])
         except Exception:
             pass
+
+    def _set_nav_hover(self, iid):
+        """给 Treeview 行加/去 hover 背景（选中行保持 accent，不叠加）。"""
+        if getattr(self, "_nav_hover_id", None) == iid:
+            return
+        if getattr(self, "_nav_hover_id", None):
+            try:
+                self.nav.item(self._nav_hover_id, tags=())
+            except Exception:
+                pass
+        self._nav_hover_id = iid
+        if iid:
+            try:
+                self.nav.item(iid, tags=("hover",))
+            except Exception:
+                pass
+
+    def _on_nav_motion(self, event):
+        try:
+            row = self.nav.identify_row(event.y)
+        except Exception:
+            row = ""
+        sel = self.nav.selection()
+        if row and sel and row == sel[0]:
+            row = ""
+        self._set_nav_hover(row if row else None)
+
+    def _on_nav_leave(self, _evt=None):
+        self._set_nav_hover(None)
 
     # ── 搜索 ────────────────────────────────────────────────────
     def search_hits(self, query):
@@ -643,9 +919,9 @@ class _HelpWindow(object):
         # 记录当前章节，重建导航后尽量保持选中
         cur_id = None
         try:
-            sel = self.nav.curselection()
+            sel = self.nav.selection()
             if sel:
-                cur_id = self._nav_ids[sel[0]]
+                cur_id = sel[0]
         except Exception:
             pass
         self._load_nav()
@@ -737,10 +1013,10 @@ class _HelpWindow(object):
             self.text.insert("end", section.title + "\n", "h1")
         except Exception:
             pass
-        src = getattr(section, "source", "") or ""
-        if src:
-            self.text.insert("end", "来源: " + src + "\n", "src")
-        self.text.insert("end", "\n")
+        # 「来源」为内部维护元数据（如「内嵌 + docs/xxx.md」），对终端用户无意义，
+        # 不再渲染到正文，避免干扰阅读；正文本身已能说明内容。
+        # 标题下加一条浅色 accent 短线，作为章节标题的视觉锚点。
+        self.text.insert("end", "─" * 28 + "\n", "titlebar")
         if self._fallback_only or section.id == "commands":
             # 命令速查章：先正文（若有），再动态命令分组
             if self._content_ok and (section.body or "").strip():
@@ -793,27 +1069,31 @@ class _HelpWindow(object):
                 line = " | ".join(str(c) for c in row)
                 self.text.insert("end", line + "\n",
                                  "thead" if ri == 0 else "table")
+        elif kind == "blockquote":
+            for ln in (getattr(b, "text", "") or "").split("\n"):
+                self._insert_inline(ln, None, "blockquote")
+                self.text.insert("end", "\n", "blockquote")
         elif kind == "hr":
             self.text.insert("end", "─" * 48 + "\n", "hr")
         else:
             self.text.insert("end", (getattr(b, "text", "") or "") + "\n", "para")
 
-    def _insert_inline(self, text, spans=None):
+    def _insert_inline(self, text, spans=None, base="para"):
         if not spans and _CONTENT_OK:
             try:
                 spans = help_content.parse_inline(text)
             except Exception:
                 spans = None
         if not spans:
-            self.text.insert("end", text or "", "para")
+            self.text.insert("end", text or "", base)
             return
         for sp in spans:
             kind = getattr(sp, "kind", "text")
             txt = getattr(sp, "text", "")
             if kind == "bold":
-                self.text.insert("end", txt, ("para", "bold"))
+                self.text.insert("end", txt, (base, "bold"))
             elif kind == "code":
-                self.text.insert("end", txt, ("para", "inline"))
+                self.text.insert("end", txt, (base, "inline"))
             elif kind == "link":
                 lk = "link_{}".format(self._link_seq)
                 self._link_seq += 1
@@ -823,9 +1103,9 @@ class _HelpWindow(object):
                                             underline=True)
                 except Exception:
                     pass
-                self.text.insert("end", txt, ("para", lk))
+                self.text.insert("end", txt, (base, lk))
             else:
-                self.text.insert("end", txt, "para")
+                self.text.insert("end", txt, base)
 
     def _render_commands(self):
         C = self.colors
@@ -913,7 +1193,8 @@ class _HelpWindow(object):
         return None
 
     def _open_link(self, target):
-        """打开链接：http(s) 走浏览器；其余按 docs/ 资源定位后 os.startfile。"""
+        """打开链接：http(s) 走浏览器；docs/res 本地资源定位后 os.startfile；
+        本地未命中但属仓库路径（docs/…、src/… 等）时回落在线仓库链接。"""
         target = (target or "").strip()
         if not target:
             return False
@@ -945,9 +1226,30 @@ class _HelpWindow(object):
                 os.startfile(path)
                 return True
             except Exception as e:
+                # .md 文档在未安装 Markdown 编辑器/无文件关联的系统上会失败：
+                # 退化为默认浏览器打开本地文件，保证内容始终可读。
+                if path.lower().endswith(".md"):
+                    try:
+                        import webbrowser
+                        from pathlib import Path
+                        webbrowser.open(Path(path).as_uri())
+                        return True
+                    except Exception:
+                        pass
                 self._link_error(target, e)
                 return False
-        self._link_error(target, FileNotFoundError(target))
+        # 本地未命中：未打包的仓库文档（docs/design、docs/analysis、src/… 等）
+        # 回落到在线仓库链接，保持「维护在线链接」的兜底能力。
+        url = _repo_url(target)
+        if url:
+            try:
+                import webbrowser
+                webbrowser.open(url)
+                return True
+            except Exception as e:
+                self._link_error(target, e)
+                return False
+        self._link_error(target, "文件不存在或未随程序分发")
         return False
 
     def _link_error(self, target, err):

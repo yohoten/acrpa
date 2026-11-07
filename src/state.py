@@ -51,6 +51,8 @@ _config_schema = [
     ("main_geometry",  "",             str),    # 主窗口几何 (空=默认居中; 仿 win_geometry)
     ("main_maximized", False,          bool),   # 主窗口最大化状态 (启动恢复)
     ("compact_mode",   False,          bool),   # 紧凑模式: True=500x625 旧布局
+    # 分栏 sash 位置记忆 {tab:{pane_id:position}} (JSON 字符串, §5.4)
+    ("layout_sash",    "",             str),
     # ── 片段库 (离线可用) ──
     ("snippet_dir",        "",    str),   # 片段库主目录 (空=<app_root>/template)
     ("snippet_extra_dirs", [],    list),  # 片段库追加目录列表
@@ -59,11 +61,10 @@ _config_schema = [
     ("hotkey_pause",    "",             str),    # 暂停/恢复快捷键
     ("hotkey_stop",     "",             str),    # 停止脚本快捷键
     # ── S1-04 热键后端 (RegisterHotKey) + 热字串 ──
-    # hotkey_backend: "poll"=GetAsyncKeyState 轮询 (默认, 与改造前逐字节等价);
-    #                 "register"=RegisterHotKey + WM_HOTKEY (可吞键/无轮询/无 200ms 丢失),
+    # hotkey_backend: "register"=RegisterHotKey + WM_HOTKEY (默认, 吞键/无轮询/无 200ms 丢失);
+    #                 "poll"=GetAsyncKeyState 轮询 (兼容回退, 与改造前逐字节等价)。
     #                 注册失败的条目**自动**落回轮询, 功能不丢。
-    # 默认 "poll" 是本卡"零行为变更默认值 + 可整体回退"的落点 (档位 L, 风险最高)。
-    ("hotkey_backend",  "poll",         str),
+    ("hotkey_backend",  "register",     str),
     # hotstrings: 热字串 [{trigger, expand, kind:"text"|"script", script_path}]。
     # 空列表 = 关闭 (默认) → **不安装任何键盘钩子**; 非空才启 WH_KEYBOARD_LL 缓冲展开。
     # 已知限制: 对以管理员运行的目标程序无效 (UIPI); IME 组合态不触发; 仅纯 ASCII 触发词。
@@ -702,5 +703,49 @@ def _save_config_plain(key, value):
         c[key] = value
         with open(CONFIG_PATH, "w") as f:
             json.dump(c, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def get_layout_sash():
+    """读取分栏 sash 位置记忆 {tab: {pane_id: position}}；解析失败返回 {}。"""
+    try:
+        d = json.loads(globals().get("LAYOUT_SASH") or "{}")
+    except Exception:
+        return {}
+    return d if isinstance(d, dict) else {}
+
+
+def set_layout_sash(tab, pane_id, pos, persist=False):
+    """更新内存中的分栏 sash 位置；``persist=True`` 时单键写盘 (不触发监听器)。"""
+    try:
+        pos = int(pos)
+    except Exception:
+        return
+    d = get_layout_sash()
+    d.setdefault(tab, {})[pane_id] = pos
+    globals()["LAYOUT_SASH"] = json.dumps(d, ensure_ascii=False)
+    if persist:
+        _save_config_plain("layout_sash", globals()["LAYOUT_SASH"])
+
+
+def sash_pos(paned, index=0):
+    """读取 ``tkinter.PanedWindow`` 分栏位置 (沿主轴坐标; 水平→x, 垂直→y)。失败返回 None。"""
+    try:
+        c = paned.sash_coord(index)
+        orient = str(paned.cget("orient"))
+        return int(c[0]) if orient == "horizontal" else int(c[1])
+    except Exception:
+        return None
+
+
+def sash_set_pos(paned, index, pos):
+    """设置 ``tkinter.PanedWindow`` 分栏位置 (水平→x, 垂直→y)。"""
+    try:
+        orient = str(paned.cget("orient"))
+        if orient == "horizontal":
+            paned.sash_place(index, int(pos), 0)
+        else:
+            paned.sash_place(index, 0, int(pos))
     except Exception:
         pass

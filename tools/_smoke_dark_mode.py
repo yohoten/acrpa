@@ -12,7 +12,7 @@
                            — 占位符/语义色不再硬编码 #9CA3AF(/#10B981);
                              三文件各自含 themed( 调用, 合计 ≥ 3
   C. src/ACRPA.py          — 日志 Text 存在 insertbackground= ;
-                             devlink_btn text="🌐" 且 font 字号 11 ; "🌐 互联" 已消失
+                             设备互联已内嵌为 Tab (tab_devlink, devlink_btn 已移除)
   D. src/ACRPA.py          — NetLink 集成块未被改动 (各 1 次)
   E. src/ACRPA.py          — Mini Bar 守护: _mb_animate_width 存在 /
                              _destroy_mini_bar 含 after_cancel
@@ -186,17 +186,19 @@ def check_hardcoded_colors():
         _p("OK", "流程图色板 _FLOW_COLORS 位于 ui/workflow_view.py, "
                  "#9CA3AF 仅在其内 (刻意固定), ACRPA.py 无散落硬编码")
 
-    # B4. 三文件各自含 themed( , 合计 ≥ 3
+    # B4. 语义色访问: scheduler/ACRPA 经 themed(, dialogs 经注入色板 C[ 直取
+    #     (阶段二起 dialogs.py 用 C 注入色板, 不再包装 themed() —— 强度等价)。
     c_d = _themed_count("src/dialogs.py")
     c_s = _themed_count("src/scheduler.py")
     c_a = _themed_count("src/ACRPA.py")
+    d_palette = _read("src/dialogs.py").count("C[")
     total = c_d + c_s + c_a
     detail = "dialogs={} scheduler={} ACRPA={}".format(c_d, c_s, c_a)
-    if c_d >= 1 and c_s >= 1 and c_a >= 1 and total >= 3:
-        _p("OK", "themed( 使用分布合格 ({}, 合计 {})".format(detail, total))
+    if (c_d >= 1 or d_palette >= 3) and c_s >= 1 and c_a >= 1 and total >= 2:
+        _p("OK", "themed( / C[ 语义色访问分布合格 ({}, 合计 {})".format(detail, total))
     else:
-        FAILS.append("themed( 使用不足 ({}, 合计 {})".format(detail, total))
-        _p("FAIL", "themed( 使用不足 ({}, 合计 {})".format(detail, total))
+        FAILS.append("语义色访问不足 ({}, 合计 {}, dialogs_C={})".format(detail, total, d_palette))
+        _p("FAIL", "语义色访问不足 ({}, 合计 {})".format(detail, total))
 
 
 def check_acrpa_cursor_and_button():
@@ -217,27 +219,14 @@ def check_acrpa_cursor_and_button():
         FAILS.append("缺 insertbackground= (ACRPA.py / ui/log_dock.py)")
         _p("FAIL", "缺 insertbackground= (ACRPA.py / ui/log_dock.py)")
 
-    # C2. devlink_btn: 图标按钮 —— v0.1.29-beta「UI 美化」起, 图标改由命名图标
-    #     字体 (FONT_ICON_MD) 承载, 不再写死 emoji + ("Segoe UI Symbol", 11) 元组。
-    #     这里断言的是「形态」而不是某个具体字形, 避免换图标就假红。
-    dev_ok = False
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign) and any(
-                isinstance(t, ast.Name) and t.id == "devlink_btn" for t in node.targets):
-            call = node.value
-            if not isinstance(call, ast.Call):
-                continue
-            kw = {k.arg: k.value for k in call.keywords}
-            text_v = getattr(kw.get("text"), "value", None)
-            font_v = kw.get("font")
-            if isinstance(text_v, str) and text_v.strip() \
-                    and isinstance(font_v, ast.Name):
-                dev_ok = True
-    if dev_ok:
-        _p("OK", "devlink_btn 为图标按钮 (text 非空 + 命名字体角色)")
+    # C2. 设备互联入口: 已由右上角图标按钮 (devlink_btn) 改为内嵌 Tab ——
+    #     断言「tab_devlink 懒构建存在 + devlink_btn 图标已移除」。
+    if "tab_devlink" in a_src and "_build_devlink_tab" in a_src \
+            and "devlink_btn" not in a_src:
+        _p("OK", "设备互联已内嵌为 Tab (tab_devlink, devlink_btn 已移除)")
     else:
-        FAILS.append("devlink_btn 未使用命名图标字体 (禁止回退到硬编码 emoji+元组字号)")
-        _p("FAIL", "devlink_btn 未使用命名图标字体")
+        FAILS.append("设备互联入口形态错误 (应内嵌 Tab, 且无 devlink_btn)")
+        _p("FAIL", "设备互联入口形态错误 (应内嵌 Tab, 且无 devlink_btn)")
 
     # C3. 旧文案已消失
     if "🌐 互联" not in a_src:
@@ -390,9 +379,9 @@ def check_theme_refresh_regressions():
 
     # G5. 日志区 tag 随主题重配 + 脚本树 tag 重刷 (D3)
     #     阶段二第 3 项第 1 步起: 日志面板整体迁至 src/ui/log_dock.py, 日志 tag 重配
-    #     由其 ThemeBus 订阅回调 refresh_theme 承担 —— 定位随之更新。
-    #     检查强度不降: 仍断言「日志 tag 随主题重配」这一语义 (且必须经订阅驱动),
-    #     只把归属从 _refresh_theme 段换到新模块; 脚本树 tag 仍须留在 _refresh_theme 段。
+    #     由其 ThemeBus 订阅回调 refresh_theme 承担; 脚本树 tag 重刷亦迁至
+    #     src/ui/editor_view.py 的 refresh_theme (同样经 ThemeBus 订阅驱动)。
+    #     检查强度不降: 仍断言「日志 tag / 脚本树 tag 随主题重配」这一语义。
     try:
         ld_src = _read("src/ui/log_dock.py")
     except Exception:
@@ -400,9 +389,14 @@ def check_theme_refresh_regressions():
     has_log_tag = ('tag_configure("error"' in ld_src
                    and 'tag_configure("success"' in ld_src
                    and "subscribe(refresh_theme)" in ld_src)
-    has_tree_tag = 'tag_configure("running"' in seg
+    try:
+        ev_src = _read("src/ui/editor_view.py")
+    except Exception:
+        ev_src = ""
+    has_tree_tag = ('tag_configure("running"' in ev_src
+                    and 'def refresh_theme' in ev_src)
     if has_log_tag and has_tree_tag:
-        _p("OK", "G5 日志区 tag 由 log_dock 订阅回调重配 + 脚本树 tag 由 _refresh_theme 重刷 (D3)")
+        _p("OK", "G5 日志区 tag 由 log_dock 订阅回调重配 + 脚本树 tag 由 editor_view 订阅回调重刷 (D3)")
     else:
         FAILS.append("G5 tag 重刷缺失 (log_dock={} tree={})".format(
             has_log_tag, has_tree_tag))
@@ -446,16 +440,16 @@ def check_theme_refresh_regressions():
     else:
         FAILS.append("G9 ACRPA._walk 覆盖不全 (Menu/Checkbutton/Radiobutton)")
         _p("FAIL", "G9 ACRPA._walk 覆盖不全 (Menu/Checkbutton/Radiobutton)")
-    # 阶段二第 4 项: 设置窗口 refresh_theme._walk 实现迁至 src/ui/settings/window.py
-    # (src/settings_window.py 退化为薄壳, refresh_theme 仅转发)。定位随之更新,
-    # 检查强度不降: 仍断言「设置窗口 _walk 覆盖 Menu/Canvas/Listbox/Spinbox」。
+    # 阶段二第 4 项: 设置窗口 refresh_theme._walk 迁至 src/ui/settings/window.py,
+    # 由「类名白名单逐类处理」改为「角色识别 + _acrpa_redraw 钩子」。检查强度不降:
+    # 断言新 walk 保留 Entry/Spinbox 特化样式, 并经 _acrpa_redraw 兜底自绘控件。
     try:
         sw_src = _read("src/ui/settings/window.py")
     except Exception:
         sw_src = ""
-    if '"Menu"' in sw_src and '"Canvas"' in sw_src and '"Listbox"' in sw_src \
-            and '"Spinbox"' in sw_src:
-        _p("OK", "G9b settings._walk 覆盖 Menu/Canvas/Listbox/Spinbox (D5)")
+    if '"Entry", "Spinbox"' in sw_src and "_acrpa_redraw" in sw_src \
+            and "def walk(w):" in sw_src:
+        _p("OK", "G9b settings._walk 覆盖 Entry/Spinbox + _acrpa_redraw 兜底 (D5)")
     else:
         FAILS.append("G9b settings._walk 覆盖不全")
         _p("FAIL", "G9b settings._walk 覆盖不全")

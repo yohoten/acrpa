@@ -17,7 +17,7 @@
   D. 替换计数        — src/ 内剩余「硬编码字体元组」数量 <= 白名单数量
   E. 守护断言        — workflow.py 未被改动; NetLink 集成块 / Mini Bar 定时器 /
                       utils.themed / ai_client.PROVIDER_PRESETS /
-                      py_sandbox.precheck / devlink_btn text="🌐" 均仍在
+                      py_sandbox.precheck 均在; 设备互联已内嵌为 Tab
   F. 依赖探测        — pyautogui/xlrd/pyperclip 缺失仅 [WARN] (不假通过)
 
 注: 无 GUI 环境 (无法建 Tk root) 时 C 段整体记 [WARN], 不假通过。
@@ -36,22 +36,11 @@ FAILS = []
 
 FAMILIES = ("Microsoft YaHei UI", "Consolas", "Segoe UI Symbol", "Segoe UI Emoji")
 
-KEYCAP_TUPLE = 'font=("Consolas", 8, "bold"), bg=C["ac"], fg="white",'
-
 # 白名单: (相对路径, 该行 strip 后的源码) -> 保留原因
 #   —— 只有在「无对应字体角色」或「被既有回归断言锁死」时才允许保留元组字面量
-WHITELIST = {
-    ("src/ACRPA.py", 'font=("Consolas", 9, "bold"), fg=C["fgb"], bg=C["bgc"])'):
-        "录制动作计数 = 等宽粗体; _FONT_SPECS 未定义 mono-bold 角色, 保留原视觉",
-    # L1-A: 原 netlink_window.py 的配对码大字早已改用 utils.FONT_PIN (角色 ACRPA_PIN),
-    # 已无硬编码字体元组; 实现迁至 ui/netlink/pairing.py 后该白名单条目彻底失效, 已移除。
-    # 阶段二第 4 项: 快捷键键帽随卡片迁出 settings_window.py —— 录制键帽 → cards/record.py,
-    # 系统卡全局快捷键键帽 → cards/system.py (定位更新, 白名单条目由 1 拆为 2)。
-    ("src/ui/settings/cards/record.py", KEYCAP_TUPLE):
-        "停止录制快捷键键帽 (等宽粗体), 无 mono-bold 角色",
-    ("src/ui/settings/cards/system.py", KEYCAP_TUPLE):
-        "全局快捷键键帽 (等宽粗体), 无 mono-bold 角色",
-}
+# 阶段二迁移完成后: 动作计数改 FONT_LOG, 键帽改 FONT_SMALL_BOLD, 已无硬编码字体元组,
+# 白名单清空; 结构保留以便后续确有需要时新增豁免项。
+WHITELIST = {}
 
 
 def _p(status, msg):
@@ -89,9 +78,9 @@ UI_MODULES = ("src/utils.py", "src/ui/theme.py", "src/ui/log_dock.py",
               "src/ui/netlink/panels.py", "src/ui/netlink/sched.py",
               "src/ui/netlink/shot.py", "src/ui/netlink/pairing.py",
               "src/ui/netlink/remote.py", "src/ui/netlink/web.py", "src/ui/netlink/audit.py",
-              # 阶段二第 4 项: 设置窗口拆分为门面 + 12 卡 (src/ui/settings/**),
+              # 阶段二第 4 项: 设置窗口拆分为门面 + 11 卡 (src/ui/settings/**),
               # 均经属性式/注入式引用字体角色, 纳入「字体角色名可解析」守护断言。
-              # (第 12 张 extensions.py 为 阶段二新增项②「扩展」卡。)
+              # sched.py 已从设置窗卸下但仍保留为兼容占位, 继续纳入字体角色守护。
               "src/ui/settings/window.py",
               "src/ui/settings/cards/exec.py", "src/ui/settings/cards/ai.py",
               "src/ui/settings/cards/sched.py", "src/ui/settings/cards/record.py",
@@ -530,20 +519,13 @@ def check_guards():
         FAILS.append("守护: py_sandbox.precheck 丢失")
         _p("FAIL", "守护: py_sandbox.precheck 丢失")
 
-    dev_ok = False
-    for n in ast.walk(tree):
-        if isinstance(n, ast.Assign) and any(
-                isinstance(t, ast.Name) and t.id == "devlink_btn" for t in n.targets) \
-                and isinstance(n.value, ast.Call):
-            kw = {k.arg: k.value for k in n.value.keywords}
-            if isinstance(getattr(kw.get("text"), "value", None), str) \
-                    and isinstance(kw.get("font"), ast.Name):
-                dev_ok = True
-    if dev_ok:
-        _p("OK", "守护: devlink_btn 为图标按钮 (text + 命名字体角色)")
+    _acrpa_src = _read("src/ACRPA.py")
+    if "tab_devlink" in _acrpa_src and "_build_devlink_tab" in _acrpa_src \
+            and "devlink_btn" not in _acrpa_src:
+        _p("OK", "守护: 设备互联已内嵌为 Tab (tab_devlink, devlink_btn 已移除)")
     else:
-        FAILS.append("守护: devlink_btn 未使用命名图标字体")
-        _p("FAIL", "守护: devlink_btn 未使用命名图标字体")
+        FAILS.append("守护: 设备互联入口形态错误 (应内嵌 Tab, 且无 devlink_btn)")
+        _p("FAIL", "守护: 设备互联入口形态错误 (应内嵌 Tab, 且无 devlink_btn)")
 
 
 # ── F. 依赖探测 ──

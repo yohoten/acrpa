@@ -176,8 +176,15 @@ def main():
 
     # ── A6 主题跟随 ──
     try:
+        def _nav_bg():
+            try:
+                return str(inst._nav_style.lookup("HelpNav.Treeview",
+                                                  "background"))
+            except Exception:
+                return ""
+
         before_txt = inst.text.cget("bg")
-        before_nav = inst.nav.cget("bg")
+        before_nav = _nav_bg()
         try:
             state.DARK_MODE = True
             darkC = dict(utils._colors())
@@ -186,9 +193,9 @@ def main():
         help_window.refresh_theme(root, darkC)
         root.update_idletasks()
         after_txt = inst.text.cget("bg")
-        after_nav = inst.nav.cget("bg")
-        check(str(after_txt) == str(darkC["logbg"])
-              and str(after_nav) == str(darkC["bgc"])
+        after_nav = _nav_bg()
+        check(str(after_txt).lower() == str(darkC["logbg"]).lower()
+              and str(after_nav).lower() == str(darkC["bgc"]).lower()
               and (after_txt != before_txt or after_nav != before_nav),
               "A6 主题跟随: text.bg {} -> {} (nav {} -> {})".format(
                   before_txt, after_txt, before_nav, after_nav),
@@ -269,7 +276,10 @@ def main():
             webbrowser.open = _fake_web
             ok_doc = inst._open_link("docs/netlink-总览与部署指南.md")
             ok_url = inst._open_link("https://gitee.com/yohoten/acrpa")
-            ok_bad = inst._open_link("docs/__no_such_doc__.md")
+            # 未打包的仓库路径 → 回落在线仓库链接（非静默失败）
+            ok_online = inst._open_link("docs/design/__no_such_internal__.md")
+            # 非仓库、非 URL 的非法目标 → 返回 False
+            ok_bad = inst._open_link("::not-a-link::")
         finally:
             if _orig_start is not None:
                 os.startfile = _orig_start
@@ -281,9 +291,13 @@ def main():
         check(ok_url and calls["web"],
               "A9 http 链接走浏览器（被拦截）: {}".format(calls["web"]),
               "A9 http 链接未走浏览器: {}".format(calls["web"]))
+        check(ok_online and any("github.com/yohoten/acrpa/blob/main/"
+                                in str(u) for u in calls["web"]),
+              "A9 未打包仓库路径回落在线链接: {}".format(calls["web"]),
+              "A9 未打包仓库路径未回落在线链接: {}".format(calls["web"]))
         check(ok_bad is False,
-              "A9 失效链接返回 False 且给出可见提示（非静默崩溃）",
-              "A9 失效链接未正确处理（返回 {}）".format(ok_bad))
+              "A9 非法链接返回 False 且给出可见提示（非静默崩溃）",
+              "A9 非法链接未正确处理（返回 {}）".format(ok_bad))
     except Exception as e:
         _fail("A9 离线链接校验异常: {!r}".format(e))
 

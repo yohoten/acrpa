@@ -16,11 +16,12 @@
   · 无 GUI 环境 (无法建 Tk root) → 实机段记 [WARN] 并退出码 0 (不假通过)。
 
 覆盖:
-  A  静态清单   : 12 张 cards/*.py 各有 build/apply; window._CARD_KEYS / _NAV_ITEMS == 12 且键序一致。
-  B  实机显示   : (1) 窗口存在/标题/minsize; (2) 导航 12 / 卡片句柄 12 / apply 11 (无 quick);
-                  (3) 卡片全部 grid; (4) 画布 scrollregion 覆盖全部内容且内容高于视口;
-                  (5) 各卡 reqwidth 表 + 在 580/680/820 三档窗宽下的横向裁剪判定
-                      (默认 680 有裁剪 → FAIL; 580 有裁剪 → WARN, 属设计文档已知「窄窗必然错位」);
+  A  静态清单   : 11 张 cards/*.py 各有 build/apply; window._CARD_KEYS == 11 键,
+                 navigation.CARD_TO_PAGE 覆盖全部卡片 / PAGE_ORDER == 8 页。
+  B  实机显示   : (1) 窗口存在/标题/minsize; (2) 导航页 8 / 卡片句柄 11 / apply 10 (无 quick);
+                  (3) 卡片全部 grid; (4) 画布 scrollregion 覆盖活动页内容且可滚动;
+                  (5) 各卡 reqwidth 表 + 在 820/1000/1250 三档窗宽下的横向裁剪判定
+                      (默认 1000 有裁剪 → FAIL; 最小 820 有裁剪 → WARN, 属设计文档已知「窄窗必然错位」);
                   (6) 定位最宽卡内最宽控件 (给出可操作定位);
                   (7) 「扩展」卡渲染状态行 (四态图标); (8) 主题往返换肤 (导航底色变化→复原);
                   (9) 点击导航滚动 + 高亮; (10) 子树 req>actual 溢出扫描 (WARN);
@@ -48,7 +49,7 @@ OUTDIR = os.path.join(ROOT, "tools", "_ui_screenshots")
 os.makedirs(OUTDIR, exist_ok=True)
 REPORT = os.path.join(OUTDIR, "settings_ui_display.out")
 
-CARD_KEYS = ("exec", "ai", "sched", "record", "log", "system", "quick",
+CARD_KEYS = ("exec", "ai", "record", "log", "system", "quick",
              "advanced", "netlink", "python", "market", "extensions")
 STATE_ICONS = ("✔", "○", "⚠", "⏸")
 
@@ -95,10 +96,20 @@ def t_static():
         check(False, "import ui.settings.window", repr(e))
         return
     check(tuple(getattr(w, "_CARD_KEYS", ())) == CARD_KEYS,
-          "window._CARD_KEYS == 12 键", str(getattr(w, "_CARD_KEYS", None)))
-    nav_keys = [it[0] for it in getattr(w, "_NAV_ITEMS", [])]
-    check(nav_keys == list(CARD_KEYS),
-          "_NAV_ITEMS 键序与 _CARD_KEYS 一致", str(nav_keys))
+          "window._CARD_KEYS == 11 键", str(getattr(w, "_CARD_KEYS", None)))
+    try:
+        import ui.settings.navigation as nav
+        card_to_page = getattr(nav, "CARD_TO_PAGE", {})
+        page_order = getattr(nav, "PAGE_ORDER", ())
+    except Exception as e:
+        card_to_page, page_order = {}, ()
+        check(False, "import ui.settings.navigation", repr(e))
+    check(set(card_to_page) == set(CARD_KEYS),
+          "navigation.CARD_TO_PAGE 覆盖全部 11 卡",
+          "missing={} extra={}".format(
+              sorted(set(CARD_KEYS) - set(card_to_page)),
+              sorted(set(card_to_page) - set(CARD_KEYS))))
+    check(len(page_order) == 8, "navigation.PAGE_ORDER == 8 页", str(page_order))
     for key in CARD_KEYS:
         try:
             mod = importlib.import_module("ui.settings.cards." + key)
@@ -239,7 +250,7 @@ def t_live():
     except Exception:
         capabilities = None
 
-    # ── 隔离: 备份 config.json; 复位内存几何以取默认 680 尺寸 ──
+    # ── 隔离: 备份 config.json; 复位内存几何以取默认 1000x680 尺寸 ──
     cfg = getattr(state_mod, "CONFIG_PATH", os.path.join(ROOT, "config.json"))
     try:
         with open(cfg, "rb") as fh:
@@ -248,7 +259,7 @@ def t_live():
         cfg_backup = None
     orig_geo = getattr(state_mod, "WIN_GEOMETRY", "")
     orig_dark = bool(getattr(state_mod, "DARK_MODE", False))
-    state_mod.WIN_GEOMETRY = ""   # 使窗口按默认 680x680 居中打开 (确定性)
+    state_mod.WIN_GEOMETRY = ""   # 使窗口按默认 1000x680 居中打开 (确定性)
 
     try:
         sw.open_settings_window()
@@ -272,26 +283,27 @@ def t_live():
         minw, minh = win.minsize()
     except Exception as e:
         minw = minh = "<err %r>" % (e,)
-    # 设计尺寸 580x500 走 window_shell → utils.sp() 缩放, 断言也按缩放后取值
-    _exp_min = (utils.sp(580), utils.sp(500))
+    # 设计尺寸 820x560 走 window._window_geometry → utils.sp() 缩放, 断言也按缩放后取值
+    _exp_min = (utils.sp(820), utils.sp(560))
     check((minw, minh) == _exp_min,
-          "minsize == 设计 580x500 (缩放后 {})".format(_exp_min),
+          "minsize == 设计 820x560 (缩放后 {})".format(_exp_min),
           "({}, {})".format(minw, minh))
     w_actual, h_actual = win.winfo_width(), win.winfo_height()
     emit("[GEOM] 默认打开尺寸 = {}x{}".format(w_actual, h_actual))
 
     # (2) 导航 / 句柄
-    nav_labels = getattr(w, "_nav_labels", {})
-    check(isinstance(nav_labels, dict) and len(nav_labels) == 12,
-          "导航项 12 个", "count={}".format(len(nav_labels) if nav_labels else nav_labels))
+    navigation = getattr(w, "_navigation", None)
+    nav_buttons = getattr(navigation, "_buttons", {}) if navigation is not None else {}
+    check(isinstance(nav_buttons, dict) and len(nav_buttons) == 8,
+          "导航页 8 个", "count={}".format(len(nav_buttons) if nav_buttons else nav_buttons))
     nav_cards = getattr(w, "_nav_cards", [])
-    check(isinstance(nav_cards, list) and len(nav_cards) == 12,
-          "注册卡片句柄 12 张", "count={}".format(len(nav_cards) if nav_cards else nav_cards))
+    check(isinstance(nav_cards, list) and len(nav_cards) == 11,
+          "注册卡片句柄 11 张", "count={}".format(len(nav_cards) if nav_cards else nav_cards))
     if isinstance(nav_cards, list):
         got_keys = [k for k, _cw in nav_cards]
-        check(got_keys == list(CARD_KEYS), "_nav_cards 键序 == _CARD_KEYS", str(got_keys))
+        check(set(got_keys) == set(CARD_KEYS), "_nav_cards 覆盖全部 11 卡 (页分组序)", str(got_keys))
     amap = getattr(w, "_apply_map", {})
-    check(len(amap) == 11, "_apply_map 覆盖 11 卡 (无 quick)", "count={}".format(len(amap)))
+    check(len(amap) == 10, "_apply_map 覆盖 10 卡 (无 quick)", "count={}".format(len(amap)))
     check("quick" not in amap, "_apply_map 不含 quick")
 
     # (3) 卡片 grid
@@ -303,11 +315,11 @@ def t_live():
                     bad.append(k)
             except Exception:
                 bad.append(k)
-        check(not bad, "12 张卡片均以 grid 布局", "非 grid: {}".format(bad))
+        check(not bad, "11 张卡片均以 grid 布局", "非 grid: {}".format(bad))
 
     # (4) 画布滚动区
-    canvas = getattr(w, "_nav_canvas", None)
-    check(canvas is not None, "_nav_canvas 存在")
+    canvas = getattr(w, "_canvas", None)
+    check(canvas is not None, "_canvas 存在")
     inner_h = canvas_h = canvas_w = None
     inner = None
     if canvas is not None:
@@ -326,8 +338,9 @@ def t_live():
               "内容高度 > 视口高度 (需要并可滚动)",
               "inner_h={} canvas_h={}".format(inner_h, canvas_h))
         try:
-            item = canvas.find_withtag("inner")[0]
-            inner = canvas.nametowidget(canvas.itemcget(item, "window"))
+            inner = getattr(w, "_inner", None)
+            if inner is None:
+                raise ValueError("no _inner attr")
         except Exception as e:
             emit("       (取 inner frame 失败: {!r})".format(e))
 
@@ -353,8 +366,9 @@ def t_live():
         except Exception:
             return None
 
+    # 设计三档: 最小 820 / 默认 1000 (config win_w) / 舒适 1250 (设计 px, 经 sp 缩放)
     measured = {}
-    for width in (580, 680, 820):
+    for width in (820, 1000, 1250):
         measured[width] = canvas_width_at(width)
     emit("[WIDTH] 各窗宽 → 画布绘制宽: " +
          ", ".join("{}→{}".format(k, v) for k, v in measured.items()))
@@ -365,18 +379,18 @@ def t_live():
             return []
         return [(k, v) for k, v in per if v > cwid + 1]
 
-    clip580 = clip_at(580)
-    clip680 = clip_at(680)
-    clip820 = clip_at(820)
-    emit("[WIDTH] 裁剪(卡req>画布宽) 580:{}".format(clip580))
-    emit("[WIDTH] 裁剪(卡req>画布宽) 680:{}".format(clip680))
-    emit("[WIDTH] 裁剪(卡req>画布宽) 820:{}".format(clip820))
-    check(not clip680,
-          "默认窗宽(680) 无横向裁剪",
-          "裁剪卡: {}".format([k for k, _ in clip680]))
-    if clip580:
-        warn("最小窗宽(580) 存在横向裁剪 (设计文档 §P0 已记为「窄窗必然错位」): {}".format(
-            [k for k, _ in clip580]))
+    clip_min = clip_at(820)
+    clip_default = clip_at(1000)
+    clip_wide = clip_at(1250)
+    emit("[WIDTH] 裁剪(卡req>画布宽) min(820):{}".format(clip_min))
+    emit("[WIDTH] 裁剪(卡req>画布宽) 默认(1000):{}".format(clip_default))
+    emit("[WIDTH] 裁剪(卡req>画布宽) 宽(1250):{}".format(clip_wide))
+    check(not clip_default,
+          "默认窗宽(1000) 无横向裁剪",
+          "裁剪卡: {}".format([k for k, _ in clip_default]))
+    if clip_min:
+        warn("最小窗宽(820) 存在横向裁剪 (设计文档 §P0 已记为「窄窗必然错位」): {}".format(
+            [k for k, _ in clip_min]))
 
     # (6) 定位最宽卡内最宽控件
     if isinstance(nav_cards, list) and per:
@@ -387,9 +401,9 @@ def t_live():
                 continue
             emit("[WIDEST] 卡 {} 内最宽控件(可见): {}".format(k, _widest(cw, 3)))
 
-    # 复位到默认 680 供后续采集 (设计 px → sp 缩放)
+    # 复位到默认 1000 供后续采集 (设计 px → sp 缩放)
     try:
-        win.geometry("{}x{}".format(utils.sp(680), utils.sp(680)))
+        win.geometry("{}x{}".format(utils.sp(1000), utils.sp(680)))
         _pump(root, n=3)
     except Exception:
         pass
@@ -412,7 +426,7 @@ def t_live():
         check(False, "定位到「扩展」卡控件")
 
     # (8) 主题往返换肤
-    sample = nav_labels.get("extensions") if isinstance(nav_labels, dict) else None
+    sample = nav_buttons.get("extensions") if isinstance(nav_buttons, dict) else None
     if sample is not None:
         try:
             bg_before = str(sample.cget("bg"))
@@ -445,7 +459,7 @@ def t_live():
         try:
             w._on_nav_click("extensions")
             _pump(root, n=3)
-            active = getattr(w, "_nav_active_key", None)
+            active = getattr(navigation, "active_page", None) if navigation is not None else None
             check(active == "extensions", "点击导航后 active=extensions", repr(active))
             yv_after = canvas.yview()
             check(yv_before is None or (yv_after != yv_before or yv_after[0] > 0.0),

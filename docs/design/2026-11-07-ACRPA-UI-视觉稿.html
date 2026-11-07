@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ACRPA UI 视觉优化方案 v5 · 视觉稿</title>
+<style>
+:root{
+  --page:#0D0D0D; --bg:#161616; --surface:#1C1C1C; --surface-alt:#232323;
+  --raised:#2B2B2B; --overlay:#333333; --border:#343434; --border-soft:#2A2A2A;
+  --fg:#F2F2F2; --fg2:#C9C9C9; --fg3:#9A9A9A; --fg4:#6E6E6E;
+  --accent:#4CC2FF; --accent-fill:#0878B8; --accent-weak:rgba(76,194,255,.12);
+  --success:#6CCB5F; --danger:#FF9AA2; --danger-fill:#C42B1C; --warn:#E3B341;
+  --ai:#A78BFA; --info:#6CB6FF;
+  --mono:"Cascadia Mono","Consolas",monospace;
+  --ui:"Microsoft YaHei UI","Segoe UI",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--page);color:var(--fg2);font-family:var(--ui);font-size:13px;line-height:1.7;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1240px;margin:0 auto;padding:56px 32px 96px}
+h1,h2,h3,h4{margin:0;color:var(--fg);font-weight:600;letter-spacing:.2px}
+h1{font-size:30px;line-height:1.35}
+h2{font-size:19px;margin:0 0 6px}
+h3{font-size:14px;margin:0 0 10px}
+p{margin:8px 0}
+code{font-family:var(--mono);font-size:12px;background:var(--surface-alt);border:1px solid var(--border-soft);padding:1px 5px;border-radius:3px;color:var(--fg2)}
+.eyebrow{font-size:11px;letter-spacing:2.4px;text-transform:uppercase;color:var(--accent);margin-bottom:14px}
+.lede{color:var(--fg3);font-size:14px;max-width:860px;margin-top:14px}
+.meta{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}
+.chip{font-size:11px;color:var(--fg3);border:1px solid var(--border);background:var(--surface);padding:4px 10px;border-radius:999px}
+.chip b{color:var(--fg2);font-weight:600}
+section{margin-top:72px}
+.sec-head{display:flex;align-items:baseline;gap:12px;border-bottom:1px solid var(--border-soft);padding-bottom:12px;margin-bottom:26px}
+.sec-num{font-family:var(--mono);font-size:12px;color:var(--accent);letter-spacing:1px}
+.sec-note{color:var(--fg4);font-size:12px;margin-left:auto}
+
+/* ── 指标卡 ── */
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:34px}
+.metric{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:18px 18px 16px}
+.metric .k{font-family:var(--mono);font-size:26px;color:var(--fg);letter-spacing:-.5px}
+.metric .k span{font-size:13px;color:var(--fg3);margin-left:4px;letter-spacing:0}
+.metric .v{font-size:12px;color:var(--fg3);margin-top:6px}
+.metric .bar{height:3px;background:var(--surface-alt);border-radius:2px;margin-top:12px;overflow:hidden}
+.metric .bar i{display:block;height:100%;background:var(--accent)}
+
+/* ── 截图 + 标注 ── */
+.shot{position:relative;border:1px solid var(--border);border-radius:6px;overflow:hidden;background:var(--surface)}
+.shot img{display:block;width:100%}
+.marker{position:absolute;width:20px;height:20px;border-radius:50%;background:var(--danger-fill);color:#fff;
+  font-family:var(--mono);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;
+  border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.6)}
+.issue-list{display:grid;grid-template-columns:repeat(2,1fr);gap:10px 28px;margin-top:20px}
+.issue{display:flex;gap:10px;font-size:12.5px;color:var(--fg3)}
+.issue b{color:var(--fg2);font-weight:600}
+.issue .n{flex:0 0 18px;height:18px;border-radius:50%;background:var(--danger-fill);color:#fff;font-family:var(--mono);
+  font-size:10px;display:flex;align-items:center;justify-content:center;margin-top:3px}
+
+/* ══════════ 应用窗口复刻 ══════════ */
+.appwin{background:var(--bg);border:1px solid var(--border);border-radius:8px;overflow:hidden;
+  box-shadow:0 24px 60px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.02) inset;font-family:var(--ui)}
+/* A1 应用栏 */
+.appbar{height:26px;display:flex;align-items:center;gap:8px;padding:0 10px;background:var(--surface-alt);border-bottom:1px solid var(--border-soft)}
+.logo{width:16px;height:16px;border-radius:3px;background:linear-gradient(135deg,var(--accent),var(--accent-fill));color:#06121A;
+  font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;letter-spacing:-.5px}
+.doc{font-size:12px;color:var(--fg);letter-spacing:.2px}
+.doc .ext{color:var(--fg4)}
+.dirty{width:5px;height:5px;border-radius:50%;background:var(--warn);display:inline-block;margin-left:2px}
+.appbar .spacer{flex:1}
+.stat{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--fg3)}
+.stat i{width:6px;height:6px;border-radius:50%;background:var(--success);display:inline-block}
+.icobtn{width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:3px;color:var(--fg3);font-size:12px}
+.icobtn:hover{background:var(--surface-alt);color:var(--fg)}
+.wctl{display:flex;gap:2px;margin-left:6px;padding-left:8px;border-left:1px solid var(--border-soft);color:var(--fg4);font-size:10px}
+
+/* A2 执行栏 */
+.execbar{height:40px;display:flex;align-items:center;gap:10px;padding:0 10px;background:var(--surface);border-bottom:1px solid var(--border-soft)}
+.run-group{display:flex;align-items:center;gap:4px}
+.btn{height:26px;display:inline-flex;align-items:center;gap:6px;padding:0 11px;border-radius:4px;font-size:12px;
+  border:1px solid transparent;white-space:nowrap;cursor:default;font-weight:500}
+.btn.primary{background:var(--accent-fill);color:#fff;border-color:transparent;font-weight:600;box-shadow:0 1px 0 rgba(255,255,255,.08) inset}
+.btn.secondary{background:var(--surface-alt);color:var(--fg2);border-color:var(--border)}
+.btn.ghost{background:transparent;color:var(--fg3)}
+.btn.ghost:hover{background:var(--surface-alt);color:var(--fg)}
+.btn.ghost-danger{background:transparent;color:var(--danger)}
+.btn.ai{background:transparent;color:var(--ai);border-color:rgba(167,139,250,.45)}
+.btn.sq{width:26px;padding:0;justify-content:center}
+.divider{width:1px;height:18px;background:var(--border);margin:0 4px}
+.exec-scroll{display:flex;align-items:center;gap:8px;flex:1;overflow:hidden}
+.lbl{font-size:11.5px;color:var(--fg3);white-space:nowrap}
+.field{height:26px;display:inline-flex;align-items:center;gap:6px;padding:0 8px;border:1px solid var(--border);
+  border-radius:4px;background:var(--surface-alt);font-size:12px;color:var(--fg2);white-space:nowrap}
+.field .car{color:var(--fg4);font-size:9px}
+.field.num{width:44px;justify-content:center;padding:0}
+.check{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--fg3)}
+.box{width:13px;height:13px;border:1px solid #4A4A4A;border-radius:3px;background:var(--surface-alt)}
+
+/* A3 工具栏 */
+.toolbar{height:34px;display:flex;align-items:center;gap:2px;padding:0 8px;background:var(--bg);border-bottom:1px solid var(--border-soft)}
+.tbtn{height:24px;display:inline-flex;align-items:center;gap:5px;padding:0 8px;border-radius:3px;font-size:12px;color:var(--fg2);border:1px solid transparent}
+.tbtn:hover{background:var(--surface-alt);border-color:var(--border-soft)}
+.tbtn.danger{color:var(--danger)}
+.tbtn.ai{color:var(--ai)}
+.tbtn.solid{background:var(--surface-alt);border-color:var(--border);color:var(--fg)}
+.tbtn .ic{font-size:11px;opacity:.85}
+.toolbar .spacer{flex:1}
+
+/* A4 表格 */
+.tablewrap{background:var(--bg);position:relative}
+.thead{display:grid;grid-template-columns:38px 106px 118px 74px 74px 92px 1fr 56px;
+  height:28px;align-items:center;background:var(--surface-alt);border-bottom:1px solid var(--border);font-size:11px;color:var(--fg3);line-height:1}
+.thead div{padding:0 8px;border-right:1px solid var(--border-soft)}
+.thead div:last-child{border-right:0}
+.trow{display:grid;grid-template-columns:38px 106px 118px 74px 74px 92px 1fr 56px;height:24px;align-items:center;
+  font-size:12px;color:var(--fg2);border-bottom:1px solid rgba(52,52,52,.45);line-height:1}
+.trow:nth-child(even){background:rgba(255,255,255,.012)}
+.trow:hover{background:rgba(76,194,255,.05)}
+.trow.sel{background:#1E2A33;box-shadow:inset 2px 0 0 var(--accent)}
+.trow .rn{color:var(--fg4);font-family:var(--mono);font-size:11px;text-align:right;padding-right:8px}
+.trow .cmd{position:relative;padding-left:12px;color:var(--fg)}
+.trow .cmd::before{content:"";position:absolute;left:0;top:3px;bottom:3px;width:3px;border-radius:0 2px 2px 0;background:var(--stripe,#555)}
+.trow div.cell{padding:0 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.muted{color:var(--fg4)}
+.pluschip{font-size:11px;color:var(--fg4);border:1px dashed #3A3A3A;border-radius:3px;padding:1px 6px;margin-right:6px}
+.legend{height:22px;display:flex;align-items:center;gap:14px;padding:0 12px;background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border);font-size:11px;color:var(--fg4)}
+.lg{display:inline-flex;align-items:center;gap:5px}
+.lg i{width:3px;height:12px;border-radius:1px;display:inline-block}
+
+/* A5 日志 */
+.logdock{background:var(--bg);border-top:1px solid var(--border)}
+.loghead{height:30px;display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid var(--border-soft)}
+.loghead .t{font-size:12px;color:var(--fg);font-weight:600}
+.loghead .cnt{font-size:11px;color:var(--fg4);font-family:var(--mono)}
+.loghead .spacer{flex:1}
+.mini{height:24px;display:inline-flex;align-items:center;padding:0 8px;border:1px solid var(--border);border-radius:3px;
+  background:var(--surface-alt);font-size:11.5px;color:var(--fg2)}
+.mini.plain{background:transparent;border-color:transparent;color:var(--fg3)}
+.logbody{padding:4px 0 6px;font-family:var(--mono);font-size:11.5px;line-height:18px}
+.lrow{display:flex;gap:10px;padding:0 12px}
+.lrow .ts{color:var(--fg4)}
+.badge{flex:0 0 42px;text-align:center;border-radius:2px;font-size:10px;line-height:14px;margin:2px 0;font-weight:600}
+.badge.info{color:var(--info);background:rgba(108,182,255,.13)}
+.badge.ok{color:var(--success);background:rgba(108,203,95,.13)}
+.badge.warn{color:var(--warn);background:rgba(227,179,65,.13)}
+.lrow .m{color:var(--fg2)}
+
+/* A6 状态栏 */
+.statusbar{height:24px;display:flex;align-items:center;gap:14px;padding:0 12px;background:var(--surface-alt);
+  border-top:1px solid var(--border);font-size:11.5px;color:var(--fg3)}
+.statusbar .seg{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.prog{width:150px;height:6px;border-radius:3px;background:#2E2E2E;overflow:hidden}
+.prog i{display:block;height:100%;width:45%;border-radius:3px;background:var(--accent)}
+.statusbar .spacer{flex:1}
+.kv{font-family:var(--mono);font-size:11px;color:var(--fg4)}
+.kv b{color:var(--fg2);font-weight:600}
+
+/* 说明列表 */
+.notes{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:18px}
+.note{background:var(--surface);border:1px solid var(--border);border-left:2px solid var(--accent);border-radius:4px;padding:12px 14px}
+.note h4{font-size:12.5px;margin-bottom:5px}
+.note p{font-size:12px;color:var(--fg3);margin:0;line-height:1.65}
+.note .num{font-family:var(--mono);font-size:10px;color:var(--accent);margin-right:6px}
+
+/* 组件矩阵 */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:18px}
+.card .hint{font-size:11.5px;color:var(--fg3);margin:0 0 14px}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.tag{font-family:var(--mono);font-size:10.5px;color:var(--fg4);min-width:62px}
+
+/* token 表 */
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border-soft);vertical-align:middle}
+th{color:var(--fg3);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.6px}
+td{color:var(--fg3)}
+td b{color:var(--fg2);font-weight:500}
+.sw{display:inline-block;width:34px;height:16px;border-radius:3px;border:1px solid rgba(255,255,255,.14);vertical-align:-3px;margin-right:8px}
+.mono{font-family:var(--mono);font-size:11.5px;color:var(--fg2)}
+.cr{font-family:var(--mono);font-size:11.5px}
+.cr.ok{color:var(--success)} .cr.warn{color:var(--warn)} .cr.bad{color:var(--danger)}
+
+/* 空态 */
+.empty{border:1px dashed #3A3A3A;border-radius:6px;padding:26px 20px;text-align:center;background:rgba(255,255,255,.008)}
+.empty .ico{font-size:20px;color:var(--fg4);margin-bottom:8px}
+.empty .t1{font-size:13px;color:var(--fg2);margin-bottom:4px}
+.empty .t2{font-size:11.5px;color:var(--fg4);max-width:330px;margin:0 auto 14px;line-height:1.65}
+
+/* 工作流节点 */
+.flowbox{background:#141414;border:1px solid var(--border);border-radius:6px;padding:22px;display:flex;gap:30px;align-items:center;justify-content:center}
+.node{width:168px;background:var(--surface-alt);border:1px solid #3C3C3C;border-radius:5px;padding:7px 10px 8px;position:relative}
+.node .hd{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--fg)}
+.node .hd .idx{font-family:var(--mono);font-size:10px;color:var(--fg4);border:1px solid #444;border-radius:2px;padding:0 3px}
+.node .sub{font-size:11px;color:var(--fg3);margin-top:2px;font-family:var(--mono)}
+.node::before{content:"";position:absolute;left:-1px;top:-1px;bottom:-1px;width:3px;border-radius:4px 0 0 4px;background:var(--nc,#555)}
+.port{position:absolute;width:7px;height:7px;border-radius:50%;background:#4A4A4A;border:1px solid #141414}
+.port.l{left:-4px;top:50%;margin-top:-3px} .port.r{right:-4px;top:50%;margin-top:-3px}
+.node.run{border-color:var(--accent);box-shadow:0 0 0 2px rgba(76,194,255,.25)}
+.node.fail{border-color:var(--danger-fill)}
+.node.fail::after{content:"!";position:absolute;right:-7px;top:-7px;width:14px;height:14px;border-radius:50%;
+  background:var(--danger-fill);color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.arrow{color:#4A4A4A;font-family:var(--mono)}
+.node.old{background:#8B1A1A;border-color:#A62B2B;border-radius:4px}
+.node.old .hd{color:#fff} .node.old .sub{color:#FFD0D0}
+
+footer{margin-top:80px;border-top:1px solid var(--border-soft);padding-top:21px;color:var(--fg4);font-size:11.5px}
+@media(max-width:1080px){.metrics{grid-template-columns:repeat(2,1fr)}.grid2{grid-template-columns:1fr}
+  .notes{grid-template-columns:1fr}.issue-list{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="eyebrow">ACRPA · Design Review v5</div>
+  <h1>UI 视觉与布局优化方案<span style="color:var(--fg4);font-weight:400"> —— 视觉稿</span></h1>
+  <p class="lede">本稿以 v0.1.30-beta 的实际界面（视觉模型逐图读取 + 源码事实核对）为基线，给出可照图施工的深色视觉稿。
+  骨架不重排，只重配视觉权重：<b style="color:var(--fg2)">一屏一个实心主操作、颜色从文字移到色条、关键操作永不滚出视口</b>。</p>
+
+  <div class="meta">
+    <span class="chip">基线 <b>v0.1.30-beta</b></span>
+    <span class="chip">工具包 <b>Tkinter / ttk clam</b></span>
+    <span class="chip">主窗 <b>1000×680</b> · row_h <b>22</b> · 字号 <b>9pt</b></span>
+    <span class="chip">配套方案 <b>2026-11-07-ACRPA-UI视觉优化方案-v5.md</b></span>
+  </div>
+
+  <div class="metrics">
+    <div class="metric">
+      <div class="k">9<span>/18</span></div>
+      <div class="v">工具栏实心填色按钮占比 50% → 目标 ≤2</div>
+      <div class="bar"><i style="width:50%"></i></div>
+    </div>
+    <div class="metric">
+      <div class="k">33</div>
+      <div class="v">主题文件外独立色值字面量 → 目标 ≤10</div>
+      <div class="bar"><i style="width:72%;background:var(--warn)"></i></div>
+    </div>
+    <div class="metric">
+      <div class="k">128<span>px</span></div>
+      <div class="v">内容区之上的四行垂直开销 → 目标 120px</div>
+      <div class="bar"><i style="width:38%;background:var(--danger)"></i></div>
+    </div>
+    <div class="metric">
+      <div class="k">0<span>/5</span></div>
+      <div class="v">空表具备可行动空态 → 目标 5/5</div>
+      <div class="bar"><i style="width:6%;background:var(--danger)"></i></div>
+    </div>
+  </div>
+
+  <!-- 结论先行 -->
+  <section>
+    <div class="sec-head"><span class="sec-num">00</span><h2>结论先行（5 条）</h2>
+      <span class="sec-note">骨架正确，不重排；只重配视觉权重</span></div>
+    <div class="card">
+      <div class="issue-list" style="grid-template-columns:1fr;margin-top:0">
+        <div class="issue"><span class="n" style="background:var(--accent-fill)">1</span><span><b>一屏一个实心主按钮</b>：现状 18 钮里 9 个实心 → 目标实心 ≤2（运行、保存），其余降 ghost。</span></div>
+        <div class="issue"><span class="n" style="background:var(--accent-fill)">2</span><span><b>颜色从文字移到色条</b>：命令名 10 组分类色 + 语义色 + 节点色，同屏 15+ 色相 → 改 3px 左侧色条，文字回归 <span class="mono">fgb</span>。</span></div>
+        <div class="issue"><span class="n" style="background:var(--accent-fill)">3</span><span><b>主操作行不可滚动</b>：<span class="mono">exec_bar.py:267</span> 把运行条放进横向 Canvas → 拆「运行组钉死 + 参数组可滚动」。</span></div>
+        <div class="issue"><span class="n" style="background:var(--accent-fill)">4</span><span><b>暗色不用浅色实心</b>：<span class="mono">#FFF on #4CC2FF=2.01:1</span> → 改 accent-fill 实心 + 白字（4.78:1）。</span></div>
+        <div class="issue"><span class="n" style="background:var(--accent-fill)">5</span><span><b>空态是「空状态」不是「空白」</b>：5 张空表各只有 9pt 灰字 → 统一「图标 + 主句 + 副句 + 主按钮」。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 01 -->
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2>现状：五个视觉热区</h2>
+      <span class="sec-note">来源 img/image1.png（真实运行截图）</span></div>
+
+    <div class="shot">
+      <img src="../../img/image1.png" alt="ACRPA 主窗口现状截图">
+      <div class="marker" style="left:1.1%;top:3.2%">1</div>
+      <div class="marker" style="left:1.1%;top:9.2%">2</div>
+      <div class="marker" style="left:1.1%;top:14.6%">3</div>
+      <div class="marker" style="left:55%;top:42%">4</div>
+      <div class="marker" style="left:1.1%;top:79.5%">5</div>
+    </div>
+
+    <div class="issue-list">
+      <div class="issue"><span class="n">1</span><span><b>双标题栏</b>：原生标题栏 + 自绘栏，后者只放一条英文标语与 5 个图标，却占 34px。</span></div>
+      <div class="issue"><span class="n">2</span><span><b>主操作行可滚动</b>：运行控制条整体在横向 Canvas 内，窄窗时「运行/停止」滑出视口。</span></div>
+      <div class="issue"><span class="n">3</span><span><b>实心按钮成灾</b>：18 个按钮中 9 个实心（蓝×3 / 绿×1 / 紫×2 / 红×3），权重全部相等。</span></div>
+      <div class="issue"><span class="n">4</span><span><b>参数空列连片</b>：未选中行时仍显示参数1–9，右侧 30–50% 为空白。</span></div>
+      <div class="issue"><span class="n">5</span><span><b>日志工具条参差</b>：下拉 22px / 输入 22px / 按钮 24px 混排，右侧蓝色导出按钮无对齐基准。</span></div>
+    </div>
+  </section>
+
+  <!-- 02 -->
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><h2>建议稿：主窗口（方案 A · 保守）</h2>
+      <span class="sec-note">深色 · 1:1 复刻 · 可对照下方标注</span></div>
+
+    <div class="appwin">
+      <!-- A1 -->
+      <div class="appbar">
+        <div class="logo">A</div>
+        <div class="doc">客户资料回填<span class="ext">.acrpas</span><span class="dirty"></span></div>
+        <div class="spacer"></div>
+        <div class="stat"><i></i>就绪</div>
+        <div class="icobtn">△</div>
+        <div class="icobtn">⊟</div>
+        <div class="icobtn">◑</div>
+        <div class="icobtn">⚙</div>
+        <div class="icobtn">?</div>
+        <div style="width:6px"></div>
+      </div>
+
+      <!-- A2 -->
+      <div class="execbar">
+        <div class="run-group">
+          <span class="btn primary">▶ 运行</span>
+          <span class="btn ghost sq">⏸</span>
+          <span class="btn ghost sq">⏭</span>
+          <span class="btn ghost sq" style="color:var(--danger)">■</span>
+        </div>
+        <div class="divider"></div>
+        <div class="exec-scroll">
+          <span class="lbl">脚本</span>
+          <span class="field">客户资料.xlsx <span class="car">▾</span></span>
+          <span class="lbl">次数</span><span class="field num">1</span>
+          <span class="lbl">最长</span><span class="field num">0</span><span class="lbl">min</span>
+          <span class="check"><span class="box"></span>退出报错</span>
+          <div class="divider"></div>
+          <span class="btn ghost">✓ 校验</span>
+          <span class="btn ghost">⌗ 调试 <span style="font-size:9px;color:var(--fg4)">▾</span></span>
+          <span class="btn ghost">变量</span>
+        </div>
+      </div>
+
+      <!-- A3 -->
+      <div class="toolbar">
+        <span class="tbtn"><span class="ic">＋</span>行</span>
+        <span class="tbtn danger">删除</span>
+        <span class="tbtn">编辑</span>
+        <span class="tbtn">↑</span><span class="tbtn">↓</span>
+        <div class="divider"></div>
+        <span class="tbtn">片段</span>
+        <span class="tbtn">新建</span>
+        <span class="tbtn">打开</span>
+        <span class="tbtn solid">保存 <span style="font-size:9px;color:var(--fg4)">▾</span></span>
+        <div class="divider"></div>
+        <span class="tbtn ai">✦ AI <span style="font-size:9px">▾</span></span>
+        <div class="divider"></div>
+        <span class="tbtn">取点</span>
+        <span class="tbtn">截屏</span>
+        <span class="tbtn">版本</span>
+        <span class="tbtn">失败现场</span>
+        <span class="spacer"></span>
+        <span class="tbtn">⋯</span>
+      </div>
+
+      <!-- A4 -->
+      <div class="tablewrap">
+        <div class="thead">
+          <div style="text-align:right;padding-right:8px">#</div><div>命令</div><div>参数 1</div><div>参数 2</div>
+          <div>参数 3</div><div>参数 4</div><div>参数 5</div>
+          <div style="border-right:0;padding-right:6px;text-align:right"><span class="pluschip" style="margin:0">+2</span></div>
+        </div>
+
+        <div class="trow"><div class="rn">01</div><div class="cmd" style="--stripe:#FCA5A5">热键</div><div class="cell">win</div><div class="cell">r</div><div class="cell muted">—</div><div class="cell"></div><div class="cell"></div><div></div></div>
+        <div class="trow"><div class="rn">02</div><div class="cmd" style="--stripe:#FCD34D">等待</div><div class="cell">2.0</div><div class="cell muted">—</div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div></div></div>
+        <div class="trow"><div class="rn">03</div><div class="cmd" style="--stripe:#FCD34D">输入</div><div class="cell">cmd</div><div class="cell">enter</div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div></div></div>
+        <div class="trow"><div class="rn">04</div><div class="cmd" style="--stripe:#FCD34D">输入</div><div class="cell">cmd /k ipconfig/all</div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div></div></div>
+        <div class="trow"><div class="rn">05</div><div class="cmd" style="--stripe:#86EFAC">按键</div><div class="cell">enter</div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div></div></div>
+        <div class="trow"><div class="rn">06</div><div class="cmd" style="--stripe:#FCD34D">等待</div><div class="cell">5.0</div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div></div></div>
+        <div class="trow"><div class="rn">07</div><div class="cmd" style="--stripe:#86EFAC">按键</div><div class="cell">enter</div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div></div></div>
+        <div class="trow sel"><div class="rn">08</div><div class="cmd" style="--stripe:#FCA5A5">热键</div><div class="cell">alt</div><div class="cell">v</div><div class="cell muted">—</div><div class="cell"></div><div class="cell"></div><div></div></div>
+        <div class="trow"><div class="rn">09</div><div class="cmd" style="--stripe:#FCA5A5">热键</div><div class="cell">ctrl</div><div class="cell">s</div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div></div></div>
+        <div class="trow"><div class="rn">10</div><div class="cmd" style="--stripe:#FCD34D">等待</div><div class="cell">2.0</div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div></div></div>
+        <div class="trow"><div class="rn">11</div><div class="cmd" style="--stripe:#FCD34D">输入</div><div class="cell">notepad</div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div></div></div>
+        <div class="trow"><div class="rn">12</div><div class="cmd" style="--stripe:#86EFAC">按键</div><div class="cell">enter</div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div class="cell"></div><div></div></div>
+      </div>
+
+      <div class="legend">
+        <span class="lg"><i style="background:#86EFAC"></i>按键 / 按下 / 释放</span>
+        <span class="lg"><i style="background:#FCA5A5"></i>热键</span>
+        <span class="lg"><i style="background:#FCD34D"></i>输入 / 等待</span>
+        <span class="lg"><i style="background:#93C5FD"></i>找图 / 点图</span>
+        <span class="lg"><i style="background:#C4B5FD"></i>代码</span>
+        <span style="margin-left:auto;color:var(--fg4)">图例仅在「⋯」内展开 · 常驻条已移除</span>
+      </div>
+
+      <!-- A5 -->
+      <div class="logdock">
+        <div class="loghead">
+          <span class="t">运行日志</span><span class="cnt">320 条</span>
+          <span class="mini plain">全部 <span style="font-size:9px">▾</span></span>
+          <span class="mini" style="width:170px;color:var(--fg4)">搜索关键字…</span>
+          <span class="mini plain">搜索</span><span class="mini plain">下一个</span>
+          <span class="spacer"></span>
+          <span class="mini plain">清空</span><span class="mini plain">导出</span>
+          <span class="mini">▲ 收起</span>
+        </div>
+        <div class="logbody">
+          <div class="lrow"><span class="ts">21:38:58</span><span class="badge info">INFO</span><span class="m">正在执行自动化任务 · 脚本「客户资料.xlsx」</span></div>
+          <div class="lrow"><span class="ts">21:38:59</span><span class="badge ok">OK</span><span class="m">第 1 行 热键 win+r 执行成功 (112ms)</span></div>
+          <div class="lrow"><span class="ts">21:39:01</span><span class="badge warn">WARN</span><span class="m">第 4 行 输入：窗口「运行」未就绪，已重试 1/3</span></div>
+          <div class="lrow"><span class="ts">21:39:02</span><span class="badge ok">OK</span><span class="m">第 4 行 执行成功 (348ms)</span></div>
+        </div>
+      </div>
+
+      <!-- A6 -->
+      <div class="statusbar">
+        <div class="seg"><span style="color:var(--success)">●</span>运行中 · 循环 1/1 · 行 31/89</div>
+        <div class="seg"><div class="prog"><i></i></div><span class="kv">45%</span></div>
+        <div class="spacer"></div>
+        <div class="seg kv">ETA <b>01:05</b></div>
+        <div class="seg kv">已用 <b>00:34</b></div>
+        <div class="seg kv">失败 <b style="color:var(--fg2)">0</b></div>
+        <div class="seg" style="color:var(--fg4)">点击展开日志 ▲</div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="note"><h4><span class="num">A1</span>应用栏 26px</h4><p>英文标语删除，标题承担「文档名 + 未保存点」；5 个图标与窗口控制同侧，形成一条权利带。</p></div>
+      <div class="note"><h4><span class="num">A2</span>运行组钉死</h4><p>左段固定不可滚动，右段参数区才滚动。窗口 640px 时「运行/停止」仍在视口内。</p></div>
+      <div class="note"><h4><span class="num">A3</span>18→13 钮</h4><p>删除/清空/录制收进「⋯」；实心仅「保存」；AI 改紫描边；危险操作走 ghost + 危险色文字。</p></div>
+      <div class="note"><h4><span class="num">A4</span>色条替代彩字</h4><p>分类色移到行首 3px 色条，命令名回归前景色；空参数列折叠为 <span class="mono">+2</span> chip。</p></div>
+      <div class="note"><h4><span class="num">A5</span>日志单行头</h4><p>级别徽标定宽 42px、时间戳降权，长日志可纵向扫读；控件统一 24px 基线。</p></div>
+      <div class="note"><h4><span class="num">A6</span>三段式状态栏</h4><p>状态｜进度（6px 圆角槽）｜指标，右端保留日志展开入口。</p></div>
+    </div>
+  </section>
+
+  <!-- 03 -->
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><h2>组件规范</h2><span class="sec-note">按钮六类 · 空态 · 日志级别</span></div>
+
+    <div class="grid2">
+      <div class="card">
+        <h3>按钮族（一屏实心 ≤ 2）</h3>
+        <p class="hint">只有"本屏最重要的一步"能实心。脚本编辑区那一步是「保存」，运行在执行栏。</p>
+        <div class="row"><span class="tag">primary</span><span class="btn primary">▶ 运行</span><span class="btn primary">保存</span></div>
+        <div class="row"><span class="tag">secondary</span><span class="btn secondary">新建</span><span class="btn secondary">打开</span><span class="btn secondary">选择</span></div>
+        <div class="row"><span class="tag">ghost</span><span class="btn ghost">编辑</span><span class="btn ghost">取点</span><span class="btn ghost">↑</span></div>
+        <div class="row"><span class="tag">ghost-ai</span><span class="btn ai">✦ AI 生成</span><span class="btn ai">✦ AI 调试</span></div>
+        <div class="row"><span class="tag">danger</span><span class="btn ghost-danger">删除</span><span class="btn ghost-danger">清空</span><span class="btn" style="background:var(--danger-fill);color:#fff">确认删除</span></div>
+        <div class="row" style="margin-bottom:0"><span class="tag">icon</span><span class="icobtn">△</span><span class="icobtn">⊟</span><span class="icobtn">◑</span><span class="icobtn">⚙</span><span class="icobtn">?</span>
+          <span style="font-size:11px;color:var(--fg4);margin-left:4px">16px 字形 / 22×22 命中区</span></div>
+      </div>
+
+      <div class="card">
+        <h3>空态组件</h3>
+        <p class="hint">现状：设备互联 5 张空表各只有一行 9pt 灰字（netlink/window.py:608/724/750）。</p>
+        <div class="empty">
+          <div class="ico">◇</div>
+          <div class="t1">还没有已配对设备</div>
+          <div class="t2">在对方机器开启「允许被发现」，输入 6 位配对码即可连接。仅限可信内网。</div>
+          <span class="btn primary">显示配对码</span>
+        </div>
+        <h3 style="margin-top:18px">日志级别徽标</h3>
+        <div class="logbody" style="background:var(--surface-alt);border-radius:4px;padding:6px 0">
+          <div class="lrow"><span class="ts">21:38:58</span><span class="badge info">INFO</span><span class="m">正在执行自动化任务</span></div>
+          <div class="lrow"><span class="ts">21:38:59</span><span class="badge ok">OK</span><span class="m">执行成功 (112ms)</span></div>
+          <div class="lrow"><span class="ts">21:39:01</span><span class="badge warn">WARN</span><span class="m">窗口未就绪，重试 1/3</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 -->
+  <section>
+    <div class="sec-head"><span class="sec-num">04</span><h2>令牌与实测对比度</h2><span class="sec-note">WCAG 2.1 · 暗色基线 #161616</span></div>
+
+    <div class="grid2" style="grid-template-columns:1.15fr .85fr">
+      <div class="card">
+        <h3>文字与语义色</h3>
+        <table>
+          <tr><th>Token</th><th>值</th><th>对比度</th><th>用途</th></tr>
+          <tr><td><b>fg</b></td><td><span class="sw" style="background:#F2F2F2"></span><span class="mono">#F2F2F2</span></td><td class="cr ok">16.16:1</td><td>标题 / 选中行</td></tr>
+          <tr><td><b>fg2</b></td><td><span class="sw" style="background:#C9C9C9"></span><span class="mono">#C9C9C9</span></td><td class="cr ok">10.93:1</td><td>正文 / 单元格</td></tr>
+          <tr><td><b>fg3</b></td><td><span class="sw" style="background:#9A9A9A"></span><span class="mono">#9A9A9A</span></td><td class="cr ok">6.43:1</td><td>标签 / 时间戳</td></tr>
+          <tr><td><b>fg4</b></td><td><span class="sw" style="background:#6E6E6E"></span><span class="mono">#6E6E6E</span></td><td class="cr warn">3.55:1</td><td>仅禁用态，不作正文</td></tr>
+          <tr><td><b>accent</b></td><td><span class="sw" style="background:#4CC2FF"></span><span class="mono">#4CC2FF</span></td><td class="cr ok">9.02:1</td><td>主操作描边 / 链接</td></tr>
+          <tr><td><b>accent-fill</b></td><td><span class="sw" style="background:#0878B8"></span><span class="mono">#0878B8</span></td><td class="cr ok">白字 4.78:1</td><td>实心主按钮底</td></tr>
+          <tr><td><b>success</b></td><td><span class="sw" style="background:#6CCB5F"></span><span class="mono">#6CCB5F</span></td><td class="cr ok">8.91:1</td><td>保存 / 成功 / 通过</td></tr>
+          <tr><td><b>danger</b></td><td><span class="sw" style="background:#FF9AA2"></span><span class="mono">#FF9AA2</span></td><td class="cr ok">8.96:1</td><td>删除 / 停止 文字</td></tr>
+          <tr><td><b>danger-fill</b></td><td><span class="sw" style="background:#C42B1C"></span><span class="mono">#C42B1C</span></td><td class="cr ok">白字 5.66:1</td><td>破坏性确认按钮</td></tr>
+          <tr><td><b>warn</b></td><td><span class="sw" style="background:#E3B341"></span><span class="mono">#E3B341</span></td><td class="cr ok">9.30:1</td><td>替换霓虹黄 #FCE100</td></tr>
+          <tr><td><b>ai</b></td><td><span class="sw" style="background:#A78BFA"></span><span class="mono">#A78BFA</span></td><td class="cr ok">6.65:1</td><td>AI 紫（描边式）</td></tr>
+          <tr><td><b>info</b></td><td><span class="sw" style="background:#6CB6FF"></span><span class="mono">#6CB6FF</span></td><td class="cr ok">8.42:1</td><td>日志 INFO</td></tr>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>表面 5 级</h3>
+        <table>
+          <tr><th>级</th><th>值</th><th>级差</th><th>用途</th></tr>
+          <tr><td><b>bg</b></td><td><span class="sw" style="background:#161616"></span><span class="mono">#161616</span></td><td class="cr">—</td><td>窗口底</td></tr>
+          <tr><td><b>surface</b></td><td><span class="sw" style="background:#1C1C1C"></span><span class="mono">#1C1C1C</span></td><td class="cr">1.06</td><td>工具栏 / 执行栏</td></tr>
+          <tr><td><b>surface-alt</b></td><td><span class="sw" style="background:#232323"></span><span class="mono">#232323</span></td><td class="cr">1.08</td><td>卡片 / 表头</td></tr>
+          <tr><td><b>raised</b></td><td><span class="sw" style="background:#2B2B2B"></span><span class="mono">#2B2B2B</span></td><td class="cr">1.11</td><td>弹层 / 下拉</td></tr>
+          <tr><td><b>overlay</b></td><td><span class="sw" style="background:#333333"></span><span class="mono">#333333</span></td><td class="cr">1.12</td><td>Toast / 悬浮</td></tr>
+          <tr><td><b>border</b></td><td><span class="sw" style="background:#343434"></span><span class="mono">#343434</span></td><td class="cr">1.37</td><td>1px 发丝描边（on surface）</td></tr>
+        </table>
+        <p style="font-size:11.5px;color:var(--fg4);margin-top:14px;line-height:1.7">
+          相邻表面级差 1.06–1.12：连续可读但不成"花板"。层级由「1 级色差 + 1px 描边」共同表达，
+          不引入圆角与阴影 —— tkinter 的 Canvas 重绘成本会在低端机掉帧。
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 05 -->
+  <section>
+    <div class="sec-head"><span class="sec-num">05</span><h2>工作流节点</h2><span class="sec-note">现状：全类型同色同形，只能读文字</span></div>
+
+    <div class="flowbox">
+      <div class="node old"><div class="hd">步骤 #1 等待</div><div class="sub">等待数据包 ["1"]</div></div>
+      <span class="arrow">──▶</span>
+      <div class="node" style="--nc:#FCD34D"><div class="hd"><span class="idx">1</span>等待</div><div class="sub">等待数据包 ["1"]</div><span class="port l"></span><span class="port r"></span></div>
+      <span class="arrow">──▶</span>
+      <div class="node run" style="--nc:#86EFAC"><div class="hd"><span class="idx">2</span>热键</div><div class="sub">win + r</div><span class="port l"></span><span class="port r"></span></div>
+      <span class="arrow">──▶</span>
+      <div class="node fail" style="--nc:#FCA5A5"><div class="hd"><span class="idx">3</span>找图</div><div class="sub">icon.png · 0.9</div><span class="port l"></span><span class="port r"></span></div>
+    </div>
+    <div class="notes" style="grid-template-columns:repeat(3,1fr)">
+      <div class="note"><h4><span class="num">05-1</span>类型色条</h4><p>沿用分类色，落在左侧 3px 竖条；节点底统一 surface-alt，深红块退场。</p></div>
+      <div class="note"><h4><span class="num">05-2</span>双行结构</h4><p>头行「序号 + 命令名」，副行「参数摘要」等宽 12px，高度 44→52。</p></div>
+      <div class="note"><h4><span class="num">05-3</span>状态语义</h4><p>运行中外发光 2px accent；失败 danger 描边 + 右上「!」角标；端口 hover 放大 1.4×。</p></div>
+    </div>
+  </section>
+
+  <!-- 06 -->
+  <section>
+    <div class="sec-head"><span class="sec-num">06</span><h2>验收（可测项）</h2><span class="sec-note">P0 7 项 · P1 6 项 · P2 按需</span></div>
+
+    <div class="card">
+      <h3>P0 · 纯视觉，零功能风险（约 1.5 人日）</h3>
+      <table>
+        <tr><th>#</th><th>验收项</th><th>判据</th><th>量级</th></tr>
+        <tr><td class="mono">P0-1</td><td><b>实心按钮收敛</b></td><td>工具栏实心按钮 9 → ≤2（仅「保存」）</td><td class="cr ok">视觉权重</td></tr>
+        <tr><td class="mono">P0-2</td><td><b>运行组钉死</b></td><td>窗口 640px 宽时「运行/停止」矩形完全在视口内</td><td class="cr ok">可用性</td></tr>
+        <tr><td class="mono">P0-3</td><td><b>应用栏 34→26px</b></td><td>主区高度 +8px；标题回退「未命名脚本」</td><td class="cr ok">空间</td></tr>
+        <tr><td class="mono">P0-4</td><td><b>色值校正</b></td><td>warn 9.30:1（不刺眼）；白字 on accent-fill(#0878B8) 4.78:1 ≥ 4.5:1</td><td class="cr ok">对比度</td></tr>
+        <tr><td class="mono">P0-5</td><td><b>日志工具条基线</b></td><td>工具条内全部控件 winfo_height 相等</td><td class="cr ok">对齐</td></tr>
+        <tr><td class="mono">P0-6</td><td><b>空态覆盖</b></td><td>5 处空表均含「图标 + 主句 + 主按钮」</td><td class="cr ok">可行动率</td></tr>
+        <tr><td class="mono">P0-7</td><td><b>sash 一致</b></td><td>main_paned 改 flat + 非 opaqueresize，拖拽无白线</td><td class="cr ok">一致性</td></tr>
+      </table>
+    </div>
+
+    <div class="card" style="margin-top:14px">
+      <h3>P1 · 结构落地（约 3 人日）</h3>
+      <table>
+        <tr><th>#</th><th>验收项</th><th>判据</th><th>量级</th></tr>
+        <tr><td class="mono">P1-1</td><td><b>分类色移到色条</b></td><td>表格截图：彩色文字 0 处，3px 色条 100% 行覆盖</td><td class="cr ok">辨识度</td></tr>
+        <tr><td class="mono">P1-2</td><td><b>参数空列折叠</b></td><td>10 行脚本右侧空白率 ~40% → &lt;10%</td><td class="cr ok">密度</td></tr>
+        <tr><td class="mono">P1-3</td><td><b>互联概览+单表多视图</b></td><td>首屏信息行 ≥3（在线数 / 配对码 / 权限档）</td><td class="cr ok">可行动率</td></tr>
+        <tr><td class="mono">P1-4</td><td><b>色值白名单 CI</b></td><td>grep hex（排除 theme.py）结果 ≤10</td><td class="cr ok">可维护性</td></tr>
+        <tr><td class="mono">P1-5</td><td><b>图标统一 Fluent 16px</b></td><td>标题栏图标 winfo_height 全部 16±1</td><td class="cr ok">一致性</td></tr>
+        <tr><td class="mono">P1-6</td><td><b>日志级别徽标定宽</b></td><td>100 行日志 [INFO] 起点 x 方差 = 0</td><td class="cr ok">扫读</td></tr>
+      </table>
+    </div>
+
+    <div class="note" style="margin-top:14px"><h4><span class="num">P2</span>按需（纯视觉）</h4>
+      <p>图例条折叠进「⋯」、进度条 6px 圆角、文档名 hover 编辑提示、设置窗左导航分组 —— 均为零功能改动，可随版本顺带。</p>
+    </div>
+  </section>
+
+  <!-- 07 -->
+  <section>
+    <div class="sec-head"><span class="sec-num">07</span><h2>设置窗口</h2><span class="sec-note">5 处细节，均为纯视觉</span></div>
+    <div class="card">
+      <table>
+        <tr><th>问题</th><th>修法</th></tr>
+        <tr><td>每张卡右上角都写「自动保存 ▾」（截图可见 6+ 处）</td><td>只在<b>页头</b>写一次「所有更改自动保存」，卡内删除</td></tr>
+        <tr><td>「登录」绿色实心 + 「注销」红色实心成对出现</td><td>登录 = <span class="mono">secondary</span>；注销 = <span class="mono">danger-ghost</span>（会话内破坏性低）</td></tr>
+        <tr><td>左导航图标 + 文字 16 项一列</td><td>分组标题（基础｜能力｜扩展｜系统）+ 折叠；图标统一 16px</td></tr>
+        <tr><td>表单标签宽 110 固定，长标签折行</td><td><span class="mono">form_label_w</span> 保持，标签改右对齐（冒号列对齐）</td></tr>
+        <tr><td>权限下拉弹出后遮挡</td><td>下拉最大高 240，向上弹出探测（复用 <span class="mono">restyle_combobox_popdown</span>）</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- 08 -->
+  <section>
+    <div class="sec-head"><span class="sec-num">08</span><h2>实施映射</h2><span class="sec-note">改哪个文件哪一行 · 与 md §9 一致</span></div>
+    <div class="card">
+      <table>
+        <tr><th>需求</th><th>文件</th><th>锚点</th></tr>
+        <tr><td>色板 / 令牌</td><td class="mono">src/ui/theme.py</td><td><span class="mono">colors()</span> 62-117；<span class="mono">apply_theme()</span> 382-566</td></tr>
+        <tr><td>标题栏高度 / 文案</td><td class="mono">src/ACRPA.py</td><td>1318 <span class="mono">TITLE_DEFAULT_TEXT</span>；6399-6462</td></tr>
+        <tr><td>主区 sash</td><td class="mono">src/ACRPA.py</td><td>6457-6462</td></tr>
+        <tr><td>工具栏按钮族</td><td class="mono">src/ACRPA.py</td><td>4755 <span class="mono">_tbtn</span>；4807 <span class="mono">_init_toolbar_buttons</span></td></tr>
+        <tr><td>执行栏拆分</td><td class="mono">src/ui/exec_bar.py</td><td>214 <span class="mono">build</span>；262-286（canvas/scrollbar）</td></tr>
+        <tr><td>参数列折叠</td><td class="mono">src/ui/editor_columns.py</td><td>94 <span class="mono">param_col_width</span>；116 <span class="mono">sync_param_headings</span></td></tr>
+        <tr><td>表格行高 / 色条</td><td class="mono">src/ui/editor_view.py</td><td>134-247（tree 构建）+ 新增 <span class="mono">stripe</span> 列</td></tr>
+        <tr><td>日志工具条</td><td class="mono">src/ui/log_dock.py</td><td>86-94（句柄）；196 <span class="mono">build</span></td></tr>
+        <tr><td>互联空态</td><td class="mono">src/ui/netlink/window.py</td><td>608 / 724 / 750</td></tr>
+        <tr><td>工作流节点</td><td class="mono">src/ui/workflow_view.py</td><td><span class="mono">_FLOW_STYLE</span> / <span class="mono">_FLOW_COLORS</span>（34 处 hex）</td></tr>
+        <tr><td>空态组件（新）</td><td class="mono">src/ui/widgets/</td><td>新建 <span class="mono">empty_state.py</span></td></tr>
+      </table>
+    </div>
+  </section>
+
+  <!-- 09 -->
+  <section>
+    <div class="sec-head"><span class="sec-num">09</span><h2>明确不做</h2><span class="sec-note">防止范围蔓延</span></div>
+    <div class="card">
+      <div class="issue-list" style="grid-template-columns:1fr;margin-top:0">
+        <div class="issue"><span class="n" style="background:var(--accent-fill)">1</span><span>不重排四行骨架语义（方案 B 仅备选，需先解决工作流上下文条）。</span></div>
+        <div class="issue"><span class="n" style="background:var(--accent-fill)">2</span><span>不为圆角 / 阴影引入 Canvas 全量重绘（低端机掉帧）。</span></div>
+        <div class="issue"><span class="n" style="background:var(--accent-fill)">3</span><span>不提高信息密度（row_h 只增不减：22→24，给分类色条呼吸）。</span></div>
+        <div class="issue"><span class="n" style="background:var(--accent-fill)">4</span><span>不做主题外的第三套配色（亮 / 暗两套 + 8 语义键封顶）。</span></div>
+        <div class="issue"><span class="n" style="background:var(--accent-fill)">5</span><span>不给「高频成功操作」加 Toast。</span></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    ACRPA · UI 视觉优化方案 v5 视觉稿 · 基线 v0.1.30-beta · 2026-11-07<br>
+    配色与几何均取自 <span class="mono">src/ui/theme.py</span> / <span class="mono">src/utils.py TOKENS</span> 的真实取值，改动项已在配套 md 的「实施映射」中标注文件与行号。<br>
+    对比度均为 WCAG 2.1 实测值；<span class="mono">accent-fill</span> 由 <span class="mono">#0A84C8</span>（白字 4.08:1，不达 AA）校正为 <span class="mono">#0878B8</span>（白字 4.78:1）。
+  </footer>
+</div>
+</body>
+</html>

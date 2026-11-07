@@ -10,7 +10,8 @@
 设置卡片历史上用 `importlib.import_module("ui.settings.cards." + key)` 运行时拼接
 模块名导入 —— PyInstaller 的静态分析看不到这条边，单文件打包后 `ui.settings.cards.*`
 未被纳入产物：`open_settings_window()` 在逐卡构建时抛 ModuleNotFoundError，窗口只剩
-左侧导航（其标签来自字面量 `_NAV_ITEMS`），右侧内容区空白；而源码运行完全正常。
+左侧导航（其标签来自 `ui.settings.navigation.PAGE_DEFS` 字面量），右侧内容区空白；
+而源码运行完全正常。
 
 注意：打包真源是 **`build.py`**（`_PROJECT_MODULES` → `--hidden-import`）；
 `ACRPA.spec` 由 PyInstaller 每次构建重新生成，故不作为校验对象。
@@ -112,7 +113,7 @@ def t_card_registry():
     print("\n── B. 静态卡片注册表 ──")
     import ui.settings.window as w
     keys = tuple(getattr(w, "_CARD_KEYS", ()))
-    check(len(keys) == 12, "_CARD_KEYS 为 12 张卡", str(keys))
+    check(len(keys) == 11, "_CARD_KEYS 为 11 张卡", str(keys))
     fn = getattr(w, "_card_modules", None)
     check(callable(fn), "window._card_modules 存在")
     if not callable(fn):

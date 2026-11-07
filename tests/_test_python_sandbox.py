@@ -289,8 +289,9 @@ check("def themed" in read_text(os.path.join(SRC, "utils.py")),
       "o4 utils.themed still present")
 check("PROVIDER_PRESETS" in read_text(os.path.join(SRC, "ai_client.py")),
       "o5 ai_client.PROVIDER_PRESETS still present")
-check(('devlink_btn' in acrpa_text and 'FONT_ICON_MD' in acrpa_text),
-      "o6 devlink_btn uses the named icon font (globe emoji retired in v0.1.29-beta)")
+check(('tab_devlink' in acrpa_text and '_build_devlink_tab' in acrpa_text
+       and 'devlink_btn' not in acrpa_text),
+      "o6 设备互联已内嵌为 Tab (tab_devlink 懒构建, 右上角 devlink_btn 已移除)")
 
 # ======================================================================
 # 旧插件兼容 (动态优先，无法 import engine 时静态断言)

@@ -426,7 +426,7 @@ def test_settings_window_ast():
        'row(content, ctx, "模型"' in src and "_entry(p, api_model_var" in src)
     ok("AI 卡含 BaseURL Entry",
        'row(content, ctx, "BaseURL"' in src and "_entry(p, api_base_var" in src)
-    ok("AI 卡含 [测试连接] 按钮", 'text="测试连接"' in src)
+    ok("AI 卡含 [测试连接] 按钮", 'ctx.btn(f, "测试连接"' in src)
     ok("AI 卡含 [添加自定义提供商] 按钮", 'text="添加自定义提供商"' in src)
     ok("ai 卡导出 build/apply", "def build(" in src and "def apply(" in src)
     ok('_track_card_vars("ai" 存在', '_track_card_vars("ai"' in src)
@@ -481,22 +481,9 @@ def test_guards():
 
     ok("utils.py 的 def themed( 仍在", "def themed(" in _read("src/utils.py"))
 
-    dev_ok = False
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign) and any(
-                isinstance(t, ast.Name) and t.id == "devlink_btn"
-                for t in node.targets):
-            call = node.value
-            if not isinstance(call, ast.Call):
-                continue
-            kw = {k.arg: k.value for k in call.keywords}
-            text_v = getattr(kw.get("text"), "value", None)
-            font_v = kw.get("font")
-            # v0.1.29-beta「UI 美化」起: 图标改由命名图标字体承载 (FONT_ICON_MD),
-            # 断言形态而非某个具体字形, 免得换个图标就假红。
-            if isinstance(text_v, str) and text_v.strip() and isinstance(font_v, ast.Name):
-                dev_ok = True
-    ok("devlink_btn 为图标按钮 (text 非空 + 命名字体角色)", dev_ok)
+    dev_ok = ("tab_devlink" in a_src and "_build_devlink_tab" in a_src
+              and "devlink_btn" not in a_src)
+    ok("设备互联已内嵌为 Tab (tab_devlink, devlink_btn 已移除)", dev_ok)
     ok("ACRPA.py 已无『地球图标+互联』旧文案", "🌐 互联" not in a_src)
 
 

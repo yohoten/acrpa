@@ -201,7 +201,7 @@ def t_hardcoded_geometry():
 def t_a11y_static():
     print("\n── C. 标题栏图标可达性 (静态) ──")
     src = _read("src/ACRPA.py")
-    for var in ("pin_btn", "fold_btn", "dark_btn", "settings_btn", "help_btn", "devlink_btn"):
+    for var in ("pin_btn", "fold_btn", "dark_btn", "settings_btn", "help_btn"):
         check(re.search(r"bind_icon_activate\(\s*{}\s*,".format(var), src) is not None,
               "{} 经 utils.bind_icon_activate 接入".format(var))
     usrc = _read("src/utils.py")
@@ -306,7 +306,7 @@ def t_a11y_live():
         warn("结果解析失败: {!r}".format(e))
         return
 
-    check(len(rows) >= 6, "标题栏图标控件数 ≥ 6 (含可访问名)",
+    check(len(rows) >= 5, "标题栏图标控件数 ≥ 5 (含可访问名)",
           "实测 {}".format(len(rows)))
     bad_focus = [r for r in rows if str(r[1]) not in ("1", "true", "True")]
     check(not bad_focus, "全部图标 cget('takefocus') 为真", "{}".format(bad_focus))

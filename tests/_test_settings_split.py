@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""设置窗口 12 卡拆分回归自测 (路线图 §3.1 阶段二第 4 项 / §12 阶段二新增项②)。
+"""设置窗口 11 卡拆分回归自测 (路线图 §3.1 阶段二第 4 项 / §12 阶段二新增项②)。
 
 用法:
     .venv\\Scripts\\python.exe -X utf8 tools\\_test_settings_split.py
 
 覆盖:
-  A  包/卡片存在性 : src/ui/settings/ 包存在; 12 张 cards/*.py 各导出 build/apply
+  A  包/卡片存在性 : src/ui/settings/ 包存在; 11 张 cards/*.py 各导出 build/apply
                      (quick 允许无 apply, 本实现仍提供 no-op);
                      src/ui/settings/window.py 提供门面 open_settings_window。
   B  薄壳瘦身      : src/settings_window.py 行数 < 300 (较拆分前 2809 行显著下降);
@@ -19,7 +19,7 @@
                      `_ui_theme.subscribe(_on_theme_publish)` 与
                      `def refresh_theme(prev=None):`。
   E  实机句柄可取  : 真实 Tk 下 open_settings_window() 后
-                     _nav_cards 覆盖 12 卡、_apply_map 覆盖 11 卡 (无 quick)。
+                     _nav_cards 覆盖 11 卡、_apply_map 覆盖 10 卡 (无 quick)。
                       无 GUI 环境记 [WARN] (不假通过)。
 
 退出码: 0 = 全部通过 / 1 = 有失败。纯静态断言 + 真实 Tk 动态断言。
@@ -41,7 +41,7 @@ SRC = os.path.join(ROOT, "src")
 if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
-CARD_KEYS = ("exec", "ai", "sched", "record", "log", "system", "quick",
+CARD_KEYS = ("exec", "ai", "record", "log", "system", "quick",
              "advanced", "netlink", "python", "market", "extensions")
 
 _PASS, _FAIL, _WARN = [], [], []
@@ -196,7 +196,7 @@ def t_theme_literals():
 # ── E1. 字体契约: init_ctx 必须兼容命名字体字符串 (2026-11-04 回归) ──
 # 历史 bug: init_ctx 用 (FONT_SMALL[0], FONT_SMALL[1], "bold") 构造粗体,
 # 对命名字体字符串 'ACRPA_SMALL' 下标得 ('A','C','bold') → TclError
-# "expected integer but got C" → 12 卡构建中断, 设置页整页空白。
+# "expected integer but got C" → 11 卡构建中断, 设置页整页空白。
 
 def t_font_contract():
     print("\n── E1. init_ctx 字体契约 (命名字体字符串兼容) ──")
@@ -244,10 +244,10 @@ def t_font_contract():
         root.destroy()
 
 
-# ── E. 实机: 12 卡句柄可取 ───────────────────────────────────────────
+# ── E. 实机: 11 卡句柄可取 ───────────────────────────────────────────
 
 def t_live_handles():
-    print("\n── E. 实机: open_settings_window 后 12 卡句柄 ──")
+    print("\n── E. 实机: open_settings_window 后 11 卡句柄 ──")
     try:
         import tkinter  # noqa: F401
         import state
@@ -284,16 +284,16 @@ def t_live_handles():
             time.sleep(0.05)
 
         nav = getattr(sw, "_nav_cards", None)
-        check(isinstance(nav, list) and len(nav) == 12,
-              "_nav_cards 覆盖 12 卡", "count={}".format(len(nav) if nav else nav))
+        check(isinstance(nav, list) and len(nav) == 11,
+              "_nav_cards 覆盖 11 卡", "count={}".format(len(nav) if nav else nav))
         if isinstance(nav, list):
             keys = sorted(k for k, _w in nav)
-            check(keys == sorted(CARD_KEYS), "导航卡 key 与 12 卡一致", "keys={}".format(keys))
+            check(keys == sorted(CARD_KEYS), "导航卡 key 与 11 卡一致", "keys={}".format(keys))
 
         applied = set(getattr(sw, "_apply_map", {}).keys())
         expect_apply = set(CARD_KEYS) - {"quick"}
         check(expect_apply.issubset(applied),
-              "_apply_map 覆盖 11 卡 (无 quick)",
+              "_apply_map 覆盖 10 卡 (无 quick)",
               "缺失={}".format(sorted(expect_apply - applied)))
         check("quick" not in applied, "quick 卡不注册 apply (与原语义一致)")
 
@@ -322,7 +322,7 @@ def t_live_handles():
 
 
 def main():
-    print("=== 设置窗口 12 卡拆分回归自测 (阶段二第 4 项 / 新增项②) ===")
+    print("=== 设置窗口 11 卡拆分回归自测 (阶段二第 4 项 / 新增项②) ===")
     t_package_and_cards()
     t_shell_thin()
     t_no_acrpa_import()

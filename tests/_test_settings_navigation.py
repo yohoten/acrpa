@@ -44,9 +44,9 @@ class SettingsNavigationTests(unittest.TestCase):
         self.root.destroy()
 
     def test_nine_pages_and_card_state_survive_switch(self):
-        self.assertEqual(9, len(PAGE_ORDER))
-        self.assertEqual(9, len(sw._page_hosts))
-        self.assertEqual(12, len(sw._nav_cards))
+        self.assertEqual(8, len(PAGE_ORDER))
+        self.assertEqual(8, len(sw._page_hosts))
+        self.assertEqual(11, len(sw._nav_cards))
         self.assertEqual(["general"], [key for key, host in sw._page_hosts.items()
                                        if host.winfo_manager()])
         retry = sw._handles_map["exec"]["retry_var"]

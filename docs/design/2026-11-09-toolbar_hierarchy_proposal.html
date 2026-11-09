@@ -1,0 +1,47 @@
+<div style="font-family:var(--font-sans); color:var(--color-text-primary); max-width:680px;">
+  <h2 class="sr-only" style="position:absolute;left:-9999px;">工具栏按钮角色体系与分组改造示意</h2>
+
+  <div style="background:var(--color-background-primary); border:0.5px solid var(--color-border-tertiary); border-radius:var(--border-radius-lg); padding:14px 16px; margin-bottom:12px;">
+    <p style="margin:0 0 8px; font-size:13px; font-weight:500; color:var(--color-text-secondary);">现状：十余个饱和实色按钮并列，主次不分</p>
+    <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+      <span style="background:#3B6D11;color:#fff;font-size:12px;padding:5px 10px;border-radius:4px;">+ 添加</span>
+      <span style="background:#A32D2D;color:#fff;font-size:12px;padding:5px 10px;border-radius:4px;">- 删除</span>
+      <span style="background:#185FA5;color:#fff;font-size:12px;padding:5px 10px;border-radius:4px;">编辑</span>
+      <span style="background:#3B6D11;color:#fff;font-size:12px;padding:5px 10px;border-radius:4px;">新建</span>
+      <span style="background:#3B6D11;color:#fff;font-size:12px;padding:5px 10px;border-radius:4px;">打开</span>
+      <span style="background:#3B6D11;color:#fff;font-size:12px;padding:5px 10px;border-radius:4px;">保存</span>
+      <span style="background:#534AB7;color:#fff;font-size:12px;padding:5px 10px;border-radius:4px;">AI生成</span>
+      <span style="background:#534AB7;color:#fff;font-size:12px;padding:5px 10px;border-radius:4px;">AI调试</span>
+      <span style="background:#185FA5;color:#fff;font-size:12px;padding:5px 10px;border-radius:4px;">市场</span>
+      <span style="background:#5F5E5A;color:#fff;font-size:12px;padding:5px 10px;border-radius:4px;">取点</span>
+      <span style="background:#5F5E5A;color:#fff;font-size:12px;padding:5px 10px;border-radius:4px;">截屏</span>
+      <span style="background:#5F5E5A;color:#fff;font-size:12px;padding:5px 10px;border-radius:4px;">版本</span>
+    </div>
+  </div>
+
+  <div style="background:var(--color-background-primary); border:2px solid var(--color-border-info); border-radius:var(--border-radius-lg); padding:14px 16px;">
+    <p style="margin:0 0 8px; font-size:13px; font-weight:500; color:var(--color-text-info);">建议：四类角色 + 竖线分组，每屏至多一个实心主按钮</p>
+    <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+      <span style="background:#3B6D11;color:#fff;font-size:12px;font-weight:500;padding:5px 12px;border-radius:4px;">▶ 运行</span>
+      <span style="width:1px;height:18px;background:var(--color-border-secondary);margin:0 2px;"></span>
+      <span style="border:0.5px solid var(--color-border-secondary);color:var(--color-text-primary);font-size:12px;padding:4px 10px;border-radius:4px;">⏸ 暂停</span>
+      <span style="border:0.5px solid #E24B4A;color:#A32D2D;font-size:12px;padding:4px 10px;border-radius:4px;">⏹ 停止</span>
+      <span style="width:1px;height:18px;background:var(--color-border-secondary);margin:0 2px;"></span>
+      <span style="color:var(--color-text-primary);font-size:12px;padding:4px 6px;">新建</span>
+      <span style="color:var(--color-text-primary);font-size:12px;padding:4px 6px;">打开</span>
+      <span style="color:var(--color-text-primary);font-size:12px;padding:4px 6px;">保存</span>
+      <span style="width:1px;height:18px;background:var(--color-border-secondary);margin:0 2px;"></span>
+      <span style="border:0.5px solid #AFA9EC;color:#534AB7;font-size:12px;padding:4px 10px;border-radius:4px;">✦ AI生成</span>
+      <span style="width:1px;height:18px;background:var(--color-border-secondary);margin:0 2px;"></span>
+      <span style="color:var(--color-text-secondary);font-size:12px;padding:4px 6px;">取点</span>
+      <span style="color:var(--color-text-secondary);font-size:12px;padding:4px 6px;">截屏</span>
+      <span style="color:var(--color-text-secondary);font-size:12px;padding:4px 6px;">版本</span>
+    </div>
+    <div style="display:flex; gap:14px; margin-top:12px; padding-top:10px; border-top:0.5px solid var(--color-border-tertiary); flex-wrap:wrap;">
+      <span style="font-size:12px; color:var(--color-text-secondary);"><span style="display:inline-block;width:10px;height:10px;background:#3B6D11;border-radius:2px;margin-right:5px;vertical-align:-1px;"></span>Primary 实心·每屏 1 个</span>
+      <span style="font-size:12px; color:var(--color-text-secondary);"><span style="display:inline-block;width:10px;height:10px;border:1px solid var(--color-border-primary);border-radius:2px;margin-right:5px;vertical-align:-1px;"></span>Secondary 描边·高频次级</span>
+      <span style="font-size:12px; color:var(--color-text-secondary);"><span style="display:inline-block;width:10px;height:10px;background:var(--color-background-tertiary);border-radius:2px;margin-right:5px;vertical-align:-1px;"></span>Ghost 纯文字·低频工具</span>
+      <span style="font-size:12px; color:var(--color-text-secondary);"><span style="display:inline-block;width:10px;height:10px;border:1px solid #E24B4A;border-radius:2px;margin-right:5px;vertical-align:-1px;"></span>Danger 描边红·危险操作</span>
+    </div>
+  </div>
+</div>

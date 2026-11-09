@@ -226,12 +226,32 @@ def build(parent, *, notebook, colors, fonts, deps=None):
     tsy.grid(row=0, column=1, sticky="ns")
     tsx.grid(row=1, column=0, sticky="ew")
 
-    # ── 空态提示 ──
-    _empty_hint = tkinter.Label(tab_edit, text=_CTX.get("empty_hint_text") or "",
-                                font=FONT_SMALL, bg=C.get("bgc"), fg=C.get("fgm"),
-                                justify="center", bd=0, padx=sp(14), pady=sp(10),
+    # ── 空态提示 (v6 §5.5: 快捷键渲染为键帽 —— accent 描边小色块 Label,
+    #    全静态控件, 无 Canvas/动画, 显隐仍走宿主 place/place_forget 幂等切换) ──
+    _hint_title = (_CTX.get("empty_hint_text") or "还没有任何步骤").split("\n", 1)[0]
+    _empty_hint = tkinter.Frame(tab_edit, bg=C.get("bgc"),
                                 highlightthickness=1,
                                 highlightbackground=C.get("bd"))
+    tkinter.Label(_empty_hint, text=_hint_title, font=FONT_SMALL,
+                  bg=C.get("bgc"), fg=C.get("fgm")).pack(
+        padx=sp(14), pady=(sp(10), 0))
+    _keys_row = tkinter.Frame(_empty_hint, bg=C.get("bgc"))
+    _keys_row.pack(padx=sp(14), pady=(sp(6), sp(10)))
+    for _i, (_cap, _act) in enumerate((("Ctrl+N", "新建脚本"),
+                                       ("Ctrl+O", "打开脚本"),
+                                       ("Ctrl+I", "插入命令"))):
+        if _i:
+            tkinter.Label(_keys_row, text="·", font=FONT_SMALL,
+                          bg=C.get("bgc"), fg=C.get("fgd")).pack(
+                side="left", padx=sp(6))
+        tkinter.Label(_keys_row, text=_cap, font=FONT_TINY,
+                      bg=C.get("bgc"), fg=C.get("ac"),
+                      padx=sp(4), pady=0,
+                      highlightthickness=1,
+                      highlightbackground=C.get("ac")).pack(side="left")
+        tkinter.Label(_keys_row, text=" " + _act, font=FONT_SMALL,
+                      bg=C.get("bgc"), fg=C.get("fgm")).pack(
+            side="left", padx=(sp(2), 0))
     _empty_hint_d["label"] = _empty_hint
     _empty_hint_d["shown"] = False
 

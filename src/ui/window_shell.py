@@ -80,14 +80,14 @@ class ShellBody:
     def header(self, title, subtitle="", row=0):
         """在内容区顶部放标准标题区 (标题 + 可选副标题), 返回其 frame。"""
         C = self.colors
-        f = tkinter.Frame(self.content, bg=C.get("bgc", "#F5F5F5"))
+        f = tkinter.Frame(self.content, bg=C.get("bgc", "whitesmoke"))
         f.grid(row=row, column=0, sticky="ew")
         f.columnconfigure(1, weight=1)
-        tkinter.Label(f, text=title, font=utils.FONT_TITLE, bg=C.get("bgc", "#F5F5F5"),
+        tkinter.Label(f, text=title, font=utils.FONT_TITLE, bg=C.get("bgc", "whitesmoke"),
                       fg=C.get("fgt", "#111")).grid(row=0, column=0, sticky="w")
         if subtitle:
             tkinter.Label(f, text=subtitle, font=utils.FONT_SMALL,
-                          bg=C.get("bgc", "#F5F5F5"), fg=C.get("fgm", "#666")
+                          bg=C.get("bgc", "whitesmoke"), fg=C.get("fgm", "#666")
                           ).grid(row=0, column=1, sticky="w", padx=(utils.sp("sp_sm"), 0))
         return f
 
@@ -106,15 +106,15 @@ class ShellBody:
         bar = self._ensure_footer()
         inner = getattr(self, "_footer_inner", None)
         if inner is None:
-            inner = tkinter.Frame(bar, bg=C.get("bgc", "#F5F5F5"))
+            inner = tkinter.Frame(bar, bg=C.get("bgc", "whitesmoke"))
             inner.grid(row=0, column=1, sticky="e")
             self._footer_inner = inner
         if kind == "primary":
-            role, bg, fg = "ac", C.get("ac", "#0078D4"), "white"
+            role, bg, fg = "ac", C.get("ac", "steelblue"), "white"
         elif kind == "danger":
-            role, bg, fg = "dg", C.get("dg", "#DC2626"), "white"
+            role, bg, fg = "dg", C.get("dg", "firebrick"), "white"
         else:
-            role, bg, fg = "fgb", C.get("fgb", "#E8E8E8"), C.get("fgt", "#111")
+            role, bg, fg = "fgb", C.get("fgb", "lightgray"), C.get("fgt", "#111")
         btn = tkinter.Button(inner, text=text, command=command, font=utils.FONT_BUTTON,
                              bg=bg, fg=fg, relief="flat", bd=0, cursor="hand2",
                              padx=utils.sp("sp_md"), pady=2,
@@ -157,7 +157,7 @@ def apply_window_chrome(win, title=None, size="md", min_size=None,
     返回传入窗口的 colors 快照 (供调用方继续取色)。
     """
     C = _colors(colors)
-    bg = C.get(bg_key, "#F5F5F5")
+    bg = C.get(bg_key, "whitesmoke")
     try:
         win.configure(bg=bg)
     except Exception:
@@ -258,7 +258,7 @@ def apply_window_shell(win, title=None, size="md", min_size=None,
                             modal=modal, parent=parent, bg_key=bg_key,
                             resizable=resizable, center=center, colors=colors,
                             icon_setter=icon_setter)
-    bg = C.get(bg_key, "#F5F5F5")
+    bg = C.get(bg_key, "whitesmoke")
 
     # 内容区: row0 标题(可选) / row1 主体(伸缩) / row99 按钮区
     win.columnconfigure(0, weight=1)

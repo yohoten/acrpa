@@ -194,7 +194,10 @@ def update_sched_next_label(text):
     global _sched_next_label
     if _sched_next_label is not None:
         try:
-            _sched_next_label.configure(text=text or "--:--")
+            t = text or "--:--"
+            # v6 §5.3: 无计划 (--:--) 用占位灰, 有计划才用强调色 —— 空信息不再抢眼
+            _sched_next_label.configure(
+                text=t, fg=(C["fgd"] if t == "--:--" else C["ac"]))
         except Exception:
             pass
 
@@ -254,9 +257,11 @@ def _build_header(parent):
                   font=_FONTS.get("log") or f_body, fg=C["fgm"], bg=C["bgc"]).pack(
         side="left", padx=(_sp("gap_tight"), 0))
 
-    # 右: 下次执行预览
-    _sched_next_label = tkinter.Label(bar, text=state.SCHED_NEXT_RUN or "--:--",
-                                      font=f_next, fg=C["ac"], bg=C["bgc"], anchor="e")
+    # 右: 下次执行预览 (v6 §5.3: 占位 --:-- 用 fgd 灰, 有计划才 accent)
+    _next0 = state.SCHED_NEXT_RUN or "--:--"
+    _sched_next_label = tkinter.Label(bar, text=_next0, font=f_next,
+                                      fg=(C["fgd"] if _next0 == "--:--" else C["ac"]),
+                                      bg=C["bgc"], anchor="e")
     _sched_next_label.pack(side="right", padx=(0, _sp("gap")))
     tkinter.Label(bar, text="下次执行", font=f_body, fg=C["fgb"],
                   bg=C["bgc"]).pack(side="right", padx=(_sp("gap_tight"), _sp("gap_tight")))

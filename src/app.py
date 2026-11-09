@@ -134,13 +134,22 @@ def _mark_post_build():
     try:
         import capabilities
         total = -1
-        fn = getattr(capabilities, "all_states", None)
-        if callable(fn):                      # all_states(): {cap_id: CapState}
+        # 只统计「已注册项数」: 不触发首次 probe (全量探测 ≈510ms, 仅为一行启动日志不值)
+        fn = getattr(capabilities, "registered_ids", None)
+        if callable(fn):
             try:
-                data = fn()
-                total = len(data) if isinstance(data, dict) else -1
+                ids = fn()
+                total = len(ids) if isinstance(ids, (list, tuple)) else -1
             except Exception:
                 total = -1
+        if total < 0:
+            fn = getattr(capabilities, "all_states", None)
+            if callable(fn):
+                try:
+                    data = fn()
+                    total = len(data) if isinstance(data, dict) else -1
+                except Exception:
+                    total = -1
         _mark("capabilities", total=total)
     except Exception:
         _mark("capabilities", total=-1)
@@ -167,9 +176,9 @@ def _show_danger_dialog(root, cmd, detail, timeout):
             pass
         # 取主窗口当前主题色板 (暗色下不再弹系统浅色框)
         C = getattr(ACRPA, "C", {}) or {}
-        _bgc = C.get("bgc", "#ffffff")
-        _fgb = C.get("fgb", "#000000")
-        _fgm = C.get("fgm", "#666666")
+        _bgc = C.get("bgc", "white")
+        _fgb = C.get("fgb", "black")
+        _fgm = C.get("fgm", "gray")
         dlg.configure(bg=_bgc)
         body = tkinter.Frame(dlg, padx=16, pady=12, bg=_bgc)
         body.pack(fill="both", expand=True)
@@ -181,7 +190,7 @@ def _show_danger_dialog(root, cmd, detail, timeout):
                       bg=_bgc, fg=_fgb).pack(fill="x", pady=(6, 4))
         # 警示文字: 仅前景色随主题 (wn), 底色仍随容器
         _warn_lbl = tkinter.Label(body, text="{} 秒内未确认将视为拒绝".format(int(timeout)),
-                      fg=C.get("wn", "#b45309"), bg=_bgc, anchor="w")
+                      fg=C.get("wn", "chocolate"), bg=_bgc, anchor="w")
         try:
             from ui import theme as _ui_theme
             _ui_theme.set_fg_token(_warn_lbl, "wn")
@@ -322,18 +331,30 @@ def _finish_build(rt):
     except Exception:
         pass
     # ① 单实例 IPC 接收窗口 + 启动前登记的动作
-    hwnd = 0
+    # 性能 (启动分帧 第 1 步): install_receiver 内部的 update_idletasks() 会触发整窗首次
+    # 布局 (实测 ~450ms, 记在 stage=ipc)。改为首次事件循环执行: 与窗口显示时的布局共用
+    # 同一帧, 不再让 build() 阻塞等这一次 layout。失败/无 root 时退回同步执行。
+    def _install_ipc():
+        hwnd = 0
+        try:
+            import single_instance
+            hwnd = single_instance.install_receiver(root)
+            _mark("ipc", hwnd=1 if hwnd else 0)
+        except Exception:
+            pass
+        try:
+            import single_instance
+            single_instance.dispatch_pending(root)
+        except Exception:
+            pass
+
     try:
-        import single_instance
-        hwnd = single_instance.install_receiver(root)
-        _mark("ipc", hwnd=1 if hwnd else 0)
+        if root is not None:
+            root.after(0, _install_ipc)
+        else:
+            _install_ipc()
     except Exception:
-        pass
-    try:
-        import single_instance
-        single_instance.dispatch_pending(root)
-    except Exception:
-        pass
+        _install_ipc()
     # ② 危险动作确认钩子
     install_danger_confirm_hook()
     # ③ 运行历史: 旁路监听调度器任务完成

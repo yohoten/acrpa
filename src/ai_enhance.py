@@ -571,7 +571,7 @@ def ai_optimize_script(exec_timings, variables_snapshot=None):
 # ======================================================================
 
 def ai_debug_explain(question, exec_timings=None, log_buffer=None, variables=None,
-                     script_rows=None):
+                     script_rows=None, workflow_steps=None):
     """
     自然语言调试：用户用自然语言提问，AI 分析执行日志回答。
 
@@ -581,6 +581,8 @@ def ai_debug_explain(question, exec_timings=None, log_buffer=None, variables=Non
         log_buffer: 最近的日志列表 [(msg, tag), ...]
         variables: engine.variables 字典
         script_rows: 当前脚本的 ScriptData 列表
+        workflow_steps: 工作流 Tab 传入的步骤摘要列表 (字符串), 与 script_rows 二选一;
+            仅追加「## 当前工作流」上下文, 不影响脚本调试路径。
 
     Returns:
         str: AI 分析结果
@@ -607,6 +609,11 @@ def ai_debug_explain(question, exec_timings=None, log_buffer=None, variables=Non
             args_str = ", ".join(str(a) for a in sd.args[:4] if a)
             context_parts.append("行{}: {}({})".format(i + 1, sd.cmd_type, args_str))
 
+    if workflow_steps:
+        context_parts.append("\n## 当前工作流")
+        for i, s in enumerate(workflow_steps):
+            context_parts.append("步骤{}: {}".format(i + 1, str(s)[:200]))
+
     if variables:
         context_parts.append("\n## 变量")
         for k, v in variables.items():
@@ -619,7 +626,7 @@ def ai_debug_explain(question, exec_timings=None, log_buffer=None, variables=Non
         for msg, tag in recent_logs:
             context_parts.append("  [{}] {}".format(tag or "info", msg[:200]))
 
-    prompt = """你是 ACRPA RPA 调试专家。用户正在调试一个自动化脚本，请根据提供的执行上下文回答用户的问题。
+    prompt = """你是 ACRPA RPA 调试专家。用户正在调试一个自动化脚本或工作流，请根据提供的执行上下文回答用户的问题。
 
 {}
 

@@ -196,6 +196,7 @@ wf_lib_frame = None
 wf_lib_search = None
 wf_lib_tree = None
 wf_lib_sy = None
+wf_lib_empty = None            # v6 §5.4: 搜索无结果空态浮层 (place 在树上, 默认隐藏)
 wf_recent_label = None
 wf_recent_list = None
 wf_paned = None
@@ -297,6 +298,10 @@ def _refresh_flow_style(palette=None):
         "shadow": (g("border_strong", "#4A4A4A") if dark else g("bd", "#E1E1E1")),
         "text_on_node": "#FFFFFF",
         "text_sub": (blend("#FFFFFF", edge, 0.15) if callable(blend) else "#E2E8F0"),
+        # §6: 节点底色统一 surface_alt; 标题/副行文字取 fgb / fgm
+        "node_bg": g("surface_alt", "#232323" if dark else "#F1F5F9"),
+        "node_text": g("fgb", "#C9C9C9" if dark else "#1F2937"),
+        "node_text_sub": g("fgm", "#9A9A9A" if dark else "#5F5F5F"),
         "grid_fine": g("gridline", "#EEEEEE"),
         "grid_coarse": g("bd", "#E1E1E1"),
         "edge": edge,
@@ -538,6 +543,7 @@ def build(parent, *, colors, fonts, deps=None, tab=None):
     global C, tab_workflow, wf_toolbar_outer, wf_canvas, wf_scrollbar, wf_toolbar, \
         wf_toolbar_overflow_hint, wf_loop_var, wf_maxmin_var, wf_name_var, wf_name_entry, \
         wf_main, wf_outer_paned, wf_lib_frame, wf_lib_search, wf_lib_tree, wf_lib_sy, \
+        wf_lib_empty, \
         wf_recent_label, wf_recent_list, wf_paned, wf_list_frame, wf_tree, wf_sy, wf_flow_frame, \
         wf_flow_canvas, wf_flow_scroll_y, wf_flow_check_lbl, _wf_show_flow, \
         _wf_view_btn, _WF_LIB_ACTIONS
@@ -619,20 +625,20 @@ def build(parent, *, colors, fonts, deps=None, tab=None):
          tip="另存为… (Ctrl+Shift+S)").pack(side="left", padx=_wfp)
     tbtn(wf_toolbar, "版本", lambda: _wf_version_history(),
          tip="查看工作流版本历史 (恢复/对比)").pack(side="left", padx=_wfp)
+    tbtn(wf_toolbar, "导出模板", lambda: _wf_export_template(),
+         tip="导出为工作流模板").pack(side="left", padx=_wfp)
     sep(wf_toolbar)
     tbtn(wf_toolbar, "↶ 撤销", lambda: _wf_undo(),
          tip="撤销上一步修改 (Ctrl+Z)").pack(side="left", padx=_wfp)
     tbtn(wf_toolbar, "↷ 重做", lambda: _wf_redo(),
          tip="重做被撤销的修改 (Ctrl+Shift+Z)").pack(side="left", padx=_wfp)
     sep(wf_toolbar)
-    tbtn(wf_toolbar, "AI 生成", lambda: _wf_ai_generate(),
+    # AI 组: 与脚本编辑工具栏同规格 —— 紫底白字 (ai 语义角色), 生成/调试并列
+    tbtn(wf_toolbar, "AI生成", lambda: _wf_ai_generate(), "ai", "white",
          tip="用自然语言描述生成工作流图 (静态校验兜底)").pack(side="left", padx=_wfp)
-    sep(wf_toolbar)
-    # 清空紧邻文件组: 工具栏右侧常被溢出裁剪, 放在末尾会「看不见也点不到」
-    tbtn(wf_toolbar, "清空", lambda: _wf_clear(), "dg", "white",
-         tip="清空工作流所有步骤 (需确认)").pack(side="left", padx=_wfp)
-    tbtn(wf_toolbar, "导出模板", lambda: _wf_export_template(),
-         tip="导出为工作流模板").pack(side="left", padx=_wfp)
+    tbtn(wf_toolbar, "AI调试", lambda: _wf_ai_debug(), "ai", "white",
+         tip="用自然语言让 AI 分析工作流执行情况 (由脚本编辑同款面板承接)"
+         ).pack(side="left", padx=_wfp)
     sep(wf_toolbar)
     tbtn(wf_toolbar, "+ 脚本", lambda: _wf_add_step("script"),
          tip="添加脚本步骤").pack(side="left", padx=_wfp)
@@ -682,6 +688,11 @@ def build(parent, *, colors, fonts, deps=None, tab=None):
     except Exception:
         pass
 
+    # ── 危险组 (v6 §4: 清空恒排最右, 与主流程物理隔离; 溢出时经「⇄」横滚可达) ──
+    sep(wf_toolbar)
+    tbtn(wf_toolbar, "清空", lambda: _wf_clear(), "dg", "white",
+         tip="清空工作流所有步骤 (需确认)").pack(side="left", padx=_wfp)
+
     # ── 主内容区: PanedWindow[操作库 | PanedWindow(列表 + 流程图)] ──
     #   外层 wf_outer_paned 提供操作库侧边栏的拉伸 sash; 内层 wf_paned 管理列表↔流程图分屏。
     wf_main = tkinter.Frame(tab_workflow, bg=C["bg"])
@@ -726,6 +737,17 @@ def build(parent, *, colors, fonts, deps=None, tab=None):
         bg=C["bd"], troughcolor=C["bgc"])
     wf_lib_sy.grid(row=2, column=1, sticky="ns", pady=(0, 2))
     wf_lib_tree.configure(yscrollcommand=wf_lib_sy.set)
+
+    # v6 §5.4: 搜索无结果空态浮层 (图标 + 主句 + 副句; 静态 Label 零开销)
+    wf_lib_empty = tkinter.Label(
+        wf_lib_frame, text="◌\n未找到匹配命令\n试试其它关键词",
+        font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"], justify="center")
+    _ut_lib2 = _CTX.get("ui_theme")
+    if _ut_lib2 is not None:
+        try:
+            _ut_lib2.set_fg_token(wf_lib_empty, "fgm")
+        except Exception:
+            pass
 
     # §5.2 行 hover + 选中加粗 (与脚本编辑/定时任务一致)
     _bind_hover = _CTX.get("bind_row_hover")
@@ -995,6 +1017,11 @@ def refresh_theme(dark=None, colors=None, prev=None):
             wf_flow_check_lbl.configure(bg=Cc["bgc"], fg=Cc["fgm"])
     except Exception:
         pass
+    try:
+        if wf_lib_empty is not None:
+            wf_lib_empty.configure(bg=Cc["bgc"], fg=Cc["fgm"])
+    except Exception:
+        pass
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -1220,13 +1247,31 @@ def _wf_lib_group_text(group):
     return str(group or "")
 
 
+# v6 §5.1: 命令行按语义类别区分图标 (Unicode 字形, 不引入资源文件)。
+# 旧实现同组命令共用分组图标 → 整树辨识度靠纯读文字 (E5)。
+# 匹配顺序即优先级 (「区域找图」命中区域 → ▭); 未命中退回分组图标。
+_WF_LIB_CAT_ICONS = (
+    (("区域",), "▭"),                                   # 区域类 (区域找图/区域点图…)
+    (("找图", "点图", "找色", "识图", "截图", "截屏"), "▣"),  # 图像识别类
+    (("按键", "热键", "输入", "写入", "打字", "点击", "鼠标", "滚轮",
+      "拖拽", "悬停", "坐标", "按下", "释放", "相移"), "⌨"),  # 键鼠类
+    (("复制", "粘贴", "剪贴板", "字符串", "文本"), "¶"),  # 文本类
+    (("如果", "否则", "循环", "跳出", "跳转"), "⟳"),      # 控制流类
+)
+
+
 def _wf_lib_cmd_icon(item):
-    """命令行图标: 命令自带 icon 优先, 否则沿用所属分组图标 (无分组用 ▸)。"""
+    """命令行图标: 命令自带 icon 优先 → 语义类别图标 (v6 §5.1) → 分组图标 → ▸。"""
     if not isinstance(item, dict):
         return "▸"
     icon = str(item.get("icon") or "").strip()
     if icon:
         return icon
+    cmd = str(item.get("cmd") or "")
+    for keys, glyph in _WF_LIB_CAT_ICONS:
+        for k in keys:
+            if k in cmd:
+                return glyph
     return _WF_LIB_GROUP_ICONS.get(item.get("group")) or "▸"
 
 
@@ -1366,6 +1411,16 @@ def _wf_populate_library(filter_text="", groups_json=None, schema_json=None,
             tree.item(cid, open=True)
         except Exception:
             pass
+    # v6 §5.4: 搜索无结果 → 空态浮层盖在树区 (place 幂等, 每帧仅一次 Tcl 调用)
+    try:
+        if wf_lib_empty is not None:
+            if kw and leaves == 0:
+                wf_lib_empty.place(in_=tree, relx=0.5, rely=0.35, anchor="center")
+                wf_lib_empty.lift()
+            else:
+                wf_lib_empty.place_forget()
+    except Exception:
+        pass
     return leaves
 
 
@@ -1535,12 +1590,19 @@ def _wf_lib_tip_cancel():
 
 
 def _wf_lib_tip_show(x_root, y_root, iid):
-    """(500ms 到点) 显示悬停说明: 命令 desc + 参数签名。"""
+    """(500ms 到点) 显示悬停说明: 命令全名 + desc + 参数签名。
+
+    v6 §5.1: 首行恒为命令全名 —— 侧栏 180px 下长条目被截断时
+    (如「找图（图片名、精…」), 悬停即可读全名, 无需拉宽侧栏。"""
     global _WF_LIB_TIP_TIMER
     _WF_LIB_TIP_TIMER = None
     if iid != _WF_LIB_TIP_IID:
         return
-    txt = _wf_lib_tooltip_text(_WF_LIB_NODES.get(iid))
+    item = _WF_LIB_NODES.get(iid)
+    txt = _wf_lib_tooltip_text(item)
+    name = str((item or {}).get("cmd") or "").strip()
+    if name and not txt.startswith(name):
+        txt = (name + "\n" + txt) if txt else name
     if not txt:
         return
     try:
@@ -2278,6 +2340,26 @@ def _wf_ai_generate():
         _toast("打开 AI 生成面板失败: {}".format(e), "error")
         return
     open_ai_panel(mode="workflow", on_workflow_import=_wf_ai_import_result)
+
+
+def _wf_ai_debug():
+    """自然语言 → 工作流诊断 (复用脚本编辑同款 AI 调试面板)。
+
+    与脚本编辑「AI调试」同一窗口/同一提问流程, 仅 mode 切到 "workflow":
+    标题/建议问题换成工作流语境, 并把当前步骤摘要作为上下文一并提交。
+    """
+    try:
+        from dialogs import open_ai_debug_dialog
+    except Exception as e:
+        _toast("打开 AI 调试面板失败: {}".format(e), "error")
+        return
+    steps = []
+    try:
+        for i, s in enumerate(_wf_data.get("steps", []) or []):
+            steps.append("第{}步: {}".format(i + 1, _wf_step_label(s)))
+    except Exception:
+        steps = []
+    open_ai_debug_dialog(mode="workflow", workflow_steps=steps)
 
 
 def _wf_ai_import_result(data, issues):

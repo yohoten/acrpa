@@ -43,6 +43,10 @@ SEMANTIC_TOKENS = ("sc", "ok", "dg", "err", "wn", "ac", "hover", "focus", "acl",
 # _SURFACE_V4=False 时 colors() 回退到 v3 旧表面取值 (保留旧值常量, 无需回滚代码)。
 _SURFACE_V4 = True
 
+# Tab 选中色条元素 (v6 §3): 序列号 (同名元素不可重复注册) + PhotoImage 保活
+_TAB_BAR_SEQ = 0
+_TAB_BAR_IMGS = []
+
 # 旧表面/语义取值 (v3, 供 _SURFACE_V4=False 回退): {dark: {key: old_value}}
 _SURFACE_V4_OLD = {
     False: {  # 亮色
@@ -86,13 +90,21 @@ def colors(dark=None):
             flowbg="#0f172a", hlbg="#4D3B00",
             ai="#8B5CF6",  # AI 品牌紫 (暗色模式, 与 ac/sc/dg/wn 同级语义键)
             # ── 新增键 (§6.1) ── 表面层级 v4: 悬停统一 #2F3A45, bd 加深 #3F3F3F ──
-            surface_alt="#262626", acp="#2B7AB8", fgd="#6E6E6E",
+            # V7/§4: 卡片不追圆角 → 用「1px 描边 + surface 级差」建层级;
+            #   surface_alt(#343434) 对 bgc(#2B2B2B) 约 1.14:1 (原 #262626 仅 1.05:1, 表头/悬停槽几乎看不出)。
+            surface_alt="#343434", acp="#2B7AB8", fgd="#6E6E6E",
             border_strong="#4A4A4A", gridline="#383838", gutter_bg="#262626",
             heading_hover="#2F3A45", caption_hover="#2F3A45", row_hover="#2F3A45",
             zebra="#262626", tooltip_bg="#3A3A3A", tooltip_border="#5A5A5A",
             log_info="#9A9A9A", log_success="#6CCB5F",
             log_warn="#FCE100", log_error="#FF99A4",
-            search_hit_bg="#4D3B00", search_hit_border="#4CC2FF")
+            search_hit_bg="#4D3B00", search_hit_border="#4CC2FF",
+            # ── 日志面板 v6 (视觉稿 A5): 时间戳降权 / 徽标色块 / 行悬停 / 分隔线 ──
+            # 徽标色块 = blend(logbg, 级别色, 0.18) 的等效实色 (Tk 无 alpha, 预先混色);
+            # 悬停底 = blend(logbg, ac, 0.05) —— 比 row_hover 更淡, 只作「光标在哪行」提示。
+            log_ts="#8A8A8A", log_hover="#2F353B", log_rule="#383838",
+            log_badge_info_bg="#3F3F3F", log_badge_success_bg="#374834",
+            log_badge_warning_bg="#514C23", log_badge_error_bg="#513F41")
     else:
         d = dict(
             # ── 既有键 (值按 §2.1 修订) ── wn 亮色 #C2410C (v4 §4.4 达 AA) ──
@@ -105,13 +117,18 @@ def colors(dark=None):
             flowbg="#f8fafc", hlbg="#FFF4CE",
             ai="#7C3AED",  # AI 品牌紫 (亮色模式, 与 ac/sc/dg/wn 同级语义键)
             # ── 新增键 (§6.1) ── 表面层级 v4: 悬停统一 #E5F1FB, bd 加深 #D6D6D6 ──
-            surface_alt="#F7F7F7", acp="#005A9E", fgd="#9A9A9A",
+            # V7/§4: 同暗色 —— surface_alt(#F0F0F0) 对 bgc(#FFFFFF) 约 1.14:1 (原 #F7F7F7 仅 1.05:1)。
+            surface_alt="#F0F0F0", acp="#005A9E", fgd="#9A9A9A",
             border_strong="#B8B8B8", gridline="#EEEEEE", gutter_bg="#F7F7F7",
             heading_hover="#E5F1FB", caption_hover="#E5F1FB", row_hover="#E5F1FB",
             zebra="#F7F7F7", tooltip_bg="#FFFFE1", tooltip_border="#646464",
             log_info="#6E6C69", log_success="#107C10",
             log_warn="#F7630C", log_error="#C42B1C",
-            search_hit_bg="#FFF4CE", search_hit_border="#0078D4")
+            search_hit_bg="#FFF4CE", search_hit_border="#0078D4",
+            # ── 日志面板 v6 (视觉稿 A5, 亮色) ──
+            log_ts="#8A8886", log_hover="#EFF6FD", log_rule="#E6E6E6",
+            log_badge_info_bg="#E5E5E4", log_badge_success_bg="#D4E7D4",
+            log_badge_warning_bg="#FEE3D3", log_badge_error_bg="#F4D9D6")
     if not _SURFACE_V4:
         d.update(_SURFACE_V4_OLD.get(dark, {}))
     return d
@@ -179,6 +196,8 @@ _FLOW_STYLE_FALLBACK = {
         "edge": "#94A3B8", "edge_sel": "#0078D4", "edge_reject": "#EF4444",
         "edge_back": "#8B5CF6", "walked": "#10B981", "terminal": "#94A3B8",
         "disabled_color": FLOW_DISABLED_COLOR, "port_idle": None, "port_hover": "#0078D4",
+        # §6: 节点底色统一 surface_alt; 标题/副行文字 fgb / fgm
+        "node_bg": "#F1F5F9", "node_text": "#1F2937", "node_text_sub": "#5F5F5F",
     },
     True: {
         "shadow": "#334155", "flowbg": "#0f172a", "disabled_mix": 0.4,
@@ -187,6 +206,7 @@ _FLOW_STYLE_FALLBACK = {
         "edge": "#A0A0A0", "edge_sel": "#4CC2FF", "edge_reject": "#FF99A4",
         "edge_back": "#8B5CF6", "walked": "#6CCB5F", "terminal": "#A0A0A0",
         "disabled_color": "#4A4A4A", "port_idle": None, "port_hover": "#4CC2FF",
+        "node_bg": "#232323", "node_text": "#C9C9C9", "node_text_sub": "#9A9A9A",
     },
 }
 
@@ -391,20 +411,42 @@ def apply_theme(root_widget, style):
     utils.C = C
     root_widget.configure(bg=C["bg"])
 
-    # === Notebook / Tabs (经典矩形页签; 去选中蓝字 → 加粗 + 强调条) ===
-    # §4.3 / §2.4: 未选 surface_alt, 选中 bgc 面 + 字色保持 fgt (删除 [("selected", C["ac"])])。
-    # clam 无「顶部 2px 条」原生元素 → 降级: 选中加粗 + 强调色描边 (见结果说明)。
+    # === Notebook / Tabs (v6 §3: 去 focus 虚线框 + 选中 2px accent 底条) ===
+    # ① 重写 layout 摘除 clam 的 Notebook.focus 元素 (dotted ring 的来源);
+    # ② 选中态 = surface_alt 底 + 底部 2px accent 色条 + fgb 加粗;
+    #    色条用两张一次性 PhotoImage 注册成 ttk image 元素 (选中=实色 / 未选=透明),
+    #    无逐帧绘制开销; 每次 apply_theme 以新元素名重建以跟随主题色
+    #    (ttk 不允许同名元素重复注册, 旧元素随主题切换极少量驻留, 可忽略)。
+    global _TAB_BAR_SEQ, _TAB_BAR_IMGS
+    try:
+        import tkinter as _tk
+        _TAB_BAR_SEQ += 1
+        _img_on = _tk.PhotoImage(master=root_widget, width=6, height=2)
+        _img_on.put(C["ac"], to=(0, 0, 6, 2))
+        _img_off = _tk.PhotoImage(master=root_widget, width=6, height=2)
+        _TAB_BAR_IMGS[:] = (_img_on, _img_off)  # 保活 (Tk 不持有引用)
+        _bar_el = "Tab.accentBar{}".format(_TAB_BAR_SEQ)
+        style.element_create(_bar_el, "image", _img_on,
+                             ("!selected", _img_off), {"sticky": "we"})
+        style.layout("TNotebook.Tab", [
+            ("Notebook.tab", {"sticky": "nswe", "children": [
+                ("Notebook.padding", {"side": "top", "sticky": "nswe", "children": [
+                    ("Notebook.label", {"side": "top", "sticky": ""}),
+                    (_bar_el, {"side": "bottom", "sticky": "we"}),
+                ]}),
+            ]}),
+        ])
+    except Exception:
+        pass
     style.configure("TNotebook", background=C["bg"], borderwidth=0)
     style.configure("TNotebook.Tab", font=utils.FONT_BODY, padding=(16, 6),
-                    background=C["surface_alt"], foreground=C["fgm"],
-                    borderwidth=1)
+                    background=C["bg"], foreground=C["fgm"],
+                    borderwidth=0)
     style.map("TNotebook.Tab",
               font=[("selected", utils.FONT_BUTTON)],
-              background=[("selected", C["bgc"]), ("active", C["caption_hover"])],
-              foreground=[("selected", C["fgt"])],
-              bordercolor=[("selected", C["ac"])],
-              lightcolor=[("selected", C["ac"])],
-              darkcolor=[("selected", C["ac"])])
+              background=[("selected", C["surface_alt"]),
+                          ("active", C["caption_hover"])],
+              foreground=[("selected", C["fgb"])])
 
     # === Treeview (数据表): 行高唯一 row_h + 选中整行 acl ===
     # §4.5: 消除旧 22 与 24 双写冲突, 统一 TOKENS["row_h"] (=22), 只保留一处。
@@ -511,11 +553,11 @@ def apply_theme(root_widget, style):
               lightcolor=[("focus", C["focus"])],
               darkcolor=[("focus", C["focus"])])
 
-    # === Progressbar - compact ===
+    # === Progressbar - compact (I4: 5→6px, 与文字基线对齐更清晰) ===
     style.configure("Horizontal.TProgressbar", background=C["sc"],
-                    troughcolor=C["bg"], borderwidth=0, thickness=5)
+                    troughcolor=C["bg"], borderwidth=0, thickness=6)
     style.configure("Success.Horizontal.TProgressbar", background=C["sc"],
-                    troughcolor=C["acl"], borderwidth=0, thickness=5)
+                    troughcolor=C["acl"], borderwidth=0, thickness=6)
 
     # === Scrollbar (ttk) — 原遗漏, 暗色下保持系统浅色 ===
     # 厚度统一 sp("sb_w")=8 (docs/UI优化方案-v3.md §5.2 D10): clam 默认 16px,

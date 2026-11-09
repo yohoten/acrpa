@@ -169,11 +169,12 @@ def build(parent, ctx):
         _mk_status[_prov] = _st
         _btns = tkinter.Frame(mk_rows, bg=C["bgc"])
         _btns.grid(row=_i, column=2, sticky="e")
+        # §7: 登录=secondary (中性底), 注销=danger-ghost (透明底 + dg 字), 不再成对实心
         _btn(_btns, "登录", lambda p=_prov: _mk_open_token(p),
-             C["sc"], "white", tip="输入 PAT 登录（仅存本机凭据库）").pack(
+             tip="输入 PAT 登录（仅存本机凭据库）").pack(
             side="left", padx=(0, 4))
         _btn(_btns, "注销", lambda p=_prov: _mk_logout(p),
-             C["dg"], "white", tip="清除本机保存的 token").pack(side="left")
+             "dg", tip="清除本机保存的 token", ghost=True).pack(side="left")
 
     mk_cur_lbl = tkinter.Label(mk_content, text="", font=ctx.FONT_SMALL,
         bg=C["bgc"], fg=C["ac"])

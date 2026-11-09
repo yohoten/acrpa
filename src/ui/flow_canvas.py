@@ -528,29 +528,31 @@ def _node_detail(node):
 def _node_appearance(node, colors, ctx, style, zoom):
     """节点外观三元组 (fill, outline, width) —— 渲染与高亮动画同口径 (P2-2 抽离)。
 
-    复用「禁用态保留类型色」(P0-2) + 「执行高亮/错误态描边」(sc/dg) 的既有规则,
+    §6: 节点底色统一 node_bg (surface_alt), 类型色改由「左侧 3px 色条」承载;
+    描边默认取类型色 (1.5px), 执行/错误态覆盖为 sc/dg (2–3px)。
     保证 render() 与 animate_nodes_outline() 计算出的目标描边逐位一致。
     """
     base = colors.get(node.type, _fallback_color())
     disabled = not node.enabled
+    node_bg = style.get("node_bg") or style.get("text_on_node")
     if disabled:
         flowbg = style.get("flowbg")
-        if _is_color(flowbg):
-            fill = blend(base, flowbg, style.get("disabled_mix", 0.4))
+        if _is_color(flowbg) and _is_color(node_bg):
+            fill = blend(node_bg, flowbg, style.get("disabled_mix", 0.4))
         else:
-            fill = style.get("disabled_color") or base
+            fill = style.get("disabled_color") or node_bg
     else:
-        fill = base
-    darken = ctx.get("darken")
-    outline = darken(fill) if callable(darken) else fill
-    width = 2 * zoom
+        fill = node_bg
+    # 默认描边 = 类型色 (1.5px); 类型色缺失时退回结构边色
+    outline = base if _is_color(base) else (style.get("edge") or fill)
+    width = max(1.0, 1.5 * zoom)
     index = _node_index(ctx, node.id)
     if index is not None and ctx.get("current_step") == index:
         outline = ctx.get("sc") or outline
-        width = 3 * zoom
+        width = max(2.0, 2.5 * zoom)
     elif index is not None and (ctx.get("step_results") or {}).get(index) == "error":
         outline = ctx.get("dg") or outline
-        width = 3 * zoom
+        width = max(2.0, 2.5 * zoom)
     return fill, outline, width
 
 
@@ -616,8 +618,9 @@ def _draw_node(canvas, node, colors, fonts, ctx, *, zoom=1.0, sp=None, style=Non
                                         fill=style["shadow"], outline="",
                                         tags=("shadow",) + tuple(tags))
 
-    # 字色按「本节点实际填充色」算: 禁用节点已与 flowbg 混浅, 固定白字会不可读
-    text_on = text_color_on(color) if _is_color(color) else style["text_on_node"]
+    # §6: 节点底色统一 node_bg → 文字走 node_text / node_text_sub (不再按填充亮度反推)
+    node_text = style.get("node_text") or style.get("text_on_node")
+    node_text_sub = style.get("node_text_sub") or style.get("text_sub") or node_text
     shape_id = None
     if typ == "condition":
         shape_id = canvas.create_polygon(
@@ -627,12 +630,10 @@ def _draw_node(canvas, node, colors, fonts, ctx, *, zoom=1.0, sp=None, style=Non
         shape_id = canvas.create_rectangle(
             x, y, x + w, y + h, fill=color, outline=outline, width=width, tags=tuple(tags))
         canvas.create_rectangle(x + 4, y + 4, x + w - 4, y + h - 4,
-                                outline=text_on, dash=(2, 2), tags=tuple(tags))
+                                outline=outline, dash=(2, 2), tags=tuple(tags))
     elif typ == "loop":
         shape_id = canvas.create_rectangle(
             x, y, x + w, y + h, fill=color, outline=outline, width=width, tags=tuple(tags))
-        canvas.create_rectangle(x + 3, y + 3, x + 10, y + h - 3,
-                                fill=text_on, outline="", tags=tuple(tags))
     else:
         shape_id = _rounded_rect(canvas, x, y, x + w, y + h, max(1.0, sp(8) * zoom),
                                  fill=color, outline=outline, width=width, tags=tuple(tags))
@@ -640,24 +641,38 @@ def _draw_node(canvas, node, colors, fonts, ctx, *, zoom=1.0, sp=None, style=Non
     if shape_id is not None:
         canvas.tag_lower(shadow_id, shape_id)
 
+    # §6: 左侧 3px 类型色条 (分类识别载体; 条件菱形以描边表达类型, 不加条)
+    if typ != "condition" and _is_color(base):
+        try:
+            inset = max(1.0, sp(4) * zoom)
+            bar_w = max(2.0, 3.0 * zoom)
+            canvas.create_rectangle(x + 1, y + inset, x + 1 + bar_w, y + h - inset,
+                                    fill=base, outline="", tags=tuple(tags))
+        except Exception:
+            pass
+
     icon = ctx.get("icons", {}).get(typ) or _TYPE_ICONS.get(typ, "?")
     label = ctx.get("type_labels", {}).get(typ) or _TYPE_LABELS.get(typ, typ)
     budget = _detail_budget(w, zoom)
-    line1 = _ellipsize("{} {} #{}".format(
+    title = _ellipsize("{} {} #{}".format(
         icon, label, (index + 1) if index is not None else "-"), budget)
-    text = "{}\n{}".format(line1, _ellipsize(_node_detail(node), budget))
-    text_id = canvas.create_text(cx, cy, text=text, fill=text_on, justify="center",
-                                 anchor="center",
-                                 font=_scaled_font(fonts.get("small_bold"), zoom),
+    sub = _ellipsize(_node_detail(node), budget)
+    canvas.create_text(cx, y + h * 0.34, text=title, fill=node_text, justify="center",
+                       anchor="center",
+                       font=_scaled_font(fonts.get("small_bold"), zoom),
+                       tags=tuple(tags))
+    text_id = canvas.create_text(cx, y + h * 0.70, text=sub, fill=node_text_sub,
+                                 justify="center", anchor="center",
+                                 font=_scaled_font(fonts.get("small"), zoom),
                                  tags=tuple(tags))
     if disabled:
-        # 第 2 行 (详情) 叠删除线: 穿过该行文本中线 (两行 bbox 的下 ~3/4 处)
+        # 禁用态: 详情行叠删除线
         try:
             bbox = canvas.bbox(text_id)
             if bbox:
-                mid = bbox[1] + (bbox[3] - bbox[1]) * 0.73
+                mid = (bbox[1] + bbox[3]) / 2.0
                 canvas.create_line(bbox[0] + 2, mid, bbox[2] - 2, mid,
-                                   fill=text_on, width=max(1.0, sp(1) * zoom),
+                                   fill=node_text_sub, width=max(1.0, sp(1) * zoom),
                                    tags=tuple(tags))
         except Exception:
             pass
@@ -678,7 +693,7 @@ def _draw_forward_edge(canvas, e, s, d, color, fonts, ctx, *, zoom=1.0, sp=None,
     sp = sp or (lambda v: v)
     sx, sy = s.x + s.w / 2.0, s.y + s.h
     dx, dy = d.x + d.w / 2.0, d.y
-    line_w = max(1.0, sp(1) * zoom)          # A2: zoom==1.0 时 == sp(1)
+    line_w = max(1.0, 1.5 * zoom)            # §6: 连线 1.5px (A2: zoom==1.0 时 == 1.5)
     canvas.create_line(sx, sy, dx, dy, fill=color, width=line_w,
                        tags=("arrow", "edge:" + str(e.id)))
     # P2-7: 箭头/标签也带 edge:<eid> 标签, 与主干线一起被脏矩形局部重绘整组删除。
@@ -693,7 +708,7 @@ def _draw_forward_edge(canvas, e, s, d, color, fonts, ctx, *, zoom=1.0, sp=None,
 
 def _draw_back_edge(canvas, e, s, d, color, fonts, *, zoom=1.0, sp=None, style=None):
     sp = sp or (lambda v: v)
-    line_w = max(1.0, sp(1) * zoom)
+    line_w = max(1.0, 1.5 * zoom)            # §6: 回边同 1.5px
     dash = (max(1.0, sp(4) * zoom), max(1.0, sp(2) * zoom))
     if s.id == d.id:                            # 自环 (空 loop 的范围标记)
         x2, cy = s.x + s.w, s.y + s.h / 2.0
@@ -855,7 +870,7 @@ def render(canvas, graph, *, colors, fonts=None, ctx=None, zoom=1.0, dirty=None)
                    zoom=zoom, sp=sp, style=style)
     _draw_terminal(canvas, cx, end_y, "END", term_color, fonts, ("terminal",),
                    zoom=zoom, sp=sp, style=style)
-    term_line_w = max(1.0, sp(1) * zoom)
+    term_line_w = max(1.0, 1.5 * zoom)
     for n in roots:
         x, y = n.x + n.w / 2.0, n.y
         canvas.create_line(cx, start_y + sp(30) * zoom, x, y, fill=term_color,
@@ -1094,7 +1109,7 @@ def bind_zoom_pan(canvas, *, min_scale=0.4, max_scale=2.5, step=1.12, re_render=
 # 控制。边: 每条连线带 ``edge:<eid>`` 标签供命中测试。
 # 交互**只操作内存图** —— 按 §11.4 的工程判断, 执行仍走树执行器, 图编辑为视图级。
 
-PORT_R = 4
+PORT_R = 3
 
 
 def _draw_ports(canvas, node, fill, outline, tags, *, zoom=1.0, sp=None, style=None):

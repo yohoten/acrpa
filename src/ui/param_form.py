@@ -200,22 +200,22 @@ def build_arg_form(parent, cmd_type, initial_args=None, *, colors, fonts, theme=
     f_button = F.get("button") or f_body
     f_log = F.get("log") or f_body
 
-    bg = C.get("bgc", "#FFFFFF")
-    fg = C.get("fgb", "#333333")
-    ebg = C.get("ebg", "#FFFFFF")
-    fgt = C.get("fgt", "#000000")
-    errbg = C.get("errbg", "#fff0f0")
-    accent = C.get("ac", "#0078D4")
+    bg = C.get("bgc", "white")
+    fg = C.get("fgb", "black")
+    ebg = C.get("ebg", "white")
+    fgt = C.get("fgt", "black")
+    errbg = C.get("errbg", "white")
+    accent = C.get("ac", "steelblue")
     if theme is not None:
         try:
             accent = theme.resolve_bg("ac", C)[0]
         except Exception:
-            accent = C.get("ac", "#0078D4")
+            accent = C.get("ac", "steelblue")
     # 强调色跨主题明度翻转 (暗色 ac 偏浅) → 字色按底色亮度自适应, 不写死白字
     try:
         accent_fg = theme.text_on(accent)
     except Exception:
-        accent_fg = "#FFFFFF"
+        accent_fg = "white"
 
     frame = tkinter.Frame(parent, bg=bg)
 

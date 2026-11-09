@@ -149,7 +149,7 @@ def open_palette(parent, colors, fonts, on_pick, initial_query="",
     F_BODY = _f.get("body") or utils.FONT_BODY
     F_SMALL = _f.get("small") or utils.FONT_SMALL
 
-    def _c(key, default="#000000"):
+    def _c(key, default="black"):
         return C.get(key, default)
 
     win = tkinter.Toplevel(parent)
@@ -158,7 +158,7 @@ def open_palette(parent, colors, fonts, on_pick, initial_query="",
         win.transient(parent)
     except Exception:
         pass
-    win.configure(bg=_c("bgc", "#FFFFFF"))
+    win.configure(bg=_c("bgc", "white"))
     if callable(set_icon):
         try:
             set_icon(win)
@@ -175,35 +175,35 @@ def open_palette(parent, colors, fonts, on_pick, initial_query="",
         win.geometry("{}x{}".format(width, height))
 
     # ── 搜索框 ──
-    top = tkinter.Frame(win, bg=_c("bgc", "#FFFFFF"))
+    top = tkinter.Frame(win, bg=_c("bgc", "white"))
     top.pack(fill="x", padx=8, pady=(8, 4))
     var = tkinter.StringVar(value=initial_query)
     ent = tkinter.Entry(top, textvariable=var, font=F_BODY,
-                        bg=_c("ebg", "#FFFFFF"), fg=_c("fgb", "#333333"),
-                        insertbackground=_c("fgt", "#000000"),
+                        bg=_c("ebg", "white"), fg=_c("fgb", "black"),
+                        insertbackground=_c("fgt", "black"),
                         relief="solid", bd=1)
     ent.pack(fill="x", ipady=3)
 
     # ── 结果列表 ──
-    mid = tkinter.Frame(win, bg=_c("bgc", "#FFFFFF"))
+    mid = tkinter.Frame(win, bg=_c("bgc", "white"))
     mid.pack(fill="both", expand=True, padx=8)
     lb = tkinter.Listbox(mid, font=F_BODY, activestyle="none",
-                         bg=_c("bgc", "#FFFFFF"), fg=_c("fgb", "#333333"),
-                         selectbackground=_c("acl", "#CCE4F7"),
-                         selectforeground=_c("fgt", "#000000"),
+                         bg=_c("bgc", "white"), fg=_c("fgb", "black"),
+                         selectbackground=_c("acl", "lightblue"),
+                         selectforeground=_c("fgt", "black"),
                          highlightthickness=0, bd=0)
     sb = tkinter.Scrollbar(mid, orient="vertical", command=lb.yview,
                            width=utils.sp("sb_w"),
-                           bg=_c("bd", "#E1E1E1"),
-                           troughcolor=_c("bgc", "#FFFFFF"), relief="flat")
+                           bg=_c("bd", "gainsboro"),
+                           troughcolor=_c("bgc", "white"), relief="flat")
     lb.configure(yscrollcommand=sb.set)
     sb.pack(side="right", fill="y")
     lb.pack(side="left", fill="both", expand=True)
 
     # ── 提示行 ──
     tkinter.Label(win, text="↑/↓ 选择    Enter 插入当前行    Esc 取消",
-                  font=F_SMALL, bg=_c("bgc", "#FFFFFF"),
-                  fg=_c("fgm", "#5F5F5F")).pack(fill="x", padx=8, pady=(2, 6))
+                  font=F_SMALL, bg=_c("bgc", "white"),
+                  fg=_c("fgm", "dimgray")).pack(fill="x", padx=8, pady=(2, 6))
 
     rows = []          # 与 lb 行一一对应: {"kind": "header"/"item", "entry": {...}}
 
@@ -226,7 +226,7 @@ def open_palette(parent, colors, fonts, on_pick, initial_query="",
                 rows.append({"kind": "header"})
                 lb.insert("end", "  " + e["group"])
                 try:
-                    lb.itemconfig("end", foreground=_c("ac", "#0078D4"))
+                    lb.itemconfig("end", foreground=_c("ac", "steelblue"))
                 except Exception:
                     pass
                 last = e["group"]
@@ -239,7 +239,7 @@ def open_palette(parent, colors, fonts, on_pick, initial_query="",
             rows.append({"kind": "header"})
             lb.insert("end", "  (无匹配命令)")
             try:
-                lb.itemconfig("end", foreground=_c("fgm", "#5F5F5F"))
+                lb.itemconfig("end", foreground=_c("fgm", "dimgray"))
             except Exception:
                 pass
         _select_first_item()

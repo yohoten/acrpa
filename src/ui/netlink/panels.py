@@ -39,6 +39,14 @@ class PanelsMixin(object):
                     self.tv.item(item, values=values, tags=(tag,))
             except Exception:
                 pass
+        # v6 §5.2: 空表引导 —— 无设备时显示空态 (含 [显示配对码] 主按钮)
+        try:
+            if self._peers:
+                self.lbl_dev_empty.grid_remove()
+            else:
+                self.lbl_dev_empty.grid()
+        except Exception:
+            pass
 
     # _perm_text
     def _perm_text(self, nid):

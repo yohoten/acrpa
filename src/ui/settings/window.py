@@ -881,6 +881,21 @@ def open_settings_window():
     restart_label = tkinter.Label(footer, textvariable=_restart_var, font=FONT_TINY,
                                   bg=C["bg"], fg=C["wn"], anchor="e")
     restart_label.grid(row=0, column=1, sticky="e", padx=(sp("sp_sm"), sp("sp_md")))
+
+    def _sync_restart_chip(*_a):
+        """v6 §5.6: 「需重启生效 N 项」wn 色 chip; N=0 (空文本) 时整段隐藏无边框。"""
+        try:
+            _on = bool(_restart_var.get())
+            restart_label.configure(
+                highlightthickness=1 if _on else 0,
+                highlightbackground=C["wn"],
+                padx=sp("sp_sm") if _on else 0)
+        except Exception:
+            pass
+    try:
+        _restart_var.trace_add("write", _sync_restart_chip)
+    except Exception:
+        pass
     RoundedButton(footer, text="关闭", command=_close, colors=C,
                   width=sp(76)).grid(row=0, column=2, sticky="e")
 
@@ -909,7 +924,7 @@ def open_settings_window():
         arrow.bind("<Button-1>", toggle)
         return card, content_frame, title_row, arrow
 
-    def btn(parent, text, command, bg=None, fg=None, tip=None):
+    def btn(parent, text, command, bg=None, fg=None, tip=None, ghost=False):
         # bg 语义: 既可以是语义键字符串 ("ac"/"sc"/"dg"/"wn"), 也可以是实际颜色值。
         # 此前按 `bg == C.get(key)` 判定, 而卡片普遍传的是字符串键, 导致 role 恒为 None,
         # 语义按钮全部退化为中性 surface_alt 底色, 失去应有的色彩与对比度。
@@ -921,7 +936,7 @@ def open_settings_window():
                 role = next((key for key in ("ac", "sc", "wn", "dg")
                              if bg == C.get(key)), None)
         button = RoundedButton(parent, text=text, command=command, colors=C,
-                               role=role, tooltip=tip)
+                               role=role, tooltip=tip, ghost=ghost)
         return button
 
     ctx = type("SettingsContext", (), {})()

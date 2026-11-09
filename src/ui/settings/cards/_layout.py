@@ -87,9 +87,10 @@ def row(parent, ctx, label, builder, help=None, unit=None, restart=False, indent
         expandable = False
 
     if label:
+        # §7: 标签右对齐 → 冒号列对齐 (原左对齐导致长标签把控件列推歪)
         tkinter.Label(fr, text=label, font=ctx.FONT_SMALL,
-            bg=C["bgc"], fg=C["fgm"], anchor="w").grid(
-            row=0, column=0, sticky="w", padx=(0, _sp(ctx, "sp_sm")))
+            bg=C["bgc"], fg=C["fgm"], anchor="e").grid(
+            row=0, column=0, sticky="e", padx=(0, _sp(ctx, "sp_sm")))
         field.grid(row=0, column=1, sticky="ew")
         if expandable:
             field.columnconfigure(0, weight=1)

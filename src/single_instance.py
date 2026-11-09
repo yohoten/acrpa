@@ -474,6 +474,10 @@ def install_receiver(root):
         win = tkinter.Toplevel(root)
         win.withdraw()
         win.title(IPC_WINDOW_TITLE)
+        # 注意: 这里必须 update_idletasks() 让 Tk 真正创建**带标题的 wrapper 窗口**。
+        # 只调 winfo_id() 得到的是内层子窗 (GetParent 返回 0 / wm_frame 同值), 而
+        # FindWindowW(标题) 命中不到它 → 第二实例的 WM_COPYDATA 会发给未挂钩的窗口,
+        # 单实例失效。该 layout 成本不可省, 只能靠「延后到首次事件循环」摊薄 (见 app._finish_build)。
         win.update_idletasks()
         tk_id = win.winfo_id()
         hwnd = ctypes.windll.user32.GetParent(ctypes.c_void_p(tk_id)) or tk_id

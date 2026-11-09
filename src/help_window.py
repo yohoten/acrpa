@@ -531,8 +531,14 @@ class _HelpWindow(object):
                         spacing1=scaled(6), spacing3=scaled(2))
         t.tag_configure("h3", font=F["button"], foreground=C["fgb"],
                         spacing1=scaled(4), spacing3=scaled(1))
-        # 章节标题下的 accent 短线锚点
-        t.tag_configure("titlebar", font=F["tiny"], foreground=C["ac"],
+        # v6 §5.7: 章节标题下 1px 实线 (整行背景 = bd 色, 2px 行高)
+        if getattr(self, "_rule_font", None) is None:
+            try:
+                self._rule_font = tkfont.Font(family="Microsoft YaHei UI", size=2)
+            except Exception:
+                self._rule_font = None
+        t.tag_configure("titlebar", font=(self._rule_font or F["tiny"]),
+                        background=C["bd"],
                         spacing1=scaled(2), spacing3=scaled(8))
         t.tag_configure("para", font=F["body"], foreground=C["fgb"],
                         spacing1=scaled(2), spacing3=scaled(6))
@@ -541,7 +547,9 @@ class _HelpWindow(object):
         t.tag_configure("param", font=F["small"], foreground=C["fgm"])
         t.tag_configure("cmd", font=F["button"], foreground=C["ac"])
         t.tag_configure("bold", font=F["button"], foreground=C["fgt"])
-        t.tag_configure("inline", font=F["log"], foreground=C["ac"])
+        # v6 §5.7: 行内代码 chip —— 等宽字体 + surface_alt 浅底 (与日志面板 code 风格一致)
+        t.tag_configure("inline", font=F["log"], foreground=C["ac"],
+                        background=C["surface_alt"])
         # 代码块：衬底色 + 缩进，形成独立块，阅读更清晰
         t.tag_configure("code", font=F["log"], foreground=C["logfg"],
                         background=C["ebg"],
@@ -1015,8 +1023,10 @@ class _HelpWindow(object):
             pass
         # 「来源」为内部维护元数据（如「内嵌 + docs/xxx.md」），对终端用户无意义，
         # 不再渲染到正文，避免干扰阅读；正文本身已能说明内容。
-        # 标题下加一条浅色 accent 短线，作为章节标题的视觉锚点。
-        self.text.insert("end", "─" * 28 + "\n", "titlebar")
+        # v6 §5.7: 标题下改 1px 实线 (bd 色) —— 对只含换行的行打背景 tag,
+        # Tk 会把该行背景铺满整行宽, 配合 2px 字体即成全宽发丝线;
+        # 替代旧「─」*28 字符虚线的廉价观感 (修 E13)。
+        self.text.insert("end", "\n", "titlebar")
         if self._fallback_only or section.id == "commands":
             # 命令速查章：先正文（若有），再动态命令分组
             if self._content_ok and (section.body or "").strip():
@@ -1056,11 +1066,16 @@ class _HelpWindow(object):
                                 getattr(b, "spans", None))
             self.text.insert("end", "\n")
         elif kind == "ulist":
+            # v6 §5.7: 列表项也走行内渲染 (项内 **粗体**/`代码` 不再露字面标记)
             for it in getattr(b, "items", []) or []:
-                self.text.insert("end", "•  " + str(it) + "\n", "ulist")
+                self.text.insert("end", "•  ", "ulist")
+                self._insert_inline(str(it), None, "ulist")
+                self.text.insert("end", "\n")
         elif kind == "olist":
             for n, it in enumerate(getattr(b, "items", []) or []):
-                self.text.insert("end", "{}. {}\n".format(n + 1, it), "olist")
+                self.text.insert("end", "{}. ".format(n + 1), "olist")
+                self._insert_inline(str(it), None, "olist")
+                self.text.insert("end", "\n")
         elif kind == "code":
             self.text.insert("end", (getattr(b, "text", "") or "") + "\n", "code")
         elif kind == "table":
@@ -1134,7 +1149,11 @@ class _HelpWindow(object):
                 self.text.insert("end", "\n")
                 desc = getattr(e, "desc", "") or ""
                 if desc:
-                    self.text.insert("end", "      " + desc + "\n", "desc")
+                    # v6 §5.7: desc 内含 markdown 行内标记 (**粗体**/`选择器`),
+                    # 走 _insert_inline 渲染, 不再露字面星号 (修 E13)
+                    self.text.insert("end", "      ", "desc")
+                    self._insert_inline(desc, None, "desc")
+                    self.text.insert("end", "\n")
                 self.text.insert("end", "      参数: " + (params or "无") + "\n",
                                  "param")
             self.text.insert("end", "\n")

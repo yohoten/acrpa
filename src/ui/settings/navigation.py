@@ -123,10 +123,12 @@ class SettingsNavigation(tkinter.Frame):
         self.pages.columnconfigure(0, weight=1)
         row = 0
         for group, page_defs in PAGE_DEFS:
+            # v6 §5.6①: 分组标题降为纯小节标签 (fgd 弱色 + 上方 sp(6) 间距, 不可点) ——
+            # 与其下条目拉开层级, 消除「标题与条目重名」造成的导航层级混乱 (E12)。
             group_label = tkinter.Label(self.pages, text=group, font=utils.FONT_TINY,
-                                        bg=self.C["bg"], fg=self.C["fgm"], anchor="w")
+                                        bg=self.C["bg"], fg=self.C["fgd"], anchor="w")
             group_label.grid(row=row, column=0, sticky="ew", padx=14,
-                             pady=(utils.sp("gap_tight"), 1))
+                             pady=(utils.sp(6), 1))
             self._groups[group] = group_label
             row += 1
             for page, title, _desc in page_defs:
@@ -234,6 +236,6 @@ class SettingsNavigation(tkinter.Frame):
                                selectbackground=colors["acl"],
                                selectforeground=colors["fgt"])
         for label in self._groups.values():
-            label.configure(bg=colors["bg"], fg=colors["fgm"])
+            label.configure(bg=colors["bg"], fg=colors["fgd"])
         self.show_page(self.active_page)
         self._on_query()

@@ -111,10 +111,11 @@ class RoundedButton(_RoundedCanvas):
 
     def __init__(self, parent, text="", command=None, *, colors=None, role=None,
                  width=None, height=None, radius=None, font=None,
-                 state="normal", tooltip=None):
+                 state="normal", tooltip=None, ghost=False):
         self._text = str(text)
         self._command = command
         self._role = role
+        self._ghost = bool(ghost)
         self._state = state
         self._font = font or utils.FONT_BUTTON
         self._width = width
@@ -143,19 +144,30 @@ class RoundedButton(_RoundedCanvas):
     # ── 颜色派生 ──
     def _base(self):
         C = self._colors()
+        if self._ghost:                       # ghost: 透明底 (卡片面) + 语义色文字
+            return C.get("bgc", "white")
         if self._role and self._role in C:
             return C[self._role]
         return C.get("surface_alt", C.get("bgc", "white"))
 
     def _fg(self, base):
         C = self._colors()
+        if self._ghost and self._role and self._role in C:
+            return C[self._role]              # ghost-danger: dg 字 / ghost-accent: ac 字
         if self._role and self._role in C:
             return text_on(base)
         return C.get("fgb", C.get("fgt", "black"))
 
     def _target_fill(self):
+        C = self._colors()
         if self._state == "disabled":
             return state_color(self._base(), "disabled", bg=self._bg())
+        if self._ghost:                       # ghost hover: 语义浅底 (danger→errbg / accent→acl)
+            if self._pressed or self._hover:
+                tint = {"dg": C.get("errbg"), "ac": C.get("acl"),
+                        "sc": C.get("hlbg"), "wn": C.get("hlbg")}.get(self._role)
+                return tint or state_color(self._base(), "hover")
+            return self._base()
         if self._pressed:
             return state_color(self._base(), "active")
         if self._hover:

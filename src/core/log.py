@@ -59,6 +59,28 @@ _LOG_BADGE_BY_TAG = {
     "error": "ERROR",
 }
 
+# ── 行版式 (v6 · 视觉稿 A5 / docs/design/2026-11-07-ACRPA-UI视觉优化方案-v5.md) ──
+# 目标: 时间戳降权 + 定宽「徽标块」承载级别色 + 正文中性可读, 纵向可扫读。
+#   ▌ 21:38:58⇢⇢[ INFO   ]⇢⇢ 正文
+#   │ └─ 8 ─┘└2┘└── 8 ──┘└2┘
+# 列宽与列间距由本模块唯一定义, ui/log_dock 只需读取本表的派生值着色 (禁止各写一份)。
+LOG_TS_W = 8        # 时间戳列宽 (HH:MM:SS)
+LOG_BADGE_W = 8     # 徽标块列宽 (含左右内补白; 文案最长 SUCCESS/WARNING = 7)
+LOG_COL_GAP = 2     # 列间距 (空格数, 时间戳后 / 徽标块前后各一处)
+
+
+def log_row_layout(lead=1):
+    """行版式列偏移 (0-based 字符列): (ts_start, ts_end, badge_start, badge_end)。
+
+    lead: 行首装饰字形数 (LOG_CBAR_INLINE 时 ▌ 占 1 列, 否则 0)。
+    ui/log_dock 用它在**不解析文本**的前提下批量给「时间戳 / 徽标块」上色。
+    """
+    ts_start = int(lead)
+    ts_end = ts_start + LOG_TS_W
+    badge_start = ts_end + LOG_COL_GAP
+    return ts_start, ts_end, badge_start, badge_start + LOG_BADGE_W
+
+
 
 def _log_badge(tag, level):
     """按 tag 决定日志级别徽标文案 (§2.5: tag 优先, 其次 level int)。"""
@@ -301,13 +323,18 @@ class ThreadSafeLog:
             self._buffer.append((msg, tag))
 
             # ── GUI 渲染: 只累积, 循环外一次性提交 ──
-            # UI Enhancement: GUI 日志 = "[HH:MM:SS] [LEVEL] msg"。
+            # UI Enhancement: GUI 日志 = "▌HH:MM:SS  徽标块  正文"。
             # §2.5: 四级 (INFO/SUCCESS/WARNING/ERROR) **均**带级别徽标, 且徽标**由 tag 判定**
             # (log1(msg,"success") 的 int 级别实为 LOG_INFO, 但徽标须为 [SUCCESS])。
+            # v6 (视觉稿 A5): 去掉 [ ] 方括号 —— 级别改由「定宽徽标块 + 底色块」承载
+            # (底色/字色 tag 由 ui/log_dock 批量施加), 时间戳降权, 正文回归中性色;
+            # 定宽块保证正文起始列对齐, 长日志可纵向扫读。
             if gui_ok:
                 ts = time.strftime("%H:%M:%S")
-                badge = _log_badge(tag, level)
-                line = "[{}] [{}] {}\n".format(ts, badge, msg)
+                # 徽标块: 定宽 8 列, 文案居中对齐 → 四级 chip 视觉等宽 (视觉稿 A5)
+                badge = _log_badge(tag, level).center(LOG_BADGE_W)
+                gap = " " * LOG_COL_GAP
+                line = "{}{}{}{}{}\n".format(ts, gap, badge, gap, msg)
                 if LOG_CBAR_INLINE:
                     # L4: 色条字形并入生产文本。级别 tag 的区间仍从行首开始
                     # (覆盖 ▌), 而 cbar_* tag 后配置、优先级更高 → ▌ 显示色条色,

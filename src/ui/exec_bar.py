@@ -79,8 +79,9 @@ import i18n  # 路线图 §5.6: UI 字符串目录 (默认 zh; 文本只作显�
 
 __all__ = [
     "build", "refresh_theme", "set_state", "get_widgets",
-    "get_exec_bar", "get_card_run", "get_run_bar", "get_run_bar_outer",
-    "get_run_canvas", "get_run_scrollbar", "get_run_overflow_hint",
+    "get_exec_bar", "get_card_run", "get_run_fixed", "get_run_bar",
+    "get_run_bar_outer", "get_run_canvas", "get_run_scrollbar",
+    "get_run_overflow_hint",
     "get_script_name_var", "get_script_switcher", "get_loop_count_var",
     "get_loop_combo", "get_exec_maxmin_var", "get_exec_maxmin_sp",
     "get_exec_stoponerror_var", "get_btn_validate", "get_btn_run",
@@ -108,9 +109,10 @@ _PAD = {"padx": 6, "pady": 3}
 _exec_bar = None            # root row1 常驻容器
 _card_run = None            # 运行控制条卡片
 _run_bar_outer = None       # 卡片内滚动区外框
-_run_canvas = None          # 横向滚动画布
+_run_fixed = None           # 运行组 (钉住, 不滚动)
+_run_canvas = None          # 参数组横向滚动画布
 _run_scrollbar = None       # 横向滚动条
-_run_bar = None             # 内容条 (Canvas 内 window)
+_run_bar = None             # 参数组内容条 (Canvas 内 window)
 _run_overflow_hint = None   # 溢出提示「⇄」
 _script_name_var = None     # StringVar 当前脚本名
 _script_switcher = None     # 最近脚本下拉
@@ -221,12 +223,13 @@ def build(parent, *, notebook, colors, fonts, deps=None):
     fonts   : {"title","body","small","button"} → 绑定模块级 FONT_*。
     deps    : 依赖注入字典 (键见模块 docstring)。
     """
-    global _exec_bar, _card_run, _run_bar_outer, _run_canvas, _run_scrollbar, \
-        _run_bar, _run_overflow_hint, _script_name_var, _script_switcher, \
-        _loop_count_var, _loop_combo, _exec_maxmin_var, _exec_maxmin_sp, \
-        _exec_stoponerror_var, _btn_validate, _btn_run, _btn_pause, _btn_step, \
-        _btn_stop, _btn_step_mode, _btn_debug_exec, _btn_vars_exec, _btn_debug_mode, \
-        _wf_ctx_frame, _wf_ctx_name, _wf_ctx_steps
+    global _exec_bar, _card_run, _run_bar_outer, _run_fixed, _run_canvas, \
+        _run_scrollbar, _run_bar, _run_overflow_hint, _script_name_var, \
+        _script_switcher, _loop_count_var, _loop_combo, _exec_maxmin_var, \
+        _exec_maxmin_sp, _exec_stoponerror_var, _btn_validate, _btn_run, \
+        _btn_pause, _btn_step, _btn_stop, _btn_step_mode, _btn_debug_exec, \
+        _btn_vars_exec, _btn_debug_mode, _wf_ctx_frame, _wf_ctx_name, \
+        _wf_ctx_steps
 
     _CTX.update(deps or {})
     _CTX["notebook"] = notebook
@@ -262,10 +265,18 @@ def build(parent, *, notebook, colors, fonts, deps=None):
 
     run_bar_outer = tkinter.Frame(card_run, bg=C["bgc"])
     run_bar_outer.grid(row=0, column=0, sticky="ew", padx=6, pady=4)
-    run_bar_outer.columnconfigure(0, weight=1)
+    run_bar_outer.columnconfigure(0, weight=0)   # #run-fixed (运行组, 钉住)
+    run_bar_outer.columnconfigure(1, weight=1)   # #run-scroll (参数组, 可滚动)
     _run_bar_outer = run_bar_outer
 
-    run_canvas = tkinter.Canvas(run_bar_outer, bg=C["bgc"],
+    # #run-fixed: 运行组钉住 —— 窄窗/分屏时「运行/停止」不再滑出视口 (v5 S2)
+    run_fixed = tkinter.Frame(run_bar_outer, bg=C["bgc"])
+    _run_fixed = run_fixed
+
+    # #run-scroll: 参数组横向滚动 (Canvas)
+    # width=1: 画布默认请求宽度 378 会撑大主窗最小宽度, 压到 1px 后由 sticky+weight 撑满剩余空间,
+    # 窄窗时参数区先收缩, 固定运行组保持可见 (v5 S2)。
+    run_canvas = tkinter.Canvas(run_bar_outer, bg=C["bgc"], width=1,
         height=ctrl_h("ctrl_h_lg"), highlightthickness=0, bd=0)
     run_scrollbar = tkinter.Scrollbar(run_bar_outer, orient="horizontal",
         command=run_canvas.xview, width=sp("sb_w_thin"))
@@ -274,7 +285,7 @@ def build(parent, *, notebook, colors, fonts, deps=None):
     _run_scrollbar = run_scrollbar
     _run_bar = run_bar
 
-    # 溢出提示「⇄」: 内容宽度超过可视宽度时显示 (item 11)
+    # 溢出提示「⇄」: 参数组内容宽度超过可视宽度时显示 (item 11)
     run_overflow_hint = tkinter.Label(run_bar_outer, text="⇄", font=FONT_SMALL,
         fg=C["fgm"], bg=C["bgc"])
     _run_overflow_hint = run_overflow_hint
@@ -283,94 +294,32 @@ def build(parent, *, notebook, colors, fonts, deps=None):
     run_canvas.bind("<Configure>", lambda e: update_overflow())
     run_canvas.create_window((0, 0), window=run_bar, anchor="w")
     run_canvas.configure(xscrollcommand=run_scrollbar.set)
-    run_canvas.grid(row=0, column=0, sticky="ew")
-    run_scrollbar.grid(row=1, column=0, sticky="ew")
+    run_fixed.grid(row=0, column=0, sticky="w")
+    run_canvas.grid(row=0, column=1, sticky="ew")
+    run_scrollbar.grid(row=1, column=1, sticky="ew")
 
-    # 脚本选择: 标签 + 最近脚本下拉 + 选择按钮
-    tkinter.Label(run_bar, text=i18n.t("exec.label_script"), font=FONT_SMALL, fg=C["fgm"],
-        bg=C["bgc"]).pack(side="left", padx=(2, 2))
-
-    script_name_var = tkinter.StringVar(value=i18n.t("exec.no_file"))
-    _script_name_var = script_name_var
-    # 快速切换：下拉框 + 浏览按钮
-    _script_switcher = ttk.Combobox(run_bar, textvariable=script_name_var,
-        font=FONT_BODY, state="readonly", width=26)
-    _script_switcher.pack(side="left", padx=(0, 4))
-
-    _script_switcher.bind("<<ComboboxSelected>>", on_script_switched)
-    update_recent_scripts()
-
-    ui_theme.roled(tkinter.Button(run_bar, text=i18n.t("exec.label_choose"), font=FONT_BUTTON, bg=C["ac"], fg=ui_theme.text_on(C["ac"]),
-        activebackground=C["ach"], activeforeground=ui_theme.text_on(C["ach"]),
-        relief="flat", bd=1,
-        cursor="hand2", padx=8, pady=2, command=select_script), "ac").pack(side="left", padx=(0, 4))
-
-    # 次数: 可编辑 + 预设 + 自定义 (默认「1」单次执行, 无限循环需显式选择)
-    tkinter.Label(run_bar, text=i18n.t("exec.label_loops"), font=FONT_SMALL, fg=C["fgm"],
-        bg=C["bgc"]).pack(side="left", padx=(6, 2))
-    loop_count_var = tkinter.StringVar(value=_loop_last)
-    _loop_count_var = loop_count_var
-    _loop_combo = ttk.Combobox(run_bar, textvariable=loop_count_var,
-        values=(i18n.t("exec.loop_infinite"), '1', '5', '10', '50',
-                i18n.t("exec.loop_custom")), width=8)
-    _loop_combo.pack(side="left", padx=(0, 4))
-    _loop_combo.bind("<<ComboboxSelected>>", on_loop_sel)
-
-    # 执行参数就地化 (与工作流/设置共用同一口径: MAX_EXECUTION_MINUTES / STOP_ON_ERROR)
-    tkinter.Label(run_bar, text=i18n.t("exec.label_maxmin"), font=FONT_SMALL, fg=C["fgm"],
-        bg=C["bgc"]).pack(side="left", padx=(sp(4), sp(2)))
-    exec_maxmin_var = tkinter.StringVar(value=str(state.MAX_EXECUTION_MINUTES))
-    _exec_maxmin_var = exec_maxmin_var
-    exec_maxmin_sp = tkinter.Spinbox(run_bar, textvariable=exec_maxmin_var, from_=0, to=1440,
-        width=4, font=FONT_SMALL, bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1)
-    exec_maxmin_sp.pack(side="left", padx=(0, sp(2)))
-    _exec_maxmin_sp = exec_maxmin_sp
-    tkinter.Label(run_bar, text=i18n.t("exec.label_minute"), font=FONT_SMALL, fg=C["fgm"],
-        bg=C["bgc"]).pack(side="left", padx=(0, sp(4)))
-    exec_stoponerror_var = tkinter.BooleanVar(value=bool(state.STOP_ON_ERROR))
-    _exec_stoponerror_var = exec_stoponerror_var
-    tkinter.Checkbutton(run_bar, text=i18n.t("exec.stop_on_error"), variable=exec_stoponerror_var, font=FONT_SMALL,
-        fg=C["fgm"], bg=C["bgc"], activebackground=C["bgc"], activeforeground=C["fgb"],
-        selectcolor=C["ebg"], bd=0, highlightthickness=0,
-        command=lambda: exec_params_commit()).pack(side="left", padx=(0, sp(4)))
-    exec_maxmin_sp.bind("<FocusOut>", lambda e: exec_params_commit())
-    exec_maxmin_sp.bind("<Return>", lambda e: exec_params_commit())
-
-    tkinter.Frame(run_bar, bg=C["bd"], width=sp(2), height=sp(22)).pack(
-        side="left", fill="y", padx=sp(6), pady=4)
-
-    # ✔ 校验 (运行前 dry-run; 默认只读展示问题, 不执行脚本)
-    # 置于四键同组之前: 与运行相关但不参与「运行/暂停/单步/停止」状态机
-    btn_validate = ui_theme.roled(tkinter.Button(run_bar, text=i18n.t("exec.btn_validate"), font=FONT_BUTTON, bg=C["ac"], fg=ui_theme.text_on(C["ac"]),
-        activebackground=C["ach"], activeforeground=ui_theme.text_on(C["ach"]), disabledforeground=C["fgm"],
-        relief="flat", bd=1,
-        cursor="hand2", padx=sp(8), pady=sp(2), command=_call_proxy("validate_script_cb")), "ac")
-    btn_validate.pack(side="left", padx=2)
-    _btn_validate = btn_validate
-
-    # 四键同组: ▶ 运行 / ⏸ 暂停 / ⏭ 单步 / ■ 停止
-    # (尺寸走 utils.sp 令牌; 四键文字统一白色, 与语义按钮一致)
-    # 语义角色显式登记 (换肤按角色回填, 不再按旧颜色值反推语义组)
-    btn_run = ui_theme.roled(tkinter.Button(run_bar, text=i18n.t("exec.btn_run"), font=FONT_BUTTON, bg=C["sc"], fg=ui_theme.text_on(C["sc"]),
+    # 运行控制四键 (钉住在 #run-fixed, 不随参数滚动): ▶ 运行 / ⏸ 暂停 / ⏭ 单步 / ■ 停止
+    # v5 S2: 运行组钉在视口最左, 参数组在右侧 Canvas 内滚动; 语义角色显式登记 (换肤按角色回填)。
+    btn_run = ui_theme.roled(tkinter.Button(run_fixed, text=i18n.t("exec.btn_run"), font=FONT_BUTTON, bg=C["sc"], fg=ui_theme.text_on(C["sc"]),
         activebackground=darken(C["sc"]), activeforeground=ui_theme.text_on(darken(C["sc"])), disabledforeground=C["fgm"],
         relief="flat", bd=1,
         cursor="hand2", padx=sp(8), pady=sp(2), command=shared_run), "sc")
     btn_run.pack(side="left", padx=2)
     _btn_run = btn_run
-    btn_pause = ui_theme.roled(tkinter.Button(run_bar, text="⏸ 暂停", font=FONT_BUTTON, bg=C["wn"], fg=ui_theme.text_on(C["wn"]),
+    btn_pause = ui_theme.roled(tkinter.Button(run_fixed, text="⏸ 暂停", font=FONT_BUTTON, bg=C["wn"], fg=ui_theme.text_on(C["wn"]),
         activebackground=darken(C["wn"]), activeforeground=ui_theme.text_on(darken(C["wn"])), disabledforeground=C["fgm"],
         relief="flat", bd=1,
         cursor="hand2", padx=sp(8), pady=sp(2), command=_CTX.get("toggle_pause")), "wn")
     btn_pause.pack(side="left", padx=2)
     _btn_pause = btn_pause
 
-    btn_step = ui_theme.roled(tkinter.Button(run_bar, text=i18n.t("exec.btn_step"), font=FONT_BUTTON, bg=C["ac"], fg=ui_theme.text_on(C["ac"]),
+    btn_step = ui_theme.roled(tkinter.Button(run_fixed, text=i18n.t("exec.btn_step"), font=FONT_BUTTON, bg=C["ac"], fg=ui_theme.text_on(C["ac"]),
         activebackground=C["ach"], activeforeground=ui_theme.text_on(C["ach"]), disabledforeground=C["fgm"],
         relief="flat", bd=1,
         cursor="hand2", padx=sp(8), pady=sp(2), command=_CTX.get("step_once")), "ac")
     btn_step.pack(side="left", padx=2)
     _btn_step = btn_step
-    btn_stop = ui_theme.roled(tkinter.Button(run_bar, text=i18n.t("exec.btn_stop"), font=FONT_BUTTON, bg=C["dg"], fg=ui_theme.text_on(C["dg"]),
+    btn_stop = ui_theme.roled(tkinter.Button(run_fixed, text=i18n.t("exec.btn_stop"), font=FONT_BUTTON, bg=C["dg"], fg=ui_theme.text_on(C["dg"]),
         activebackground=darken(C["dg"]), activeforeground=ui_theme.text_on(darken(C["dg"])), disabledforeground=C["fgm"],
         relief="flat", bd=1,
         cursor="hand2", padx=sp(8), pady=sp(2), command=shared_stop), "dg")
@@ -379,7 +328,6 @@ def build(parent, *, notebook, colors, fonts, deps=None):
 
     # 四键 tooltip (含用户配置快捷键); 单步右键 = 单步模式开关 (调试态内聚)
     try:
-        attach_tooltip(btn_validate, i18n.t("exec.tip_validate"))
         attach_tooltip(btn_run, tip_with_hotkey("运行", "HOTKEY_RUN"))
         attach_tooltip(btn_pause, tip_with_hotkey("暂停/继续", "HOTKEY_PAUSE"))
         attach_tooltip(btn_stop, tip_with_hotkey("停止", "HOTKEY_STOP"))
@@ -393,12 +341,68 @@ def build(parent, *, notebook, colors, fonts, deps=None):
     tkinter.Frame(run_bar, bg=C["bd"], width=sp(2), height=sp(22)).pack(
         side="left", fill="y", padx=sp(6), pady=4)
 
-    # 调试 / 变量入口 (调试态统一归此; 脚本编辑工具栏已移除该组, 避免两处状态不同步)
+    # 脚本选择: 标签 + 最近脚本下拉
+    # (「选择脚本」按钮已移除 —— 与脚本编辑/工作流工具栏的「打开脚本」功能重复)
+    tkinter.Label(run_bar, text=i18n.t("exec.label_script"), font=FONT_SMALL, fg=C["fgm"],
+        bg=C["bgc"]).pack(side="left", padx=(sp(2), sp(2)))
+
+    script_name_var = tkinter.StringVar(value=i18n.t("exec.no_file"))
+    _script_name_var = script_name_var
+    _script_switcher = ttk.Combobox(run_bar, textvariable=script_name_var,
+        font=FONT_BODY, state="readonly", width=24)
+    _script_switcher.pack(side="left", padx=(0, sp(8)))
+
+    _script_switcher.bind("<<ComboboxSelected>>", on_script_switched)
+    update_recent_scripts()
+
+    # 次数: 可编辑 + 预设 + 自定义 (默认「1」单次执行, 无限循环需显式选择)
+    tkinter.Label(run_bar, text=i18n.t("exec.label_loops"), font=FONT_SMALL, fg=C["fgm"],
+        bg=C["bgc"]).pack(side="left", padx=(0, sp(2)))
+    loop_count_var = tkinter.StringVar(value=_loop_last)
+    _loop_count_var = loop_count_var
+    _loop_combo = ttk.Combobox(run_bar, textvariable=loop_count_var,
+        values=(i18n.t("exec.loop_infinite"), '1', '5', '10', '50',
+                i18n.t("exec.loop_custom")), width=8)
+    _loop_combo.pack(side="left", padx=(0, sp(8)))
+    _loop_combo.bind("<<ComboboxSelected>>", on_loop_sel)
+
+    # 执行参数就地化 (与工作流/设置共用同一口径: MAX_EXECUTION_MINUTES / STOP_ON_ERROR)
+    tkinter.Label(run_bar, text=i18n.t("exec.label_maxmin"), font=FONT_SMALL, fg=C["fgm"],
+        bg=C["bgc"]).pack(side="left", padx=(0, sp(2)))
+    exec_maxmin_var = tkinter.StringVar(value=str(state.MAX_EXECUTION_MINUTES))
+    _exec_maxmin_var = exec_maxmin_var
+    exec_maxmin_sp = tkinter.Spinbox(run_bar, textvariable=exec_maxmin_var, from_=0, to=1440,
+        width=4, font=FONT_SMALL, bg=C["ebg"], fg=C["fgb"], relief="solid", bd=1)
+    exec_maxmin_sp.pack(side="left", padx=(0, sp(2)))
+    _exec_maxmin_sp = exec_maxmin_sp
+    tkinter.Label(run_bar, text=i18n.t("exec.label_minute"), font=FONT_SMALL, fg=C["fgm"],
+        bg=C["bgc"]).pack(side="left", padx=(0, sp(8)))
+    exec_stoponerror_var = tkinter.BooleanVar(value=bool(state.STOP_ON_ERROR))
+    _exec_stoponerror_var = exec_stoponerror_var
+    tkinter.Checkbutton(run_bar, text=i18n.t("exec.stop_on_error"), variable=exec_stoponerror_var, font=FONT_SMALL,
+        fg=C["fgm"], bg=C["bgc"], activebackground=C["bgc"], activeforeground=C["fgb"],
+        selectcolor=C["ebg"], bd=0, highlightthickness=0,
+        command=lambda: exec_params_commit()).pack(side="left", padx=(0, sp(8)))
+    exec_maxmin_sp.bind("<FocusOut>", lambda e: exec_params_commit())
+    exec_maxmin_sp.bind("<Return>", lambda e: exec_params_commit())
+
+    tkinter.Frame(run_bar, bg=C["bd"], width=sp(2), height=sp(22)).pack(
+        side="left", fill="y", padx=sp(6), pady=4)
+
+    # 调试 / 校验 / 变量入口 (调试态统一归此; 脚本编辑工具栏已移除该组, 避免两处状态不同步)
+    # ✔ 校验 已从「实心语义按钮」降级为 ghost, 与调试/变量同级颜色表达 (v5 V1: 全窗实心收敛)。
     btn_debug_exec = tkinter.Button(run_bar, text=i18n.t("exec.btn_debug"), font=FONT_BUTTON, bg=C["bgc"], fg=C["fgb"],
         activebackground=C["acl"], activeforeground=C["fgb"], relief="flat", bd=1,
         cursor="hand2", padx=sp(8), pady=sp(2), command=_call_proxy("toggle_debug_mode"))
     btn_debug_exec.pack(side="left", padx=2)
     _btn_debug_exec = btn_debug_exec
+
+    btn_validate = tkinter.Button(run_bar, text=i18n.t("exec.btn_validate"), font=FONT_BUTTON, bg=C["bgc"], fg=C["fgb"],
+        activebackground=C["acl"], activeforeground=C["fgb"], relief="flat", bd=1,
+        cursor="hand2", padx=sp(8), pady=sp(2), command=_call_proxy("validate_script_cb"))
+    btn_validate.pack(side="left", padx=2)
+    _btn_validate = btn_validate
+
     btn_vars_exec = tkinter.Button(run_bar, text=i18n.t("exec.btn_vars"), font=FONT_BUTTON, bg=C["bgc"], fg=C["fgb"],
         activebackground=C["acl"], activeforeground=C["fgb"], relief="flat", bd=1,
         cursor="hand2", padx=sp(8), pady=sp(2), command=_open_vars_entry)
@@ -408,6 +412,7 @@ def build(parent, *, notebook, colors, fonts, deps=None):
     _btn_debug_mode = btn_debug_mode
     try:
         attach_tooltip(btn_debug_exec, "调试模式 (断点/变量监视)")
+        attach_tooltip(btn_validate, i18n.t("exec.tip_validate"))
         attach_tooltip(btn_vars_exec, "变量监视器")
     except Exception:
         pass
@@ -456,7 +461,7 @@ def refresh_theme(dark=None, colors=None, prev=None):
         return
     _CTX["colors"] = C
     ui_theme = _CTX.get("ui_theme")
-    for w in (_btn_validate, _btn_run, _btn_pause, _btn_step, _btn_stop):
+    for w in (_btn_run, _btn_pause, _btn_step, _btn_stop):
         if w is None:
             continue
         try:
@@ -490,7 +495,7 @@ def update_overflow(event=None):
         bb = _run_canvas.bbox("all")
         need = bb[2] if bb else 0
         if need > _run_canvas.winfo_width() + sp(2):
-            _run_overflow_hint.grid(row=0, column=1, sticky="e", padx=(sp(2), 0))
+            _run_overflow_hint.grid(row=0, column=2, sticky="e", padx=(sp(2), 0))
         else:
             _run_overflow_hint.grid_remove()
     except Exception:
@@ -955,6 +960,10 @@ def get_card_run():
     return _card_run
 
 
+def get_run_fixed():
+    return _run_fixed
+
+
 def get_run_bar():
     return _run_bar
 
@@ -1093,9 +1102,9 @@ def get_widgets():
     """取回全部控件句柄 (与构建返回值一致)。"""
     return {
         "exec_bar": _exec_bar, "card_run": _card_run,
-        "run_bar_outer": _run_bar_outer, "run_canvas": _run_canvas,
-        "run_scrollbar": _run_scrollbar, "run_bar": _run_bar,
-        "run_overflow_hint": _run_overflow_hint,
+        "run_bar_outer": _run_bar_outer, "run_fixed": _run_fixed,
+        "run_canvas": _run_canvas, "run_scrollbar": _run_scrollbar,
+        "run_bar": _run_bar, "run_overflow_hint": _run_overflow_hint,
         "script_name_var": _script_name_var, "script_switcher": _script_switcher,
         "loop_count_var": _loop_count_var, "loop_combo": _loop_combo,
         "exec_maxmin_var": _exec_maxmin_var, "exec_maxmin_sp": _exec_maxmin_sp,

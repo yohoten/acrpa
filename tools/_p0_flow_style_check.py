@@ -10,8 +10,8 @@
   blend 纯函数: 线性混色正确 + 非法输入兜底
   resolve_style: ctx["style"] 覆盖回退; 缺失时回退默认键齐全
   实机(可用时):
-    A2 线宽 == sp(1) · 端口半径 == sp(4)
-    A3 禁用节点填充 == blend(类型色, flowbg, 0.4)
+    A2 线宽 == 1.5 · 端口半径 == sp(3)
+    A3 禁用节点填充 == blend(node_bg, flowbg, 0.4)   (§6: 节点底色统一 surface_alt)
     A1 ui_scale ∈ {1.0,1.25,1.5,2.0} 下 node_w(scale)/node_w(1.0) ≈ scale
        (含显式 1.0 vs 1.5 比值 ≈ 1.5)
     A7 ui_scale ∈ {1.0,1.25,1.5,2.0} × 深/浅两主题 = 8 组,
@@ -109,6 +109,7 @@ def t_pure():
 STYLE_LIGHT = {
     "flowbg": "#f8fafc", "disabled_mix": 0.4, "shadow": "#E1E1E1",
     "text_on_node": "#FFFFFF", "text_sub": "#E2E8F0",
+    "node_bg": "#F1F5F9", "node_text": "#1F2937", "node_text_sub": "#5F5F5F",
     "edge": "#5F5F5F", "edge_sel": "#0078D4", "edge_reject": "#C42B1C",
     "edge_back": "#8B5CF6", "walked": "#107C10", "terminal": "#5F5F5F",
     "disabled_color": "#94A3B8", "port_hover": "#0078D4",
@@ -116,6 +117,7 @@ STYLE_LIGHT = {
 STYLE_DARK = {
     "flowbg": "#0f172a", "disabled_mix": 0.4, "shadow": "#334155",
     "text_on_node": "#FFFFFF", "text_sub": "#CBD5E0",
+    "node_bg": "#232323", "node_text": "#C9C9C9", "node_text_sub": "#9A9A9A",
     "edge": "#A0A0A0", "edge_sel": "#4CC2FF", "edge_reject": "#FF99A4",
     "edge_back": "#8B5CF6", "walked": "#6CCB5F", "terminal": "#A0A0A0",
     "disabled_color": "#4A4A4A", "port_hover": "#4CC2FF",
@@ -239,24 +241,24 @@ def t_real_smoke():
                       ctx=_ctx_of(scale, dark), zoom=1.0)
             return cv
 
-        # ── A2 (ui_scale=1.0, 浅色): 连线线宽 == sp(1); 端口半径 == sp(4) ──
+        # ── A2 (ui_scale=1.0, 浅色): 连线线宽 == 1.5; 端口半径 == sp(3) ──
         cv = _render(1.0, False)
         widths = set()
         for it in cv.find_all():
             if cv.type(it) == "line" and "arrow" in [str(t) for t in cv.gettags(it)]:
                 widths.add(round(float(cv.itemcget(it, "width")), 3))
-        check(widths == {1.0}, "A2: zoom==1.0 连线线宽 == sp(1)=1.0 ({})".format(sorted(widths)))
+        check(widths == {1.5}, "A2: zoom==1.0 连线线宽 == 1.5 ({})".format(sorted(widths)))
         radii = set()
         for it in cv.find_all():
             if "port" in [str(t) for t in cv.gettags(it)]:
                 x1, y1, x2, y2 = cv.coords(it)
                 radii.add(round((x2 - x1) / 2.0, 3))
-        check(radii == {4.0}, "A2: 端口半径 == sp(4)=4.0 ({})".format(sorted(radii)))
+        check(radii == {3.0}, "A2: 端口半径 == sp(3)=3.0 ({})".format(sorted(radii)))
 
-        # ── A3: 禁用节点填充 == blend(类型色, flowbg, 0.4) 且 != #94A3B8 ──
-        expect = fc.blend("#9CA3AF", STYLE_LIGHT["flowbg"], 0.4)
+        # ── A3: 禁用节点填充 == blend(node_bg, flowbg, 0.4) 且 != #94A3B8 ──
+        expect = fc.blend(STYLE_LIGHT["node_bg"], STYLE_LIGHT["flowbg"], 0.4)
         fills = [cv.itemcget(it, "fill") for it in _node_shapes(cv)]
-        check(expect in fills, "A3: 禁用节点填充 == blend(类型色,flowbg,0.4)={}".format(expect))
+        check(expect in fills, "A3: 禁用节点填充 == blend(node_bg,flowbg,0.4)={}".format(expect))
         check("#94A3B8" not in fills, "A3: 禁用节点未再整体变灰 (#94A3B8 不出现)")
         cv.destroy()
 

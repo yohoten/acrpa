@@ -434,12 +434,18 @@ def check_theme_refresh_regressions():
         FAILS.append("G8 主题色板缺 hlbg 键或 utils._colors 委托丢失")
         _p("FAIL", "G8 主题色板缺 hlbg 键或 utils._colors 委托丢失")
 
-    # G9. _walk 覆盖 Menu / Checkbutton / Radiobutton (主窗 + settings)
-    if '"Menu"' in seg and '"Checkbutton", "Radiobutton"' in seg:
-        _p("OK", "G9 ACRPA._walk 覆盖 Menu/Checkbutton/Radiobutton (D5)")
+    # G9. 换肤 walk 覆盖 Menu / Checkbutton / Radiobutton (主窗 + settings)
+    # 懒换肤改造后 walk 已提到模块级 `_theme_walk` (原为 _refresh_theme 内闭包 _walk),
+    # 断言随之改为「模块级函数体」, 检查强度不变; 旧实现回退用 _refresh_theme 段。
+    _wt = _find_func(a_tree, "_theme_walk")
+    seg_walk = ast.get_source_segment(a_src, _wt) if _wt is not None else None
+    if seg_walk is None:
+        seg_walk = seg
+    if '"Menu"' in seg_walk and '"Checkbutton", "Radiobutton"' in seg_walk:
+        _p("OK", "G9 ACRPA._theme_walk 覆盖 Menu/Checkbutton/Radiobutton (D5)")
     else:
-        FAILS.append("G9 ACRPA._walk 覆盖不全 (Menu/Checkbutton/Radiobutton)")
-        _p("FAIL", "G9 ACRPA._walk 覆盖不全 (Menu/Checkbutton/Radiobutton)")
+        FAILS.append("G9 ACRPA._theme_walk 覆盖不全 (Menu/Checkbutton/Radiobutton)")
+        _p("FAIL", "G9 ACRPA._theme_walk 覆盖不全 (Menu/Checkbutton/Radiobutton)")
     # 阶段二第 4 项: 设置窗口 refresh_theme._walk 迁至 src/ui/settings/window.py,
     # 由「类名白名单逐类处理」改为「角色识别 + _acrpa_redraw 钩子」。检查强度不降:
     # 断言新 walk 保留 Entry/Spinbox 特化样式, 并经 _acrpa_redraw 兜底自绘控件。

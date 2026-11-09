@@ -42,6 +42,13 @@ def restyle_combobox_popdown(widget, colors=None):
         lb.configure(background=C["bgc"], foreground=C["fgb"],
                      selectbackground=C["acl"], selectforeground=C["fgt"],
                      font=FONT_BODY)
+        # §7: 下拉最大高 ≈240px (约 10 行), 长列表不再撑满屏幕遮挡下方控件;
+        # 靠近屏幕底部时 Tk 原生 popdown 会自动向上翻转, 无需自绘。
+        try:
+            if int(lb.cget("height")) > 10:
+                lb.configure(height=10)
+        except Exception:
+            pass
     except Exception:
         pass
 
@@ -224,6 +231,9 @@ def themed(key, fallback=None):
 FONT_TITLE  = "ACRPA_TITLE"
 FONT_BODY   = "ACRPA_BODY"
 FONT_LOG    = "ACRPA_LOG"
+# 日志徽标块 (INFO/SUCCESS/...) 专用: 同字族+同字号, 仅字重加粗 —— 等宽字体加粗
+# 不改变字宽, 徽标块列宽因此保持对齐 (视觉稿 A5: 级别徽标作色块, 需字形有分量)。
+FONT_LOG_BOLD = "ACRPA_LOG_BOLD"
 FONT_SMALL  = "ACRPA_SMALL"
 FONT_BUTTON = "ACRPA_BUTTON"
 FONT_SMALL_BOLD = "ACRPA_SMALL_BOLD"
@@ -246,6 +256,7 @@ _FONT_SPECS = {
     "ACRPA_TINY":       ("Microsoft YaHei UI", 9,  "normal"),
     "ACRPA_BUTTON":     ("Microsoft YaHei UI", 9,  "bold"),
     "ACRPA_LOG":        ("Consolas",           9,  "normal"),
+    "ACRPA_LOG_BOLD":   ("Consolas",           9,  "bold"),
     "ACRPA_ICON":       ("Segoe UI Symbol",    9,  "normal"),
     "ACRPA_ICON_MD":    ("Segoe UI Symbol",   11,  "normal"),
     "ACRPA_ICON_LG":    ("Segoe UI Symbol",   12,  "normal"),

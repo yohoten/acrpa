@@ -1705,16 +1705,28 @@ def open_ai_panel(mode="script", on_workflow_import=None):
 # ======================================================================
 # AI 智能调试对话框
 # ======================================================================
-def open_ai_debug_dialog():
-    """Open AI natural language debugging dialog."""
+def open_ai_debug_dialog(mode="script", workflow_steps=None):
+    """Open AI natural language debugging dialog.
+
+    v6 视觉对齐「AI 生成」面板 (open_ai_panel): 顶部状态卡 (标题 + API/模型) →
+    建议问题 chip → 聊天式输入卡 → AI 回答卡 → 底部操作条。
+    mode: "script" (默认, 脚本编辑) | "workflow" (工作流 Tab, 步骤摘要作为上下文);
+    仅文案/快捷问题/上下文来源随 mode 变化, 提问→后台分析→展示回答的流程不变。
+    """
     try:
-        from ai_client import has_ai_key
-        _has_key = has_ai_key()
+        from ai_client import has_ai_key, resolve_model
     except Exception:
-        _has_key = bool(state.API_KEY)
-    if not _has_key:
+        def has_ai_key():
+            return bool(getattr(state, "API_KEY", ""))
+        def resolve_model():
+            return ""
+    if not has_ai_key():
         messagebox.showwarning("需要 API Key", "AI 调试功能未配置可用的 AI 密钥（请在设置中配置提供商与密钥）")
         return
+
+    _is_wf = (mode == "workflow")
+    _wf_steps = [str(s) for s in (workflow_steps or [])]
+    _model_name = resolve_model() or "默认"
 
     dlg = tkinter.Toplevel(root)
     # v3 §2.3 模板: 从窗口骨架统一 尺寸/最小尺寸/居中/模态/外边距 (字面量 → token)
@@ -1724,91 +1736,206 @@ def open_ai_debug_dialog():
         min_size=("dlg_min_w", "dlg_min_h"), parent=root, modal=True,
         icon_setter=_set_window_icon, colors=C)
     ai_body = shell.content
-    ai_body.rowconfigure(3, weight=1)
+    ai_body.columnconfigure(0, weight=1)
+    ai_body.rowconfigure(3, weight=1)      # 回答区随窗口伸展
 
-    # Title
-    title_frame = tkinter.Frame(ai_body, bg=C["bgc"])
-    title_frame.grid(row=0, column=0, sticky="ew", pady=(0, gap("gap_tight")))
-    tkinter.Label(title_frame, text="AI 智能调试", font=FONT_TITLE, bg=C["bgc"],
-        fg=C["fgt"]).pack(side="left")
-    tkinter.Label(title_frame, text="用自然语言提问，AI 分析执行记录回答",
-        font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"]).pack(side="left", padx=(sp("sp_sm"), 0))
+    # ═══ Row 0: 顶部状态卡 (标题 + 副标题 + API 状态/模型, 与 AI 生成面板同构) ═══
+    top_bar = tkinter.Frame(ai_body, bg=C["bgc"],
+                            highlightbackground=C["bd"], highlightthickness=1)
+    top_bar.grid(row=0, column=0, sticky="ew", pady=(0, sp("gap_tight")))
+    top_bar.columnconfigure(0, weight=1)
 
-    # Quick questions
-    quick_frame = tkinter.Frame(ai_body, bg=C["bgc"])
-    quick_frame.grid(row=1, column=0, sticky="ew", pady=(0, gap("gap_tight")))
-    quick_questions = [
-        "为什么最后一条命令失败了?",
-        "哪行命令最耗时?",
-        "脚本为什么停止了?",
-        "变量值是否符合预期?",
-        "有哪些优化建议?",
-    ]
+    head = tkinter.Frame(top_bar, bg=C["bgc"])
+    head.grid(row=0, column=0, sticky="ew", padx=sp("sp_sm"), pady=(sp("gap"), 0))
+    head.columnconfigure(0, weight=1)
+
+    _title_lbl = tkinter.Label(
+        head, text=("AI 智能调试 · 工作流" if _is_wf else "AI 智能调试"),
+        font=FONT_TITLE, bg=C["bgc"], fg=C["fgt"])
+    _ui_theme.set_fg_token(_title_lbl, "fgt")
+    _title_lbl.grid(row=0, column=0, sticky="w")
+
+    info_frame = tkinter.Frame(head, bg=C["bgc"])
+    info_frame.grid(row=0, column=1, sticky="e")
+    api_lbl = tkinter.Label(info_frame, text=" ● ", font=FONT_SMALL,
+                            bg=C["bgc"], fg=C["sc"], cursor="hand2")
+    _ui_theme.set_fg_token(api_lbl, "sc")
+    api_lbl.pack(side="left")
+    model_lbl = tkinter.Label(info_frame, text="模型: {}  ".format(_model_name),
+                              font=FONT_TINY, bg=C["bgc"], fg=C["fgm"],
+                              cursor="hand2")
+    model_lbl.pack(side="left")
+
+    def _open_ai_settings():
+        try:
+            from ui.settings.window import open_settings_window
+            open_settings_window()
+        except Exception:
+            pass
+    api_lbl.bind("<Button-1>", lambda e: _open_ai_settings())
+    model_lbl.bind("<Button-1>", lambda e: _open_ai_settings())
+    attach_tooltip(api_lbl, "已配置, 点击修改设置")
+    attach_tooltip(model_lbl, "当前模型: {}\n点击修改设置".format(_model_name))
+
+    tkinter.Label(
+        top_bar,
+        text=("基于最近的执行日志与当前工作流步骤回答提问" if _is_wf
+              else "基于最近的执行日志与当前脚本内容回答提问"),
+        font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"], anchor="w").grid(
+        row=1, column=0, sticky="w", padx=sp("sp_sm"), pady=(0, sp("gap_tight")))
+
+    # ═══ Row 1: 建议问题 (chip 两列, 与 AI 生成面板「建议试试」同规格) ═══
+    quick_frame = tkinter.Frame(ai_body, bg=C["bgc"],
+                                highlightbackground=C["bd"], highlightthickness=1)
+    quick_frame.grid(row=1, column=0, sticky="ew", pady=(0, sp("gap_tight")))
+    tkinter.Label(quick_frame, text="💡 建议试试:", font=FONT_SMALL,
+                  bg=C["bgc"], fg=C["fgm"]).grid(
+        row=0, column=0, columnspan=2, sticky="w",
+        padx=sp("gap"), pady=(sp("gap"), sp("gap_tight")))
+    quick_questions = (["为什么某个节点没有执行?", "流程在哪一步耗时最长?",
+                        "条件分支为什么走了 else?", "循环为什么提前结束?",
+                        "有哪些稳定性优化建议?"]
+                       if _is_wf else
+                       ["为什么最后一条命令失败了?", "哪行命令最耗时?",
+                        "脚本为什么停止了?", "变量值是否符合预期?",
+                        "有哪些优化建议?"])
     for i, q in enumerate(quick_questions):
-        btn = tkinter.Button(quick_frame, text=q, font=FONT_TINY,
-            bg=C["acl"], fg=C["ac"], relief="raised", bd=1, cursor="hand2",
-            command=lambda qq=q: question_var.set(qq))
-        btn.pack(side="left", padx=sp("hairline"), pady=sp("hairline"))
+        chip = tkinter.Button(quick_frame, text=q, font=FONT_SMALL,
+            bg=C["bgc"], fg=C["ac"], relief="flat", bd=1, cursor="hand2",
+            activebackground=C["acl"], activeforeground=C["ach"],
+            highlightbackground=C["bd"], highlightthickness=1,
+            padx=sp("gap"), pady=sp("gap_tight"), anchor="w",
+            command=lambda qq=q: _use_quick(qq))
+        chip.grid(row=1 + i // 2, column=i % 2, sticky="ew",
+                  padx=((sp("gap"), sp("gap_tight")) if i % 2 == 0
+                        else (0, sp("gap"))),
+                  pady=(0, sp("gap_tight")))
+        _ui_theme.set_role(chip, "ac")
+    quick_frame.columnconfigure(0, weight=1)
+    quick_frame.columnconfigure(1, weight=1)
 
-    # Question input
-    input_frame = tkinter.Frame(ai_body, bg=C["bgc"])
-    input_frame.grid(row=2, column=0, sticky="ew", pady=(0, gap("gap_tight")))
-    input_frame.columnconfigure(0, weight=1)
+    # ═══ Row 2: 输入卡 (多行问题 + 发送按钮, 与 AI 生成面板输入栏同构) ═══
+    input_card = tkinter.Frame(ai_body, bg=C["bgc"],
+                               highlightbackground=C["bd"], highlightthickness=1)
+    input_card.grid(row=2, column=0, sticky="ew", pady=(0, sp("gap_tight")))
+    input_card.columnconfigure(0, weight=1)
 
-    question_var = tkinter.StringVar(value="请分析最近的执行情况，有什么问题?")
-    question_entry = tkinter.Entry(input_frame, textvariable=question_var,
-        font=FONT_BODY, relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"])
-    question_entry.grid(row=0, column=0, sticky="ew", padx=(0, sp("gap_tight")))
-    question_entry.select_range(0, "end")
+    question_entry = tkinter.Text(input_card, height=2, font=FONT_BODY,
+        bg=C["ebg"], fg=C["fgb"], wrap="word", relief="flat", bd=0,
+        padx=sp("gap"), pady=sp("gap_tight"), insertbackground=C["fgt"],
+        selectbackground=C["acl"], selectforeground=C["fgt"],
+        highlightbackground=C["bd"], highlightthickness=1)
+    question_entry.grid(row=0, column=0, sticky="ew",
+                        padx=sp("gap"), pady=(sp("gap_tight"), 0))
 
-    ask_btn = tkinter.Button(input_frame, text="▶ 提问",
+    _PH_TEXT = ("例如: 为什么第 3 个节点被跳过?" if _is_wf
+                else "例如: 请分析最近的执行情况，有什么问题?")
+    _ph_on = [True]
+
+    def _show_ph():
+        question_entry.delete("1.0", "end")
+        question_entry.insert("1.0", _PH_TEXT)
+        question_entry.tag_add("ph", "1.0", "end")
+        question_entry.tag_configure("ph", foreground=C["fgm"])
+        _ph_on[0] = True
+
+    def _clear_ph(event=None):
+        if _ph_on[0]:
+            question_entry.delete("1.0", "end")
+            question_entry.tag_remove("ph", "1.0", "end")
+            _ph_on[0] = False
+
+    def _get_question():
+        return "" if _ph_on[0] else question_entry.get("1.0", "end").strip()
+
+    def _use_quick(text):
+        """点击建议问题 → 填入输入框并聚焦 (与 AI 生成面板 _use_suggestion 一致)。"""
+        _ph_on[0] = False
+        question_entry.delete("1.0", "end")
+        question_entry.tag_remove("ph", "1.0", "end")
+        question_entry.insert("1.0", text)
+        question_entry.focus_set()
+
+    question_entry.bind("<FocusIn>", _clear_ph)
+    question_entry.bind("<Button-1>", _clear_ph)
+    _show_ph()
+
+    ask_btn = tkinter.Button(input_card, text="发送",
         font=FONT_BUTTON, bg=C["ac"], fg=_ui_theme.text_on(C["ac"]),
-        relief="flat", bd=1, padx=sp("sp_md"), pady=sp("gap_tight"), cursor="hand2")
+        relief="flat", bd=1, padx=sp("sp_md"), pady=sp("gap_tight"), cursor="hand2",
+        activebackground=C["ach"], activeforeground=_ui_theme.text_on(C["ach"]),
+        disabledforeground=C["fgm"])
     _ui_theme.set_role(ask_btn, "ac")
-    ask_btn.grid(row=0, column=1)
-    attach_tooltip(ask_btn, "提交问题给 AI 分析执行日志")
+    ask_btn.grid(row=0, column=1, sticky="ns",
+                 padx=(0, sp("gap")), pady=(sp("gap_tight"), 0))
+    attach_tooltip(ask_btn, "提交问题给 AI 分析 (Enter 发送, Shift+Enter 换行)")
+    tkinter.Label(input_card, text="Enter 发送 · Shift+Enter 换行", font=FONT_TINY,
+                  bg=C["bgc"], fg=C["fgd"], anchor="e").grid(
+        row=1, column=0, sticky="e", padx=sp("gap"), pady=(0, sp("gap_tight")))
 
-    # Answer area
+    # ═══ Row 3: 回答卡 (卡片头 + 只读正文, 与 AI 生成面板消息气泡同层级) ═══
     answer_frame = tkinter.Frame(ai_body, bg=C["bgc"],
         highlightbackground=C["bd"], highlightthickness=1)
-    answer_frame.grid(row=3, column=0, sticky="nsew", pady=(0, gap("gap_tight")))
+    answer_frame.grid(row=3, column=0, sticky="nsew", pady=(0, sp("gap_tight")))
     answer_frame.columnconfigure(0, weight=1)
-    answer_frame.rowconfigure(0, weight=1)
+    answer_frame.rowconfigure(1, weight=1)
+
+    answer_head = tkinter.Frame(answer_frame, bg=C["bgc"])
+    answer_head.grid(row=0, column=0, columnspan=2, sticky="ew",
+                     padx=sp("gap"), pady=(sp("gap_tight"), sp("hairline")))
+    _ans_title = tkinter.Label(answer_head, text="AI 回答", font=FONT_BUTTON,
+                               bg=C["bgc"], fg=C["fgb"])
+    _ans_title.pack(side="left")
+    tkinter.Label(answer_head, text="只读 · 可选中复制", font=FONT_TINY,
+                  bg=C["bgc"], fg=C["fgd"]).pack(side="right")
 
     answer_txt = tkinter.Text(answer_frame, font=FONT_BODY,
         bg=C["logbg"], fg=C["logfg"], wrap="word", relief="flat", bd=0,
         padx=sp("sp_sm"), pady=sp("gap"), state="disabled",
-        selectbackground=C["acl"], selectforeground=C["fgt"])
-    answer_txt.grid(row=0, column=0, sticky="nsew")
-    answer_scroll = tkinter.Scrollbar(answer_frame, width=sp("sb_w"), relief="flat",
-        bg=C["bd"], troughcolor=C["logbg"])
-    answer_scroll.grid(row=0, column=1, sticky="ns")
+        selectbackground=C["acl"], selectforeground=C["fgt"],
+        highlightthickness=0)
+    answer_txt.grid(row=1, column=0, sticky="nsew")
+    # 空闲占位说明 (首次提问时被 _do_ask 清空)
+    answer_txt.config(state="normal")
+    answer_txt.insert("1.0", "提问后，AI 的回答会显示在这里。")
+    answer_txt.tag_configure("hint", foreground=C["fgd"])
+    answer_txt.tag_add("hint", "1.0", "end")
+    answer_txt.config(state="disabled")
+    answer_scroll = ttk.Scrollbar(answer_frame, orient="vertical",
+                                  command=answer_txt.yview)
+    answer_scroll.grid(row=1, column=1, sticky="ns")
     answer_txt.config(yscrollcommand=answer_scroll.set)
-    answer_scroll.config(command=answer_txt.yview)
 
-    # Status
-    status_var = tkinter.StringVar(value="输入问题后点击提问（需要配置 API Key）")
+    # ═══ Row 4: 状态行 (✔/✘/⧗ 前缀由 _do_ask 写入) ═══
+    status_var = tkinter.StringVar(value="就绪 · 输入问题后点击发送")
     status_label = tkinter.Label(ai_body, textvariable=status_var, font=FONT_SMALL,
-        bg=C["bgc"], fg=C["fgm"])
-    status_label.grid(row=4, column=0, sticky="w", pady=(0, gap("gap_tight")))
+        bg=C["bgc"], fg=C["fgm"], anchor="w")
+    status_label.grid(row=4, column=0, sticky="ew", pady=(0, sp("gap_tight")))
 
-    # Progress bar
+    # ═══ Row 5: 进度条 (仅在分析中启动, 静止时无动画开销) ═══
     progress = ttk.Progressbar(ai_body, mode="indeterminate",
                                length=sp("dlg_sm_w") // 2)
-    progress.grid(row=5, column=0, sticky="ew", pady=(0, gap("gap_tight")))
+    progress.grid(row=5, column=0, sticky="ew", pady=(0, sp("gap_tight")))
+    progress.grid_remove()      # 空闲不占位/不动画, 分析中才出现
 
     def _do_ask():
-        question = question_var.get().strip()
+        if _ph_on[0]:
+            show_toast(root, "请输入问题", "warning")
+            question_entry.focus_set()
+            return
+        question = _get_question()
         if not question:
             show_toast(root, "请输入问题", "warning")
             return
 
+        progress.grid()
         progress.start(10)
-        status_var.set("AI 正在分析...")
+        status_var.set("⧗ AI 正在分析...")
         ask_btn.config(state="disabled")
         answer_txt.config(state="normal")
         answer_txt.delete("1.0", "end")
-        answer_txt.insert("1.0", "⧗ 正在分析执行数据和日志，请稍候...\n")
+        answer_txt.insert("1.0", "⧗ AI 正在分析{}，请稍候...\n".format(
+            "工作流步骤与执行日志" if _is_wf else "执行数据和日志"))
         answer_txt.config(state="disabled")
 
         def _ask_thread():
@@ -1823,10 +1950,17 @@ def open_ai_debug_dialog():
                 log_buffer = _tlog._buffer if hasattr(_tlog, '_buffer') else []
                 rows = getattr(state, '_editor_rows', [])
 
-                result = ai_debug_explain(question, timings, log_buffer, variables, rows)
+                if _is_wf:
+                    # 工作流: 步骤摘要作为上下文 (脚本行数据与工作流 Tab 无关, 不混入)
+                    result = ai_debug_explain(question, timings, log_buffer,
+                                              variables, None,
+                                              workflow_steps=_wf_steps)
+                else:
+                    result = ai_debug_explain(question, timings, log_buffer, variables, rows)
 
                 def _on_result():
                     progress.stop()
+                    progress.grid_remove()
                     ask_btn.config(state="normal")
                     answer_txt.config(state="normal")
                     answer_txt.delete("1.0", "end")
@@ -1841,6 +1975,7 @@ def open_ai_debug_dialog():
             except Exception as e:
                 def _on_error(err=str(e)):
                     progress.stop()
+                    progress.grid_remove()
                     ask_btn.config(state="normal")
                     status_var.set("✘ 出错: {}".format(err))
                 dlg.after(0, _on_error)
@@ -1848,29 +1983,47 @@ def open_ai_debug_dialog():
         threading.Thread(target=_ask_thread, daemon=True).start()
 
     ask_btn.config(command=_do_ask)
-    question_entry.bind("<Return>", lambda e: _do_ask())
+
+    def _on_entry_return(event=None):
+        """Enter 发送; Shift+Enter 换行 (与 AI 生成面板输入栏一致)。"""
+        try:
+            if event is not None and bool(event.state & 0x0001):   # Shift 按住 → 放行换行
+                return None
+        except Exception:
+            pass
+        _do_ask()
+        return "break"
+
+    question_entry.bind("<Return>", _on_entry_return)
+    question_entry.bind("<Control-Return>", lambda e: (_do_ask(), "break"))
 
     # Copy answer button
     def _copy_answer():
         content = answer_txt.get("1.0", "end-1c")
-        if content.strip():
+        if content.strip() and content.strip() != "提问后，AI 的回答会显示在这里。":
             import pyperclip
             pyperclip.copy(content)
             show_toast(root, "已复制到剪贴板", "success")
 
-    btn_frame = tkinter.Frame(dlg, bg=C["bgc"])
-    btn_frame.grid(row=6, column=0, sticky="ew", padx=sp("sp_md"), pady=(0, sp("sp_md")))
+    # ═══ Row 6: 底部操作条 (复制回答 secondary + 关闭 secondary; 不再用红实心) ═══
+    btn_frame = tkinter.Frame(ai_body, bg=C["bgc"])
+    btn_frame.grid(row=6, column=0, sticky="ew", pady=(sp("hairline"), 0))
     _copy_btn = tkinter.Button(btn_frame, text="复制回答", font=FONT_BUTTON,
-        bg=C["bgc"], fg=C["fgb"], relief="flat", bd=1, padx=sp("sp_md"), pady=sp("gap_tight"),
-        command=_copy_answer)
+        bg=C["bgc"], fg=C["fgb"], relief="flat", bd=1, cursor="hand2",
+        highlightbackground=C["bd"], highlightthickness=1,
+        activebackground=C["caption_hover"], activeforeground=C["fgt"],
+        padx=sp("sp_md"), pady=sp("gap_tight"), command=_copy_answer)
     _copy_btn.pack(side="left")
     attach_tooltip(_copy_btn, "复制 AI 回答到剪贴板")
-    _ui_theme.roled(tkinter.Button(btn_frame, text="关闭", font=FONT_BUTTON,
-        bg=C["dg"], fg=_ui_theme.text_on(C["dg"]),
-        relief="flat", bd=1, padx=sp("sp_lg"), pady=sp("gap_tight"),
-        command=dlg.destroy), "dg").pack(side="right")
+    _close_btn = tkinter.Button(btn_frame, text="关闭", font=FONT_BUTTON,
+        bg=C["bgc"], fg=C["fgb"], relief="flat", bd=1, cursor="hand2",
+        highlightbackground=C["bd"], highlightthickness=1,
+        activebackground=C["caption_hover"], activeforeground=C["fgt"],
+        padx=sp("sp_lg"), pady=sp("gap_tight"), command=dlg.destroy)
+    _close_btn.pack(side="right")
 
     dlg.bind("<Escape>", lambda e: dlg.destroy())
+    question_entry.focus_set()
 
 
 # ======================================================================
@@ -2841,6 +2994,31 @@ def build_sched_manager(parent, win_parent=None, show_log_button=True):
     mgr_tree.configure(yscrollcommand=msy.set)
     mgr_tree.grid(row=0, column=0, sticky="nsew"); msy.grid(row=0, column=1, sticky="ns")
 
+    # v6 §5.3/§5.4: 任务表空态浮层 (图标 + 主句 + 副句 + [新建任务] 主按钮)。
+    # 与表体同格 grid + lift 遮盖; 静态控件, 显隐各一次 Tcl 调用, 无重绘负担。
+    _mgr_empty = tkinter.Frame(list_f, bg=C["bgc"])
+    _mgr_empty.grid(row=0, column=0, columnspan=2, sticky="nsew")
+    _mgr_empty_box = tkinter.Frame(_mgr_empty, bg=C["bgc"])
+    _mgr_empty_box.pack(expand=True)
+    tkinter.Label(_mgr_empty_box, text="◌", font=FONT_TITLE,
+                  bg=C["bgc"], fg=C["fgd"]).pack()
+    tkinter.Label(_mgr_empty_box, text="暂无计划任务", font=FONT_BODY,
+                  bg=C["bgc"], fg=C["fgm"]).pack(pady=(sp("gap_tight"), 0))
+    tkinter.Label(_mgr_empty_box, text="点击「新建任务」添加第一个定时执行",
+                  font=FONT_SMALL, bg=C["bgc"], fg=C["fgd"]).pack()
+    _btn(_mgr_empty_box, "新建任务", _mgr_new_task, "ac", "white").pack(
+        pady=(sp("gap_tight"), 0))
+
+    def _mgr_sync_empty(row_count, query):
+        try:
+            if row_count or query:
+                _mgr_empty.grid_remove()
+            else:
+                _mgr_empty.grid()
+                _mgr_empty.lift()
+        except Exception:                       # noqa: BLE001
+            pass
+
     _mgr_sig = {"v": None}
 
     def _mgr_update_count(shown, query):
@@ -2877,6 +3055,7 @@ def build_sched_manager(parent, win_parent=None, show_log_button=True):
             vals = (row["name"], row["target"], row["plan"],
                     row["next_run"], row["last_run"], row["status"])
             rows.append((row["id"], tag, vals))
+        _mgr_sync_empty(len(rows), query)
         new_sig = (query, tuple(rows))
         if _mgr_sig["v"] == new_sig:
             _mgr_update_count(len(rows), query)

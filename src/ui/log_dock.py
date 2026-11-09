@@ -12,6 +12,14 @@
     `ui.theme.subscribe(refresh_theme)` 自注册 —— _refresh_theme 不再出现
     这两处具名回填。
 
+v6 视觉改造 (docs/design/2026-11-07-ACRPA-UI视觉优化方案-v5.md · A5/A6)
+---------------------------------------------------------------------
+原「标题行 + 工具条行」两行合并为**单行头** (标题 / 计数 / 级别视图 / 搜索框 /
+搜索·下一个 / 自动滚动 / 清空·导出·收起), 释放约 30px 纵向空间给日志体;
+日志行改为「时间戳降权 + 定宽徽标色块 + 中性正文」(版式常量唯一真源在
+core.log:LOG_TS_W / LOG_BADGE_W / LOG_COL_GAP), 灰度与语义色只保留在
+「左缘色条 + 徽标块」两处, 正文回归可读中性色; 另加行悬停提示。
+
 设计约束
 --------
 · **零 GUI 副作用**: `import ui.log_dock` 不建窗、不建 Tk 对象 (仅 import tkinter);
@@ -19,6 +27,7 @@
   (src/ 内既有约定: 模块间一律依赖注入, 无反向 import 宿主);
 · **字体角色不复制定义**: `FONT_*` 由 build() 从注入值绑定, 本模块不自建
   `_FONT_SPECS` (唯一真源仍在 utils);
+· **配色不自建**: 徽标色块/悬停底等新色一律取 colors() 的 `log_*` 键;
 · **set_tlog 契约**: build() 内仍调用一次注入的 `utils.set_tlog(_tlog)`, 使
   `utils.log1` 全库可用; 宿主可经 get_tlog() 取回实例。
 
@@ -55,7 +64,6 @@ import datetime
 import os
 import tkinter
 from tkinter import filedialog
-from tkinter import ttk
 
 __all__ = [
     "build", "init_ctx", "refresh_theme", "flush_and_apply",
@@ -74,9 +82,52 @@ FONT_BODY = None
 FONT_SMALL = None
 FONT_BUTTON = None
 FONT_LOG = None
+FONT_SMALL_BOLD = None      # 头部「运行日志」标题 (语义: 小号加粗)
+FONT_LOG_BOLD = None        # 徽标色块 (等宽加粗, 列宽不变)
 
-# 卡片内边距 (与宿主 build_app 的 PI 同规格: {"padx":6,"pady":2})
-_PI = {"padx": 6, "pady": 2}
+# 头部留白 (设计 px, 经 sp() 缩放): 左右 10 / 上下 4 —— 单行头 ≈ 32px
+_PAD_X = 10
+_PAD_Y = 4
+
+# 级别 → (徽标 tag, 徽标字色 token): 徽标块 = 定宽色块 + 级别色字 (§2.5 四级)
+_BADGE_SPEC = (
+    ("info", "lbadge_info", "log_info"),
+    ("success", "lbadge_success", "log_success"),
+    ("warning", "lbadge_warning", "log_warn"),
+    ("error", "lbadge_error", "log_error"),
+)
+_BADGE_TAG_OF = dict((lv, tag) for lv, tag, _tok in _BADGE_SPEC)
+_BADGE_NAME_OF = dict((lv, name) for lv, name in (
+    ("info", "INFO"), ("success", "SUCCESS"),
+    ("warning", "WARNING"), ("error", "ERROR")))
+
+# 行版式常量与生产端 (core/log.py) **同源**: 列宽/列距只有一份定义, 本模块只读派生值。
+try:
+    from core.log import (LOG_TS_W as _CORE_TS_W, LOG_BADGE_W as _CORE_BADGE_W,
+                          LOG_COL_GAP as _CORE_COL_GAP, log_row_layout as _core_layout)
+except Exception:                       # core.log 不可用 (孤立导入) → 与默认版式一致
+    _CORE_TS_W, _CORE_BADGE_W, _CORE_COL_GAP = 8, 8, 2
+
+    def _core_layout(lead=1):
+        ts_a = int(lead)
+        b_a = ts_a + _CORE_TS_W + _CORE_COL_GAP
+        return ts_a, ts_a + _CORE_TS_W, b_a, b_a + _CORE_BADGE_W
+
+LOG_TS_W = _CORE_TS_W
+LOG_BADGE_W = _CORE_BADGE_W
+
+# 行悬停 (视觉稿 A5: 光标所在行淡底提示) —— 只记「上一个悬停行」, 换行才动 Tcl
+_hover = {"line": 0}
+
+# 级别视图选项 = 徽标去括号 (§2.5 权威: 过滤下拉文案 = 徽标去括号)
+_LEVEL_CHOICES = ("全部", "INFO", "SUCCESS", "WARNING", "ERROR")
+
+# 单行头控件登记表 (换肤按此逐项回填; build 填充, refresh_theme 消费)
+_UI = {}
+
+# 单行头自适应: 关键字框是唯一的「弹性」控件 (宽度按剩余空间伸缩 12..26 字符),
+# 其余控件保持自然宽度 —— 窄窗时不至于把右侧「清空/导出/收起」挤出可视区。
+_FIT = {"cols": 0}
 
 # ── 模块级控件引用 (build() 后可用; 宿主经 get_* 取回, 亦可直读) ──
 _rz = None                  # 日志 Text (宿主 _periodic / tools 直读)
@@ -158,13 +209,26 @@ def init_ctx(**kw):
 
 def _bind_fonts(fonts):
     """把注入的字体角色绑定到模块级 FONT_* (唯一真源仍是 utils)。"""
-    global FONT_TITLE, FONT_BODY, FONT_SMALL, FONT_BUTTON, FONT_LOG
+    global FONT_TITLE, FONT_BODY, FONT_SMALL, FONT_BUTTON, FONT_LOG, \
+        FONT_SMALL_BOLD, FONT_LOG_BOLD
     fonts = fonts or {}
     FONT_TITLE = fonts.get("title")
     FONT_BODY = fonts.get("body")
     FONT_SMALL = fonts.get("small")
     FONT_BUTTON = fonts.get("button")
     FONT_LOG = fonts.get("log")
+    # 新增角色缺失时按语义回退 (旧注入点只传 5 个键, 不得因此报错)
+    FONT_SMALL_BOLD = fonts.get("small_bold") or FONT_SMALL or FONT_BODY
+    FONT_LOG_BOLD = fonts.get("log_bold") or FONT_LOG
+
+
+def _spx(n):
+    """设计 px → 实际 px (经 utils.sp 缩放; 未注入 utils 时按原值, 绝不抛错)。"""
+    try:
+        from utils import sp as _sp
+        return _sp(n)
+    except Exception:
+        return int(n)
 
 
 def _toast(msg, kind="info", ms=2000):
@@ -190,6 +254,134 @@ def _log1(msg, tag=None):
 
 
 # ══════════════════════════════════════════════════════════════════════
+# 日志 tag 表 (建窗与换肤共用同一份配置, 避免两处漂移)
+# ══════════════════════════════════════════════════════════════════════
+
+def _configure_tags(rz, C):
+    """配置日志 Text 的全部 tag (唯一实现, 建窗与 refresh_theme 都调它)。
+
+    **tag 优先级由创建顺序决定** (Tk: 后创建者优先), 故顺序不可随意调整:
+      级别(整行字色) → cbar_*(行首色条) → lzebra(斑马底) → lhover(悬停底)
+      → lts(时间戳字色) → lbadge_*(徽标块字色+底色) → search_hit(搜索命中)
+    换肤时只 reconfigure 已存在的 tag, 不新建 → 优先级保持不变。
+    """
+    get = C.get
+    # ① 级别 tag: 整行前景 = 正文色。级别色只由「左缘色条 + 徽标块」承载,
+    #    INFO/SUCCESS 正文回归中性可读色 (视觉稿 A5: 长日志纵向扫读不刺眼)。
+    rz.tag_configure("info", foreground=get("logfg", C["fgb"]))
+    rz.tag_configure("success", foreground=get("logfg", C["fgb"]))
+    rz.tag_configure("warning", foreground=C["wn"])
+    rz.tag_configure("error", foreground=C["dg"])
+
+    # ② §4.6 级别左缘色条: 行首字形 ▌(U+258C) + cbar_<tag> 颜色 tag
+    #    (tkinter Text 无 per-row 边框, 按文档 §4.6 以行首窄形字符承载色条)
+    #    _CBAR_LEVEL_COLOR 同时是「级别 ↔ 左缘色」的唯一映射 (宿主经 get_cbar_colors 取回),
+    #    四个 tag 逐条显式配置, 便于逐个核对。
+    _CBAR_LEVEL_COLOR.update({
+        "cbar_info": C["log_info"], "cbar_success": C["log_success"],
+        "cbar_warning": C["log_warn"], "cbar_error": C["log_error"],
+    })
+    rz.tag_configure("cbar_info", foreground=_CBAR_LEVEL_COLOR["cbar_info"])
+    rz.tag_configure("cbar_success", foreground=_CBAR_LEVEL_COLOR["cbar_success"])
+    rz.tag_configure("cbar_warning", foreground=_CBAR_LEVEL_COLOR["cbar_warning"])
+    rz.tag_configure("cbar_error", foreground=_CBAR_LEVEL_COLOR["cbar_error"])
+
+    rz.tag_configure("lzebra", background=C["zebra"])            # §4.6 行 zebra 极淡
+    rz.tag_configure("lhover", background=get("log_hover", C["surface_alt"]))
+
+    # ③ 时间戳降权 (视觉稿 A5: 时间戳只作定位锚点, 不抢正文)
+    rz.tag_configure("lts", foreground=get("log_ts", C["fgm"]))
+
+    # ④ 徽标块: 定宽色块 + 级别色加粗字 (§2.5 四级; 色值取 log_* 系列 token)
+    for _lv, _tag, _token in _BADGE_SPEC:
+        rz.tag_configure(_tag,
+            foreground=get(_token, C["fgb"]),
+            background=get("log_badge_{}_bg".format(_lv), C["surface_alt"]),
+            font=FONT_LOG_BOLD or FONT_LOG)
+
+    # ⑤ 搜索命中 / 级别过滤隐藏 (elide 在旧 Tk 上可能不支持, 容错降级)
+    rz.tag_configure("search_hit", background=C["search_hit_bg"], foreground=C["fgt"])
+    try:
+        rz.tag_configure("lf_hide", elide=True)
+    except Exception:
+        pass
+
+
+def sync_auto_look():
+    """自动滚动开关的外观随状态/主题同步 (● 开 = 语义成功色, ○ 关 = 弱灰)。"""
+    dot = _UI.get("auto_dot")
+    txt = _UI.get("auto_txt")
+    var = _log_auto_scroll
+    if dot is None or var is None:
+        return
+    C = _CTX.get("colors") or {}
+    try:
+        on = bool(var.get())
+    except Exception:
+        return
+    bg = C.get("bgc", "white")
+    try:
+        dot.configure(text=("●" if on else "○"),
+                      fg=(C.get("sc", "green") if on else C.get("fdg", C.get("fgm", "dimgray"))),
+                      bg=bg)
+        if txt is not None:
+            txt.configure(fg=(C.get("fgb", "black") if on else C.get("fgm", "dimgray")), bg=bg)
+    except Exception:
+        pass
+
+
+def _log_hover(event=None):
+    """光标所在行加淡底 (lhover) —— 只在「换行」时动 Tcl, 每次 2 次调用。"""
+    if _rz is None:
+        return
+    try:
+        line = int(float(str(_rz.index("@%d,%d" % (event.x, event.y)))))
+    except Exception:
+        return
+    old = _hover.get("line", 0)
+    if line == old:
+        return
+    try:
+        if old:
+            _rz.tag_remove("lhover", "{}.0".format(old), "{}.end+1c".format(old))
+        _rz.tag_add("lhover", "{}.0".format(line), "{}.end+1c".format(line))
+        _hover["line"] = line
+    except Exception:
+        pass
+
+
+def _log_hover_leave(event=None):
+    """鼠标离开日志体: 清掉悬停行。"""
+    old = _hover.get("line", 0)
+    _hover["line"] = 0
+    if _rz is None or not old:
+        return
+    try:
+        _rz.tag_remove("lhover", "{}.0".format(old), "{}.end+1c".format(old))
+    except Exception:
+        pass
+
+
+def _log_update_count():
+    """刷新头部「N 条」计数 (与日志体实际行数一致, 含被过滤隐藏的行)。"""
+    lbl = _UI.get("count")
+    if lbl is None or _rz is None:
+        return
+    try:
+        total = int(float(_rz.index("end-1c")))
+    except Exception:
+        return
+    text = "{} 条".format(max(0, total - 1))   # 末尾隐含空行不计
+    if text == _UI.get("count_text"):
+        return
+    _UI["count_text"] = text
+    try:
+        lbl.configure(text=text)
+    except Exception:
+        pass
+
+
+# ══════════════════════════════════════════════════════════════════════
 # 构建 (原 ACRPA.build_app 内日志面板段: :5543-5635)
 # ══════════════════════════════════════════════════════════════════════
 
@@ -208,6 +400,7 @@ def build(parent, *, log_dir, colors, fonts, deps=None):
         _log_save_path, _CBAR_LEVEL_COLOR
 
     _CTX.update(deps or {})
+    _FIT["cols"] = 0                 # 重新构建 → 自适应状态复位
     _CTX["log_dir"] = log_dir
     _CTX["colors"] = colors
     _bind_fonts(fonts)
@@ -224,24 +417,147 @@ def build(parent, *, log_dir, colors, fonts, deps=None):
     card_log.columnconfigure(0, weight=1); card_log.rowconfigure(2, weight=1)
     _card_log = card_log
 
-    lh = tkinter.Frame(card_log, bg=C["bgc"]); lh.grid(row=0, column=0, sticky="ew", **_PI)
-    lh.columnconfigure(0, weight=1)
-    # 语义角色显式登记: 旧实现按文案含「运行」嗅探 → fg=sc; 迁移为登记 "sc" (行为等价)
-    ui_theme.roled(tkinter.Label(lh, text="运行日志", font=FONT_BODY, fg=C["fgm"], bg=C["bgc"]), "sc").grid(
-        row=0, column=0, sticky="w")
-    log_auto_scroll = tkinter.BooleanVar(value=True)
-    tkinter.Checkbutton(lh, text="自动滚动", variable=log_auto_scroll, font=FONT_SMALL,
-        fg=C["fgm"], bg=C["bgc"], activebackground=C["bgc"], activeforeground=C["fgb"],
-        selectcolor=C["ebg"], bd=0, highlightthickness=0,
-        command=lambda: autoscroll_changed()).grid(row=0, column=1, sticky="e")
     if _main_paned is not None:
         _main_paned.bind("<ButtonRelease-1>", on_sash_release)
-    _lh = lh
 
-    _log_collapse_btn = tkinter.Button(lh, text="收起 ▲", font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"],
-        activebackground=C["acl"], relief="flat", bd=1, cursor="hand2", padx=6, pady=1,
+    pad_x = _spx(_PAD_X)
+    pad_y = _spx(_PAD_Y)
+
+    # ── ① 单行头 (视觉稿 A5) ─────────────────────────────────────────────
+    #    左: 运行日志 · 计数 · 级别视图 · 搜索框 · 搜索/下一个
+    #    右: 自动滚动 · 清空 · 导出 · 收起
+    #    旧版「标题行 + 工具条行」两行合一 —— 日志体多出约 30px 可视高度。
+    lh = tkinter.Frame(card_log, bg=C["bgc"])
+    lh.grid(row=0, column=0, sticky="ew", padx=pad_x, pady=(pad_y, 0))
+    _lh = lh
+    _lt = lh          # 兼容: 旧「工具条」已并入单行头, get_toolbar() 仍指向该行
+
+    # 标题: 只登记「前景 token」(底色随卡片) —— 旧实现 roled(.., "sc") 会让通用
+    # walker 把标题刷成绿底 (Label 分支按角色同时刷 bg/fg), 属语义误用, 此处纠正。
+    title = tkinter.Label(lh, text="运行日志", font=FONT_SMALL_BOLD,
+                          fg=C["fgt"], bg=C["bgc"])
+    ui_theme.set_fg_token(title, "fgt")
+    title.pack(side="left")
+
+    # 计数: 条数与日志体行数实时同步 (flush / 清空时刷新, 见 _log_update_count)
+    count_lbl = tkinter.Label(lh, text="0 条", font=FONT_SMALL,
+                              fg=C["log_ts"], bg=C["bgc"])
+    count_lbl.pack(side="left", padx=(_spx(8), _spx(10)))
+
+    # 级别视图: 幽灵 Menubutton (文本「全部 ▾」+ 下拉菜单), 取代旧 ttk.Combobox —
+    # 去边框/去槽底, 与单行头的文字按钮同一视觉层级 (§4.9.3 tertiary)。
+    log_level_var = tkinter.StringVar(value="全部")
+    level_btn = tkinter.Menubutton(lh, text="全部 ▾", font=FONT_SMALL,
+        bg=C["bgc"], fg=C["fgm"], activebackground=C["caption_hover"],
+        activeforeground=C["fgt"], relief="flat", bd=0, highlightthickness=0,
+        cursor="hand2", padx=_spx(6), pady=0, indicatoron=False, anchor="w")
+    level_btn.pack(side="left", padx=(0, _spx(6)))
+    level_menu = tkinter.Menu(level_btn, tearoff=0, font=FONT_SMALL,
+        bg=C["bgc"], fg=C["fgb"], activebackground=C["acl"],
+        activeforeground=C["fgt"], bd=0)
+    level_btn.configure(menu=level_menu)
+
+    def _pick_level(value):
+        try:
+            log_level_var.set(value)
+        except Exception:
+            pass
+        try:
+            level_btn.configure(text="{} ▾".format(value))
+        except Exception:
+            pass
+        apply_filter(full=True)
+
+    for _lv in _LEVEL_CHOICES:
+        level_menu.add_command(label=_lv, command=lambda v=_lv: _pick_level(v))
+    _log_level_combo = level_btn
+
+    # 搜索框: 1px 发丝描边容器 + 放大镜字形 + 无边框 Entry + 占位提示
+    sbox = tkinter.Frame(lh, bg=C["ebg"], bd=0, highlightthickness=1,
+        highlightbackground=C["bd"], highlightcolor=C["focus"])
+    sbox.pack(side="left", padx=(0, _spx(2)))
+    search_icon = tkinter.Label(sbox, text="⊙", font=FONT_SMALL,
+                                fg=C["log_ts"], bg=C["ebg"])
+    search_icon.pack(side="left", padx=(_spx(6), 0))
+    log_search_var = tkinter.StringVar(value="")
+    entry = tkinter.Entry(sbox, textvariable=log_search_var, font=FONT_SMALL,
+        width=22, relief="flat", bd=0, bg=C["ebg"], fg=C["fgb"],
+        insertbackground=C["fgt"], highlightthickness=0)
+    entry.pack(side="left", padx=(_spx(4), _spx(8)), pady=_spx(1))
+    entry.bind("<Return>", lambda e: search_next(reset=True))
+    entry.bind("<KP_Enter>", lambda e: search_next(reset=True))
+    # 占位提示: 用叠加 Label 而非写进 StringVar —— 后者会污染搜索关键字 (get() 带提示语)
+    ph = tkinter.Label(entry, text="搜索关键字…", font=FONT_SMALL,
+                       fg=C["log_ts"], bg=C["ebg"])
+
+    def _ph_sync(*_a):
+        try:
+            if log_search_var.get():
+                ph.place_forget()
+            else:
+                ph.place(x=1, rely=0.5, anchor="w")
+        except Exception:
+            pass
+
+    try:
+        log_search_var.trace_add("write", _ph_sync)
+    except Exception:
+        pass
+    _ph_sync()
+    ph.bind("<Button-1>", lambda e: entry.focus_set())
+    _log_search_entry = entry
+    _log_search_var = log_search_var
+
+    # 幽灵文字按钮 (tertiary: 无底无边, hover 才显 caption_hover 底)
+    def _ghost(text, cmd, side="left", padx=(0, _spx(2))):
+        b = tkinter.Button(lh, text=text, font=FONT_SMALL, bg=C["bgc"], fg=C["fgm"],
+            activebackground=C["caption_hover"], activeforeground=C["fgt"],
+            relief="flat", bd=0, highlightthickness=0, cursor="hand2",
+            padx=_spx(6), pady=0, command=cmd)
+        b.pack(side=side, padx=padx)
+        return b
+
+    _ghost("搜索", lambda: search_next(reset=True), padx=(_spx(4), _spx(2)))
+    _ghost("下一个", lambda: search_next(reset=False))
+
+    # 右侧组 (自右向左 pack): 收起 ▸ 导出 ▸ 清空 ▸ 自动滚动
+    _log_collapse_btn = tkinter.Button(lh, text="▲ 收起", font=FONT_SMALL,
+        bg=C["surface_alt"], fg=C["fgb"], activebackground=C["caption_hover"],
+        activeforeground=C["fgt"], relief="flat", bd=0, highlightthickness=1,
+        highlightbackground=C["bd"], cursor="hand2", padx=_spx(8), pady=0,
         command=toggle_body)
-    _log_collapse_btn.grid(row=0, column=2, sticky="e", padx=(4, 0))
+    _log_collapse_btn.pack(side="right", padx=(_spx(6), 0))
+    export_btn = _ghost("导出", lambda: export_view(), side="right")
+    clear_btn = _ghost("清空", lambda: clear_view(), side="right")
+
+    # 自动滚动: 「状态点 + 文字」两段式 (点随状态着色, 文字保持中性; 旧 Checkbutton
+    # 的方框在 30px 单行头里过于笨重, 且无法只给「点」上色)
+    log_auto_scroll = tkinter.BooleanVar(value=True)
+    auto_box = tkinter.Frame(lh, bg=C["bgc"])
+    auto_box.pack(side="right", padx=(_spx(10), 0))
+    auto_dot = tkinter.Label(auto_box, text="●", font=FONT_SMALL, bg=C["bgc"],
+                             fg=C["sc"], cursor="hand2")
+    auto_dot.pack(side="left", padx=(0, _spx(3)))
+    auto_txt = tkinter.Label(auto_box, text="自动滚动", font=FONT_SMALL, bg=C["bgc"],
+                             fg=C["fgb"], cursor="hand2")
+    auto_txt.pack(side="left")
+    for _w in (auto_dot, auto_txt):
+        _w.bind("<Button-1>", lambda e: _toggle_autoscroll())
+
+    def _toggle_autoscroll():
+        try:
+            log_auto_scroll.set(not log_auto_scroll.get())
+        except Exception:
+            return
+        sync_auto_look()
+        autoscroll_changed()
+
+    _log_auto_scroll = log_auto_scroll
+    _log_level_var = log_level_var
+
+    # 头部与日志体之间的分隔线 (视觉稿 A5: 1px 发丝线, 全宽)
+    rule = tkinter.Frame(card_log, bg=C.get("log_rule", C["bd"]), height=1)
+    rule.grid(row=1, column=0, sticky="ew")
 
     # 将日志 Dock 作为 pane#1 加入 (最小 60; stretch=always 随窗口等比, 不抢增量)
     if _main_paned is not None:
@@ -252,43 +568,16 @@ def build(parent, *, log_dir, colors, fonts, deps=None):
         except Exception:
             pass
 
-    # ③ 日志工具条: 级别过滤 / 关键字搜索 / 清空 / 导出
-    lt = tkinter.Frame(card_log, bg=C["bgc"]); lt.grid(row=1, column=0, sticky="ew", padx=6, pady=(0, 2))
-    tkinter.Label(lt, text="级别:", font=FONT_SMALL, fg=C["fgm"], bg=C["bgc"]).pack(side="left")
-    log_level_var = tkinter.StringVar(value="全部")
-    _log_level_combo = ttk.Combobox(lt, textvariable=log_level_var, state="readonly", width=8,
-        values=("全部", "INFO", "SUCCESS", "WARNING", "ERROR"))
-    _log_level_combo.pack(side="left", padx=(2, 8))
-    _log_level_combo.bind("<<ComboboxSelected>>", lambda e: apply_filter(full=True))
-    tkinter.Label(lt, text="搜索:", font=FONT_SMALL, fg=C["fgm"], bg=C["bgc"]).pack(side="left")
-    log_search_var = tkinter.StringVar(value="")
-    _log_search_entry = tkinter.Entry(lt, textvariable=log_search_var, font=FONT_SMALL,
-        width=16, relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"], insertbackground=C["fgt"])
-    _log_search_entry.pack(side="left", padx=(2, 2))
-    _log_search_entry.bind("<Return>", lambda e: search_next(reset=True))
-    tkinter.Button(lt, text="搜索", font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"],
-        activebackground=C["acl"], relief="flat", bd=1, cursor="hand2", padx=6, pady=1,
-        command=lambda: search_next(reset=True)).pack(side="left", padx=2)
-    tkinter.Button(lt, text="下一个", font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"],
-        activebackground=C["acl"], relief="flat", bd=1, cursor="hand2", padx=6, pady=1,
-        command=lambda: search_next(reset=False)).pack(side="left", padx=2)
-    ui_theme.roled(tkinter.Button(lt, text="导出", font=FONT_SMALL, bg=C["ac"],
-        fg=ui_theme.text_on(C["ac"]),
-        activebackground=C["ach"], activeforeground=ui_theme.text_on(C["ach"]),
-        relief="flat", bd=1, cursor="hand2", padx=6, pady=1,
-        command=lambda: export_view()), "ac").pack(side="right", padx=2)
-    tkinter.Button(lt, text="清空", font=FONT_SMALL, bg=C["bgc"], fg=C["fgb"],
-        activebackground=C["acl"], relief="flat", bd=1, cursor="hand2", padx=6, pady=1,
-        command=lambda: clear_view()).pack(side="right", padx=2)
-    _lt = lt
-
+    # ── ② 日志体 ────────────────────────────────────────────────────────
     log_frame = tkinter.Frame(card_log, bg=C["logbg"])
-    log_frame.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 4))
+    log_frame.grid(row=2, column=0, sticky="nsew", padx=0, pady=(0, _spx(4)))
     log_frame.columnconfigure(0, weight=1); log_frame.rowconfigure(0, weight=1)
     _log_frame = log_frame
 
+    # spacing1 = 行上留白 (≈18px 行高, 视觉稿 A5); 由控件级选项承担, 不额外占用 tag
     rz = tkinter.Text(log_frame, font=FONT_LOG, fg=C["logfg"], bg=C["logbg"],
-        wrap="word", relief="flat", bd=0, padx=6, pady=4, insertbackground=C["fgt"],
+        wrap="word", relief="flat", bd=0, padx=pad_x, pady=_spx(2),
+        spacing1=_spx(2), insertbackground=C["fgt"],
         selectbackground=C["acl"], selectforeground=C["fgt"], undo=True, maxundo=50)
     rz.grid(row=0, column=0, sticky="nsew")
     # 滚动条厚度统一取 TOKENS["sb_w"] (D10); 本模块不 import utils, 故运行时惰性取
@@ -302,31 +591,53 @@ def build(parent, *, log_dir, colors, fonts, deps=None):
     scroll.grid(row=0, column=1, sticky="ns")
 
     scroll.config(command=rz.yview); rz.config(yscrollcommand=scroll.set)
-    rz.tag_configure("info", foreground=C["log_info"])
-    rz.tag_configure("success", foreground=C["sc"])
-    rz.tag_configure("warning", foreground=C["wn"])
-    rz.tag_configure("error", foreground=C["dg"])
-    # §4.6 级别左缘 2px 色条: 行首字形 ▌(U+258C) + cbar_<tag> 颜色 tag
-    #   (tkinter Text 无 per-row 边框, 按文档 §4.6 以行首窄形字符承载色条)
-    _CBAR_LEVEL_COLOR = {
-        "cbar_info": C["log_info"], "cbar_success": C["log_success"],
-        "cbar_warning": C["log_warn"], "cbar_error": C["log_error"],
-    }
-    for _ctag, _ccol in _CBAR_LEVEL_COLOR.items():
-        rz.tag_configure(_ctag, foreground=_ccol)
-    rz.tag_configure("lzebra", background=C["zebra"])   # §4.6 行 zebra 极淡
-    # ③ 日志工具条: 搜索高亮 + 级别过滤隐藏 (elide 在旧 Tk 上可能不支持, 容错降级)
-    #   §4.6 命中色改 token (删除硬编码 #FFEB3B); 1px ac 描边受 Tk Text tag 能力限制降级为底色高亮
-    rz.tag_configure("search_hit", background=C["search_hit_bg"], foreground=C["fgt"])
-    try:
-        rz.tag_configure("lf_hide", elide=True)
-    except Exception:
-        pass
+    _configure_tags(rz, C)
     _rz = rz
     _scroll = scroll
-    _log_auto_scroll = log_auto_scroll
-    _log_level_var = log_level_var
-    _log_search_var = log_search_var
+
+    # 行悬停: 光标所在行淡底 (只在跨行时动 Tcl; 3 次调用/次跨行)
+    rz.bind("<Motion>", _log_hover, add="+")
+    rz.bind("<Leave>", _log_hover_leave, add="+")
+
+    # 头部自适应: 关键字框吃掉剩余宽度 (窄窗 / 大字号时不挤掉右侧功能组)
+    def _head_fit(event=None):
+        try:
+            w = lh.winfo_width()
+        except Exception:
+            return
+        if w <= 1:
+            return
+        others = 0
+        for _c in lh.winfo_children():
+            if _c not in (sbox,):
+                try:
+                    others += int(_c.winfo_reqwidth())
+                except Exception:
+                    pass
+        try:
+            per = max(1.0, entry.winfo_reqwidth() / float(max(1, int(entry.cget("width")))))
+        except Exception:
+            per = 8.0
+        avail = w - others - _spx(60)          # 60: 预留组间距与 pack 内边距
+        cols = int(max(10, min(26, avail / per)))
+        if cols == _FIT["cols"]:
+            return
+        _FIT["cols"] = cols
+        try:
+            entry.configure(width=cols)
+        except Exception:
+            pass
+
+    lh.bind("<Configure>", _head_fit, add="+")
+
+    # 控件登记表: 换肤回调按此逐项回填 (避免 refresh_theme 里再散落一堆闭包变量)
+    _UI.update({
+        "card": card_log, "head": lh, "title": title, "count": count_lbl,
+        "rule": rule, "level": level_btn, "level_menu": level_menu,
+        "search_box": sbox, "search_icon": search_icon, "ph": ph, "entry": entry,
+        "auto_box": auto_box, "auto_dot": auto_dot, "auto_txt": auto_txt,
+        "clear": clear_btn, "export": export_btn, "collapse": _log_collapse_btn,
+    })
 
     # set_tlog 契约: 让 utils.log1 全库可用 (必须被调用一次)
     _tlog = _CTX["thread_safe_log"](rz, log_dir)
@@ -350,35 +661,77 @@ def build(parent, *, log_dir, colors, fonts, deps=None):
 # ══════════════════════════════════════════════════════════════════════
 
 def refresh_theme(dark=None, colors=None, prev=None):
-    """ThemeBus 订阅回调 (签名与 publish 派发契约一致): 日志区 + 日志 tag 随主题重配。
+    """ThemeBus 订阅回调 (签名与 publish 派发契约一致): 单行头 + 日志体 + 全部 tag 随主题重配。
 
     D3: 日志区 tag 前景随主题刷新 (旧实现仅建窗时设一次, 切换后 tag 文字仍是旧色)。
+    v6: 头部控件已从 ttk.Combobox / Checkbutton 改为 tk Button/Menubutton/Label,
+    通用 walker 只会把它们刷成中性色, 故这里逐项按设计语义回填 (在 publish 时执行,
+    晚于 _theme_walk → 本函数的结果为准)。
     """
     C = colors if isinstance(colors, dict) else _CTX.get("colors")
     if not isinstance(C, dict) or _rz is None:
         return
     _CTX["colors"] = C
+    U = _UI
+    # ① 日志体 + 滚动条
     try:
         _rz.configure(bg=C["logbg"], fg=C["logfg"],
-            selectbackground=C["acl"], selectforeground=C["fgt"])
+            selectbackground=C["acl"], selectforeground=C["fgt"],
+            insertbackground=C["fgt"])
         if _scroll is not None:
             _scroll.configure(bg=C["bd"], activebackground=C["fgm"], troughcolor=C["logbg"])
     except Exception:
         pass
+    # ② 全部 tag (与建窗同一实现: 单一真源)
     try:
-        _rz.tag_configure("info", foreground=C["log_info"])
-        _rz.tag_configure("success", foreground=C["sc"])
-        _rz.tag_configure("warning", foreground=C["wn"])
-        _rz.tag_configure("error", foreground=C["dg"])
-        # §4.6 左缘色条 / 行 zebra / 搜索命中 随主题刷新
-        _rz.tag_configure("cbar_info", foreground=C["log_info"])
-        _rz.tag_configure("cbar_success", foreground=C["log_success"])
-        _rz.tag_configure("cbar_warning", foreground=C["log_warn"])
-        _rz.tag_configure("cbar_error", foreground=C["log_error"])
-        _rz.tag_configure("lzebra", background=C["zebra"])
-        _rz.tag_configure("search_hit", background=C["search_hit_bg"])
+        _configure_tags(_rz, C)
     except Exception:
         pass
+    # ③ 卡片 / 单行头
+    try:
+        U["card"].configure(bg=C["bgc"], highlightbackground=C["bd"])
+        U["head"].configure(bg=C["bgc"])
+        U["title"].configure(bg=C["bgc"], fg=C["fgt"])
+        U["count"].configure(bg=C["bgc"], fg=C.get("log_ts", C["fgm"]))
+        U["rule"].configure(bg=C.get("log_rule", C["bd"]))
+    except Exception:
+        pass
+    # ④ 级别视图 (幽灵 Menubutton + 下拉菜单)
+    try:
+        U["level"].configure(bg=C["bgc"], fg=C["fgm"],
+            activebackground=C["caption_hover"], activeforeground=C["fgt"])
+        U["level_menu"].configure(bg=C["bgc"], fg=C["fgb"],
+            activebackground=C["acl"], activeforeground=C["fgt"])
+    except Exception:
+        pass
+    # ⑤ 搜索框 (1px 发丝描边容器)
+    try:
+        U["search_box"].configure(bg=C["ebg"], highlightbackground=C["bd"],
+                                  highlightcolor=C["focus"])
+        U["search_icon"].configure(bg=C["ebg"], fg=C.get("log_ts", C["fgm"]))
+        U["ph"].configure(bg=C["ebg"], fg=C.get("log_ts", C["fgm"]))
+        U["entry"].configure(bg=C["ebg"], fg=C["fgb"], insertbackground=C["fgt"])
+    except Exception:
+        pass
+    # ⑥ 幽灵按钮组 / 收起钮
+    for _key in ("clear", "export"):
+        try:
+            U[_key].configure(bg=C["bgc"], fg=C["fgm"],
+                activebackground=C["caption_hover"], activeforeground=C["fgt"])
+        except Exception:
+            pass
+    try:
+        U["collapse"].configure(bg=C["surface_alt"], fg=C["fgb"],
+            activebackground=C["caption_hover"], activeforeground=C["fgt"],
+            highlightbackground=C["bd"])
+    except Exception:
+        pass
+    # ⑦ 自动滚动开关 (开/关两态色不同, 由 sync_auto_look 统一决定)
+    try:
+        U["auto_box"].configure(bg=C["bgc"])
+    except Exception:
+        pass
+    sync_auto_look()
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -436,6 +789,7 @@ def _log_trim():
         return 0
     _cbar_state["done"] = max(0, _cbar_state["done"] - excess)
     _logfilter["applied"] = max(0, _logfilter["applied"] - excess)
+    _hover["line"] = 0          # 行号整体左移 → 旧的悬停行号失效, 交给下一次 Motion 重建
     # D6: 裁掉奇数行会让 zebra 奇偶整体反转 (后续追加新行时出现连续两行同样式),
     #   故裁剪后按新行号整段重建 zebra (一次 tag_remove + 一次批量 tag_add)。
     try:
@@ -546,6 +900,8 @@ def flush_and_apply():
     # ③ 级别过滤生效时, 增量隐藏新增的不匹配行
     if _log_level_var is not None and _log_level_var.get() != "全部":
         _log_apply_filter(full=False)
+    # ④ 头部「N 条」计数 (仅在文本变化后的 flush 里跑, 空闲轮次已被短路)
+    _log_update_count()
     return True
 
 
@@ -759,6 +1115,26 @@ def _log_level_runs(start, total):
     return runs
 
 
+def _row_marks(line, level):
+    """求一行的「时间戳 / 徽标块」字符列区间: (ts_a, ts_b, b_a, b_b, btag)。
+
+    列偏移由 core.log 的版式表派生 (log_row_layout), 不在此另写一份;
+    再以「徽标名是否真的落在徽标槽位内」做一次校验 —— 不符合行版式的行
+    (例如外部直接 insert 的纯文本) 返回 None, 调用方跳过着色即可。
+    """
+    if not level or level not in _BADGE_NAME_OF:
+        return None
+    lead = 1 if line.startswith("▌") else 0
+    ts_a, ts_b, b_a, b_b = _core_layout(lead)
+    if len(line) < ts_b + 1:
+        return None
+    name = _BADGE_NAME_OF[level]
+    if line.find(name, b_a, b_b) < 0:
+        return None
+    # 色块严格取「徽标槽位」的 8 列 (文案在槽内居中), 与版式表一一对应
+    return ts_a, ts_b, b_a, min(len(line), b_b), _BADGE_TAG_OF.get(level)
+
+
 def _log_apply_cbar():
     """为新增日志行: 行首色条着色 + 偶行加极淡 zebra (§4.6)。
 
@@ -796,6 +1172,8 @@ def _log_apply_cbar():
     if LOG_CBAR_INLINE:
         # ── 批量分支: 收集区间 → 每 tag 一次 tag_add ──
         groups = {}          # ctag → [i1, i2, i3, i4, ...] (成对区间)
+        badges = {}          # lbadge_* → 成对区间 (徽标色块)
+        stamps = []          # lts 成对区间 (时间戳降权)
         zebra = []           # lzebra 的扁平区间列表
         done = _cbar_state["done"]
         for i in range(start, total + 1):
@@ -810,17 +1188,37 @@ def _log_apply_cbar():
                 # 未内联 (开关中途翻转/外部直接 insert): 就地补一次字形
                 try:
                     _rz.insert("{}.0".format(i), "▌")
+                    line = "▌" + line
                 except Exception:
                     continue
-            ctag = _CBAR_LEVEL_OF.get(line_level.get(i, ""), "cbar_info")
+            lv = line_level.get(i, "")
+            ctag = _CBAR_LEVEL_OF.get(lv, "cbar_info")
             groups.setdefault(ctag, []).extend(
                 ["{}.0".format(i), "{}.1".format(i)])
             if i % 2 == 0:
                 zebra.extend(["{}.1".format(i), "{}.end".format(i)])
+            # 时间戳 / 徽标块着色 (定宽槽位, 同一批内仍按 tag 各一次 tag_add)
+            marks = _row_marks(line, lv)
+            if marks is not None:
+                ts_a, ts_b, b_a, b_b, btag = marks
+                stamps.extend(["{}.{}".format(i, ts_a), "{}.{}".format(i, ts_b)])
+                if btag:
+                    badges.setdefault(btag, []).extend(
+                        ["{}.{}".format(i, b_a), "{}.{}".format(i, b_b)])
             done = i
         for ctag, rngs in groups.items():
             try:
                 _rz.tag_add(ctag, *rngs)
+            except Exception:
+                pass
+        if stamps:
+            try:
+                _rz.tag_add("lts", *stamps)
+            except Exception:
+                pass
+        for btag, rngs in badges.items():
+            try:
+                _rz.tag_add(btag, *rngs)
             except Exception:
                 pass
         if zebra:
@@ -844,9 +1242,16 @@ def _log_apply_cbar():
             lv = line_level.get(i, "")
             ctag = _CBAR_LEVEL_OF.get(lv, "cbar_info")
             _rz.insert("{}.0".format(i), "▌")
+            line = "▌" + line
             _rz.tag_add(ctag, "{}.0".format(i), "{}.1".format(i))
             if i % 2 == 0:
                 _rz.tag_add("lzebra", "{}.1".format(i), "{}.end".format(i))
+            marks = _row_marks(line, lv)
+            if marks is not None:
+                ts_a, ts_b, b_a, b_b, btag = marks
+                _rz.tag_add("lts", "{}.{}".format(i, ts_a), "{}.{}".format(i, ts_b))
+                if btag:
+                    _rz.tag_add(btag, "{}.{}".format(i, b_a), "{}.{}".format(i, b_b))
             _cbar_state["done"] = i
         except Exception:
             # 单行失败: 保留 done 于上一成功行; 下次以「行首▌」判定避免重复
@@ -925,9 +1330,11 @@ def _log_clear_view():
         _rz.delete("1.0", "end")
         _logfilter["applied"] = 0
         _cbar_state["done"] = 0
+        _hover["line"] = 0
         _rz.tag_remove("search_hit", "1.0", "end")
     except Exception:
         pass
+    _log_update_count()
 
 
 def _log_export_snapshot():

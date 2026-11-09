@@ -161,8 +161,18 @@ def require_reason(cap_id):
     return probe(cap_id).reason
 
 
+def registered_ids():
+    """→ 已注册能力 id 列表 (**不触发 probe**)。
+
+    启动日志/统计这类「只想知道有多少项」的场景用它, 避免首次 all_states() 的
+    全量探测 (实测 9 项 ≈510ms, 纯为一行 stage 日志不值得)。
+    """
+    with _lock:
+        return list(_caps.keys())
+
+
 def all_states():
-    """→ {cap_id: CapState}, 覆盖全部已注册能力。"""
+    """→ {cap_id: CapState}, 覆盖全部已注册能力 (会触发首次 probe, 约 0.5s)。"""
     with _lock:
         ids = list(_caps.keys())
     return {cid: state(cid) for cid in ids}

@@ -85,7 +85,7 @@ class RemoteMixin(object):
         except Exception:
             pass
         try:
-            self.btn_pause.config(text=("[▶ 恢复]" if s.get("paused") else "[⏸ 暂停]"),
+            self.btn_pause.config(text=("▶ 恢复" if s.get("paused") else "⏸ 暂停"),
                                   state=("normal" if s["pause_ok"] else "disabled"))
         except Exception:
             pass
@@ -673,7 +673,7 @@ class RemoteMixin(object):
         rsb = ttk.Scrollbar(dlg, orient="vertical", command=tv.yview)
         rsb.grid(row=1, column=1, sticky="ns", padx=(0, utils.sp(10)), pady=(0, utils.sp(6)))
         tv.configure(yscrollcommand=rsb.set)
-        tv.tag_configure("rs_empty", foreground=utils.themed("fgm", "#718096"))
+        tv.tag_configure("rs_empty", foreground=utils.themed("fgm"))
         tv.bind("<Double-1>", lambda e: self._on_rs_run())
         self._rs_tree = tv
         dlg.columnconfigure(0, weight=1)

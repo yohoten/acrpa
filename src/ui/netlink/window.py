@@ -22,6 +22,73 @@ from ui.netlink.common import (
 from ui.netlink import panels, shot, pairing, remote, web, audit, sched
 
 
+# ── 建窗 UI 小工厂 (v5 §4 卡片层级 / V1 按钮语义 / I1 空态) ──────────────
+
+def _mk_card(parent, C, title=None):
+    """房子风格卡片: bgc 面 + 1px bd 描边 (同 sched_tab); title 给出时追加 muted 区头。
+
+    注意: 区头与内容体统一走 grid (卡片内禁止 pack/grid 混用)。
+    """
+    card = tkinter.Frame(parent, bg=C["bgc"],
+                         highlightbackground=C["bd"], highlightthickness=1)
+    if title:
+        head = tkinter.Frame(card, bg=C["bgc"])
+        head.grid(row=0, column=0, sticky="ew",
+                  padx=utils.sp(10), pady=(utils.sp(8), utils.sp(2)))
+        tkinter.Label(head, text=title, font=utils.FONT_BUTTON,
+                      fg=C["fgm"], bg=C["bgc"]).pack(side="left")
+    return card
+
+
+def _mk_btn(parent, C, text, command, kind="ghost", font=None,
+            state="normal", padx=None):
+    """v5 V1/V2: 每窗仅一个实心主按钮 (kind="primary"), 其余 ghost;
+    danger 为「dg 字 + errbg hover」的 ghost, 不再整颗实心红。"""
+    f = font or utils.FONT_BUTTON
+    px = utils.sp(12) if padx is None else padx
+    py = utils.sp(1) if f == utils.FONT_SMALL else utils.sp(3)
+    kw = dict(font=f, relief="flat", bd=1, cursor="hand2",
+              padx=px, pady=py, state=state, command=command)
+    if kind == "primary":
+        return tkinter.Button(parent, text=text, bg=C["ac"],
+                              fg=utils.text_on(C["ac"]),
+                              activebackground=C["ach"],
+                              activeforeground=utils.text_on(C["ach"]), **kw)
+    if kind == "danger":
+        return tkinter.Button(parent, text=text, bg=C["bgc"], fg=C["dg"],
+                              activebackground=C["errbg"],
+                              activeforeground=C["dg"],
+                              disabledforeground=C["fgd"], **kw)
+    return tkinter.Button(parent, text=text, bg=C["bgc"], fg=C["fgb"],
+                          activebackground=C["acl"],
+                          activeforeground=C["fgb"],
+                          disabledforeground=C["fgd"], **kw)
+
+
+def _mk_empty(parent, C, icon, main, sub="", btn_text=None, btn_cmd=None):
+    """I1 空态: 图标 + 主句 + 副句 (muted, 左对齐); 返回容器, 供 grid_remove() 复用。
+
+    v6 §5.4: 可选主按钮 (btn_text/btn_cmd, primary 实心) —— 空态组件三要素
+    「图标 + 主句 + 主按钮」的落地; 不传则维持旧的两行文本形态。"""
+    box = tkinter.Frame(parent, bg=C["bgc"])
+    row = tkinter.Frame(box, bg=C["bgc"])
+    row.pack(anchor="w", padx=utils.sp(10), pady=utils.sp(4))
+    tkinter.Label(row, text=icon, font=utils.FONT_BODY,
+                  fg=C["fgd"], bg=C["bgc"]).pack(side="left", padx=(0, utils.sp(8)))
+    col = tkinter.Frame(row, bg=C["bgc"])
+    col.pack(side="left")
+    tkinter.Label(col, text=main, font=utils.FONT_SMALL,
+                  fg=C["fgm"], bg=C["bgc"], anchor="w").pack(anchor="w")
+    if sub:
+        tkinter.Label(col, text=sub, font=utils.FONT_TINY,
+                      fg=C["fgd"], bg=C["bgc"], anchor="w").pack(anchor="w")
+    if btn_text and callable(btn_cmd):
+        _mk_btn(col, C, btn_text, btn_cmd, kind="primary",
+                font=utils.FONT_SMALL, padx=utils.sp(10)).pack(
+            anchor="w", pady=(utils.sp(4), 0))
+    return box
+
+
 class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
                      remote.RemoteMixin, web.WebMixin, audit.AuditMixin,
                      sched.SchedMixin, object):
@@ -308,6 +375,10 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
                 self._rs_tree.tag_configure("rs_empty", foreground=cur["fgm"])
             except Exception:
                 pass
+        try:      # 视图切页按钮高亮随主题重刷 (选中 accent 浅底/未选中 ghost)
+            self._set_view(getattr(self, "_view", "dev"))
+        except Exception:
+            pass
         self._theme_snapshot = dict(cur)
         try:
             (self.host if self.host is not None else self.win).update_idletasks()
@@ -391,7 +462,7 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
                 ok = False
             try:
                 from ui.window_shell import apply_window_chrome
-                apply_window_chrome(win, size=(780, 700), min_size=(700, 560),
+                apply_window_chrome(win, size=(800, 840), min_size=(700, 620),
                                     geometry=geom if ok else None, center=not ok,
                                     bg_key="bg", colors=C)
             except Exception:
@@ -399,9 +470,9 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
                     try:
                         win.geometry(geom)
                     except Exception:
-                        win.geometry("780x700")
+                        win.geometry("800x840")
                 else:
-                    win.geometry("780x700")
+                    win.geometry("800x840")
                 try:
                     win.minsize(utils.sp(700), utils.sp(560))
                 except Exception:
@@ -410,41 +481,38 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
             win.protocol("WM_DELETE_WINDOW", self.close)
         win.configure(bg=C["bg"])
         win.columnconfigure(0, weight=1)
-        win.rowconfigure(2, weight=1)   # 主区 (2 列 PanedWindow) 可伸缩
+        win.rowconfigure(1, weight=1)   # 主区 (2 列 PanedWindow) 可伸缩 (row0=概览卡)
 
-        # ── 0. 顶部状态条 ──
-        top = tkinter.Frame(win, bg=C["bg"])
+        # ── 0. 概览卡: 状态摘要 + 启停/配对 + 连接配置 (v5 S4/P1-3) ──
+        # 原「顶部状态条 + 单行配置」在 780px 独立窗口下横向溢出被裁切,
+        # 收进卡片并把「手动添加」折到第二行, 任意宽度 ≥ minsize 都放得下。
+        ov = _mk_card(win, C)
+        ov.grid(row=0, column=0, sticky="ew", padx=utils.sp(10), pady=(utils.sp(8), utils.sp(6)))
+        ov.columnconfigure(0, weight=1)
+
+        top = tkinter.Frame(ov, bg=C["bgc"])
         top.grid(row=0, column=0, sticky="ew", padx=utils.sp(10), pady=(utils.sp(8), utils.sp(4)))
         top.columnconfigure(0, weight=1)
-        self.lbl_top = tkinter.Label(top, text="本机名: —  |  TCP :—  |  ○ 已停止",
-                                     font=utils.FONT_BODY, bg=C["bg"], fg=C["fgt"],
+        self.lbl_top = tkinter.Label(top, text="—  ·  ○ 已停止",
+                                     font=utils.FONT_BODY, bg=C["bgc"], fg=C["fgt"],
                                      anchor="w")
         self.lbl_top.grid(row=0, column=0, sticky="w")
         self.lbl_pair = tkinter.Label(top, text="配对码 —", font=utils.FONT_SMALL,
-                                      bg=C["bg"], fg=C["fgm"], anchor="e")
+                                      bg=C["bgc"], fg=C["fgm"], anchor="e")
         self.lbl_pair.grid(row=0, column=1, sticky="e", padx=(utils.sp(8), utils.sp(6)))
-        self.btn_pair_code = tkinter.Button(top, text="配对码", font=utils.FONT_BUTTON,
-                                            bg=C["bgc"], fg=C["fgb"],
-                                            activebackground=C["acl"], relief="flat",
-                                            bd=1, cursor="hand2", padx=utils.sp(12), pady=utils.sp(3),
-                                            command=self._on_pair_code)
+        self.btn_pair_code = _mk_btn(top, C, "配对码", self._on_pair_code)
         self.btn_pair_code.grid(row=0, column=2, sticky="e", padx=(0, utils.sp(6)))
         try:
             utils.attach_tooltip(self.btn_pair_code,
                                  "生成 6 位配对码，供其它设备输入以完成配对 (被控端)")
         except Exception:
             pass
-        self.btn_toggle = tkinter.Button(top, text="启动互联", font=utils.FONT_BUTTON,
-                                         bg=C["ac"], fg=utils.text_on(C["ac"]),
-                                         activebackground=C["ach"],
-                                         activeforeground=utils.text_on(C["ach"]),
-                                         relief="flat", bd=1, cursor="hand2",
-                                         padx=utils.sp(12), pady=utils.sp(3), command=self._on_toggle)
+        self.btn_toggle = _mk_btn(top, C, "启动互联", self._on_toggle, kind="primary")
         self.btn_toggle.grid(row=0, column=3, sticky="e")
 
-        # ── 1. 配置行 ──
-        cfg = tkinter.Frame(win, bg=C["bg"])
-        cfg.grid(row=1, column=0, sticky="ew", padx=utils.sp(10), pady=(0, utils.sp(4)))
+        # 连接配置 (行 1): 自动发现 / 端口 / 设备名 / 应用
+        cfg = tkinter.Frame(ov, bg=C["bgc"])
+        cfg.grid(row=1, column=0, sticky="ew", padx=utils.sp(10), pady=(0, utils.sp(2)))
 
         self.var_auto = tkinter.BooleanVar(
             value=bool(getattr(state, "NETLINK_AUTODISCOVER", True)))
@@ -452,55 +520,56 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
             side="left", padx=(0, utils.sp(8)))
 
         tkinter.Label(cfg, text="端口", font=utils.FONT_SMALL,
-                      bg=C["bg"], fg=C["fgm"]).pack(side="left", padx=(0, utils.sp(4)))
+                      bg=C["bgc"], fg=C["fgm"]).pack(side="left", padx=(0, utils.sp(4)))
         self.var_port = tkinter.StringVar(
             value=str(getattr(state, "NETLINK_PORT", DEFAULT_TCP_PORT)))
-        tkinter.Entry(cfg, textvariable=self.var_port, width=7, font=utils.FONT_BODY,
-                      relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"]).pack(
+        tkinter.Entry(cfg, textvariable=self.var_port, width=6, font=utils.FONT_BODY,
+                      relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"],
+                      insertbackground=C["fgt"]).pack(
             side="left", padx=(0, utils.sp(8)))
 
         tkinter.Label(cfg, text="设备名", font=utils.FONT_SMALL,
-                      bg=C["bg"], fg=C["fgm"]).pack(side="left", padx=(0, utils.sp(4)))
+                      bg=C["bgc"], fg=C["fgm"]).pack(side="left", padx=(0, utils.sp(4)))
         self.var_name = tkinter.StringVar(
             value=getattr(state, "NETLINK_DEVICE_NAME", "") or "")
-        tkinter.Entry(cfg, textvariable=self.var_name, width=14, font=utils.FONT_BODY,
-                      relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"]).pack(
+        tkinter.Entry(cfg, textvariable=self.var_name, width=12, font=utils.FONT_BODY,
+                      relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"],
+                      insertbackground=C["fgt"]).pack(
             side="left", padx=(0, utils.sp(8)))
 
-        tkinter.Label(cfg, text="手动添加", font=utils.FONT_SMALL,
-                      bg=C["bg"], fg=C["fgm"]).pack(side="left", padx=(0, utils.sp(4)))
+        _mk_btn(cfg, C, "应用", self._on_apply, font=utils.FONT_SMALL,
+                padx=utils.sp(10)).pack(side="left")
+
+        # 手动添加 (行 2, 独立一行防溢出)
+        cfg2 = tkinter.Frame(ov, bg=C["bgc"])
+        cfg2.grid(row=2, column=0, sticky="ew", padx=utils.sp(10), pady=(0, utils.sp(8)))
+        tkinter.Label(cfg2, text="手动添加", font=utils.FONT_SMALL,
+                      bg=C["bgc"], fg=C["fgm"]).pack(side="left", padx=(0, utils.sp(4)))
         self.var_add = tkinter.StringVar(value="")
-        tkinter.Entry(cfg, textvariable=self.var_add, width=16, font=utils.FONT_BODY,
-                      relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"]).pack(
-            side="left", padx=(0, utils.sp(4)))
-        tkinter.Button(cfg, text="添加", font=utils.FONT_SMALL,
-                       bg=C["bgc"], fg=C["fgb"], relief="flat", bd=1,
-                       cursor="hand2", padx=utils.sp(8), pady=utils.sp(1),
-                       command=self._on_add_peer).pack(side="left", padx=(0, utils.sp(8)))
-        tkinter.Button(cfg, text="应用", font=utils.FONT_SMALL,
-                       bg=C["ac"], fg=utils.text_on(C["ac"]),
-                       activebackground=C["ach"],
-                       activeforeground=utils.text_on(C["ach"]), relief="flat", bd=1,
-                       cursor="hand2", padx=utils.sp(10), pady=utils.sp(1),
-                       command=self._on_apply).pack(side="left")
+        tkinter.Entry(cfg2, textvariable=self.var_add, width=18, font=utils.FONT_BODY,
+                      relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"],
+                      insertbackground=C["fgt"]).pack(
+            side="left", padx=(0, utils.sp(6)))
+        _mk_btn(cfg2, C, "添加", self._on_add_peer, font=utils.FONT_SMALL,
+                padx=utils.sp(10)).pack(side="left")
+        tkinter.Label(cfg2, text="格式 host:port",
+                      font=utils.FONT_TINY, bg=C["bgc"], fg=C["fgd"]).pack(
+            side="left", padx=(utils.sp(10), 0))
 
         # ── 主区: 2 列 PanedWindow (左3右1, 可调节) ──
         # 左列 = 设备管理 (设备列表/详情/已配对/操控/远程指令/传输),
         # 右列 = 日志面板 (常驻侧栏)。分隔条可拖动调整比例。
         paned = ttk.PanedWindow(win, orient="horizontal")
-        paned.grid(row=2, column=0, sticky="nsew", padx=utils.sp(10), pady=(0, utils.sp(4)))
+        paned.grid(row=1, column=0, sticky="nsew", padx=utils.sp(10), pady=(0, utils.sp(4)))
         self._paned = paned
         left = tkinter.Frame(paned, bg=C["bg"])
         right = tkinter.Frame(paned, bg=C["bg"])
         paned.add(left, weight=3)
         paned.add(right, weight=1)
         left.columnconfigure(0, weight=1)
-        left.rowconfigure(0, weight=0)   # 设备列表
-        left.rowconfigure(1, weight=0)   # 选中设备详情
-        left.rowconfigure(2, weight=0)   # 已配对设备
-        left.rowconfigure(3, weight=0)   # 操控按钮组
-        left.rowconfigure(4, weight=1)   # 远程指令 (可伸缩)
-        left.rowconfigure(5, weight=1)   # 传输 (可伸缩)
+        # S4/P1-3: 左列 = 单表多视图卡 (设备|配对|指令|传输) + 操控按钮组。
+        left.rowconfigure(0, weight=1)   # 单表多视图 (可伸缩)
+        left.rowconfigure(1, weight=0)   # 操控按钮组
         right.columnconfigure(0, weight=1)
         right.rowconfigure(0, weight=1)  # 日志面板 (可伸缩)
 
@@ -535,50 +604,96 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
         except Exception:
             self._sash_init_id = None
 
-        # ── 2. 设备列表 ──
-        mid = tkinter.Frame(left, bg=C["bg"])
-        mid.grid(row=0, column=0, sticky="nsew", padx=0, pady=(0, utils.sp(4)))
-        mid.columnconfigure(0, weight=1)
+        # ── 2. 单表多视图 (S4/P1-3): 一张表 + 切页 (设备｜配对｜指令｜传输) ──
+        # 替代原「多张空表纵向堆叠」: 同一区域按视图切换, 首屏不再是一屏空白表头。
+        self._view = "dev"
+        self._view_btns = {}
+        self._view_frames = {}
+        card_table = tkinter.Frame(left, bg=C["bgc"],
+                                   highlightbackground=C["bd"], highlightthickness=1)
+        card_table.grid(row=0, column=0, sticky="nsew", pady=(0, utils.sp(6)))
+        card_table.columnconfigure(0, weight=1)
+        card_table.rowconfigure(1, weight=1)
 
+        # 切页条: 视图按钮 (含计数) + 右侧在线数 (P1-3 首屏信息 ≥3 条)
+        thead = tkinter.Frame(card_table, bg=C["bgc"])
+        thead.grid(row=0, column=0, sticky="ew", padx=utils.sp(8),
+                   pady=(utils.sp(6), utils.sp(4)))
+        self.lbl_online = tkinter.Label(thead, text="在线 0 / 0", font=utils.FONT_SMALL,
+                                        bg=C["bgc"], fg=C["fgm"], anchor="e")
+        self.lbl_online.pack(side="right")
+        for _key, _cap in (("dev", "设备"), ("paired", "配对"),
+                           ("cmd", "指令"), ("xfer", "传输")):
+            _b = _mk_btn(thead, C, _cap,
+                         (lambda k=_key: self._set_view(k)),
+                         font=utils.FONT_SMALL, padx=utils.sp(10))
+            _b.pack(side="left", padx=(0, utils.sp(4)))
+            self._view_btns[_key] = _b
+
+        # 视图堆叠: 4 个子页同格叠放, 仅当前视图可见 (其余 grid_remove)
+        stack = tkinter.Frame(card_table, bg=C["bgc"])
+        stack.grid(row=1, column=0, sticky="nsew", padx=utils.sp(8), pady=(0, utils.sp(8)))
+        stack.columnconfigure(0, weight=1)
+        stack.rowconfigure(0, weight=1)
+        self._view_stack = stack
+
+        def _mk_view(key):
+            f = tkinter.Frame(stack, bg=C["bgc"])
+            f.grid(row=0, column=0, sticky="nsew")
+            f.columnconfigure(0, weight=1)
+            f.rowconfigure(0, weight=1)
+            self._view_frames[key] = f
+            return f
+
+        # 视图①设备: 设备表 + 选中详情
+        dev_body = _mk_view("dev")
         cols = ("dev", "state", "script", "progress", "latency", "perm")
         # Phase3-2: 设备表支持多选（批量下发）；主选中取 selection()[0]
-        self.tv = ttk.Treeview(mid, columns=cols, show="headings", height=6,
+        self.tv = ttk.Treeview(dev_body, columns=cols, show="headings", height=9,
                                selectmode="extended")
         for cid, text, width in (
-                ("dev", "设备", 150), ("state", "状态", 90),
-                ("script", "当前脚本", 160), ("progress", "进度", 150),
-                ("latency", "延迟", 60), ("perm", "权限", 70)):
+                ("dev", "设备", 120), ("state", "状态", 70),
+                ("script", "当前脚本", 120), ("progress", "进度", 110),
+                ("latency", "延迟", 50), ("perm", "权限", 60)):
             self.tv.heading(cid, text=text)
             self.tv.column(cid, width=width, anchor="w")
         # §4.5 降级: show="headings" 无 #0 列 → 选中行加粗 (整行 acl 底由 style.map)
         utils.bind_sel_bold(self.tv)
         self.tv.grid(row=0, column=0, sticky="nsew")
-        sb = ttk.Scrollbar(mid, orient="vertical", command=self.tv.yview)
+        sb = ttk.Scrollbar(dev_body, orient="vertical", command=self.tv.yview)
         sb.grid(row=0, column=1, sticky="ns")
         self.tv.configure(yscrollcommand=sb.set)
-        self.tv.tag_configure("run", foreground=utils.themed("sc", "#10b981"))
-        self.tv.tag_configure("pause", foreground=utils.themed("wn", "#f59e0b"))
-        self.tv.tag_configure("idle", foreground=utils.themed("fgm", "#718096"))
-        self.tv.tag_configure("off", foreground=utils.themed("fgm", "#718096"))
-        self.tv.tag_configure("unauth", foreground=utils.themed("fgm", "#718096"))
+        self.tv.tag_configure("run", foreground=C["sc"])
+        self.tv.tag_configure("pause", foreground=C["wn"])
+        self.tv.tag_configure("idle", foreground=C["fgm"])
+        self.tv.tag_configure("off", foreground=C["fgm"])
+        self.tv.tag_configure("unauth", foreground=C["fgm"])
         self.tv.bind("<<TreeviewSelect>>", self._on_select)
 
-        # ── 3. 选中设备详情 ──
-        det = tkinter.Frame(left, bg=C["bg"])
-        det.grid(row=1, column=0, sticky="ew", padx=0, pady=(0, utils.sp(4)))
+        # v6 §5.2/§5.4: 设备表空态 (图标 + 主句 + 副句 + [显示配对码] 主按钮);
+        # panels._refresh_table 按 grid_remove/grid 切换, 与已配对区空态同法。
+        self.lbl_dev_empty = _mk_empty(
+            dev_body, C, "◌", "还没有已配对设备",
+            "在对方机器开启允许被发现后会自动出现在这里",
+            btn_text="显示配对码", btn_cmd=self._on_pair_code)
+        self.lbl_dev_empty.grid(row=1, column=0, columnspan=2, sticky="ew",
+                                pady=(utils.sp(2), 0))
+
+        # 选中设备详情 (设备视图内)
+        det = tkinter.Frame(dev_body, bg=C["bgc"])
+        det.grid(row=2, column=0, sticky="ew", pady=(utils.sp(6), 0))
         det.columnconfigure(1, weight=1)
         tkinter.Label(det, text="进度", font=utils.FONT_SMALL,
-                      bg=C["bg"], fg=C["fgm"]).grid(row=0, column=0, sticky="w", padx=(0, utils.sp(6)))
-        self.pb_detail = ttk.Progressbar(det, mode="determinate", maximum=1, value=0)
+                      bg=C["bgc"], fg=C["fgm"]).grid(row=0, column=0, sticky="w", padx=(0, utils.sp(6)))
+        self.pb_detail = ttk.Progressbar(det, mode="determinate", maximum=1,
+                                         value=0, length=100)
         self.pb_detail.grid(row=0, column=1, sticky="ew")
         self.lbl_detail = tkinter.Label(det, text="未选择设备", font=utils.FONT_SMALL,
-                                        bg=C["bg"], fg=C["fgm"], anchor="w")
+                                        bg=C["bgc"], fg=C["fgm"], anchor="w")
         self.lbl_detail.grid(row=1, column=0, columnspan=2, sticky="w", pady=(utils.sp(2), 0))
-        self.btn_pair_peer = tkinter.Button(det, text="⇄ 配对", font=utils.FONT_SMALL,
-                                            bg=C["bgc"], fg=C["fgb"],
-                                            activebackground=C["acl"], relief="flat",
-                                            bd=1, cursor="hand2", padx=utils.sp(10), pady=utils.sp(2),
-                                            state="disabled", command=self._on_pair_peer)
+        self.btn_pair_peer = _mk_btn(det, C, "⇄ 配对", self._on_pair_peer,
+                                     font=utils.FONT_SMALL, padx=utils.sp(10),
+                                     state="disabled")
         self.btn_pair_peer.grid(row=0, column=2, rowspan=2, sticky="e", padx=(utils.sp(8), 0))
         try:
             utils.attach_tooltip(self.btn_pair_peer,
@@ -586,12 +701,9 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
         except Exception:
             pass
         # Phase3-1b: 查看远端脚本列表并可直接远程运行 (需 perm=script)
-        self.btn_remote_scripts = tkinter.Button(det, text="▭ 远端脚本",
-                                                 font=utils.FONT_SMALL, bg=C["bgc"],
-                                                 fg=C["fgb"], activebackground=C["acl"],
-                                                 relief="flat", bd=1, cursor="hand2",
-                                                 padx=utils.sp(10), pady=utils.sp(2), state="disabled",
-                                                 command=self._on_remote_scripts)
+        self.btn_remote_scripts = _mk_btn(det, C, "▭ 远端脚本", self._on_remote_scripts,
+                                          font=utils.FONT_SMALL, padx=utils.sp(10),
+                                          state="disabled")
         self.btn_remote_scripts.grid(row=0, column=3, rowspan=2, sticky="e", padx=(utils.sp(8), 0))
         try:
             utils.attach_tooltip(self.btn_remote_scripts, self._tip_script)
@@ -600,34 +712,34 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
 
         # Phase3-2: 定时任务状态（消费 TOPIC_PEER_SCHED，只读展示）
         self.lbl_sched = tkinter.Label(det, text="定时任务：—", font=utils.FONT_SMALL,
-                                       bg=C["bg"], fg=C["fgm"], anchor="w")
+                                       bg=C["bgc"], fg=C["fgm"], anchor="w")
         self.lbl_sched.grid(row=2, column=0, columnspan=4, sticky="w", pady=(utils.sp(2), 0))
 
-        # ── 3b. 已配对设备（本机授予的远程权限）──
-        self.lf_paired = ttk.LabelFrame(left, text="已配对设备（本机授予的远程权限）")
-        self.lf_paired.grid(row=2, column=0, sticky="ew", padx=0, pady=(0, utils.sp(4)))
-        self.lf_paired.columnconfigure(0, weight=1)
+        # 视图②已配对: 已配对设备 + 本机授予的远程权限
+        pbody = _mk_view("paired")
+        self.lf_paired = pbody
         pcols = ("name", "fp", "perm", "last")
-        self.tv_paired = ttk.Treeview(self.lf_paired, columns=pcols,
-                                      show="headings", height=4)
-        for cid, text, width in (("name", "设备名", 140), ("fp", "指纹", 230),
-                                 ("perm", "权限", 110), ("last", "最近连接", 140)):
+        self.tv_paired = ttk.Treeview(pbody, columns=pcols,
+                                      show="headings", height=9)
+        for cid, text, width in (("name", "设备名", 120), ("fp", "指纹", 180),
+                                 ("perm", "权限", 90), ("last", "最近连接", 120)):
             self.tv_paired.heading(cid, text=text)
             self.tv_paired.column(cid, width=width, anchor="w")
         # §4.5 降级: show="headings" 无 #0 列 → 选中行加粗
         utils.bind_sel_bold(self.tv_paired)
-        self.tv_paired.grid(row=0, column=0, sticky="ew", padx=(utils.sp(6), 0), pady=(utils.sp(2), 0))
-        psb = ttk.Scrollbar(self.lf_paired, orient="vertical",
+        self.tv_paired.grid(row=0, column=0, sticky="nsew")
+        psb = ttk.Scrollbar(pbody, orient="vertical",
                             command=self.tv_paired.yview)
-        psb.grid(row=0, column=1, sticky="ns", pady=(utils.sp(2), 0))
+        psb.grid(row=0, column=1, sticky="ns")
         self.tv_paired.configure(yscrollcommand=psb.set)
         self.tv_paired.bind("<<TreeviewSelect>>", self._on_paired_select)
-        self.lbl_paired_empty = tkinter.Label(self.lf_paired, text="暂无已配对设备",
-                                              font=utils.FONT_SMALL, bg=C["bgc"],
-                                              fg=C["fgm"])
-        self.lbl_paired_empty.grid(row=1, column=0, sticky="w", padx=utils.sp(8), pady=(0, utils.sp(2)))
-        pctl = tkinter.Frame(self.lf_paired, bg=C["bgc"])
-        pctl.grid(row=2, column=0, columnspan=2, sticky="ew", padx=utils.sp(6), pady=(0, utils.sp(4)))
+        # I1 空态: 图标 + 主句 + 副句 (panels._refresh_paired 按 grid_remove/grid 切换)
+        self.lbl_paired_empty = _mk_empty(pbody, C, "◌", "暂无已配对设备",
+                                          "选中设备点「⇄ 配对」完成配对")
+        self.lbl_paired_empty.grid(row=1, column=0, columnspan=2, sticky="ew",
+                                   pady=(utils.sp(2), 0))
+        pctl = tkinter.Frame(pbody, bg=C["bgc"])
+        pctl.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(utils.sp(2), 0))
         tkinter.Label(pctl, text="权限", font=utils.FONT_SMALL, bg=C["bgc"],
                       fg=C["fgm"]).pack(side="left", padx=(0, utils.sp(4)))
         self.var_perm = tkinter.StringVar(value="仅观察")
@@ -635,55 +747,64 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
                                      values=("仅观察", "允许操控", "允许接收脚本"),
                                      state="readonly", width=12)
         self.cmb_perm.pack(side="left", padx=(0, utils.sp(6)))
-        self.btn_perm_apply = tkinter.Button(pctl, text="应用", font=utils.FONT_SMALL,
-                                             bg=C["ac"], fg=utils.text_on(C["ac"]),
-                                             activebackground=C["ach"],
-                                             activeforeground=utils.text_on(C["ach"]),
-                                             relief="flat",
-                                             bd=1, cursor="hand2", padx=utils.sp(10), pady=utils.sp(1),
-                                             state="disabled", command=self._on_perm_apply)
+        # v5 V1: 应用不再是第二颗实心主按钮 → ghost
+        self.btn_perm_apply = _mk_btn(pctl, C, "应用", self._on_perm_apply,
+                                      font=utils.FONT_SMALL, padx=utils.sp(10),
+                                      state="disabled")
         self.btn_perm_apply.pack(side="left", padx=(0, utils.sp(6)))
-        self.btn_peer_remove = tkinter.Button(pctl, text="移除", font=utils.FONT_SMALL,
-                                              bg=C["dg"], fg=utils.text_on(C["dg"]),
-                                              activebackground=C["dg"],
-                                              activeforeground=utils.text_on(C["dg"]),
-                                              relief="flat",
-                                              bd=1, cursor="hand2", padx=utils.sp(10), pady=utils.sp(1),
-                                              state="disabled", command=self._on_peer_remove)
+        self.btn_peer_remove = _mk_btn(pctl, C, "移除", self._on_peer_remove,
+                                       kind="danger", font=utils.FONT_SMALL,
+                                       padx=utils.sp(10), state="disabled")
         self.btn_peer_remove.pack(side="left")
 
         # ── 4. 日志面板 (右列, 常驻侧栏) ──
-        logfr = tkinter.Frame(right, bg=C["bg"])
+        logfr = _mk_card(right, C, title="设备日志")
         logfr.grid(row=0, column=0, sticky="nsew", padx=(utils.sp(6), 0), pady=0)
         logfr.columnconfigure(0, weight=1)
-        logfr.rowconfigure(0, weight=1)
-        self.txt_log = tkinter.Text(logfr, height=8, font=utils.FONT_LOG,
+        logfr.rowconfigure(1, weight=1)
+        logbody = tkinter.Frame(logfr, bg=C["bgc"])
+        logbody.grid(row=1, column=0, sticky="nsew", padx=utils.sp(8), pady=(0, utils.sp(8)))
+        logbody.columnconfigure(0, weight=1)
+        logbody.rowconfigure(0, weight=1)
+        # v6 §5.2: 外框接主题 —— Text 默认 highlight 框是系统黑 (截图里的「粗黑外框」),
+        # 显式设为 bd 1px (聚焦时 accent); 换肤由 refresh_theme 的 _walk 旧色→新色映射跟随。
+        self.txt_log = tkinter.Text(logbody, height=8, width=10, font=utils.FONT_LOG,
                                     bg=C["logbg"], fg=C["logfg"], relief="solid", bd=1,
-                                    wrap="none", state="disabled")
+                                    wrap="none", state="disabled",
+                                    highlightthickness=1,
+                                    highlightbackground=C["bd"],
+                                    highlightcolor=C["focus"])
         self.txt_log.grid(row=0, column=0, sticky="nsew")
-        logsb = ttk.Scrollbar(logfr, orient="vertical", command=self.txt_log.yview)
+        logsb = ttk.Scrollbar(logbody, orient="vertical", command=self.txt_log.yview)
         logsb.grid(row=0, column=1, sticky="ns")
         self.txt_log.configure(yscrollcommand=logsb.set)
-        self.txt_log.tag_configure("err", foreground=utils.themed("err", "#ef4444"))
-        self.txt_log.tag_configure("wn", foreground=utils.themed("wn", "#f59e0b"))
+        self.txt_log.tag_configure("err", foreground=C["err"])
+        self.txt_log.tag_configure("wn", foreground=C["wn"])
 
         # ── 5. 操控按钮组 (Phase 2-2b: 按选中设备权限/运行态启用) ──
+        # 两行布局: 指令行 + 工具行, 避免左栏 570px 下按钮被挤到只剩图标。
         ctl = tkinter.Frame(left, bg=C["bg"])
-        ctl.grid(row=3, column=0, sticky="ew", padx=0, pady=(0, utils.sp(4)))
+        ctl.grid(row=1, column=0, sticky="ew", padx=0, pady=(0, utils.sp(6)))
+        ctl.columnconfigure(0, weight=1)
+        ctl.rowconfigure(0, weight=0)
+        ctl.rowconfigure(1, weight=0)
+        ctl_cmd = tkinter.Frame(ctl, bg=C["bg"])
+        ctl_cmd.grid(row=0, column=0, sticky="w")
+        ctl_tool = tkinter.Frame(ctl, bg=C["bg"])
+        ctl_tool.grid(row=1, column=0, sticky="w", pady=(utils.sp(4), 0))
 
-        def _mk_ctl(text, command):
-            b = tkinter.Button(ctl, text=text, font=utils.FONT_BUTTON,
-                               bg=C["bgc"], fg=C["fgm"], relief="flat", bd=1,
-                               padx=utils.sp(10), pady=utils.sp(3), state="disabled", command=command)
-            b.pack(side="left", padx=(0, utils.sp(6)))
+        def _mk_ctl(parent, text, command):
+            b = _mk_btn(parent, C, text, command, font=utils.FONT_SMALL,
+                        state="disabled", padx=utils.sp(8))
+            b.pack(side="left", padx=(0, utils.sp(5)))
             return b
 
-        self.btn_run = _mk_ctl("[▶ 远程运行]", self._on_remote_run)
-        self.btn_pause = _mk_ctl("[⏸ 暂停]", self._on_remote_pause)
-        self.btn_stop = _mk_ctl("[⏹ 停止]", self._on_remote_stop)
-        self.btn_script = _mk_ctl("[推脚本]", self._on_push_script)
-        # Phase4-1: [◎ 截图]（需「允许操控」权限，control/script 均可）
-        self.btn_shot = _mk_ctl("[◎ 截图]", self._on_remote_shot)
+        self.btn_run = _mk_ctl(ctl_cmd, "▶ 运行", self._on_remote_run)
+        self.btn_pause = _mk_ctl(ctl_cmd, "⏸ 暂停", self._on_remote_pause)
+        self.btn_stop = _mk_ctl(ctl_cmd, "⏹ 停止", self._on_remote_stop)
+        self.btn_script = _mk_ctl(ctl_cmd, "推脚本", self._on_push_script)
+        # Phase4-1: ◎ 截图（需「允许操控」权限，control/script 均可）
+        self.btn_shot = _mk_ctl(ctl_cmd, "◎ 截图", self._on_remote_shot)
         try:
             utils.attach_tooltip(self.btn_run, self._tip_run)
             utils.attach_tooltip(self.btn_pause, self._tip_pause)
@@ -693,90 +814,83 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
         except Exception:
             pass
 
-        self.btn_audit = tkinter.Button(ctl, text="[≡ 审计日志]",
-                                        font=utils.FONT_BUTTON, bg=C["bgc"],
-                                        fg=C["fgb"], activebackground=C["acl"],
-                                        relief="flat", bd=1, cursor="hand2",
-                                        padx=utils.sp(10), pady=utils.sp(3), command=self._on_audit)
-        self.btn_audit.pack(side="left", padx=(utils.sp(12), 0))
+        self.btn_audit = _mk_btn(ctl_tool, C, "≡ 审计日志", self._on_audit,
+                                 font=utils.FONT_SMALL, padx=utils.sp(8))
+        self.btn_audit.pack(side="left", padx=(0, utils.sp(5)))
         try:
             utils.attach_tooltip(self.btn_audit, "查看远程操控审计日志（只读）")
         except Exception:
             pass
 
-        # Phase4-2: [⊕ 网页面板]（浏览器只读监控面板，默认关闭）
-        self.btn_web = tkinter.Button(ctl, text="[⊕ 网页面板]",
-                                      font=utils.FONT_BUTTON, bg=C["bgc"],
-                                      fg=C["fgb"], activebackground=C["acl"],
-                                      relief="flat", bd=1, cursor="hand2",
-                                      padx=utils.sp(10), pady=utils.sp(3), command=self._on_web_panel)
-        self.btn_web.pack(side="left", padx=(utils.sp(12), 0))
+        # Phase4-2: ⊕ 网页面板（浏览器只读监控面板，默认关闭）
+        self.btn_web = _mk_btn(ctl_tool, C, "⊕ 网页面板", self._on_web_panel,
+                               font=utils.FONT_SMALL, padx=utils.sp(8))
+        self.btn_web.pack(side="left")
         try:
             utils.attach_tooltip(self.btn_web,
                                  "浏览器只读监控面板：手机/平板可查看进度（默认关闭，需启用）")
         except Exception:
             pass
 
-        # ── 6. 远程指令结果 ──
-        self.lf_cmd = ttk.LabelFrame(left, text="远程指令")
-        self.lf_cmd.grid(row=4, column=0, sticky="nsew", padx=0, pady=(0, utils.sp(4)))
-        self.lf_cmd.columnconfigure(0, weight=1)
-        self.lf_cmd.rowconfigure(0, weight=1)
+        # ── 6. 视图③远程指令 / 视图④传输 ──
+        cbody = _mk_view("cmd")
+        self.lf_cmd = cbody
         ccols = ("time", "dev", "cmd", "result")
-        self.tv_cmd = ttk.Treeview(self.lf_cmd, columns=ccols, show="headings",
-                                   height=5)
-        for cid, text, width in (("time", "时间", 90), ("dev", "设备", 150),
-                                 ("cmd", "指令", 110), ("result", "结果", 380)):
+        self.tv_cmd = ttk.Treeview(cbody, columns=ccols, show="headings",
+                                   height=9)
+        for cid, text, width in (("time", "时间", 60), ("dev", "设备", 120),
+                                 ("cmd", "指令", 90), ("result", "结果", 250)):
             self.tv_cmd.heading(cid, text=text)
             self.tv_cmd.column(cid, width=width, anchor="w")
         # §4.5 降级: show="headings" 无 #0 列 → 选中行加粗
         utils.bind_sel_bold(self.tv_cmd)
-        self.tv_cmd.grid(row=0, column=0, sticky="nsew", padx=(utils.sp(6), 0), pady=(utils.sp(2), 0))
-        csb = ttk.Scrollbar(self.lf_cmd, orient="vertical", command=self.tv_cmd.yview)
-        csb.grid(row=0, column=1, sticky="ns", pady=(utils.sp(2), 0))
+        self.tv_cmd.grid(row=0, column=0, sticky="nsew")
+        csb = ttk.Scrollbar(cbody, orient="vertical", command=self.tv_cmd.yview)
+        csb.grid(row=0, column=1, sticky="ns")
         self.tv_cmd.configure(yscrollcommand=csb.set)
-        self.tv_cmd.tag_configure("cmdok", foreground=utils.themed("sc", "#10b981"))
-        self.tv_cmd.tag_configure("cmdfail", foreground=utils.themed("err", "#ef4444"))
-        self.tv_cmd.tag_configure("cmdgray", foreground=utils.themed("fgm", "#718096"))
-        self.lbl_cmd_empty = tkinter.Label(self.lf_cmd, text="暂无远程指令",
-                                           font=utils.FONT_SMALL, bg=C["bgc"],
-                                           fg=C["fgm"])
-        self.lbl_cmd_empty.grid(row=1, column=0, sticky="w", padx=utils.sp(8), pady=(0, utils.sp(2)))
+        self.tv_cmd.tag_configure("cmdok", foreground=C["sc"])
+        self.tv_cmd.tag_configure("cmdfail", foreground=C["err"])
+        self.tv_cmd.tag_configure("cmdgray", foreground=C["fgm"])
+        self.lbl_cmd_empty = _mk_empty(cbody, C, "◌", "暂无远程指令",
+                                       "选中设备后用操控按钮下发指令")
+        self.lbl_cmd_empty.grid(row=1, column=0, columnspan=2, sticky="ew",
+                                pady=(utils.sp(2), 0))
 
-        # ── 8. 传输 (Phase3-1b: TOPIC_TRANSFER 进度) ──
-        self.lf_xfer = ttk.LabelFrame(left, text="传输")
-        self.lf_xfer.grid(row=5, column=0, sticky="nsew", padx=0, pady=(0, utils.sp(4)))
-        self.lf_xfer.columnconfigure(0, weight=1)
-        self.lf_xfer.rowconfigure(0, weight=1)
+        # 视图④传输 (Phase3-1b: TOPIC_TRANSFER 进度)
+        xbody = _mk_view("xfer")
+        self.lf_xfer = xbody
         xcols = ("dev", "file", "progress", "state")
-        self.tv_xfer = ttk.Treeview(self.lf_xfer, columns=xcols, show="headings",
-                                    height=4)
-        for cid, text, width in (("dev", "设备", 150), ("file", "文件", 190),
-                                 ("progress", "进度", 190), ("state", "状态", 230)):
+        self.tv_xfer = ttk.Treeview(xbody, columns=xcols, show="headings",
+                                    height=9)
+        for cid, text, width in (("dev", "设备", 120), ("file", "文件", 150),
+                                 ("progress", "进度", 140), ("state", "状态", 160)):
             self.tv_xfer.heading(cid, text=text)
             self.tv_xfer.column(cid, width=width, anchor="w")
         # §4.5 降级: show="headings" 无 #0 列 → 选中行加粗
         utils.bind_sel_bold(self.tv_xfer)
-        self.tv_xfer.grid(row=0, column=0, sticky="nsew", padx=(utils.sp(6), 0), pady=(utils.sp(2), 0))
-        xsb = ttk.Scrollbar(self.lf_xfer, orient="vertical", command=self.tv_xfer.yview)
-        xsb.grid(row=0, column=1, sticky="ns", pady=(utils.sp(2), 0))
+        self.tv_xfer.grid(row=0, column=0, sticky="nsew")
+        xsb = ttk.Scrollbar(xbody, orient="vertical", command=self.tv_xfer.yview)
+        xsb.grid(row=0, column=1, sticky="ns")
         self.tv_xfer.configure(yscrollcommand=xsb.set)
-        self.tv_xfer.tag_configure("xfer_run", foreground=utils.themed("ac", "#0078d4"))
-        self.tv_xfer.tag_configure("xfer_ok", foreground=utils.themed("sc", "#10b981"))
-        self.tv_xfer.tag_configure("xfer_fail", foreground=utils.themed("err", "#ef4444"))
-        self.lbl_xfer_empty = tkinter.Label(self.lf_xfer, text="暂无传输",
-                                            font=utils.FONT_SMALL, bg=C["bgc"],
-                                            fg=C["fgm"])
-        self.lbl_xfer_empty.grid(row=1, column=0, sticky="w", padx=utils.sp(8), pady=(0, utils.sp(2)))
+        self.tv_xfer.tag_configure("xfer_run", foreground=C["ac"])
+        self.tv_xfer.tag_configure("xfer_ok", foreground=C["sc"])
+        self.tv_xfer.tag_configure("xfer_fail", foreground=C["err"])
+        self.lbl_xfer_empty = _mk_empty(xbody, C, "◌", "暂无传输",
+                                        "「推脚本」的文件进度显示在这里")
+        self.lbl_xfer_empty.grid(row=1, column=0, columnspan=2, sticky="ew",
+                                 pady=(utils.sp(2), 0))
+
+        # 初始只显示「设备」视图 (其余 3 个子页 grid_remove)
+        self._set_view("dev")
 
         # ── 9. 底部状态行 ──
         self.lbl_bottom = tkinter.Label(win, text="互联未启动", font=utils.FONT_SMALL,
                                         bg=C["bg"], fg=C["fgm"], anchor="w")
-        self.lbl_bottom.grid(row=3, column=0, sticky="ew", padx=utils.sp(10), pady=(utils.sp(4), utils.sp(2)))
+        self.lbl_bottom.grid(row=2, column=0, sticky="ew", padx=utils.sp(10), pady=(utils.sp(4), utils.sp(2)))
         # Phase4-3 传输加密状态（只读：明文 / TLS（指纹 N 个））
         self.lbl_tls = tkinter.Label(win, text="传输：明文", font=utils.FONT_SMALL,
                                      bg=C["bg"], fg=C["fgm"], anchor="w")
-        self.lbl_tls.grid(row=4, column=0, sticky="ew", padx=utils.sp(10), pady=(0, utils.sp(8)))
+        self.lbl_tls.grid(row=3, column=0, sticky="ew", padx=utils.sp(10), pady=(0, utils.sp(8)))
 
         # 内嵌模式: 全部控件就绪后再递归绑定滚轮 (可滚动的 Treeview/Text/Listbox 除外)
         if host is not None:
@@ -786,6 +900,32 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
                 pass
 
         self._schedule_pump(PUMP_INTERVAL_MS)
+
+    # _set_view
+    def _set_view(self, key):
+        """切换单表视图 (设备｜配对｜指令｜传输): 仅当前子页可见, 按钮高亮 (S4/P1-3)。"""
+        self._view = key
+        C = utils.C
+        for k, f in getattr(self, "_view_frames", {}).items():
+            try:
+                if k == key:
+                    f.grid()
+                else:
+                    f.grid_remove()
+            except Exception:
+                pass
+        for k, b in getattr(self, "_view_btns", {}).items():
+            try:
+                if k == key:      # 选中: accent 浅底 + 前景白
+                    b.configure(bg=C.get("acl"), fg=C.get("fgt"),
+                                activebackground=C.get("acl"),
+                                activeforeground=C.get("fgt"))
+                else:             # 未选中: 卡片底 + 正文色 (ghost)
+                    b.configure(bg=C.get("bgc"), fg=C.get("fgb"),
+                                activebackground=C.get("acl"),
+                                activeforeground=C.get("fgb"))
+            except Exception:
+                pass
 
     # _schedule_pump
     def _schedule_pump(self, delay):
@@ -957,10 +1097,9 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
                 name = socket.gethostname()
             except Exception:
                 name = "ACRPA"
-        port = getattr(state, "NETLINK_PORT", DEFAULT_TCP_PORT)
         try:
-            self.lbl_top.config(text="本机名: {}  |  TCP :{}  |  {}".format(
-                name, port, "● 运行中" if running else "○ 已停止"))
+            self.lbl_top.config(text="{}  ·  {}".format(
+                name, "● 运行中" if running else "○ 已停止"))
             self.btn_toggle.config(text="停止互联" if running else "启动互联")
         except Exception:
             pass
@@ -980,6 +1119,24 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
             self.lbl_bottom.config(text=text)
         except Exception:
             pass
+        # 视图计数 + 在线数 (P1-3 首屏信息 ≥3 条: 状态/配对码/在线/各视图计数)
+        try:
+            self.lbl_online.config(text="在线 {} / {}".format(online, len(self._peers)))
+        except Exception:
+            pass
+        try:
+            counts = {
+                "dev": len(self._peers),
+                "paired": len(self.tv_paired.get_children("")),
+                "cmd": len(self.tv_cmd.get_children("")),
+                "xfer": len(self.tv_xfer.get_children("")),
+            }
+            _caps = {"dev": "设备", "paired": "配对", "cmd": "指令", "xfer": "传输"}
+            for k, b in getattr(self, "_view_btns", {}).items():
+                n = counts.get(k, 0)
+                b.configure(text=(_caps.get(k, k) + (" {}".format(n) if n else "")))
+        except Exception:
+            pass
         self._refresh_tls_label(node, running)
 
     # _refresh_tls_label
@@ -987,20 +1144,20 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
         """刷新「传输」状态行：明文 / TLS（指纹 N 个）；未就绪→error 配色。"""
         try:
             if not running or node is None or not hasattr(node, "tls_status"):
-                self.lbl_tls.config(text="传输：—", fg=utils.themed("fgm", "#718096"))
+                self.lbl_tls.config(text="传输：—", fg=utils.themed("fgm"))
                 return
             st = node.tls_status() or {}
             if not st.get("enabled"):
-                self.lbl_tls.config(text="传输：明文", fg=utils.themed("fgm", "#718096"))
+                self.lbl_tls.config(text="传输：明文", fg=utils.themed("fgm"))
                 return
             if not st.get("ready"):
                 self.lbl_tls.config(
                     text="传输：TLS 未就绪 — {}".format(st.get("reason") or "unknown"),
-                    fg=utils.themed("err", "#ef4444"))
+                    fg=utils.themed("err"))
                 return
             self.lbl_tls.config(
                 text="传输：TLS（指纹 {} 个）".format(int(st.get("pins") or 0)),
-                fg=utils.themed("sc", "#22c55e"))
+                fg=utils.themed("sc"))
         except Exception:
             pass
 
@@ -1008,7 +1165,7 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
     def _refresh_pair_label(self, node):
         """顶部状态条配对码提示 (被控端, 随 _pump 更新)。"""
         txt = "配对码 —"
-        fg = utils.themed("fgm", "#718096")
+        fg = utils.themed("fgm")
         try:
             st = node.pair_window_status() if node is not None else None
             if st and st.get("active"):
@@ -1017,7 +1174,7 @@ class NetLinkWindow(panels.PanelsMixin, shot.ShotMixin, pairing.PairingMixin,
                 left = left if left > 0 else 0
                 txt = "配对码 {}  (剩余 {:02d}:{:02d})".format(
                     " ".join(pin), left // 60, left % 60)
-                fg = utils.themed("ac", "#0078d4")
+                fg = utils.themed("ac")
         except Exception:
             pass
         try:

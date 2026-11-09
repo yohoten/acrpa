@@ -962,7 +962,7 @@
         <a class="btn btn-ghost" href="#screenshots">▶ 查看演示</a>
         <a class="btn btn-ghost" href="#contact">💬 交流共创</a>
       </div>
-      <p style="font-size:12.5px;color:var(--dim);margin:-10px 0 22px">最新版：<span data-ver></span>（预发布）· <span data-asset></span> · 14.9 MiB · SHA-256 3f859af1…92b82</p>
+      <p style="font-size:12.5px;color:var(--dim);margin:-10px 0 22px">最新版：<span data-ver></span>（正式版）· <span data-asset></span> · 18.0 MiB · SHA-256 30f77941…b64e73</p>
       <div class="hero-trust">
         <span class="badge-free">✔ 完全免费 · 开源 MIT</span>
         <span class="badge-free">✔ 便携高效 · 免安装解压即用</span>
@@ -1077,7 +1077,7 @@
         <a class="dl-card dl-card-primary" href="https://github.com/yohoten/acrpa/releases" data-download target="_blank" rel="noopener noreferrer">
           <span class="dl-badge">推荐</span>
           <span class="dl-card-head"><span class="gi">⬇</span> 直接下载 <span class="dl-arrow">↓</span></span>
-          <small>GitHub Release 直链 · <span data-asset></span> · 14.9 MiB · 解压即用</small>
+          <small>GitHub Release 直链 · <span data-asset></span> · 18.0 MiB · 免安装</small>
         </a>
         <a class="dl-card" href="https://github.com/yohoten/acrpa/releases" target="_blank" rel="noopener noreferrer">
           <span class="dl-card-head"><span class="gi">⌥</span> GitHub Releases <span class="dl-arrow">↓</span></span>
@@ -1092,7 +1092,7 @@
           <small>备选镜像仓库 · 与主仓库同步发布</small>
         </a>
       </div>
-      <p class="dl-foot">SHA-256 3f859af1…92b82 · 下载后建议核对校验值</p>
+      <p class="dl-foot">SHA-256 30f77941…b64e73 · 下载后建议核对校验值</p>
     </div>
   </div>
 </div>
@@ -1627,7 +1627,8 @@
       <p class="sec-desc">持续迭代，近期聚焦更新机制、工作流编排、AI 增强与稳定性；完整历史见 <a class="doc-link" href="https://github.com/yohoten/acrpa/releases" target="_blank" rel="noopener">GitHub Releases →</a></p>
     </div>
     <div class="timeline is-collapsed" id="timeline">
-      <div class="tl-item reveal"><div class="tl-ver" data-ver></div><div class="tl-date" data-date></div><p>工作流与 AI 能力集中增强：新增 <code>retry</code> 重试 / <code>rollback</code> 失败补偿 / <code>workflow</code> 子工作流引用 / <code>parallel</code> 真并行四类执行语义；补齐工作流版本历史与撤销重做；失败现场从「只落盘」升级为只读查看 + 两次运行对比；AI 生成接入流式输出 + token 记账 + 结果缓存，支持自然语言生成工作流图；全链路统一 <code>run_id</code>。脚本列结构未变，旧脚本 / 旧工作流 / 旧 Excel 无需修改。</p></div>
+      <div class="tl-item reveal"><div class="tl-ver" data-ver></div><div class="tl-date" data-date></div><p>UI 视觉规范 v6 落地：页签去除系统焦点虚线框并加 2px 强调色选中条，工具栏按 1px 竖线分组且危险组恒排最右，操作库按语义类别区分图标并补全名悬停与搜索空态，设备表 / 任务表 / 编辑区空态统一，设置左导航层级与「需重启」提示重做，帮助窗口支持 Markdown 行内渲染与实线标题；工作流「AI生成」紫化并新增「AI调试」，调试面板与生成面板视觉统一。同时完成主窗布局与交互重构、定时任务独立 Tab 与 <code>build.py --inno</code> 安装包链路。</p></div>
+      <div class="tl-item reveal"><div class="tl-ver">v0.1.30-beta</div><div class="tl-date">2026-11-06</div><p>工作流与 AI 能力集中增强：新增 <code>retry</code> 重试 / <code>rollback</code> 失败补偿 / <code>workflow</code> 子工作流引用 / <code>parallel</code> 真并行四类执行语义；补齐工作流版本历史与撤销重做；失败现场从「只落盘」升级为只读查看 + 两次运行对比；AI 生成接入流式输出 + token 记账 + 结果缓存，支持自然语言生成工作流图；全链路统一 <code>run_id</code>。脚本列结构未变，旧脚本 / 旧工作流 / 旧 Excel 无需修改。</p></div>
       <div class="tl-item reveal"><div class="tl-ver">v0.1.29</div><div class="tl-date">2026-10-07</div><p>界面美化（色板扩充 / 扁平按钮 + 焦点环 / 日志级别徽标）；底部常驻日志面板 + 执行控制工具栏；设置窗口优化与 OCR 状态行；PaddleOCR.dll 原生 OCR 后端（可选）；AI 密钥单一真源与生成规范化；窗口标题统一显示版本号。</p></div>
       <div class="tl-item reveal"><div class="tl-ver">v0.1.27</div><div class="tl-date">2026-09-13</div><p>以 v0.1.25 为基线重建，修复 v0.1.26 的不稳定接线：<code>_update_pending</code> 未定义导致 <code>_periodic</code> 每 100ms 抛 <code>NameError</code>、状态栏与执行进度刷新链路中断且更新提示置位失败；<code>show_update_dialog</code> 未导入导致点击状态栏更新入口失效。完整保留 v0.1.26 的优点：更新机制重构（多源降级 / 语义化版本比较 / sha256 校验 / 便携版一键重启自更新 / 打包版版本号来源修复）、engine 命令失败语义与工作流错误传播、发布工具链与构建资源纳管。</p></div>
       <div class="tl-item reveal"><div class="tl-ver">v0.1.26</div><div class="tl-date">2026-09-13</div><p>更新机制重构：修复打包后版本号失真（EXE 永远自报旧版本，导致更新判断与「关于」页全部失效）；检查更新改为多源降级（GitHub Releases → 原始清单 → CDN 镜像），任一可用即返回，某个来源报出的版本不够新时继续探测其余来源取最高者，不再因镜像缓存落后或网络异常而误报「已是最新」；版本比较支持 v 前缀、位数不齐与预发布后缀；网络传输双栈（requests → 系统证书库），修复企业 TLS 拦截环境下的静默失效；下载支持多候选直链逐个重试、流式进度、sha256 与体积校验，并复核包内 VERSION，镜像返回旧包时自动换源；新增应用内更新窗口与便携版一键重启自更新，只替换主程序与 VERSION，配置、脚本、模板、日志一律不动。另修复「命令失败静默成功」与 <code>stop_on_error</code> / 重试失效问题。</p></div>
@@ -1663,7 +1664,7 @@
     <div class="limits reveal">
       <h3>已知限制（诚实告知）</h3>
       <ul>
-        <li>当前 <span data-ver></span> 为<b>预发布（beta）</b>版本，建议先在测试环境验证后再投入生产使用。</li>
+        <li>当前 <span data-ver></span> 为<b>正式版（Stable）</b>；脚本与工作流相关改动仍建议先在测试环境验证后再投入生产使用。</li>
         <li>exe 未做付费代码签名，首次运行可能触发 SmartScreen / 杀软拦截（处理方式见上方提示）。</li>
         <li>脚本仅支持 <b>.xls</b> 格式（暂不支持 .xlsx）；识图素材需为 PNG，路径 / 文件名请避免中文。</li>
         <li>NetLink 面向内网（LAN）设计，跨机真机验收仍在进行中，Web 面板默认关闭。</li>
@@ -2058,9 +2059,9 @@
      效果；如需 SEO 精确，请在发版时另行维护站点侧的静态快照。
      两个语言页面各自维护一份单一源，互不共享。 */
   var ACRPA_RELEASE = {
-    version: "0.1.30-beta",      // 唯一权威字面量：展示用版本号（可含预发布后缀）
-    date: "2026-11-06",          // 发布日期
-    tag: "",                     // 显式覆盖：留空即按 "v"+version 派生（本版 tag = v0.1.30-beta）
+    version: "0.1.30",           // 唯一权威字面量：展示用版本号（可含预发布后缀）
+    date: "2026-11-09",          // 发布日期
+    tag: "",                     // 显式覆盖：留空即按 "v"+version 派生（本版 tag = v0.1.30）
     ghUser: "yohoten",
     ghRepo: "acrpa"
   };

@@ -185,13 +185,16 @@ def t_no_build_residue():
     hits = [b for b in BANNED_IN_ACRPA if b in a]
     check(not hits, "ACRPA.py 不再含原执行栏构建段控件创建", "残留={}".format(hits))
     # 四键创建 (roled) 只在 exec_bar; ACRPA 不再具名创建
+    # (btn_validate 已按用户要求降级为 ghost, 不再登记 roled 语义角色 —— 见 theme_bus T9)
     eb = _read("src/ui/exec_bar.py")
     eflat = eb.replace(" ", "")
-    for name in ("btn_validate", "btn_run", "btn_pause", "btn_step", "btn_stop"):
+    for name in ("btn_run", "btn_pause", "btn_step", "btn_stop"):
         check('{}=ui_theme.roled('.format(name) in eflat,
               "exec_bar 创建 {} (roled)".format(name))
         check('{}=ui_theme.roled('.format(name) not in flat,
               "ACRPA.py 不再创建 {}".format(name))
+    check('btn_validate=ui_theme.roled(' not in eflat,
+          "exec_bar 创建 btn_validate (ghost, 不登记角色)")
     check("_update_exec_buttons = ui_exec_bar.set_state" in a,
           "ACRPA._update_exec_buttons 转发到 exec_bar.set_state")
 
@@ -234,6 +237,13 @@ def t_real_machine():
     rt = None
     try:
         rt = app.build()
+        # 启动分帧: 执行栏/日志面板在首个 idle 才构建 → 断言前先驱动一次事件循环
+        # (与工作流 Tab 的 _wf_ensure() 懒构建同口径)。
+        try:
+            rt.root.update_idletasks()
+            rt.root.update()
+        except Exception:
+            pass
         check(ACRPA.btn_run is not None, "实机: ACRPA.btn_run 非空")
         check(ACRPA.script_name_var is not None, "实机: ACRPA.script_name_var 非空")
         # 工作流 Tab 为延迟构建 (§5.2 P1): 先触发构建再比对 StringVar 身份

@@ -201,9 +201,15 @@ def t_hardcoded_geometry():
 def t_a11y_static():
     print("\n── C. 标题栏图标可达性 (静态) ──")
     src = _read("src/ACRPA.py")
-    for var in ("pin_btn", "fold_btn", "dark_btn", "settings_btn", "help_btn"):
+    for var in ("pin_btn", "fold_btn", "dark_btn"):
         check(re.search(r"bind_icon_activate\(\s*{}\s*,".format(var), src) is not None,
               "{} 经 utils.bind_icon_activate 接入".format(var))
+    # v6 §9: 设置/帮助改为标题栏文字菜单 —— 经 _tb_menubtn 工厂统一接入
+    # (工厂内部对 mb 调 utils.bind_icon_activate, 键盘可达性与图标等价)
+    for var in ("settings_menu_btn", "help_menu_btn"):
+        check(re.search(r"{} = _tb_menubtn\(".format(var), src) is not None
+              and "utils.bind_icon_activate(mb," in src,
+              "{} 经 _tb_menubtn 工厂接入 (内含 bind_icon_activate)".format(var))
     usrc = _read("src/utils.py")
     check("def set_accessible_name(" in usrc, "utils.set_accessible_name 已定义")
     check("def bind_icon_activate(" in usrc, "utils.bind_icon_activate 已定义")

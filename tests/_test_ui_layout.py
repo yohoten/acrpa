@@ -126,11 +126,17 @@ def t_log_batch():
 
     joined = "".join(w.text)
     first = joined.split("\n")[0]
-    # v5 §3.4 L4 (P1-6): 色条字形 ▌ 由生产端 (core.log.flush) 内联进行首,
-    # 故首行现在是「▌[时间] [级别] 消息」; 正文格式不变 (仅多一个装饰字形,
-    # 导出/复制侧会 strip 掉)。开关 LOG_CBAR_INLINE=False 时恢复旧格式。
-    check("3d. 首行格式为 [▌][时间] [级别] 消息",
-          first.startswith("▌[") and "] [INFO] 行-0000" in first, first)
+    # v5 §3.4 L4 (P1-6): 色条字形 ▌ 由生产端 (core.log.flush) 内联进行首。
+    # v6 (视觉稿 A5): 行版式 = 「▌ + 时间戳(8) + 2空格 + 徽标块(8) + 2空格 + 正文」,
+    # 去掉 [ ] 方括号, 级别由「徽标块 + 左缘色条」承载; 版式常量唯一真源在 core.log。
+    # 导出/复制侧仍 strip 掉行首 ▌ (见 ui/log_dock._log_export_write)。
+    from core.log import log_row_layout
+    _ts_a, _ts_b, _b_a, _b_b = log_row_layout(1)
+    check("3d. 首行格式为 [▌][时间] [徽标块] 正文",
+          (first.startswith("▌")
+           and first[_ts_a:_ts_b].count(":") == 2
+           and first[_b_a:_b_b].strip() == "INFO"
+           and first[_b_b:].strip() == "行-0000"), first)
     idx = [joined.find("行-{:04d}".format(i)) for i in range(n)]
     check("3e. 1000 条全部落地", all(i >= 0 for i in idx), idx[:5])
     check("3f. 顺序与写入顺序一致", idx == sorted(idx))

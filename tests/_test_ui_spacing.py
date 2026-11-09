@@ -45,25 +45,18 @@ C5_EXCLUDE = frozenset({"ui/theme.py", "netlink/webui.py"})
 # 出现集合外的**新**字面量 → 失败; 删除字面量 → 允许 (可顺带把键删掉)。
 COLOR_WHITELIST = {
     "ACRPA.py": frozenset({"#FFFFFF"}),
-    "app.py": frozenset({"#000000", "#666666", "#B45309", "#FFFFFF"}),
     "core/color.py": frozenset({"#000000", "#1A1A1A", "#808080", "#FFFFFF"}),  # P1-1: 中性默认色常量
     "reminder.py": frozenset({"#0078D4", "#1F1F1F", "#333333", "#5F5F5F",
                               "#C42B1C", "#E1E1E1", "#FFFFFF"}),
     "utils.py": frozenset({"#1A1A1A", "#7C3AED", "#FFFFFF"}),
     "ui/bg_image.py": frozenset({"#FFFFFF"}),
-    "ui/command_palette.py": frozenset({"#000000", "#0078D4", "#333333",
-                                        "#5F5F5F", "#CCE4F7", "#E1E1E1", "#FFFFFF"}),
-    "ui/netlink/remote.py": frozenset({"#718096"}),
-    "ui/netlink/window.py": frozenset({"#0078D4", "#10B981", "#22C55E",
-                                       "#718096", "#EF4444", "#F59E0B"}),
-    "ui/param_form.py": frozenset({"#000000", "#0078D4", "#333333",
-                                   "#FFF0F0", "#FFFFFF"}),
-    "ui/window_shell.py": frozenset({"#0078D4", "#DC2626", "#E8E8E8", "#F5F5F5"}),
-    "ui/workflow_view.py": frozenset({"#0078D4", "#0EA5E9", "#10B981", "#3B82F6",
-                                      "#4A4A4A", "#64748B", "#6B7280", "#888888",
-                                      "#8B5CF6", "#94A3B8", "#9CA3AF", "#CCE4F7",
-                                      "#E1E1E1", "#E2E8F0", "#EEEEEE", "#EF4444",
-                                      "#F59E0B", "#F8FAFC", "#FFFFFF"}),
+    "ui/workflow_view.py": frozenset({"#0078D4", "#0EA5E9", "#10B981", "#14B8A6",
+                                      "#1F2937", "#232323", "#3B82F6", "#4A4A4A",
+                                      "#5F5F5F", "#64748B", "#6B7280", "#888888",
+                                      "#8B5CF6", "#94A3B8", "#9A9A9A", "#9CA3AF",
+                                      "#C9C9C9", "#CCE4F7", "#E1E1E1", "#E2E8F0",
+                                      "#EEEEEE", "#EF4444", "#F1F5F9", "#F59E0B",
+                                      "#F8FAFC", "#F97316", "#FFFFFF"}),
 }
 
 

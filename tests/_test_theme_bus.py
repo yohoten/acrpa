@@ -349,9 +349,13 @@ def t_roles_and_subscriptions():
         pat = '{}=ui_theme.roled('.format(name)
         check(pat in eflat and '"{}")'.format(tok) in eflat,
               "exec_bar.{} 登记语义角色 \"{}\"".format(name, tok))
-    check(eb.count("ui_theme.roled(") >= 5,
-          "src/ui/exec_bar.py 多处 roled(...) 登记语义角色 (选择/四键)",
+    # 校验键已按视觉方案降级为 ghost (与调试/变量同级), 不再登记语义角色;
+    # 角色登记只保留执行四键 (run/pause/step/stop)。
+    check(eb.count("ui_theme.roled(") >= 4,
+          "src/ui/exec_bar.py 四键登记语义角色 (run/pause/step/stop)",
           "count={}".format(eb.count("ui_theme.roled(")))
+    check("btn_validate=ui_theme.roled(" not in eflat,
+          "校验键为 ghost, 不登记语义角色 (与调试/变量同级)")
     for name in ("btn_run", "btn_pause", "btn_step", "btn_stop"):
         check('{}=ui_theme.roled('.format(name) not in flat,
               "ACRPA.py 不再具名登记 {} (已迁 exec_bar)".format(name))

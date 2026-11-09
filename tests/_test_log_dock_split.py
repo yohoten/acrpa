@@ -154,13 +154,16 @@ def l_host_aliases_and_moved_out():
         check(pat in a_src, "ACRPA.py 保留函数别名 `{}`".format(pat))
 
     # L3b: 运行时别名可解析 (不 import ACRPA —— 静态文本已足够; 额外用子进程确认)
+    # 注: 启动分帧重构后 (ACRPA.py「执行栏/日志面板句柄默认值」段), 模块级默认
+    # `rz = None` 恒存在 —— import 零副作用的口径改为「rz 为分帧默认 None,
+    # idle 后才由 _build_exec_and_log 赋真实句柄」。
     env = dict(os.environ)
     env["PYTHONIOENCODING"] = "utf-8"
     code = ("import sys; sys.path.insert(0, {src!r}); import ACRPA; "
             "print('ALIASES=%s' % (callable(ACRPA._toggle_log_dock) "
             "and callable(ACRPA._log_apply_filter) "
             "and callable(ACRPA._log_export_view) "
-            "and hasattr(ACRPA, 'rz') == False))").format(src=SRC)
+            "and ACRPA.rz is None))").format(src=SRC)
     try:
         p = subprocess.run([sys.executable, "-X", "utf8", "-c", code],
                            cwd=ROOT, env=env, stdout=subprocess.PIPE,

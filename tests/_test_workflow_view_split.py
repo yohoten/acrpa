@@ -278,6 +278,12 @@ def t_real_machine():
     rt = None
     try:
         rt = app.build()
+        # 启动分帧: 执行栏/日志面板在首个 idle 才构建 → 断言前先驱动一次事件循环
+        try:
+            rt.root.update_idletasks()
+            rt.root.update()
+        except Exception:
+            pass
         check(ACRPA.tab_workflow is not None, "实机: ACRPA.tab_workflow 非空 (空占位 Tab)")
         # ── 延迟构建: 启动后未切 Tab 时控件树应尚未创建 ──
         check(ACRPA.wf_tree is None,

@@ -277,6 +277,7 @@ _sched_thread_active = False
 # ── Editor state ──
 _editor_rows = []
 _editor_clipboard = []  # Ctrl+C/V row clipboard
+_editor_active_col = 0  # 活动列 (0=命令, 1..9=参数; Excel Active Cell 的列锚点)
 _undo_stack = []        # 撤销栈: [(rows_snapshot, breakpoints_snapshot), ...]
 _redo_stack = []        # 重做栈
 _MAX_UNDO = 30          # 最大撤销步数

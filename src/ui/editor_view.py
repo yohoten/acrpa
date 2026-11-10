@@ -39,6 +39,7 @@ _tsy = None
 _tsx = None
 _legend_frame = None
 _legend_inner = None
+_editor_status = None
 _editor_font = None
 _idle_bg_label = None
 _empty_hint = None
@@ -57,6 +58,8 @@ _CTX = {
     "kb_toggle_comment": None, "kb_command_palette": None,
     "kb_move_up": None, "kb_move_down": None, "kb_toggle_breakpoint": None,
     "kb_run_script": None, "cmd_edit_row_dialog": None, "edit_cell": None,
+    "kb_clear_cells": None, "kb_type_to_edit": None,
+    "track_active_cell": None, "update_editor_status": None,
     "sync_idle_bg": None, "idle_bg_on_configure": None,
     "bind_paste_new_task": None, "interp_hint_for_values": None,
     "build_sel_bar": None, "sync_sel_bars": None, "idle_bg_retheme": None,
@@ -106,7 +109,8 @@ def build(parent, *, notebook, colors, fonts, deps=None):
     global _tab_edit, _toolbar, _edit_file_label, _tb_scroll
     global _toolbar_canvas, _toolbar_scrollbar, _toolbar_inner, _toolbar_overflow_hint
     global _tree_frame, _tree, _tsy, _tsx
-    global _legend_frame, _legend_inner, _editor_font, _idle_bg_label, _empty_hint
+    global _legend_frame, _legend_inner, _editor_status
+    global _editor_font, _idle_bg_label, _empty_hint
 
     if deps:
         for _k in list(_CTX.keys()):
@@ -264,7 +268,14 @@ def build(parent, *, notebook, colors, fonts, deps=None):
     legend_frame = tkinter.Frame(tab_edit, bg=C.get("bg"))
     legend_frame.grid(row=2, column=0, sticky="ew", padx=sp(3), pady=(0, sp(2)))
     legend_inner = tkinter.Frame(legend_frame, bg=C.get("bg"))
-    legend_inner.pack(anchor="w")
+    legend_inner.pack(side="left", anchor="w")
+
+    # ── 编辑区状态条 (Excel 状态栏 / 内容条的最小复刻) ──
+    # 只读展示: 行号 + 参数名 + 当前值 (长值省略) + 总行数/选中数。
+    # 单 Label, 每次刷新 1 次 Tcl configure —— 不进入 per-row 绘制路径。
+    editor_status = tkinter.Label(legend_frame, text="", font=FONT_TINY,
+                                  fg=C.get("fgm"), bg=C.get("bg"), anchor="e")
+    editor_status.pack(side="right", padx=(sp(8), 0))
     _lg = _CTX.get("legend_groups")
     _ld = _CTX.get("legend_dots")
     if _lg is not None:
@@ -304,10 +315,14 @@ def build(parent, *, notebook, colors, fonts, deps=None):
 
     # ── 编辑行为绑定 (事件驱动) ──
     tree.bind("<Button-1>", _CTX.get("toggle_breakpoint"), add=True)
+    tree.bind("<Button-1>", _CTX.get("track_active_cell"), add=True)
     tree.bind("<Button-3>", _CTX.get("show_conditional_breakpoint_menu"))
     tree.bind("<Control-c>", _CTX.get("kb_copy"))
     tree.bind("<Control-v>", _CTX.get("kb_paste"))
-    tree.bind("<Delete>", lambda e: _call("cmd_del_row"))
+    # Excel 键义: Delete = 清空单元格内容; 删行 = Ctrl+Delete (工具栏「−删除」保留)。
+    # 不用 Ctrl+- —— 它已被编辑区缩放占用 (见上面的 zoom 绑定), 不能抢。
+    tree.bind("<Delete>", _CTX.get("kb_clear_cells"))
+    tree.bind("<Control-Delete>", lambda e: _call("cmd_del_row"))
     tree.bind("<Control-z>", _CTX.get("cmd_undo"))
     tree.bind("<Control-y>", _CTX.get("cmd_redo"))
     tree.bind("<Control-Z>", _CTX.get("cmd_undo"))
@@ -336,8 +351,13 @@ def build(parent, *, notebook, colors, fonts, deps=None):
     tree.bind("<Alt-Down>", _CTX.get("kb_move_down"))
     tree.bind("<F9>", _CTX.get("kb_toggle_breakpoint"))
     tree.bind("<F5>", _CTX.get("kb_run_script"))
-    tree.bind("<F2>", lambda e: _call("cmd_edit_row_dialog"))
+    # Excel 键义: F2 = 单元格内联编辑; 整行结构化编辑退到 Shift+F2 (工具栏「✎ 编辑」不变)
+    tree.bind("<F2>", _CTX.get("edit_cell"))
+    tree.bind("<Shift-F2>", lambda e: _call("cmd_edit_row_dialog"))
     tree.bind("<Double-1>", _CTX.get("edit_cell"))
+    # 键入即编辑 (Excel 核心肌肉记忆): 选中单元格后直接打字 → 进入编辑并替换原值
+    tree.bind("<Key>", _CTX.get("kb_type_to_edit"), add=True)
+    tree.bind("<<TreeviewSelect>>", lambda e: _call("update_editor_status"), add=True)
     for _seq in ("<<TreeviewSelect>>", "<Button-1>", "<Double-1>", "<Key>",
                  "<ButtonRelease-1>"):
         try:
@@ -371,6 +391,7 @@ def build(parent, *, notebook, colors, fonts, deps=None):
     _tsx = tsx
     _legend_frame = legend_frame
     _legend_inner = legend_inner
+    _editor_status = editor_status
 
     return get_widgets()
 
@@ -392,9 +413,15 @@ def refresh_theme(dark=None, colors=None, prev=None):
             tree.tag_configure("breakpoint", foreground=C.get("dg"))
         except Exception:
             pass
+    if _editor_status is not None:
+        try:
+            _editor_status.configure(bg=C.get("bg"), fg=C.get("fgm"))
+        except Exception:
+            pass
     _call("build_sel_bar")
     if tree is not None:
-        _call("sync_sel_bars", tree)
+        # 贴图刚重建: 必须全表重挂 image, 不能走增量 (否则残留已销毁的旧 PhotoImage)
+        _call("sync_sel_bars", tree, True)
     _call("idle_bg_retheme")
 
 
@@ -407,6 +434,7 @@ def get_widgets():
         "toolbar_overflow_hint": _toolbar_overflow_hint,
         "tree_frame": _tree_frame, "tree": _tree, "tsy": _tsy, "tsx": _tsx,
         "legend_frame": _legend_frame, "legend_inner": _legend_inner,
+        "editor_status": _editor_status,
         "editor_font": _editor_font,
         "idle_bg_label": _idle_bg_label, "empty_hint": _empty_hint,
     }

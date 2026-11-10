@@ -1867,20 +1867,49 @@ def _sel_bar(tree_, item, on):
         pass
 
 
-def _sync_sel_bars(tree_):
-    """重刷选中左缘色条, 并对选中行移除 row_hover (确保 selected 不被冲淡)。"""
+# 每棵树「上次已点亮色条」的选中行 iid 集合 (供增量同步; 换主题时整体重挂)
+_SEL_BAR_PREV = {}
+
+
+def _sync_sel_bars(tree_, force=False):
+    """重刷选中左缘色条, 并对选中行移除 row_hover (确保 selected 不被冲淡)。
+
+    增量语义 (v6 表格性能): 只处理「新选中 / 取消选中」的行, 单次选择变化
+    O(Δ) 而非 O(行数)。原因: 每行 ``tree.item(image=...)`` 是一次 Tcl 往返
+    (~10~20µs), 千行脚本里每次移动选区全表重刷 ≈ 50~100ms —— 方向键连按、
+    单元格 Tab 步进 (都会触发 <<TreeviewSelect>>) 会被这一项直接吃掉帧预算。
+
+    ``force=True``: 贴图对象已重建 (换主题 / 改 DPI / 改缩放) 时必须全表重挂,
+    否则行内 image 仍指向已销毁的旧 PhotoImage (表现为色条消失)。
+    """
     try:
-        for it in tree_.get_children(""):
-            _sel_bar(tree_, it, False)
-        for it in tree_.selection():
+        now = set(tree_.selection())
+        prev = _SEL_BAR_PREV.get(tree_)
+        if force or prev is None:
+            # 首次或贴图重建: 历史状态不可信, 全表归零后再点亮当前选中
+            for it in tree_.get_children(""):
+                _sel_bar(tree_, it, False)
+            prev = set()
+        else:
+            for it in prev - now:          # 取消选中 → 恢复 4px 分类色条
+                if tree_.exists(it):
+                    _sel_bar(tree_, it, False)
+        for it in now - prev:              # 新选中 → 6px [ac+分类] 复合条
+            if not tree_.exists(it):
+                continue
             _sel_bar(tree_, it, True)
             tgs = tuple(t for t in tree_.item(it, "tags") if t != "rowhover")
             tree_.item(it, tags=tgs)
+        _SEL_BAR_PREV[tree_] = now
     except Exception:
         pass
 
 
 def _bind_sel_bar(tree_):
+    # 绑定时就登记空集合: 此刻树为空, 所有行都由 insert 时的「未选中」贴图生成,
+    # 因此首次选择无需再做一次全表归零 (否则启动后第一次点选仍是 O(行数))。
+    _SEL_BAR_PREV.setdefault(tree_, set())
+
     def _on(_e=None):
         _sync_sel_bars(tree_)
     tree_.bind("<<TreeviewSelect>>", _on, add=True)
@@ -2455,7 +2484,7 @@ def _cmd_edit_row_dialog():
     与内联编辑 (_edit_cell, 双击单元格) 并存 —— 本入口提供「整行结构化编辑」,
     **不改动** _edit_cell 的 <Double-1> 绑定语义, 也不改 _cmd_add_row (仍插空行)。
     确定后写回 sd.cmd_type / sd.args (恒 9 位), 并 _push_undo() + _update_row_inplace(idx)。
-    触发: 工具栏「✎ 编辑」按钮 或 树内 F2。
+    触发: 工具栏「✎ 编辑」按钮 或 树内 Shift+F2 (F2 已对齐 Excel = 单元格内联编辑)。
     """
     if _edit_blocked("编辑行"):
         return
@@ -3404,6 +3433,8 @@ def _editor_sync_to_tree():
         _apply_tree_columns()   # 行数跨过大脚本阈值时收窄可见列 (幂等, 计划未变即返回)
         _sync_legend()
         _sync_empty_hint()
+        _sync_param_headings_safe()
+        _update_editor_status()
         return
 
     prev_sel_sigs = []
@@ -3458,6 +3489,8 @@ def _editor_sync_to_tree():
     _apply_tree_columns()   # 行数跨过大脚本阈值时收窄可见列 (幂等, 计划未变即返回)
     _sync_legend()      # 图例与行内容同源一次判定, 不额外遍历
     _sync_empty_hint()  # 空态指引 (零行 → 显示 Ctrl+N/O/I 提示, v3 §3 D8)
+    _sync_param_headings_safe()   # 重建后选中行可能已变 → 表头/状态条同步刷新
+    _update_editor_status()
 
 
 def _cmd_clear():
@@ -3466,10 +3499,12 @@ def _cmd_clear():
     if messagebox.askyesno("确认","确定要清空所有行吗？"):
         _push_undo()
         state._editor_rows=[]; state.breakpoints.clear(); tree.delete(*tree.get_children())
+        state._editor_active_col=0
         _tree_cache_invalidate()
         _invalidate_load_token()          # 作废在途的后台加载结果
         _sync_legend()
         _sync_empty_hint()
+        _update_editor_status()
         from utils import show_toast; show_toast(root, "已清空所有行", "warning")
 
 def _cmd_new():
@@ -3479,6 +3514,7 @@ def _cmd_new():
         if not messagebox.askyesno("未保存的修改", "当前脚本有未保存的修改，是否放弃？"):
             return
     state._editor_rows=[]; state.breakpoints.clear()
+    state._editor_active_col=0
     state._undo_stack.clear(); state._redo_stack.clear()
     state._editor_modified=False
     tree.delete(*tree.get_children())
@@ -3486,6 +3522,7 @@ def _cmd_new():
     _invalidate_load_token()          # 作废在途的后台加载结果
     _sync_legend()
     _sync_empty_hint()
+    _update_editor_status()
     state.has_script=False; state.filename=None; state.script_dir=None
     script_name_var.set("新建脚本（未保存）")
     edit_file_label.config(text="未保存")
@@ -3512,9 +3549,12 @@ def _cmd_open():
         _sync_idle_bg()
 
 # 保存对话框的过滤器与「可原地覆盖」的扩展名 (其它扩展名一律转「另存为」,
-# 避免把 xlwt 的 BIFF 内容写进 .xlsx 之类不匹配的容器)
-_SAVE_FILETYPES = [('Excel 文件', '*.xls'), ('ACRPA 脚本', '*.acrpas')]
-_SAVE_INPLACE_EXTS = (".xls", ".acrpas")
+# 避免把容器与内容写岔: .xls 走 xlwt(BIFF), .xlsx 走 openpyxl(OOXML))
+_SAVE_FILETYPES = [('Excel 文件', '*.xlsx *.xls'),
+                   ('Excel 工作簿 (*.xlsx)', '*.xlsx'),
+                   ('Excel 97-2003 (*.xls)', '*.xls'),
+                   ('ACRPA 脚本', '*.acrpas')]
+_SAVE_INPLACE_EXTS = (".xls", ".xlsx", ".acrpas")
 
 
 def _script_save_dir():
@@ -3569,13 +3609,15 @@ def _persist_script(fp, action="保存", allow_empty=False):
         return False
     old_path = str(getattr(state, "filename", "") or "")
     try:
-        # 统一 I/O: .acrpas → JSON; 其它 → xls(xlwt); 均经 utils.atomic_save 原子写
+        # 统一 I/O: .acrpas → JSON; .xlsx → openpyxl; .xls → xlwt;
+        # 均经 utils.atomic_save 原子写。
         script_io.save_script(
             fp, rows,
             meta={"name": os.path.splitext(os.path.basename(fp))[0]},
             allow_empty=allow_empty)
     except ImportError:
-        messagebox.showerror("错误", "需要安装 xlwt: pip install xlwt")
+        messagebox.showerror("错误", "需要安装 xlwt / openpyxl:\n"
+                                     "pip install xlwt openpyxl")
         return False
     except Exception as e:
         # Windows 上目标被 Excel/WPS 打开时 os.replace 会 PermissionError,
@@ -3623,19 +3665,21 @@ def _persist_script(fp, action="保存", allow_empty=False):
 
 
 def _commit_inline_edit():
-    """提交进行中的单元格内联编辑。
+    """提交进行中的单元格内联编辑 → 是否允许继续 (False = 校验未过)。
 
     内联编辑平时靠 <FocusOut> 落库; Ctrl+S 时焦点仍在编辑框内 → 不会触发 FocusOut,
     若不显式提交, 保存的就是编辑前的旧值 (用户看到的却是新值)。
+    校验失败时 _commit 返回 False 且不写库 → 调用方 (保存/运行) 应中止。
     """
     fn = _inline_commit_fn
     if fn is None or _inline_edit_widget is None:
-        return
+        return True
     try:
-        fn()          # 走 _commit 同一提交路径 (含撤销快照)
+        ok = fn()     # 走 _commit 同一提交路径 (含校验与撤销快照)
         root.update_idletasks()
+        return ok is not False
     except Exception:
-        pass
+        return True
 
 
 def _cmd_save():
@@ -3643,7 +3687,10 @@ def _cmd_save():
 
     返回是否已成功落盘 (退出前的「保存并退出」据此判断能否继续)。
     """
-    _commit_inline_edit()
+    if not _commit_inline_edit():
+        from utils import show_toast
+        show_toast(root, "当前单元格内容不合法，已阻止保存", "warning")
+        return False
     if not state._editor_rows and not _is_new_empty_script():
         # D3: 区分「正在加载」(rows 还没灌进来) 与「真的空」, 避免用户按提示反复重试
         if _load_in_flight():
@@ -3659,7 +3706,10 @@ def _cmd_save():
 
 def _cmd_save_as():
     """另存为 (Ctrl+Shift+S): 总是询问新路径, 成功后该路径成为当前文件。"""
-    _commit_inline_edit()
+    if not _commit_inline_edit():
+        from utils import show_toast
+        show_toast(root, "当前单元格内容不合法，已阻止保存", "warning")
+        return False
     # D3: 显式新建的空脚本允许另存 (allow_empty), 其余空态一律拒绝
     empty_ok = _is_new_empty_script()
     if not state._editor_rows and not empty_ok:
@@ -4140,6 +4190,226 @@ def _load_template_lazy(name):
 _inline_edit_widget = None
 _inline_commit_fn = None   # 进行中内联编辑的提交函数 (保存/运行前主动落库用)
 
+# ── 底部状态条 (Excel 状态栏 / 内容条的最小复刻) ──
+_editor_status = None      # Label, build 时由 editor_view 回填
+_STATUS_MAX_VALUE = 34     # 内容条里值的最多显示字符 (超出省略, 避免挤掉右侧计数)
+
+
+def _editor_active_col():
+    """当前活动列 (0=命令, 1..9=参数); 越界/异常回落 0。"""
+    try:
+        c = int(getattr(state, "_editor_active_col", 0) or 0)
+    except Exception:
+        c = 0
+    return c if 0 <= c <= 9 else 0
+
+
+def _editor_param_label(sd, col):
+    """列名: 1..9 → schema 参数名 (无 schema 回退 参数N); 0 → 命令。"""
+    if col <= 0:
+        return "命令"
+    try:
+        ps = ui_editor_columns.command_params(getattr(sd, "cmd_type", ""))
+        if col - 1 < len(ps):
+            nm = str(ps[col - 1].get("name") or "").strip()
+            if nm:
+                return nm
+    except Exception:
+        pass
+    return "参数{}".format(col)
+
+
+def _update_editor_status(msg=None):
+    """刷新底部状态条 (单 Label configure, 不进 per-row 绘制路径)。
+
+    常规内容: ``第 3 行 · 参数2（坐标X）: 值 · 共 128 行``;
+    msg 非空 → 直接显示临时提示 (校验失败等, 下次选择/编辑时被覆盖)。
+    """
+    lab = _editor_status
+    if lab is None:
+        return
+    try:
+        if msg is not None:
+            lab.configure(text=msg)
+            return
+        rows = state._editor_rows
+        n = len(rows)
+        if n <= 0:
+            lab.configure(text="")
+            return
+        sel = tree.selection()
+        if not sel:
+            lab.configure(text="共 {} 行".format(n))
+            return
+        if len(sel) > 1:
+            lab.configure(text="选中 {} 行 · 共 {} 行".format(len(sel), n))
+            return
+        idx = tree.index(sel[0])
+        if idx < 0 or idx >= n:
+            lab.configure(text="共 {} 行".format(n))
+            return
+        sd = rows[idx]
+        col = _editor_active_col()
+        if col == 0:
+            label, val = "命令", str(sd.cmd_type or "")
+        else:
+            nm = _editor_param_label(sd, col)
+            label = nm if nm.startswith("参数") else "参数{}（{}）".format(col, nm)
+            args = getattr(sd, "args", []) or []
+            val = str(args[col - 1]) if col - 1 < len(args) else ""
+        val = " ".join(val.replace("\r", " ").replace("\n", " ").split())
+        if len(val) > _STATUS_MAX_VALUE:
+            val = val[:_STATUS_MAX_VALUE - 1] + "…"
+        lab.configure(text="第 {} 行 · {}: {} · 共 {} 行".format(
+            idx + 1, label, (val or "（空）"), n))
+    except Exception:
+        pass
+
+
+def _track_active_cell(event=None):
+    """单击单元格只记录「活动列」(不改数据/不改布局), 供键入即编辑与状态条使用。"""
+    if event is None:
+        return
+    try:
+        if tree.identify_region(event.x, event.y) not in ("cell", "tree"):
+            return
+        if not tree.identify_row(event.y):
+            return
+        disp = int(str(tree.identify_column(event.x)).replace("#", ""))
+        col = 0 if disp <= 0 else _tree_display_to_logical(disp)
+        if col is None:
+            return
+        state._editor_active_col = col
+        _update_editor_status()
+    except Exception:
+        pass
+
+
+def _kb_type_to_edit(event=None):
+    """键入即编辑 (Excel 核心肌肉记忆): 选中行后直接打字符 → 进入该单元格编辑并替换原值。
+
+    只处理「单个可打印字符」; Ctrl/Alt 组合与功能键走各自更具体的绑定 (Tk 按最具体
+    的模式匹配, 不会落到 <Key>)。命令列是只读下拉, 不在本路径内 (Ctrl+K 选命令)。
+    """
+    if event is None:
+        return None
+    ch = getattr(event, "char", "") or ""
+    if len(ch) != 1 or not ch.isprintable():
+        return None
+    # 带 Ctrl/Alt 的组合是快捷键, 不能当输入吃掉 (Shift 允许: 大写字母要能输入)
+    st = int(getattr(event, "state", 0) or 0)
+    if st & 0x0004 or st & 0x0008 or st & 0x20000:
+        return None
+    try:
+        if state.running:
+            return "break"      # 运行中静默拦截 (不弹 toast, 避免每次按键都提示)
+    except Exception:
+        pass
+    if not state._editor_rows:
+        return None
+    col = _editor_active_col()
+    if col <= 0:
+        return None
+    sel = tree.selection()
+    if not sel:
+        return None
+    try:
+        idx = tree.index(sel[0])
+    except Exception:
+        return None
+    if idx < 0 or idx >= len(state._editor_rows):
+        return None
+    _editor_open_cell(idx, col, initial=ch)
+    return "break"
+
+
+def _kb_clear_cells(event=None):
+    """Delete — 清空选中行「当前列」的内容 (Excel 语义; 删行走 Ctrl+-)。"""
+    if _inline_edit_widget is not None:
+        return None                     # 正在编辑: 让 Entry/Combobox 自己处理 Delete
+    if _edit_blocked("清空内容"):
+        return "break"
+    sel = tree.selection()
+    if not sel:
+        return "break"
+    col = _editor_active_col()
+    targets = []
+    for it in sel:
+        try:
+            idx = tree.index(it)
+        except Exception:
+            continue
+        if not (0 <= idx < len(state._editor_rows)):
+            continue
+        sd = state._editor_rows[idx]
+        if col <= 0:
+            if sd.cmd_type or any(getattr(sd, "args", None) or []):
+                targets.append(idx)
+        else:
+            args = getattr(sd, "args", None) or []
+            if col - 1 < len(args) and args[col - 1] != "":
+                targets.append(idx)
+    if not targets:
+        return "break"
+    _push_undo()                        # 先快照, 再改数据
+    for idx in targets:
+        sd = _ensure_args9(state._editor_rows[idx])
+        if col <= 0:
+            sd.cmd_type = ""
+            sd.args = [""] * 9
+        else:
+            sd.args[col - 1] = ""
+    if len(targets) <= 60:
+        for idx in targets:
+            _update_row_inplace(idx)
+    else:
+        _editor_sync_to_tree()
+    _update_editor_status()
+    try:
+        log1("已清空 {} 行的{}".format(
+            len(targets), "整行内容" if col <= 0 else "参数{}内容".format(col)))
+    except Exception:
+        pass
+    return "break"
+
+
+def _cell_error(sd, col, value):
+    """单元格提交前校验 → 错误文案 / None (空值放行, 无 schema 放行)。"""
+    if col <= 0:
+        return None
+    try:
+        from ui import param_form
+        ps = ui_editor_columns.command_params(getattr(sd, "cmd_type", ""))
+        if col - 1 >= len(ps):
+            return None
+        p = ps[col - 1]
+        return param_form.field_error(p.get("kind"), p.get("choices"), value)
+    except Exception:
+        return None
+
+
+def _sync_param_headings_safe():
+    """结构变更后对齐表头: 清缓存键 → 按当前选中行重写 (无选中回退「参数N」)。"""
+    try:
+        ui_editor_columns.reset_param_headings()
+        ui_editor_columns.sync_param_headings(tree)
+    except Exception:
+        pass
+
+
+def _mark_cell_error(widget, msg, col):
+    """校验失败: 保留用户输入 → 控件标红 + 状态条给原因, 数据不落库。"""
+    try:
+        widget.configure(bg=C.get("errbg") or C.get("ebg"),
+                         fg=C.get("dg") or C.get("fgb"),
+                         highlightthickness=1,
+                         highlightbackground=C.get("dg"),
+                         highlightcolor=C.get("dg"))
+    except Exception:
+        pass
+    _update_editor_status("⚠ 参数{}: {} — 未提交，修正后回车 / Esc 放弃".format(col, msg))
+
+
 def _editor_cell_step(row, col, dr, dc):
     """Excel 式单元格步进：返回 (row, col) 或 None（到边界即停）。
 
@@ -4193,22 +4463,33 @@ def _editor_cell_step_visible(row, col, dr, dc):
     return (r, seq[0] if dc > 0 else seq[-1])
 
 
-def _editor_open_cell(idx, col):
-    """在 (idx, col) 原位打开内联编辑器（col: 0=命令列, 1..9=参数列）。"""
+def _editor_open_cell(idx, col, initial=None):
+    """在 (idx, col) 原位打开内联编辑器（col: 0=命令列, 1..9=参数列）。
+
+    initial 非空 = 「键入即编辑」路径: 用首个键入字符替换原值 (不预选原文),
+    光标落到末尾, 与 Excel 的「打字即改写」一致。
+    """
     global _inline_edit_widget, _inline_commit_fn
     if _edit_blocked("编辑单元格"):
         return
     if _inline_edit_widget is not None:
         # 先提交上一处进行中的编辑（避免切换单元格时丢失已输入内容）
         fn = _inline_commit_fn
+        old = _inline_edit_widget
         try:
             if fn:
                 fn()
             else:
-                _inline_edit_widget.destroy()
+                old.destroy()
         except Exception:
             try:
-                _inline_edit_widget.destroy()
+                old.destroy()
+            except Exception:
+                pass
+        # 校验失败时 _commit 会保留控件 (输入不合法); 换格时强制收掉, 避免残留浮层
+        if _inline_edit_widget is old:
+            try:
+                old.destroy()
             except Exception:
                 pass
         _inline_edit_widget = None
@@ -4216,6 +4497,7 @@ def _editor_open_cell(idx, col):
 
     if idx < 0 or idx >= len(state._editor_rows) or col < 0 or col > 9:
         return
+    state._editor_active_col = col      # 活动列随编辑同步 (状态条/后续键入都用它)
     sd = _ensure_args9(state._editor_rows[idx])
     # 列可能被列策略隐藏 (v3 §2.1a): bbox 的 column 参数是「显示列号」, 需先映射
     disp = _tree_logical_to_display(col)
@@ -4245,8 +4527,12 @@ def _editor_open_cell(idx, col):
         w = tkinter.Entry(tree_frame, font=_font,
             relief="solid", bd=1, bg=C["ebg"], fg=C["fgb"],
             insertbackground=C["fgt"])
-        w.insert(0, cur_val)
-        w.select_range(0, "end")
+        if initial:
+            w.insert(0, initial)        # 键入即编辑: 首字符已落格, 不预选原文
+            w.icursor("end")
+        else:
+            w.insert(0, cur_val)
+            w.select_range(0, "end")
 
     # 相对 tree 左上角的偏移 (tree 在 tree_frame 中, 用 winfo_x/y 兜底修正显示位置)
     try:
@@ -4257,29 +4543,41 @@ def _editor_open_cell(idx, col):
     w.focus_set()
     _inline_edit_widget = w
     _sync_idle_bg()   # 进入内联编辑 = 已退出待机态 (背景层让位给真实表格)
+    _update_editor_status()
 
     def _commit(move=None):
         global _inline_edit_widget, _inline_commit_fn
         cur = _inline_edit_widget
         if cur is None:
             return "break"
-        # 先解除全局引用, 防止 destroy 触发的 FocusOut 二次提交
+        new_val = cur.get()
+        # ① 校验先行: 非法值保留在控件里标红, 不写库、不移动 (Excel 数据验证语义)
+        err = _cell_error(sd, col, new_val)
+        if err:
+            _mark_cell_error(cur, err, col)
+            return False
+        old_val = (sd.cmd_type if col == 0
+                   else (sd.args[col - 1] if col - 1 < len(sd.args) else ""))
+        norm = commands.strip_display_badge(new_val) if col == 0 else new_val
+        # ② 解除全局引用, 防止 destroy 触发的 FocusOut 二次提交
         _inline_edit_widget = None
         _inline_commit_fn = None
-        _push_undo()  # 内联编辑前保存撤销快照
-        new_val = cur.get()
-        if col == 0:
-            sd.cmd_type = commands.strip_display_badge(new_val)
-        else:
-            # args 可能来自短列表构造的行 (长度 < 9), 先补齐再按下标写入
-            _ensure_args9(sd).args[col - 1] = new_val
-        # 单行数据变更: 就地刷新该行, 不再全量重建
-        _update_row_inplace(idx)
+        # ③ 值未变: 不入撤销栈、不置 dirty (否则 Ctrl+Z 会出现「按了没反应」)
+        if norm != old_val:
+            _push_undo()  # 快照必须在改数据之前
+            if col == 0:
+                sd.cmd_type = norm
+            else:
+                # args 可能来自短列表构造的行 (长度 < 9), 先补齐再按下标写入
+                _ensure_args9(sd).args[col - 1] = norm
+            # 单行数据变更: 就地刷新该行, 不再全量重建
+            _update_row_inplace(idx)
         try:
             cur.destroy()
         except Exception:
             pass
         _sync_idle_bg()
+        _update_editor_status()
         if move:
             # 用可见列步进: 隐藏的参数列不参与 Tab 循环 (v3 §2.1a)
             nxt = _editor_cell_step_visible(idx, col, move[0], move[1])
@@ -4328,6 +4626,8 @@ def _editor_open_cell(idx, col):
 
     w.bind("<Return>", lambda e: _commit(move=(1, 0)))       # Enter → 提交并下移
     w.bind("<KP_Enter>", lambda e: _commit(move=(1, 0)))
+    w.bind("<Shift-Return>", lambda e: _commit(move=(-1, 0)))  # Shift+Enter → 提交并上移
+    w.bind("<Control-Return>", lambda e: _commit())            # Ctrl+Enter → 提交不动
     w.bind("<Escape>", _cancel)                              # Esc → 取消编辑
     w.bind("<FocusOut>", _on_focus_out)                      # 失焦 → 提交
     w.bind("<Tab>", lambda e: _commit(move=(0, 1)))          # Tab → 提交并右移
@@ -4388,45 +4688,48 @@ def _editor_open_cell(idx, col):
     w.bind("<Control-v>", _on_paste)
     w.bind("<Control-V>", _on_paste)
     w.bind("<Shift-Insert>", _on_paste)
-    _inline_commit_fn = lambda: _commit()                    # 供 Ctrl+S / 运行前主动提交
+    _inline_commit_fn = _commit   # 供 Ctrl+S / 运行前主动提交; 返回 False = 校验未过
 
 
 def _edit_cell(event=None):
-    """内联编辑入口：双击单元格原位编辑（借鉴 Excel）。
+    """内联编辑入口：双击单元格 / F2 / 键入即编辑（借鉴 Excel 的单元格状态机）。
 
-    优先用事件坐标定位行与列（不依赖“已选中行/全局指针”，避免错行错列）；
-    无事件时退回当前选中行的第 0 列（命令）。
+    指针触发 → 用事件坐标定位行列（不依赖「已选中行/全局指针」，避免错行错列）；
+    键盘触发（F2 的 x/y 无意义）→ 用「选中行 + 活动列」。活动列保证 F2 打开的是
+    用户最后点过的那一列，而不是永远第 0 列。
     """
     if _edit_blocked("编辑单元格"):
         return
     global _inline_edit_widget, _inline_commit_fn
     idx = -1
-    col = 0
+    col = _editor_active_col()
     if event is not None:
         try:
             region = tree.identify_region(event.x, event.y)
-            if region not in ("cell", "tree"):
-                return  # 表头/分隔线等区域不进入编辑
-            row_id = tree.identify_row(event.y)
-            if not row_id:
-                return  # 点在空白处
-            idx = tree.index(row_id)
-            # identify_column 返回的是「显示列号」; 列策略可能隐藏了尾部参数列,
-            # 必须先映射回逻辑列号, 否则窄窗口双击会编辑到错误的列 (v3 §2.1a)
-            disp_no = int(str(tree.identify_column(event.x)).replace("#", ""))
-            if disp_no <= 0:
-                return  # #0 行号列不可编辑
-            col = _tree_display_to_logical(disp_no)
-            if col is None:
-                return  # 越界列不可编辑
         except Exception:
-            idx = -1
+            region = ""
+        if region in ("cell", "tree"):
+            try:
+                row_id = tree.identify_row(event.y)
+                if not row_id:
+                    return  # 点在空白处
+                idx = tree.index(row_id)
+                # identify_column 返回的是「显示列号」; 列策略可能隐藏了尾部参数列,
+                # 必须先映射回逻辑列号, 否则窄窗口双击会编辑到错误的列 (v3 §2.1a)
+                disp_no = int(str(tree.identify_column(event.x)).replace("#", ""))
+                if disp_no <= 0:
+                    return  # #0 行号列不可编辑
+                col = _tree_display_to_logical(disp_no)
+                if col is None:
+                    return  # 越界列不可编辑
+            except Exception:
+                idx = -1
     if idx < 0:
         sel = tree.selection()
         if not sel:
             return
         idx = tree.index(sel[0])
-        col = 0
+        col = _editor_active_col()
     if idx < 0 or idx >= len(state._editor_rows):
         return
     _editor_open_cell(idx, col)
@@ -4935,7 +5238,7 @@ def _init_toolbar_buttons():
     _tbtn(toolbar_inner,"新建",_cmd_new,"ac","white",
           tip="新建空白脚本 (Ctrl+N)").pack(side="left",padx=_P)
     _tbtn(toolbar_inner,"打开",_cmd_open,"ac","white",
-          tip="打开脚本文件 (.xls/.acrpas) (Ctrl+O)").pack(side="left",padx=_P)
+          tip="打开脚本文件 (.xlsx/.xls/.acrpas) (Ctrl+O)").pack(side="left",padx=_P)
     _tbtn(toolbar_inner,"保存",_cmd_save,"sc","white",
           tip="保存 (Ctrl+S): 已有文件直接覆盖, 未落盘时另存").pack(side="left",padx=_P)
     _tbtn(toolbar_inner,"另存",_cmd_save_as,
@@ -4947,7 +5250,7 @@ def _init_toolbar_buttons():
     _tbtn(toolbar_inner,"+ 添加",_cmd_add_row,"ac","white",
           tip="新增一行命令").pack(side="left",padx=_P)
     _tbtn(toolbar_inner,"✎ 编辑",_cmd_edit_row_dialog,
-          tip="编辑选中行 (结构化参数表单, F2)").pack(side="left",padx=_P)
+          tip="编辑选中行 (结构化参数表单, Shift+F2)").pack(side="left",padx=_P)
     _tbtn(toolbar_inner,"↑",_cmd_move_up,tip="上移选中行").pack(side="left",padx=_P)
     _tbtn(toolbar_inner,"↓",_cmd_move_down,tip="下移选中行").pack(side="left",padx=_P)
     _tbtn(toolbar_inner,"片段",_cmd_snippet,tip="插入/管理片段库 (离线可用)").pack(side="left",padx=_P)
@@ -4982,7 +5285,7 @@ def _init_toolbar_buttons():
     # 「调试 / 单步 / 变量」已移至「执行控制」Tab 运行控制条, 避免两处状态不同步
     _sep(toolbar_inner)
     _tbtn(toolbar_inner,"- 删除",_cmd_del_row,"dg","white",
-          tip="删除选中行").pack(side="left",padx=_P)
+          tip="删除选中行 (Ctrl+Delete; Delete 只清空单元格内容)").pack(side="left",padx=_P)
     _tbtn(toolbar_inner,"清空",_cmd_clear,"dg","white",
           tip="清空所有命令行").pack(side="left",padx=_P)
 
@@ -6346,7 +6649,7 @@ def build_app():
         FONT_SMALL, FONT_SMALL_BOLD, FONT_TINY, FONT_TITLE, ICON_BIG, ICON_SMALL, IMAGE_ICON, \
         LOG_DIR, LR_LOADFROMFILE, RES_DIR, SCREENSHOT_DIR, VERSION, WM_SETICON, \
         _CBAR_LEVEL_COLOR, _EDITOR_ZOOM_MAX, _EDITOR_ZOOM_MIN, _WF_LIB_ACTIONS, \
-        _applied_dark_mode, _ccol, _ctag, _e, _editor_font, _fn, _hotkey_executors, \
+        _applied_dark_mode, _ccol, _ctag, _e, _editor_font, _editor_status, _fn, _hotkey_executors, \
         _log_collapse_btn, _log_level_combo, _log_save_path, _log_search_entry, _loop_combo, \
         _main_thread, _netlink_mod, _ocr_backend_mod, _script_switcher, _seq, \
         _title_text_session, _tlog, _wf_show_flow, _wf_view_btn, _wfp, bottom_dock, \
@@ -6772,6 +7075,9 @@ def build_app():
             "kb_toggle_breakpoint": _kb_toggle_breakpoint,
             "kb_run_script": _kb_run_script,
             "cmd_edit_row_dialog": _cmd_edit_row_dialog, "edit_cell": _edit_cell,
+            "kb_clear_cells": _kb_clear_cells, "kb_type_to_edit": _kb_type_to_edit,
+            "track_active_cell": _track_active_cell,
+            "update_editor_status": _update_editor_status,
             "sync_idle_bg": _sync_idle_bg,
             "idle_bg_on_configure": _idle_bg_on_configure,
             "bind_paste_new_task": dialogs.bind_paste_new_task,
@@ -6796,6 +7102,7 @@ def build_app():
     tsx = _ew["tsx"]
     legend_frame = _ew["legend_frame"]
     legend_inner = _ew["legend_inner"]
+    _editor_status = _ew["editor_status"]
     _editor_font = _ew["editor_font"]
 
     # ── 构建期行为补调 (读取上面已同步的编辑器控件全局) ──
@@ -6806,7 +7113,9 @@ def build_app():
     _bind_sel_bar(tree)
     _bind_row_hover(tree)
     try:
-        utils.register_ui_scale_hook(lambda: (_build_sel_bar(), _sync_sel_bars(tree),
+        # force=True: 贴图随主题/DPI 重建后必须全表重挂 image (增量同步会漏旧图)
+        utils.register_ui_scale_hook(lambda: (_build_sel_bar(),
+                                              _sync_sel_bars(tree, force=True),
                                               _bind_minibar(), _apply_editor_zoom()))
     except Exception:
         pass
@@ -6815,6 +7124,7 @@ def build_app():
     root.after(0, _init_toolbar_buttons)
     try:
         root.after_idle(_sync_empty_hint)
+        root.after_idle(_update_editor_status)   # 首帧给出「共 N 行」基线
     except Exception:
         pass
 

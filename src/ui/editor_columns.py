@@ -2,8 +2,12 @@
 """脚本编辑「参数列表头 / 列宽 / 悬停提示」纯展示辅助 (S1-A 切片)。
 
 从 ACRPA.py 迁出的只读展示逻辑: 只读取命令 schema (commands.schema / module_catalog),
-据此动态改写表格列头、按参数类型自适应列宽、在表头提供悬停说明。**不写任何存储格式**,
+据此动态改写表格列头、提供列宽估算与表头悬停说明。**不写任何存储格式**,
 脚本 JSON / 工作流 JSON 零变化, 兼容旧文件。
+
+列宽策略: `param_col_width` 只提供「按类型估算」的纯函数 (供自适应列宽/校验复用),
+`sync_param_headings` **绝不改 width** —— 按选中行改列宽会让每次点选都重排整表,
+双击编辑的第二次点击落到别的列。
 
 设计 (与 workflow_view / exec_bar 范式一致): 本模块不 import ACRPA;
 `sync_param_headings(tree)` / `bind_param_header_tip(tree)` 均以 `tree` 为显式入参,
@@ -14,21 +18,22 @@ import utils
 
 __all__ = [
     "command_params", "command_param_names", "param_col_width",
-    "param_hint_text", "sync_param_headings", "bind_param_header_tip",
-    "get_header_params",
+    "param_hint_text", "sync_param_headings", "reset_param_headings",
+    "bind_param_header_tip", "get_header_params",
 ]
 
 # ── 缓存 (命令名 → 参数名列表 / 参数字典列表) + 当前选中行参数 (供表头 tooltip/列宽) ──
 _PARAM_HEADING_CACHE = {}
-_PARAM_INFO_CACHE = {}          # 命令名 → 参数字典列表 (含 name/raw/kind/default/optional)
-_HEADER_PARAMS = []             # 当前选中命令的参数字典列表 (供表头 tooltip / 列宽)
+_PARAM_INFO_CACHE = {}          # 命令名 → 参数字典列表 (含 name/raw/kind/choices/default/optional)
+_HEADER_PARAMS = []             # 当前选中命令的参数字典列表 (供表头 tooltip)
+_HEADING_KEY = None             # 上次写入表头的 (cmd, multi): 重复点选直接跳过
 
 
 def command_params(cmd):
-    """命令名 → schema 参数字典列表 (含 name/raw/kind/default/optional), 失败返回 []。
+    """命令名 → schema 参数字典列表 (含 name/raw/kind/choices/default/optional)。
 
-    主源 commands.schema (带 kind: number/string, 供列宽自适应), 缺失时回退
-    module_catalog (无 kind, 列宽退化为名长启发式); 数据只读, 不改任何存储格式。
+    主源 commands.schema (带 kind/choices, 供列宽自适应与单元格校验), 缺失时回退
+    module_catalog (无 kind/choices, 校验按 string 放行); 数据只读, 不改任何存储格式。
     """
     name = str(cmd or "").strip()
     if not name:
@@ -44,6 +49,7 @@ def command_params(cmd):
                     "name": str(p.get("name") or ""),
                     "raw": str(p.get("raw") or ""),
                     "kind": str(p.get("kind") or "string"),
+                    "choices": tuple(p.get("choices") or ()),
                     "default": p.get("default"),
                     "optional": bool(p.get("optional")),
                 })
@@ -60,6 +66,7 @@ def command_params(cmd):
                             "name": str(p.get("name") or ""),
                             "raw": str(p.get("raw") or ""),
                             "kind": "string",
+                            "choices": (),
                             "default": p.get("default"),
                             "optional": bool(p.get("optional")),
                         })
@@ -114,24 +121,39 @@ def param_hint_text(params, i):
 
 
 def sync_param_headings(tree):
-    """选中某行时把「参数1..9」换成该命令 schema 字段名, 并按类型自适应列宽。
+    """选中某行时把「参数1..9」换成该命令 schema 字段名 —— **只改文字, 不改列宽**。
 
-    无选中/无 schema 时回退「参数N」; 参数信息存入 _HEADER_PARAMS 供表头 tooltip。
-    只改 heading 文本与列宽, 不影响 _apply_tree_columns 的可见列策略。
+    列宽必须与选中行无关: 早先这里按当前命令的 schema 改 ``width``, 每次点选都会
+    让整表重排 (实测 116px → 267/202/213px)。双击编辑的第一次点击就把列挪走,
+    第二次点击落到别的列 —— 这正是「点一下表格就变样、不好编辑」的根因。
+    列宽改由用户拖拽 / 双击分隔线自适应 (见 ``autofit_column``)。
+
+    多选时列语义不唯一 → 回退通用「参数N」; 参数信息存入 _HEADER_PARAMS 供 tooltip。
+    同一命令重复点选直接返回, 省掉 9 次 heading 的 Tcl 往返。
     """
-    global _HEADER_PARAMS
+    global _HEADER_PARAMS, _HEADING_KEY
     try:
         sel = tree.selection()
-        params = command_params(tree.set(sel[0], "cmd") if sel else "")
+        multi = len(sel) > 1
+        cmd = tree.set(sel[0], "cmd") if (sel and not multi) else ""
+        params = command_params(cmd)
         _HEADER_PARAMS = params
+        key = (cmd, multi)
+        if key == _HEADING_KEY:
+            return
+        _HEADING_KEY = key
         for i in range(1, 10):
             p = params[i - 1] if i - 1 < len(params) else None
             nm = (p["name"] if p and p.get("name") else "参数{}".format(i))
             tree.heading("p{}".format(i), text=nm)
-            w = param_col_width(p) if p else 65
-            tree.column("p{}".format(i), width=w, minwidth=min(w, 50))
     except Exception:
         pass
+
+
+def reset_param_headings():
+    """外部结构变更 (清空/重建) 后允许下一次 sync 重写表头 (清掉缓存键)。"""
+    global _HEADING_KEY
+    _HEADING_KEY = None
 
 
 def bind_param_header_tip(tree):

@@ -86,7 +86,8 @@ def main():
             tree["show"] = "headings"
             for i in range(1, 10):
                 tree.heading("p{}".format(i), text="参数{}".format(i))
-            tree.insert("", "end", values=("找图", "a.png", "0.9"))
+            iid = tree.insert("", "end", values=("找图", "a.png", "0.9"))
+            tree.selection_set(iid)          # sync 读 selection(): 不选中只会得到通用表头
             ec.sync_param_headings(tree)
             check(tree.heading("p1")["text"] == "图片名",
                   "GUI: 选中找图后 p1 表头=图片名")

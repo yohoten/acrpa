@@ -186,8 +186,8 @@ HIDDEN_IMPORTS = _PROJECT_MODULES + [
     "PIL.PngImagePlugin", "PIL.JpegImagePlugin", "PIL.IcoImagePlugin",
     # 自动化
     "pyautogui", "pyperclip",
-    # Excel
-    "xlrd", "xlwt",
+    # Excel（xlsx 读写走 openpyxl，xlrd>=2.0 不再支持 xlsx）
+    "xlrd", "xlwt", "openpyxl", "et_xmlfile",
     # 网络 (AI/更新/市场) — charset_normalizer 由 requests 按需加载，不显式引入
     "requests", "urllib3", "certifi", "idna",
     # stdlib 可能遗漏的 (configparser/csv 由 requests→http.cookiejar 使用, 必须保留)

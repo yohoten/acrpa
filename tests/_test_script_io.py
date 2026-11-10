@@ -33,6 +33,12 @@ try:
 except Exception:
     _HAVE_XLS = False
 
+try:
+    import openpyxl  # noqa: F401
+    _HAVE_XLSX = True
+except Exception:
+    _HAVE_XLSX = False
+
 _fails = 0
 _warns = 0
 
@@ -120,6 +126,35 @@ def _run(tmp):
     else:
         warn("缺 xlrd/xlwt，跳过 xls 等价/结构断言")
 
+    # ── 3b. xlsx 读写等价（openpyxl；xlrd>=2.0 已不支持 xlsx） ──
+    print("\n== 3b. xlsx 读写等价 ==")
+    if _HAVE_XLSX:
+        pxx = os.path.join(tmp, "s.xlsx")
+        script_io.save_script(pxx, rows)
+        rxx = script_io.load_script(pxx)
+        check("3b-1. xlsx 往返逐行相等",
+              [r.to_tuple() for r in rxx] == [r.to_tuple() for r in rows])
+        with open(pxx, "rb") as f:
+            check("3b-2. 写出的是真 OOXML (PK 头)", f.read(2) == b"PK")
+        check("3b-3. 每行 args=9", all(len(x.args) == 9 for x in rxx))
+        check("3b-4. load_xls_rows(.xlsx) 行数",
+              len(script_io.load_xls_rows(pxx)) == len(rows))
+        # 空命令行跳过 / 短行补空 / None 归一
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["命令类型"] + ["参数{}".format(i) for i in range(1, 10)])
+        ws.append(["（标题行）"])
+        ws.append([None])
+        ws.append(["点击", 1, None, "b"])
+        pe = os.path.join(tmp, "edge.xlsx")
+        wb.save(pe)
+        re_ = script_io.load_script(pe)
+        check("3b-5. 空命令行跳过", len(re_) == 1, len(re_))
+        check("3b-6. None → '' 且后续列不丢",
+              re_[0].args[1] == "" and re_[0].args[2] == "b", re_[0].args)
+    else:
+        warn("缺 openpyxl，跳过 xlsx 断言")
+
     # ── 4. 旧 xls 可读（真实模板 + 自建 fixture） ──
     print("\n== 4. 旧 .xls 可读 ==")
     tmpl = os.path.join(_ROOT, "template", "脚本模板.xls")
@@ -169,6 +204,20 @@ def _run(tmp):
               script_io.iter_commands(px2))
     else:
         warn("缺 xlrd，跳过 iter_commands(.xls)")
+    if _HAVE_XLSX:
+        px3 = os.path.join(tmp, "cmds.xlsx")
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["命令类型"])
+        ws.append(["标题"])
+        ws.append(["等待"])
+        ws.append(["坐标"])
+        wb.save(px3)
+        check("5c. iter_commands(.xlsx)",
+              script_io.iter_commands(px3) == ["等待", "坐标"],
+              script_io.iter_commands(px3))
+    else:
+        warn("缺 openpyxl，跳过 iter_commands(.xlsx)")
 
     # ── 6. 原子写：.bak 备份 / 失败不破坏 / 无 .tmp 残留 ──
     print("\n== 6. 原子写 ==")

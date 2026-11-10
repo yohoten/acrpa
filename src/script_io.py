@@ -26,16 +26,18 @@ xlrd 实现 —— ``tools/_test_python_sandbox.py`` 的 ``o1`` 断言要求
   可与之互相复用。
 
 * ``.xls`` / ``.xlsx``：遗留位置式 Excel —— 行0=表头、行1=「（标题行）」占位、
-  数据从行2起，第0列=命令名，第1..9列=参数1..9。**写仅支持 ``.xls``（xlwt）**；
-  ``.xlsx`` 读依赖 xlrd（xlrd>=2.0 不支持 xlsx，此时保持原有报错行为）。
+  数据从行2起，第0列=命令名，第1..9列=参数1..9。``.xls`` 读写走 xlrd/xlwt（历史
+  契约逐字不变）；``.xlsx`` 读写走 openpyxl —— xlrd>=2.0 已移除 xlsx 支持，此前
+  「打开 .xlsx」必然报错，现改为 openpyxl 流式读取（``read_only`` + ``data_only``），
+  写出结构与 ``.xls`` 逐项对齐（同一套表头 / 占位行 / 策略表）。
 
 归一化
 ------
 载入（两种格式）与写出时，均把参数值中的 ``None`` 与字面量字符串 ``"None"``
 （路线图 §4.1 提到的存量脏值）统一归一为 ``""``；参数列表补齐/裁剪为恰好 9 个。
 
-零第三方新依赖：仅 ``json`` / ``xlrd`` / ``xlwt`` / ``utils``（均为现有依赖，
-且 xlrd/xlwt/utils 均按需惰性导入）。
+依赖：``json`` / ``xlrd`` / ``xlwt`` / ``openpyxl`` / ``utils``，全部按需惰性导入
+（``import script_io`` 不触发任何第三方导入）。
 """
 import os
 import json
@@ -58,6 +60,11 @@ _NUM_ARGS = 9
 # **第二张工作表**（不占用主表列 → 不新增常显列，旧版本读主表完全不受影响）。
 # 三列：数据行序号(0 基) / 策略码 / 跳转目标(1 基)。无策略的行不写。
 _POLICY_SHEET = "ACRPA-Policy"
+
+
+def _is_xlsx(path):
+    """按扩展名判定 ``.xlsx``（xlsx 走 openpyxl，xls 走 xlrd/xlwt）。"""
+    return os.path.splitext(str(path or ""))[1].lower() == ".xlsx"
 
 
 def _policy_of(sd):
@@ -269,12 +276,98 @@ def load_acrpas(path):
     return acrpas_to_rows(doc)
 
 
-def load_xls(path):
-    """读取 ``.xls``/``.xlsx``（xlrd，跳过前 2 行）→ ``list[ScriptData]``。
+def _read_policy_sheet_xlsx(wb):
+    """openpyxl 版策略表读取 → ``{数据行序号(0 基): (策略码, 跳转目标)}``。
 
-    行为与历史 5 处实现等价：跳过空白行（``not row[0]``），参数补齐 9 个，
+    与 :func:`_read_policy_sheet` 同口径：缺表 / 损坏 / 空值一律跳过，
+    失败开放（旧文件没有策略表是正常情况）。
+    """
+    out = {}
+    try:
+        sheet = wb[_POLICY_SHEET]
+    except Exception:
+        return out
+    try:
+        for r, vals in enumerate(sheet.iter_rows(values_only=True)):
+            if r == 0:                     # 行0 = 表头
+                continue
+            vals = list(vals or ())
+            if len(vals) < 2:
+                continue
+            try:
+                idx = int(vals[0])
+            except (TypeError, ValueError):
+                continue
+            code = str(vals[1] or "").strip()
+            if not code:
+                continue
+            try:
+                jump = int(vals[2] or 0) if len(vals) > 2 else 0
+            except (TypeError, ValueError):
+                jump = 0
+            out[idx] = (code, jump)
+    except Exception:
+        return out
+    return out
+
+
+def _read_xlsx_table(path):
+    """``.xlsx`` 首个工作表 → ``(数据行 list[list], 策略 dict)``。
+
+    与 xls 口径一致：行0/行1 跳过，数据行只取前 10 列，命令列为空的行跳过
+    （``not vals[0]``，与历史 ``not row[0]`` 同义，数字 0 也跳过）。
+    ``read_only=True`` 流式读取（不整本载入内存）；``data_only=True`` 取公式
+    缓存值，避免参数里落进 ``=SUM(...)`` 之类字符串。
+    """
+    import openpyxl
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    try:
+        sheets = list(getattr(wb, "worksheets", None) or [])
+        if not sheets:
+            return [], {}
+        policies = _read_policy_sheet_xlsx(wb)
+        rows = []
+        for i, vals in enumerate(sheets[0].iter_rows(values_only=True)):
+            if i < 2:                      # 表头 + 「（标题行）」占位
+                continue
+            vals = list(vals or ())[:_NUM_ARGS + 1]
+            if not vals or not vals[0]:
+                continue
+            rows.append(vals)
+        return rows, policies
+    finally:
+        try:
+            wb.close()
+        except Exception:
+            pass
+
+
+def _load_xlsx(path):
+    """读取 ``.xlsx``（openpyxl）→ ``list[ScriptData]``，语义与 xls 路径一致。"""
+    from scriptdata import ScriptData
+    raw_rows, policies = _read_xlsx_table(path)
+    rows = []
+    for vals in raw_rows:
+        sd = ScriptData(_norm_cmd(vals[0]), _norm_args(vals[1:_NUM_ARGS + 1]))
+        policy = policies.get(len(rows))
+        if policy:
+            try:
+                sd.set_failure_policy(policy[0], policy[1])
+            except Exception:
+                pass        # 失败开放: 脏策略不影响载入
+        rows.append(sd)
+    return rows
+
+
+def load_xls(path):
+    """读取 ``.xls``/``.xlsx``（跳过前 2 行）→ ``list[ScriptData]``。
+
+    ``.xlsx`` 走 openpyxl（xlrd>=2.0 已不支持 xlsx），``.xls`` 仍走 xlrd；
+    两者行为等价：跳过空白行（``not row[0]``），参数补齐 9 个，
     额外把 ``"None"`` 归一为 ``""``。
     """
+    if _is_xlsx(path):
+        return _load_xlsx(path)
     import xlrd
     from scriptdata import ScriptData
     wb = xlrd.open_workbook(path)
@@ -304,11 +397,15 @@ def load_xls(path):
 
 
 def load_xls_rows(path):
-    """读取 ``.xls`` 原始数据行（跳过前 2 行）→ ``list[list]``。
+    """读取 ``.xls``/``.xlsx`` 原始数据行（跳过前 2 行）→ ``list[list]``。
 
     每行形如 ``[cmd, arg1..arg9]``（共 10 项，均已归一化）。供需要原始行、
     而非 ``ScriptData`` 的调用方使用。
     """
+    if _is_xlsx(path):
+        raw_rows, _policies = _read_xlsx_table(path)
+        return [[_norm_cmd(v[0])] + _norm_args(v[1:_NUM_ARGS + 1])
+                for v in raw_rows]
     import xlrd
     wb = xlrd.open_workbook(path)
     try:
@@ -330,7 +427,7 @@ def load_xls_rows(path):
 def load_script(path):
     """按扩展名分派读取脚本 → ``list[ScriptData]``。
 
-    ``.acrpas`` → JSON；其它（``.xls``/``.xlsx``）→ xlrd。
+    ``.acrpas`` → JSON；``.xlsx`` → openpyxl；``.xls`` → xlrd。
     """
     if not path:
         raise ValueError("脚本路径为空")
@@ -343,8 +440,8 @@ def load_script(path):
 def iter_commands(path):
     """只读返回脚本的命令名列表（不含参数），供市场校验等使用。
 
-    ``.acrpas`` → 每行 ``cmd``；其它 → xlrd 第 0 列（行0/行1 跳过）。
-    读取失败原样抛出，由调用方决定是否降级为空列表。
+    ``.acrpas`` → 每行 ``cmd``；``.xlsx`` → openpyxl；``.xls`` → xlrd 第 0 列
+    （行0/行1 跳过）。读取失败原样抛出，由调用方决定是否降级为空列表。
     """
     if not path:
         return []
@@ -355,6 +452,9 @@ def iter_commands(path):
             if sd.cmd_type:
                 out.append(sd.cmd_type)
         return out
+    if _is_xlsx(path):
+        raw_rows, _policies = _read_xlsx_table(path)
+        return [str(v[0]).strip() for v in raw_rows if str(v[0]).strip()]
     import xlrd
     wb = xlrd.open_workbook(path)
     try:
@@ -418,10 +518,37 @@ def save_xls(path, rows):
     return atomic_save(path, lambda tmp: wb.save(tmp), backup=True)
 
 
+def save_xlsx(path, rows):
+    """原子写入 ``.xlsx``（openpyxl），结构与 :func:`save_xls` 逐项对齐。
+
+    行0=``命令类型`` + ``参数1..9``；行1=``（标题行）`` 占位；数据从行2起；
+    第二张表 ``ACRPA-Policy`` 承载步骤级失败策略。走 ``openpyxl`` 是因为
+    xlwt 只能写 BIFF（.xls），把 xlwt 产物存成 .xlsx 会得到一个打不开的文件。
+    """
+    from utils import atomic_save
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws.append([_HEADER_CMD] + ["参数{}".format(j)
+                              for j in range(1, _NUM_ARGS + 1)])
+    ws.append([_TITLE_PLACEHOLDER])
+    pol = wb.create_sheet(_POLICY_SHEET)
+    pol.append(["行序号", "失败策略", "跳转目标"])
+    for i, sd in enumerate(rows or [], start=2):
+        ws.append([_norm_cmd(getattr(sd, "cmd_type", ""))]
+                  + _norm_args(getattr(sd, "args", None)))
+        meta = _policy_of(sd)
+        if meta:
+            pol.append([i - 2, meta.get("on_error", ""),
+                        int(meta.get("jump_to", 0) or 0)])
+    return atomic_save(path, lambda tmp: wb.save(tmp), backup=True)
+
+
 def save_script(path, rows, meta=None, allow_empty=False):
     """按扩展名分派原子写入脚本。
 
-    ``.acrpas`` → JSON；其它（``.xls``）→ xls（xlwt）。失败不破坏原文件
+    ``.acrpas`` → JSON；``.xlsx`` → openpyxl；``.xls`` → xlwt。失败不破坏原文件
     （``utils.atomic_save``：同目录 ``.tmp`` + ``.bak`` 前像 + ``os.replace``）。
 
     D3 空行守卫: ``rows`` 为空且 ``allow_empty`` 为 False 时抛 ``ValueError``。
@@ -436,6 +563,8 @@ def save_script(path, rows, meta=None, allow_empty=False):
     ext = os.path.splitext(str(path))[1].lower()
     if ext == ACRPAS_EXT:
         return save_acrpas(path, rows, meta=meta)
+    if _is_xlsx(path):
+        return save_xlsx(path, rows)
     return save_xls(path, rows)
 
 
@@ -443,5 +572,5 @@ __all__ = [
     "ACRPAS_EXT", "SCHEMA_VERSION", "MIGRATIONS",
     "rows_to_acrpas", "acrpas_to_rows",
     "load_acrpas", "load_xls", "load_xls_rows", "load_script", "iter_commands",
-    "save_acrpas", "save_xls", "save_script",
+    "save_acrpas", "save_xls", "save_xlsx", "save_script",
 ]
